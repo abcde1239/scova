@@ -1,0 +1,4309 @@
+{
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "$id": "#/components/schemas/ApiError",
+        "additionalProperties": false,
+        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议",
+        "properties": {
+          "code": {
+            "description": "至少包含一个非空白字符的文本",
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "fieldErrors": {
+            "description": "输入校验失败时的字段错误列表",
+            "items": {
+              "additionalProperties": false,
+              "description": "可定位的字段校验错误",
+              "properties": {
+                "message": {
+                  "description": "至少包含一个非空白字符的文本",
+                  "minLength": 1,
+                  "pattern": "\\S",
+                  "type": "string"
+                },
+                "path": {
+                  "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                  "type": "string"
+                }
+              },
+              "required": ["path", "message"],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "message": {
+            "description": "至少包含一个非空白字符的文本",
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "requestId": {
+            "description": "至少包含一个非空白字符的文本",
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          }
+        },
+        "required": ["code", "message", "requestId"],
+        "type": "object"
+      },
+      "CreateTaskInput": {
+        "$id": "#/components/schemas/CreateTaskInput",
+        "additionalProperties": false,
+        "description": "保存手工配置或已确认的自然语言草稿，不接受 owner/userId",
+        "properties": {
+          "config": {
+            "$id": "#/components/schemas/TaskConfig",
+            "additionalProperties": false,
+            "description": "可编辑查阅任务配置；持久化后以不可变版本保存",
+            "properties": {
+              "budget": {
+                "additionalProperties": false,
+                "description": "单次执行预算，服务端部署策略另行设置上限",
+                "properties": {
+                  "maxDurationSeconds": {
+                    "description": "单次执行总时间预算（秒），恢复不重置期限",
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "maxInputTokens": {
+                    "description": "累计模型输入 token 上限",
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "maxOutputTokens": {
+                    "description": "累计模型输出 token 上限",
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "maxPages": {
+                    "description": "最多网页读取次数，包含重试",
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "maxSearches": {
+                    "description": "最多搜索调用次数，包含重试",
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "maxSearches",
+                  "maxPages",
+                  "maxDurationSeconds",
+                  "maxInputTokens",
+                  "maxOutputTokens"
+                ],
+                "type": "object"
+              },
+              "exclusions": {
+                "description": "需要排除的主题或条件",
+                "items": {
+                  "description": "至少包含一个非空白字符的文本",
+                  "minLength": 1,
+                  "pattern": "\\S",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "focusPoints": {
+                "description": "重点关注事项",
+                "items": {
+                  "description": "至少包含一个非空白字符的文本",
+                  "minLength": 1,
+                  "pattern": "\\S",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "goal": {
+                "description": "至少包含一个非空白字符的文本",
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              "notificationPreference": {
+                "additionalProperties": false,
+                "description": "站内提醒偏好，不包含邮件或外部推送",
+                "properties": {
+                  "mode": {
+                    "anyOf": [
+                      {
+                        "const": "summary",
+                        "type": "string"
+                      },
+                      {
+                        "const": "important_change",
+                        "type": "string"
+                      },
+                      {
+                        "const": "off",
+                        "type": "string"
+                      }
+                    ],
+                    "description": "每次汇总、仅重要变化或关闭提醒"
+                  },
+                  "runIssues": {
+                    "description": "是否提醒失败或不完整执行等运行问题",
+                    "type": "boolean"
+                  }
+                },
+                "required": ["mode", "runIssues"],
+                "type": "object"
+              },
+              "outputFormat": {
+                "anyOf": [
+                  {
+                    "const": "brief",
+                    "type": "string"
+                  },
+                  {
+                    "const": "list",
+                    "type": "string"
+                  },
+                  {
+                    "const": "comparison",
+                    "type": "string"
+                  },
+                  {
+                    "const": "research_report",
+                    "type": "string"
+                  }
+                ],
+                "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
+              },
+              "schedule": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "description": "仅手动执行",
+                    "properties": {
+                      "frequency": {
+                        "const": "manual",
+                        "description": "执行频率",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["frequency"],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "description": "每日按当地时间执行",
+                    "properties": {
+                      "frequency": {
+                        "const": "daily",
+                        "description": "执行频率",
+                        "type": "string"
+                      },
+                      "localTime": {
+                        "description": "任务时区的当地时分 HH:mm",
+                        "pattern": "^(?:[01][0-9]|2[0-3]):[0-5][0-9]$",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["frequency", "localTime"],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "description": "每周按当地星期和时间执行",
+                    "properties": {
+                      "frequency": {
+                        "const": "weekly",
+                        "description": "执行频率",
+                        "type": "string"
+                      },
+                      "localTime": {
+                        "description": "任务时区的当地时分 HH:mm",
+                        "pattern": "^(?:[01][0-9]|2[0-3]):[0-5][0-9]$",
+                        "type": "string"
+                      },
+                      "weekday": {
+                        "description": "ISO 星期：周一为 1，周日为 7",
+                        "maximum": 7,
+                        "minimum": 1,
+                        "type": "integer"
+                      }
+                    },
+                    "required": ["frequency", "localTime", "weekday"],
+                    "type": "object"
+                  }
+                ],
+                "description": "首版仅手动、每日、每周；DST 消歧由调度服务统一处理"
+              },
+              "sourcePreferences": {
+                "additionalProperties": false,
+                "description": "来源偏好，不授予任意网络地址访问权限",
+                "properties": {
+                  "excludedUrls": {
+                    "description": "排除查阅的来源 URL",
+                    "items": {
+                      "description": "HTTP/HTTPS 来源原文链接，不包含用户名或密码；实际抓取另行执行网络安全校验",
+                      "format": "scova-http-url",
+                      "maxLength": 4096,
+                      "type": "string"
+                    },
+                    "type": "array",
+                    "uniqueItems": true
+                  },
+                  "officialOnly": {
+                    "description": "是否限定官方来源；Agent 仍需验证来源性质",
+                    "type": "boolean"
+                  },
+                  "preferredUrls": {
+                    "description": "优先查阅的来源 URL",
+                    "items": {
+                      "description": "HTTP/HTTPS 来源原文链接，不包含用户名或密码；实际抓取另行执行网络安全校验",
+                      "format": "scova-http-url",
+                      "maxLength": 4096,
+                      "type": "string"
+                    },
+                    "type": "array",
+                    "uniqueItems": true
+                  }
+                },
+                "required": ["preferredUrls", "excludedUrls", "officialOnly"],
+                "type": "object"
+              },
+              "timeRange": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "description": "滚动查阅范围",
+                    "properties": {
+                      "days": {
+                        "description": "每次执行向前查阅的天数",
+                        "maximum": 9007199254740991,
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "kind": {
+                        "const": "rolling",
+                        "description": "范围或记录分类",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["kind", "days"],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "description": "固定查阅范围，结束时间不得早于开始时间",
+                    "properties": {
+                      "end": {
+                        "description": "带 UTC 偏移的 ISO 8601 时间",
+                        "format": "scova-instant",
+                        "type": "string"
+                      },
+                      "kind": {
+                        "const": "fixed",
+                        "description": "范围或记录分类",
+                        "type": "string"
+                      },
+                      "start": {
+                        "description": "带 UTC 偏移的 ISO 8601 时间",
+                        "format": "scova-instant",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["kind", "start", "end"],
+                    "type": "object"
+                  }
+                ],
+                "description": "滚动或固定时间范围"
+              },
+              "timezone": {
+                "description": "明确的 IANA 时区，例如 Asia/Shanghai",
+                "format": "scova-timezone",
+                "type": "string"
+              },
+              "title": {
+                "description": "便于识别的任务标题",
+                "maxLength": 200,
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              "topic": {
+                "description": "至少包含一个非空白字符的文本",
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              }
+            },
+            "required": [
+              "title",
+              "topic",
+              "goal",
+              "focusPoints",
+              "exclusions",
+              "sourcePreferences",
+              "timeRange",
+              "timezone",
+              "schedule",
+              "outputFormat",
+              "budget",
+              "notificationPreference"
+            ],
+            "type": "object"
+          },
+          "inputText": {
+            "description": "至少包含一个非空白字符的文本",
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          }
+        },
+        "required": ["config"],
+        "type": "object"
+      },
+      "HealthResponse": {
+        "$id": "#/components/schemas/HealthResponse",
+        "additionalProperties": false,
+        "description": "进程健康状态",
+        "properties": {
+          "runtime": {
+            "anyOf": [
+              {
+                "const": "bun",
+                "type": "string"
+              },
+              {
+                "const": "node",
+                "type": "string"
+              }
+            ],
+            "description": "当前主运行时或兼容运行时"
+          },
+          "status": {
+            "const": "ok",
+            "description": "API 进程正常响应",
+            "type": "string"
+          }
+        },
+        "required": ["status", "runtime"],
+        "type": "object"
+      },
+      "LoginInput": {
+        "$id": "#/components/schemas/LoginInput",
+        "additionalProperties": false,
+        "description": "登录输入，Cookie 由服务端安全设置",
+        "properties": {
+          "email": {
+            "description": "邮箱地址，账号服务负责规范化与唯一性判断",
+            "maxLength": 254,
+            "minLength": 3,
+            "pattern": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+            "type": "string"
+          },
+          "password": {
+            "description": "登录密码，不在客户端重新应用注册强度策略",
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": ["email", "password"],
+        "type": "object"
+      },
+      "Preferences": {
+        "$id": "#/components/schemas/Preferences",
+        "additionalProperties": false,
+        "description": "账号默认偏好；只影响后续创建的任务草稿",
+        "properties": {
+          "defaultTimezone": {
+            "description": "明确的 IANA 时区，例如 Asia/Shanghai",
+            "format": "scova-timezone",
+            "type": "string"
+          },
+          "notificationPreference": {
+            "additionalProperties": false,
+            "description": "站内提醒偏好，不包含邮件或外部推送",
+            "properties": {
+              "mode": {
+                "anyOf": [
+                  {
+                    "const": "summary",
+                    "type": "string"
+                  },
+                  {
+                    "const": "important_change",
+                    "type": "string"
+                  },
+                  {
+                    "const": "off",
+                    "type": "string"
+                  }
+                ],
+                "description": "每次汇总、仅重要变化或关闭提醒"
+              },
+              "runIssues": {
+                "description": "是否提醒失败或不完整执行等运行问题",
+                "type": "boolean"
+              }
+            },
+            "required": ["mode", "runIssues"],
+            "type": "object"
+          }
+        },
+        "required": ["defaultTimezone", "notificationPreference"],
+        "type": "object"
+      },
+      "RegisterInput": {
+        "$id": "#/components/schemas/RegisterInput",
+        "additionalProperties": false,
+        "description": "邮箱密码注册输入；不接受客户端 userId",
+        "properties": {
+          "defaultTimezone": {
+            "description": "明确的 IANA 时区，例如 Asia/Shanghai",
+            "format": "scova-timezone",
+            "type": "string"
+          },
+          "email": {
+            "description": "邮箱地址，账号服务负责规范化与唯一性判断",
+            "maxLength": 254,
+            "minLength": 3,
+            "pattern": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+            "type": "string"
+          },
+          "password": {
+            "description": "12 至 128 个字符的密码，禁止写入日志或返回体",
+            "maxLength": 128,
+            "minLength": 12,
+            "type": "string"
+          }
+        },
+        "required": ["email", "password", "defaultTimezone"],
+        "type": "object"
+      },
+      "Report": {
+        "$id": "#/components/schemas/Report",
+        "additionalProperties": false,
+        "description": "四种展示形式共用的不可变报告 DTO",
+        "properties": {
+          "baselineRunId": {
+            "anyOf": [
+              {
+                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "本次比较所用基线执行，可为空"
+          },
+          "changes": {
+            "description": "重复、新增与变化列表",
+            "items": {
+              "additionalProperties": false,
+              "description": "可解释差异，不把一次未观测到视为资料撤回",
+              "properties": {
+                "factKey": {
+                  "description": "至少包含一个非空白字符的文本",
+                  "minLength": 1,
+                  "pattern": "\\S",
+                  "type": "string"
+                },
+                "id": {
+                  "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                  "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                  "type": "string"
+                },
+                "important": {
+                  "description": "经确认是否为与任务相关的重要事实变化",
+                  "type": "boolean"
+                },
+                "kind": {
+                  "anyOf": [
+                    {
+                      "const": "baseline",
+                      "type": "string"
+                    },
+                    {
+                      "const": "new",
+                      "type": "string"
+                    },
+                    {
+                      "const": "duplicate",
+                      "type": "string"
+                    },
+                    {
+                      "const": "duplicate_candidate",
+                      "type": "string"
+                    },
+                    {
+                      "const": "changed",
+                      "type": "string"
+                    },
+                    {
+                      "const": "non_material",
+                      "type": "string"
+                    },
+                    {
+                      "const": "uncertain",
+                      "type": "string"
+                    }
+                  ],
+                  "description": "基线、新增、重复、疑似转载、实质变化、非实质变化或待核验"
+                },
+                "newEvidenceIds": {
+                  "description": "本次观测证据",
+                  "items": {
+                    "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                    "type": "string"
+                  },
+                  "type": "array",
+                  "uniqueItems": true
+                },
+                "newValue": {
+                  "anyOf": [
+                    {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "新事实值，可为空"
+                },
+                "oldEvidenceIds": {
+                  "description": "旧值证据，来自合法基线",
+                  "items": {
+                    "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                    "type": "string"
+                  },
+                  "type": "array",
+                  "uniqueItems": true
+                },
+                "oldValue": {
+                  "anyOf": [
+                    {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "旧事实值，可为空"
+                },
+                "reason": {
+                  "description": "至少包含一个非空白字符的文本",
+                  "minLength": 1,
+                  "pattern": "\\S",
+                  "type": "string"
+                },
+                "sourceId": {
+                  "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                  "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "sourceId",
+                "kind",
+                "factKey",
+                "oldValue",
+                "newValue",
+                "oldEvidenceIds",
+                "newEvidenceIds",
+                "important",
+                "reason"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "claims": {
+            "description": "至少一条有内容的结构化结论",
+            "items": {
+              "additionalProperties": false,
+              "description": "结构化结论，事实型结论至少有一条引用",
+              "properties": {
+                "confidenceLabel": {
+                  "description": "至少包含一个非空白字符的文本",
+                  "minLength": 1,
+                  "pattern": "\\S",
+                  "type": "string"
+                },
+                "evidenceIds": {
+                  "description": "引用的证据 ID，必须出现在报告可访问证据中",
+                  "items": {
+                    "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                    "type": "string"
+                  },
+                  "type": "array",
+                  "uniqueItems": true
+                },
+                "id": {
+                  "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                  "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                  "type": "string"
+                },
+                "kind": {
+                  "anyOf": [
+                    {
+                      "const": "fact",
+                      "type": "string"
+                    },
+                    {
+                      "const": "inference",
+                      "type": "string"
+                    },
+                    {
+                      "const": "conflict",
+                      "type": "string"
+                    },
+                    {
+                      "const": "insufficient",
+                      "type": "string"
+                    }
+                  ],
+                  "description": "来源事实、Agent 推断、冲突证据或证据不足"
+                },
+                "text": {
+                  "description": "至少包含一个非空白字符的文本",
+                  "minLength": 1,
+                  "pattern": "\\S",
+                  "type": "string"
+                }
+              },
+              "required": ["id", "kind", "text", "confidenceLabel", "evidenceIds"],
+              "type": "object"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "coverage": {
+            "additionalProperties": false,
+            "description": "由系统判定的查阅覆盖范围，complete 不等于互联网穷尽",
+            "properties": {
+              "completeness": {
+                "anyOf": [
+                  {
+                    "const": "complete",
+                    "type": "string"
+                  },
+                  {
+                    "const": "partial",
+                    "type": "string"
+                  }
+                ],
+                "description": "本次查阅完整性"
+              },
+              "exhausted": {
+                "description": "已耗尽的预算维度",
+                "items": {
+                  "anyOf": [
+                    {
+                      "const": "searches",
+                      "type": "string"
+                    },
+                    {
+                      "const": "pages",
+                      "type": "string"
+                    },
+                    {
+                      "const": "time",
+                      "type": "string"
+                    },
+                    {
+                      "const": "input_tokens",
+                      "type": "string"
+                    },
+                    {
+                      "const": "output_tokens",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "type": "array",
+                "uniqueItems": true
+              },
+              "gaps": {
+                "description": "未覆盖子问题、失败来源或未核验冲突",
+                "items": {
+                  "description": "至少包含一个非空白字符的文本",
+                  "minLength": 1,
+                  "pattern": "\\S",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "searchedQueries": {
+                "description": "已经执行的查询摘要，不包含完整提示词",
+                "items": {
+                  "description": "至少包含一个非空白字符的文本",
+                  "minLength": 1,
+                  "pattern": "\\S",
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": ["completeness", "searchedQueries", "gaps", "exhausted"],
+            "type": "object"
+          },
+          "evidence": {
+            "description": "至少一条可查证证据；没有证据时不能发布报告",
+            "items": {
+              "additionalProperties": false,
+              "description": "原始证据片段，来源权限和执行归属仍由领域服务校验",
+              "properties": {
+                "id": {
+                  "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                  "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                  "type": "string"
+                },
+                "location": {
+                  "description": "原文段落或字符位置的可解释定位，不执行页面选择器代码",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "observedAt": {
+                  "description": "带 UTC 偏移的 ISO 8601 时间",
+                  "format": "scova-instant",
+                  "type": "string"
+                },
+                "quote": {
+                  "description": "至少包含一个非空白字符的文本",
+                  "minLength": 1,
+                  "pattern": "\\S",
+                  "type": "string"
+                },
+                "snapshotId": {
+                  "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                  "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                  "type": "string"
+                },
+                "sourceId": {
+                  "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                  "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                  "type": "string"
+                },
+                "title": {
+                  "description": "至少包含一个非空白字符的文本",
+                  "minLength": 1,
+                  "pattern": "\\S",
+                  "type": "string"
+                },
+                "url": {
+                  "description": "HTTP/HTTPS 来源原文链接，不包含用户名或密码；实际抓取另行执行网络安全校验",
+                  "format": "scova-http-url",
+                  "maxLength": 4096,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "sourceId",
+                "snapshotId",
+                "url",
+                "title",
+                "quote",
+                "location",
+                "observedAt"
+              ],
+              "type": "object"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "format": {
+            "anyOf": [
+              {
+                "const": "brief",
+                "type": "string"
+              },
+              {
+                "const": "list",
+                "type": "string"
+              },
+              {
+                "const": "comparison",
+                "type": "string"
+              },
+              {
+                "const": "research_report",
+                "type": "string"
+              }
+            ],
+            "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
+          },
+          "id": {
+            "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+            "type": "string"
+          },
+          "limitations": {
+            "description": "查阅限制与证据缺口，不能隐藏部分交付状态",
+            "items": {
+              "description": "至少包含一个非空白字符的文本",
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "const": "demo",
+                "type": "string"
+              },
+              {
+                "const": "live",
+                "type": "string"
+              }
+            ],
+            "description": "服务模式，演示和真实资料的基线分别保存"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "const": "baseline",
+                "type": "string"
+              },
+              {
+                "const": "important_change",
+                "type": "string"
+              },
+              {
+                "const": "new_findings",
+                "type": "string"
+              },
+              {
+                "const": "no_important_change",
+                "type": "string"
+              },
+              {
+                "const": "inconclusive",
+                "type": "string"
+              }
+            ],
+            "description": "执行业务结论；不完整查阅不能声明没有重要变化"
+          },
+          "publishedAt": {
+            "description": "带 UTC 偏移的 ISO 8601 时间",
+            "format": "scova-instant",
+            "type": "string"
+          },
+          "runId": {
+            "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+            "type": "string"
+          },
+          "schemaVersion": {
+            "const": 1,
+            "description": "公共结构版本",
+            "type": "number"
+          },
+          "summary": {
+            "description": "至少包含一个非空白字符的文本",
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "taskId": {
+            "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+            "type": "string"
+          },
+          "taskVersionId": {
+            "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+            "type": "string"
+          },
+          "title": {
+            "description": "至少包含一个非空白字符的文本",
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "runId",
+          "taskId",
+          "taskVersionId",
+          "baselineRunId",
+          "schemaVersion",
+          "title",
+          "summary",
+          "format",
+          "mode",
+          "outcome",
+          "coverage",
+          "limitations",
+          "claims",
+          "evidence",
+          "changes",
+          "publishedAt"
+        ],
+        "type": "object"
+      },
+      "Run": {
+        "$id": "#/components/schemas/Run",
+        "additionalProperties": false,
+        "description": "执行公共快照，不暴露租约、checkpoint 或数据库内部字段",
+        "properties": {
+          "baselineRunId": {
+            "anyOf": [
+              {
+                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "本次比较所用基线执行，可为空"
+          },
+          "budget": {
+            "additionalProperties": false,
+            "description": "单次执行预算，服务端部署策略另行设置上限",
+            "properties": {
+              "maxDurationSeconds": {
+                "description": "单次执行总时间预算（秒），恢复不重置期限",
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "maxInputTokens": {
+                "description": "累计模型输入 token 上限",
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "maxOutputTokens": {
+                "description": "累计模型输出 token 上限",
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "maxPages": {
+                "description": "最多网页读取次数，包含重试",
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "maxSearches": {
+                "description": "最多搜索调用次数，包含重试",
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "maxSearches",
+              "maxPages",
+              "maxDurationSeconds",
+              "maxInputTokens",
+              "maxOutputTokens"
+            ],
+            "type": "object"
+          },
+          "coverage": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "description": "由系统判定的查阅覆盖范围，complete 不等于互联网穷尽",
+                "properties": {
+                  "completeness": {
+                    "anyOf": [
+                      {
+                        "const": "complete",
+                        "type": "string"
+                      },
+                      {
+                        "const": "partial",
+                        "type": "string"
+                      }
+                    ],
+                    "description": "本次查阅完整性"
+                  },
+                  "exhausted": {
+                    "description": "已耗尽的预算维度",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "const": "searches",
+                          "type": "string"
+                        },
+                        {
+                          "const": "pages",
+                          "type": "string"
+                        },
+                        {
+                          "const": "time",
+                          "type": "string"
+                        },
+                        {
+                          "const": "input_tokens",
+                          "type": "string"
+                        },
+                        {
+                          "const": "output_tokens",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "type": "array",
+                    "uniqueItems": true
+                  },
+                  "gaps": {
+                    "description": "未覆盖子问题、失败来源或未核验冲突",
+                    "items": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "searchedQueries": {
+                    "description": "已经执行的查询摘要，不包含完整提示词",
+                    "items": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": ["completeness", "searchedQueries", "gaps", "exhausted"],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "系统判定的查阅覆盖范围，可为空"
+          },
+          "failureCode": {
+            "anyOf": [
+              {
+                "description": "至少包含一个非空白字符的文本",
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "失败原因编码，可为空"
+          },
+          "finishedAt": {
+            "anyOf": [
+              {
+                "description": "带 UTC 偏移的 ISO 8601 时间",
+                "format": "scova-instant",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "结束时间，可为空"
+          },
+          "id": {
+            "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+            "type": "string"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "const": "demo",
+                "type": "string"
+              },
+              {
+                "const": "live",
+                "type": "string"
+              }
+            ],
+            "description": "服务模式，演示和真实资料的基线分别保存"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "const": "baseline",
+                    "type": "string"
+                  },
+                  {
+                    "const": "important_change",
+                    "type": "string"
+                  },
+                  {
+                    "const": "new_findings",
+                    "type": "string"
+                  },
+                  {
+                    "const": "no_important_change",
+                    "type": "string"
+                  },
+                  {
+                    "const": "inconclusive",
+                    "type": "string"
+                  }
+                ],
+                "description": "执行业务结论；不完整查阅不能声明没有重要变化"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "执行业务结论"
+          },
+          "parentRunId": {
+            "anyOf": [
+              {
+                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "重试或关联研究的父执行，可为空"
+          },
+          "queuedAt": {
+            "description": "带 UTC 偏移的 ISO 8601 时间",
+            "format": "scova-instant",
+            "type": "string"
+          },
+          "startedAt": {
+            "anyOf": [
+              {
+                "description": "带 UTC 偏移的 ISO 8601 时间",
+                "format": "scova-instant",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "开始时间，可为空"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "const": "queued",
+                "type": "string"
+              },
+              {
+                "const": "running",
+                "type": "string"
+              },
+              {
+                "const": "recovering",
+                "type": "string"
+              },
+              {
+                "const": "cancel_requested",
+                "type": "string"
+              },
+              {
+                "const": "canceled",
+                "type": "string"
+              },
+              {
+                "const": "succeeded",
+                "type": "string"
+              },
+              {
+                "const": "partial",
+                "type": "string"
+              },
+              {
+                "const": "failed",
+                "type": "string"
+              }
+            ],
+            "description": "执行控制状态，与业务结论分别保存"
+          },
+          "taskId": {
+            "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+            "type": "string"
+          },
+          "taskVersionId": {
+            "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+            "type": "string"
+          },
+          "trigger": {
+            "anyOf": [
+              {
+                "const": "manual",
+                "type": "string"
+              },
+              {
+                "const": "scheduled",
+                "type": "string"
+              },
+              {
+                "const": "retry",
+                "type": "string"
+              },
+              {
+                "const": "followup",
+                "type": "string"
+              }
+            ],
+            "description": "执行触发来源"
+          },
+          "usage": {
+            "additionalProperties": false,
+            "description": "包含重试与恢复期间累计消耗的预算用量",
+            "properties": {
+              "estimated": {
+                "description": "模型未返回计量时是否使用保守估算",
+                "type": "boolean"
+              },
+              "inputTokens": {
+                "description": "非负安全整数计数",
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "outputTokens": {
+                "description": "非负安全整数计数",
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "pages": {
+                "description": "非负安全整数计数",
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "searches": {
+                "description": "非负安全整数计数",
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": ["searches", "pages", "inputTokens", "outputTokens", "estimated"],
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "taskId",
+          "taskVersionId",
+          "parentRunId",
+          "baselineRunId",
+          "mode",
+          "status",
+          "outcome",
+          "trigger",
+          "budget",
+          "usage",
+          "coverage",
+          "queuedAt",
+          "startedAt",
+          "finishedAt",
+          "failureCode"
+        ],
+        "type": "object"
+      },
+      "RunCommandResponse": {
+        "$id": "#/components/schemas/RunCommandResponse",
+        "additionalProperties": false,
+        "description": "执行命令的普通 JSON 响应；首次入队使用 HTTP 202",
+        "properties": {
+          "reused": {
+            "description": "是否返回已经存在的活动执行",
+            "type": "boolean"
+          },
+          "run": {
+            "$id": "#/components/schemas/Run",
+            "additionalProperties": false,
+            "description": "执行公共快照，不暴露租约、checkpoint 或数据库内部字段",
+            "properties": {
+              "baselineRunId": {
+                "anyOf": [
+                  {
+                    "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "本次比较所用基线执行，可为空"
+              },
+              "budget": {
+                "additionalProperties": false,
+                "description": "单次执行预算，服务端部署策略另行设置上限",
+                "properties": {
+                  "maxDurationSeconds": {
+                    "description": "单次执行总时间预算（秒），恢复不重置期限",
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "maxInputTokens": {
+                    "description": "累计模型输入 token 上限",
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "maxOutputTokens": {
+                    "description": "累计模型输出 token 上限",
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "maxPages": {
+                    "description": "最多网页读取次数，包含重试",
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "maxSearches": {
+                    "description": "最多搜索调用次数，包含重试",
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "maxSearches",
+                  "maxPages",
+                  "maxDurationSeconds",
+                  "maxInputTokens",
+                  "maxOutputTokens"
+                ],
+                "type": "object"
+              },
+              "coverage": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "description": "由系统判定的查阅覆盖范围，complete 不等于互联网穷尽",
+                    "properties": {
+                      "completeness": {
+                        "anyOf": [
+                          {
+                            "const": "complete",
+                            "type": "string"
+                          },
+                          {
+                            "const": "partial",
+                            "type": "string"
+                          }
+                        ],
+                        "description": "本次查阅完整性"
+                      },
+                      "exhausted": {
+                        "description": "已耗尽的预算维度",
+                        "items": {
+                          "anyOf": [
+                            {
+                              "const": "searches",
+                              "type": "string"
+                            },
+                            {
+                              "const": "pages",
+                              "type": "string"
+                            },
+                            {
+                              "const": "time",
+                              "type": "string"
+                            },
+                            {
+                              "const": "input_tokens",
+                              "type": "string"
+                            },
+                            {
+                              "const": "output_tokens",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "gaps": {
+                        "description": "未覆盖子问题、失败来源或未核验冲突",
+                        "items": {
+                          "description": "至少包含一个非空白字符的文本",
+                          "minLength": 1,
+                          "pattern": "\\S",
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "searchedQueries": {
+                        "description": "已经执行的查询摘要，不包含完整提示词",
+                        "items": {
+                          "description": "至少包含一个非空白字符的文本",
+                          "minLength": 1,
+                          "pattern": "\\S",
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    },
+                    "required": ["completeness", "searchedQueries", "gaps", "exhausted"],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "系统判定的查阅覆盖范围，可为空"
+              },
+              "failureCode": {
+                "anyOf": [
+                  {
+                    "description": "至少包含一个非空白字符的文本",
+                    "minLength": 1,
+                    "pattern": "\\S",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "失败原因编码，可为空"
+              },
+              "finishedAt": {
+                "anyOf": [
+                  {
+                    "description": "带 UTC 偏移的 ISO 8601 时间",
+                    "format": "scova-instant",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "结束时间，可为空"
+              },
+              "id": {
+                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                "type": "string"
+              },
+              "mode": {
+                "anyOf": [
+                  {
+                    "const": "demo",
+                    "type": "string"
+                  },
+                  {
+                    "const": "live",
+                    "type": "string"
+                  }
+                ],
+                "description": "服务模式，演示和真实资料的基线分别保存"
+              },
+              "outcome": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "const": "baseline",
+                        "type": "string"
+                      },
+                      {
+                        "const": "important_change",
+                        "type": "string"
+                      },
+                      {
+                        "const": "new_findings",
+                        "type": "string"
+                      },
+                      {
+                        "const": "no_important_change",
+                        "type": "string"
+                      },
+                      {
+                        "const": "inconclusive",
+                        "type": "string"
+                      }
+                    ],
+                    "description": "执行业务结论；不完整查阅不能声明没有重要变化"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "执行业务结论"
+              },
+              "parentRunId": {
+                "anyOf": [
+                  {
+                    "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "重试或关联研究的父执行，可为空"
+              },
+              "queuedAt": {
+                "description": "带 UTC 偏移的 ISO 8601 时间",
+                "format": "scova-instant",
+                "type": "string"
+              },
+              "startedAt": {
+                "anyOf": [
+                  {
+                    "description": "带 UTC 偏移的 ISO 8601 时间",
+                    "format": "scova-instant",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "开始时间，可为空"
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "const": "queued",
+                    "type": "string"
+                  },
+                  {
+                    "const": "running",
+                    "type": "string"
+                  },
+                  {
+                    "const": "recovering",
+                    "type": "string"
+                  },
+                  {
+                    "const": "cancel_requested",
+                    "type": "string"
+                  },
+                  {
+                    "const": "canceled",
+                    "type": "string"
+                  },
+                  {
+                    "const": "succeeded",
+                    "type": "string"
+                  },
+                  {
+                    "const": "partial",
+                    "type": "string"
+                  },
+                  {
+                    "const": "failed",
+                    "type": "string"
+                  }
+                ],
+                "description": "执行控制状态，与业务结论分别保存"
+              },
+              "taskId": {
+                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                "type": "string"
+              },
+              "taskVersionId": {
+                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                "type": "string"
+              },
+              "trigger": {
+                "anyOf": [
+                  {
+                    "const": "manual",
+                    "type": "string"
+                  },
+                  {
+                    "const": "scheduled",
+                    "type": "string"
+                  },
+                  {
+                    "const": "retry",
+                    "type": "string"
+                  },
+                  {
+                    "const": "followup",
+                    "type": "string"
+                  }
+                ],
+                "description": "执行触发来源"
+              },
+              "usage": {
+                "additionalProperties": false,
+                "description": "包含重试与恢复期间累计消耗的预算用量",
+                "properties": {
+                  "estimated": {
+                    "description": "模型未返回计量时是否使用保守估算",
+                    "type": "boolean"
+                  },
+                  "inputTokens": {
+                    "description": "非负安全整数计数",
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "outputTokens": {
+                    "description": "非负安全整数计数",
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "pages": {
+                    "description": "非负安全整数计数",
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "searches": {
+                    "description": "非负安全整数计数",
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": ["searches", "pages", "inputTokens", "outputTokens", "estimated"],
+                "type": "object"
+              }
+            },
+            "required": [
+              "id",
+              "taskId",
+              "taskVersionId",
+              "parentRunId",
+              "baselineRunId",
+              "mode",
+              "status",
+              "outcome",
+              "trigger",
+              "budget",
+              "usage",
+              "coverage",
+              "queuedAt",
+              "startedAt",
+              "finishedAt",
+              "failureCode"
+            ],
+            "type": "object"
+          }
+        },
+        "required": ["run", "reused"],
+        "type": "object"
+      },
+      "RunEvent": {
+        "$id": "#/components/schemas/RunEvent",
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "description": "执行已入队",
+            "properties": {
+              "eventId": {
+                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                "type": "string"
+              },
+              "occurredAt": {
+                "description": "带 UTC 偏移的 ISO 8601 时间",
+                "format": "scova-instant",
+                "type": "string"
+              },
+              "payload": {
+                "additionalProperties": false,
+                "description": "由类型决定的结构化数据",
+                "properties": {
+                  "status": {
+                    "const": "queued",
+                    "description": "当前控制状态",
+                    "type": "string"
+                  },
+                  "taskVersionId": {
+                    "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                    "type": "string"
+                  }
+                },
+                "required": ["status", "taskVersionId"],
+                "type": "object"
+              },
+              "runId": {
+                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                "type": "string"
+              },
+              "schemaVersion": {
+                "const": 1,
+                "description": "持久化事件结构版本；未知版本禁止静默解析",
+                "type": "number"
+              },
+              "seq": {
+                "description": "执行内严格递增的持久化序号",
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "type": {
+                "const": "run.queued",
+                "description": "事件或控制帧类型",
+                "type": "string"
+              }
+            },
+            "required": [
+              "schemaVersion",
+              "eventId",
+              "runId",
+              "seq",
+              "occurredAt",
+              "type",
+              "payload"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "执行开始或接管后继续",
+            "properties": {
+              "eventId": {
+                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                "type": "string"
+              },
+              "occurredAt": {
+                "description": "带 UTC 偏移的 ISO 8601 时间",
+                "format": "scova-instant",
+                "type": "string"
+              },
+              "payload": {
+                "additionalProperties": false,
+                "description": "由类型决定的结构化数据",
+                "properties": {
+                  "startedAt": {
+                    "description": "带 UTC 偏移的 ISO 8601 时间",
+                    "format": "scova-instant",
+                    "type": "string"
+                  },
+                  "status": {
+                    "const": "running",
+                    "description": "当前控制状态",
+                    "type": "string"
+                  }
+                },
+                "required": ["status", "startedAt"],
+                "type": "object"
+              },
+              "runId": {
+                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                "type": "string"
+              },
+              "schemaVersion": {
+                "const": 1,
+                "description": "持久化事件结构版本；未知版本禁止静默解析",
+                "type": "number"
+              },
+              "seq": {
+                "description": "执行内严格递增的持久化序号",
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "type": {
+                "const": "run.started",
+                "description": "事件或控制帧类型",
+                "type": "string"
+              }
+            },
+            "required": [
+              "schemaVersion",
+              "eventId",
+              "runId",
+              "seq",
+              "occurredAt",
+              "type",
+              "payload"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "执行等待恢复，不暴露 checkpoint 或租约细节",
+            "properties": {
+              "eventId": {
+                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                "type": "string"
+              },
+              "occurredAt": {
+                "description": "带 UTC 偏移的 ISO 8601 时间",
+                "format": "scova-instant",
+                "type": "string"
+              },
+              "payload": {
+                "additionalProperties": false,
+                "description": "由类型决定的结构化数据",
+                "properties": {
+                  "recoveryCount": {
+                    "description": "非负计数",
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "status": {
+                    "const": "recovering",
+                    "description": "当前控制状态",
+                    "type": "string"
+                  }
+                },
+                "required": ["status", "recoveryCount"],
+                "type": "object"
+              },
+              "runId": {
+                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                "type": "string"
+              },
+              "schemaVersion": {
+                "const": 1,
+                "description": "持久化事件结构版本；未知版本禁止静默解析",
+                "type": "number"
+              },
+              "seq": {
+                "description": "执行内严格递增的持久化序号",
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "type": {
+                "const": "run.recovering",
+                "description": "事件或控制帧类型",
+                "type": "string"
+              }
+            },
+            "required": [
+              "schemaVersion",
+              "eventId",
+              "runId",
+              "seq",
+              "occurredAt",
+              "type",
+              "payload"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "编排节点开始",
+            "properties": {
+              "eventId": {
+                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                "type": "string"
+              },
+              "occurredAt": {
+                "description": "带 UTC 偏移的 ISO 8601 时间",
+                "format": "scova-instant",
+                "type": "string"
+              },
+              "payload": {
+                "additionalProperties": false,
+                "description": "由类型决定的结构化数据",
+                "properties": {
+                  "step": {
+                    "anyOf": [
+                      {
+                        "const": "load_context",
+                        "type": "string"
+                      },
+                      {
+                        "const": "plan",
+                        "type": "string"
+                      },
+                      {
+                        "const": "search",
+                        "type": "string"
+                      },
+                      {
+                        "const": "select",
+                        "type": "string"
+                      },
+                      {
+                        "const": "read",
+                        "type": "string"
+                      },
+                      {
+                        "const": "verify",
+                        "type": "string"
+                      },
+                      {
+                        "const": "compare",
+                        "type": "string"
+                      },
+                      {
+                        "const": "synthesize",
+                        "type": "string"
+                      },
+                      {
+                        "const": "validate",
+                        "type": "string"
+                      },
+                      {
+                        "const": "ready_for_delivery",
+                        "type": "string"
+                      }
+                    ],
+                    "description": "持久化 Agent 编排节点，不传输逐 token 过程或隐式思维链"
+                  }
+                },
+                "required": ["step"],
+                "type": "object"
+              },
+              "runId": {
+                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                "type": "string"
+              },
+              "schemaVersion": {
+                "const": 1,
+                "description": "持久化事件结构版本；未知版本禁止静默解析",
+                "type": "number"
+              },
+              "seq": {
+                "description": "执行内严格递增的持久化序号",
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "type": {
+                "const": "step.started",
+                "description": "事件或控制帧类型",
+                "type": "string"
+              }
+            },
+            "required": [
+              "schemaVersion",
+              "eventId",
+              "runId",
+              "seq",
+              "occurredAt",
+              "type",
+              "payload"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "编排节点完成",
+            "properties": {
+              "eventId": {
+                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                "type": "string"
+              },
+              "occurredAt": {
+                "description": "带 UTC 偏移的 ISO 8601 时间",
+                "format": "scova-instant",
+                "type": "string"
+              },
+              "payload": {
+                "additionalProperties": false,
+                "description": "由类型决定的结构化数据",
+                "properties": {
+                  "durationMs": {
+                    "description": "非负计数",
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "step": {
+                    "anyOf": [
+                      {
+                        "const": "load_context",
+                        "type": "string"
+                      },
+                      {
+                        "const": "plan",
+                        "type": "string"
+                      },
+                      {
+                        "const": "search",
+                        "type": "string"
+                      },
+                      {
+                        "const": "select",
+                        "type": "string"
+                      },
+                      {
+                        "const": "read",
+                        "type": "string"
+                      },
+                      {
+                        "const": "verify",
+                        "type": "string"
+                      },
+                      {
+                        "const": "compare",
+                        "type": "string"
+                      },
+                      {
+                        "const": "synthesize",
+                        "type": "string"
+                      },
+                      {
+                        "const": "validate",
+                        "type": "string"
+                      },
+                      {
+                        "const": "ready_for_delivery",
+                        "type": "string"
+                      }
+                    ],
+                    "description": "持久化 Agent 编排节点，不传输逐 token 过程或隐式思维链"
+                  }
+                },
+                "required": ["step", "durationMs"],
+                "type": "object"
+              },
+              "runId": {
+                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                "type": "string"
+              },
+              "schemaVersion": {
+                "const": 1,
+                "description": "持久化事件结构版本；未知版本禁止静默解析",
+                "type": "number"
+              },
+              "seq": {
+                "description": "执行内严格递增的持久化序号",
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "type": {
+                "const": "step.completed",
+                "description": "事件或控制帧类型",
+                "type": "string"
+              }
+            },
+            "required": [
+              "schemaVersion",
+              "eventId",
+              "runId",
+              "seq",
+              "occurredAt",
+              "type",
+              "payload"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "工具调用开始，只展示脱敏摘要",
+            "properties": {
+              "eventId": {
+                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                "type": "string"
+              },
+              "occurredAt": {
+                "description": "带 UTC 偏移的 ISO 8601 时间",
+                "format": "scova-instant",
+                "type": "string"
+              },
+              "payload": {
+                "additionalProperties": false,
+                "description": "由类型决定的结构化数据",
+                "properties": {
+                  "summary": {
+                    "description": "至少包含一个非空白字符的文本",
+                    "minLength": 1,
+                    "pattern": "\\S",
+                    "type": "string"
+                  },
+                  "tool": {
+                    "anyOf": [
+                      {
+                        "const": "search",
+                        "type": "string"
+                      },
+                      {
+                        "const": "read",
+                        "type": "string"
+                      },
+                      {
+                        "const": "model",
+                        "type": "string"
+                      }
+                    ],
+                    "description": "工具类别"
+                  },
+                  "toolCallId": {
+                    "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                    "type": "string"
+                  }
+                },
+                "required": ["toolCallId", "tool", "summary"],
+                "type": "object"
+              },
+              "runId": {
+                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                "type": "string"
+              },
+              "schemaVersion": {
+                "const": 1,
+                "description": "持久化事件结构版本；未知版本禁止静默解析",
+                "type": "number"
+              },
+              "seq": {
+                "description": "执行内严格递增的持久化序号",
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "type": {
+                "const": "tool.started",
+                "description": "事件或控制帧类型",
+                "type": "string"
+              }
+            },
+            "required": [
+              "schemaVersion",
+              "eventId",
+              "runId",
+              "seq",
+              "occurredAt",
+              "type",
+              "payload"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "工具调用完成与累计用量",
+            "properties": {
+              "eventId": {
+                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                "type": "string"
+              },
+              "occurredAt": {
+                "description": "带 UTC 偏移的 ISO 8601 时间",
+                "format": "scova-instant",
+                "type": "string"
+              },
+              "payload": {
+                "additionalProperties": false,
+                "description": "由类型决定的结构化数据",
+                "properties": {
+                  "durationMs": {
+                    "description": "非负计数",
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "tool": {
+                    "anyOf": [
+                      {
+                        "const": "search",
+                        "type": "string"
+                      },
+                      {
+                        "const": "read",
+                        "type": "string"
+                      },
+                      {
+                        "const": "model",
+                        "type": "string"
+                      }
+                    ],
+                    "description": "工具类别"
+                  },
+                  "toolCallId": {
+                    "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                    "type": "string"
+                  },
+                  "usage": {
+                    "additionalProperties": false,
+                    "description": "包含重试与恢复期间累计消耗的预算用量",
+                    "properties": {
+                      "estimated": {
+                        "description": "模型未返回计量时是否使用保守估算",
+                        "type": "boolean"
+                      },
+                      "inputTokens": {
+                        "description": "非负安全整数计数",
+                        "maximum": 9007199254740991,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "outputTokens": {
+                        "description": "非负安全整数计数",
+                        "maximum": 9007199254740991,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "pages": {
+                        "description": "非负安全整数计数",
+                        "maximum": 9007199254740991,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "searches": {
+                        "description": "非负安全整数计数",
+                        "maximum": 9007199254740991,
+                        "minimum": 0,
+                        "type": "integer"
+                      }
+                    },
+                    "required": ["searches", "pages", "inputTokens", "outputTokens", "estimated"],
+                    "type": "object"
+                  }
+                },
+                "required": ["toolCallId", "tool", "durationMs", "usage"],
+                "type": "object"
+              },
+              "runId": {
+                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                "type": "string"
+              },
+              "schemaVersion": {
+                "const": 1,
+                "description": "持久化事件结构版本；未知版本禁止静默解析",
+                "type": "number"
+              },
+              "seq": {
+                "description": "执行内严格递增的持久化序号",
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "type": {
+                "const": "tool.completed",
+                "description": "事件或控制帧类型",
+                "type": "string"
+              }
+            },
+            "required": [
+              "schemaVersion",
+              "eventId",
+              "runId",
+              "seq",
+              "occurredAt",
+              "type",
+              "payload"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "工具调用失败，不将失败解释为资料无变化",
+            "properties": {
+              "eventId": {
+                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                "type": "string"
+              },
+              "occurredAt": {
+                "description": "带 UTC 偏移的 ISO 8601 时间",
+                "format": "scova-instant",
+                "type": "string"
+              },
+              "payload": {
+                "additionalProperties": false,
+                "description": "由类型决定的结构化数据",
+                "properties": {
+                  "code": {
+                    "description": "至少包含一个非空白字符的文本",
+                    "minLength": 1,
+                    "pattern": "\\S",
+                    "type": "string"
+                  },
+                  "message": {
+                    "description": "至少包含一个非空白字符的文本",
+                    "minLength": 1,
+                    "pattern": "\\S",
+                    "type": "string"
+                  },
+                  "retryable": {
+                    "description": "是否允许在剩余预算内按策略重试",
+                    "type": "boolean"
+                  },
+                  "tool": {
+                    "anyOf": [
+                      {
+                        "const": "search",
+                        "type": "string"
+                      },
+                      {
+                        "const": "read",
+                        "type": "string"
+                      },
+                      {
+                        "const": "model",
+                        "type": "string"
+                      }
+                    ],
+                    "description": "工具类别"
+                  },
+                  "toolCallId": {
+                    "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                    "type": "string"
+                  }
+                },
+                "required": ["toolCallId", "tool", "code", "message", "retryable"],
+                "type": "object"
+              },
+              "runId": {
+                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                "type": "string"
+              },
+              "schemaVersion": {
+                "const": 1,
+                "description": "持久化事件结构版本；未知版本禁止静默解析",
+                "type": "number"
+              },
+              "seq": {
+                "description": "执行内严格递增的持久化序号",
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "type": {
+                "const": "tool.failed",
+                "description": "事件或控制帧类型",
+                "type": "string"
+              }
+            },
+            "required": [
+              "schemaVersion",
+              "eventId",
+              "runId",
+              "seq",
+              "occurredAt",
+              "type",
+              "payload"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "预算预留或累计消耗更新，包含重试",
+            "properties": {
+              "eventId": {
+                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                "type": "string"
+              },
+              "occurredAt": {
+                "description": "带 UTC 偏移的 ISO 8601 时间",
+                "format": "scova-instant",
+                "type": "string"
+              },
+              "payload": {
+                "additionalProperties": false,
+                "description": "由类型决定的结构化数据",
+                "properties": {
+                  "budget": {
+                    "additionalProperties": false,
+                    "description": "单次执行预算，服务端部署策略另行设置上限",
+                    "properties": {
+                      "maxDurationSeconds": {
+                        "description": "单次执行总时间预算（秒），恢复不重置期限",
+                        "maximum": 9007199254740991,
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "maxInputTokens": {
+                        "description": "累计模型输入 token 上限",
+                        "maximum": 9007199254740991,
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "maxOutputTokens": {
+                        "description": "累计模型输出 token 上限",
+                        "maximum": 9007199254740991,
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "maxPages": {
+                        "description": "最多网页读取次数，包含重试",
+                        "maximum": 9007199254740991,
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "maxSearches": {
+                        "description": "最多搜索调用次数，包含重试",
+                        "maximum": 9007199254740991,
+                        "minimum": 1,
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "maxSearches",
+                      "maxPages",
+                      "maxDurationSeconds",
+                      "maxInputTokens",
+                      "maxOutputTokens"
+                    ],
+                    "type": "object"
+                  },
+                  "usage": {
+                    "additionalProperties": false,
+                    "description": "包含重试与恢复期间累计消耗的预算用量",
+                    "properties": {
+                      "estimated": {
+                        "description": "模型未返回计量时是否使用保守估算",
+                        "type": "boolean"
+                      },
+                      "inputTokens": {
+                        "description": "非负安全整数计数",
+                        "maximum": 9007199254740991,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "outputTokens": {
+                        "description": "非负安全整数计数",
+                        "maximum": 9007199254740991,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "pages": {
+                        "description": "非负安全整数计数",
+                        "maximum": 9007199254740991,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "searches": {
+                        "description": "非负安全整数计数",
+                        "maximum": 9007199254740991,
+                        "minimum": 0,
+                        "type": "integer"
+                      }
+                    },
+                    "required": ["searches", "pages", "inputTokens", "outputTokens", "estimated"],
+                    "type": "object"
+                  }
+                },
+                "required": ["budget", "usage"],
+                "type": "object"
+              },
+              "runId": {
+                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                "type": "string"
+              },
+              "schemaVersion": {
+                "const": 1,
+                "description": "持久化事件结构版本；未知版本禁止静默解析",
+                "type": "number"
+              },
+              "seq": {
+                "description": "执行内严格递增的持久化序号",
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "type": {
+                "const": "budget.updated",
+                "description": "事件或控制帧类型",
+                "type": "string"
+              }
+            },
+            "required": [
+              "schemaVersion",
+              "eventId",
+              "runId",
+              "seq",
+              "occurredAt",
+              "type",
+              "payload"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "系统判定的查阅覆盖范围更新",
+            "properties": {
+              "eventId": {
+                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                "type": "string"
+              },
+              "occurredAt": {
+                "description": "带 UTC 偏移的 ISO 8601 时间",
+                "format": "scova-instant",
+                "type": "string"
+              },
+              "payload": {
+                "additionalProperties": false,
+                "description": "由系统判定的查阅覆盖范围，complete 不等于互联网穷尽",
+                "properties": {
+                  "completeness": {
+                    "anyOf": [
+                      {
+                        "const": "complete",
+                        "type": "string"
+                      },
+                      {
+                        "const": "partial",
+                        "type": "string"
+                      }
+                    ],
+                    "description": "本次查阅完整性"
+                  },
+                  "exhausted": {
+                    "description": "已耗尽的预算维度",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "const": "searches",
+                          "type": "string"
+                        },
+                        {
+                          "const": "pages",
+                          "type": "string"
+                        },
+                        {
+                          "const": "time",
+                          "type": "string"
+                        },
+                        {
+                          "const": "input_tokens",
+                          "type": "string"
+                        },
+                        {
+                          "const": "output_tokens",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "type": "array",
+                    "uniqueItems": true
+                  },
+                  "gaps": {
+                    "description": "未覆盖子问题、失败来源或未核验冲突",
+                    "items": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "searchedQueries": {
+                    "description": "已经执行的查询摘要，不包含完整提示词",
+                    "items": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": ["completeness", "searchedQueries", "gaps", "exhausted"],
+                "type": "object"
+              },
+              "runId": {
+                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                "type": "string"
+              },
+              "schemaVersion": {
+                "const": 1,
+                "description": "持久化事件结构版本；未知版本禁止静默解析",
+                "type": "number"
+              },
+              "seq": {
+                "description": "执行内严格递增的持久化序号",
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "type": {
+                "const": "coverage.updated",
+                "description": "事件或控制帧类型",
+                "type": "string"
+              }
+            },
+            "required": [
+              "schemaVersion",
+              "eventId",
+              "runId",
+              "seq",
+              "occurredAt",
+              "type",
+              "payload"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "不可变报告已原子交付",
+            "properties": {
+              "eventId": {
+                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                "type": "string"
+              },
+              "occurredAt": {
+                "description": "带 UTC 偏移的 ISO 8601 时间",
+                "format": "scova-instant",
+                "type": "string"
+              },
+              "payload": {
+                "additionalProperties": false,
+                "description": "由类型决定的结构化数据",
+                "properties": {
+                  "completeness": {
+                    "anyOf": [
+                      {
+                        "const": "complete",
+                        "type": "string"
+                      },
+                      {
+                        "const": "partial",
+                        "type": "string"
+                      }
+                    ],
+                    "description": "本次查阅完整性"
+                  },
+                  "reportId": {
+                    "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                    "type": "string"
+                  }
+                },
+                "required": ["reportId", "completeness"],
+                "type": "object"
+              },
+              "runId": {
+                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                "type": "string"
+              },
+              "schemaVersion": {
+                "const": 1,
+                "description": "持久化事件结构版本；未知版本禁止静默解析",
+                "type": "number"
+              },
+              "seq": {
+                "description": "执行内严格递增的持久化序号",
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "type": {
+                "const": "report.published",
+                "description": "事件或控制帧类型",
+                "type": "string"
+              }
+            },
+            "required": [
+              "schemaVersion",
+              "eventId",
+              "runId",
+              "seq",
+              "occurredAt",
+              "type",
+              "payload"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "执行已完成交付",
+            "properties": {
+              "eventId": {
+                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                "type": "string"
+              },
+              "occurredAt": {
+                "description": "带 UTC 偏移的 ISO 8601 时间",
+                "format": "scova-instant",
+                "type": "string"
+              },
+              "payload": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "outcome": {
+                        "anyOf": [
+                          {
+                            "const": "baseline",
+                            "type": "string"
+                          },
+                          {
+                            "const": "important_change",
+                            "type": "string"
+                          },
+                          {
+                            "const": "new_findings",
+                            "type": "string"
+                          },
+                          {
+                            "const": "no_important_change",
+                            "type": "string"
+                          },
+                          {
+                            "const": "inconclusive",
+                            "type": "string"
+                          }
+                        ],
+                        "description": "执行业务结论；不完整查阅不能声明没有重要变化"
+                      },
+                      "reportId": {
+                        "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                        "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                        "type": "string"
+                      },
+                      "status": {
+                        "const": "succeeded",
+                        "description": "当前控制状态",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["status", "outcome", "reportId"],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "outcome": {
+                        "anyOf": [
+                          {
+                            "const": "important_change",
+                            "type": "string"
+                          },
+                          {
+                            "const": "new_findings",
+                            "type": "string"
+                          },
+                          {
+                            "const": "inconclusive",
+                            "type": "string"
+                          }
+                        ],
+                        "description": "执行业务结论"
+                      },
+                      "reportId": {
+                        "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                        "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                        "type": "string"
+                      },
+                      "status": {
+                        "const": "partial",
+                        "description": "当前控制状态",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["status", "outcome", "reportId"],
+                    "type": "object"
+                  }
+                ],
+                "description": "完整或部分交付，部分交付不能声明完整无变化或建立基线"
+              },
+              "runId": {
+                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                "type": "string"
+              },
+              "schemaVersion": {
+                "const": 1,
+                "description": "持久化事件结构版本；未知版本禁止静默解析",
+                "type": "number"
+              },
+              "seq": {
+                "description": "执行内严格递增的持久化序号",
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "type": {
+                "const": "run.completed",
+                "description": "事件或控制帧类型",
+                "type": "string"
+              }
+            },
+            "required": [
+              "schemaVersion",
+              "eventId",
+              "runId",
+              "seq",
+              "occurredAt",
+              "type",
+              "payload"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "执行终结失败，不创建伪报告",
+            "properties": {
+              "eventId": {
+                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                "type": "string"
+              },
+              "occurredAt": {
+                "description": "带 UTC 偏移的 ISO 8601 时间",
+                "format": "scova-instant",
+                "type": "string"
+              },
+              "payload": {
+                "additionalProperties": false,
+                "description": "由类型决定的结构化数据",
+                "properties": {
+                  "code": {
+                    "description": "至少包含一个非空白字符的文本",
+                    "minLength": 1,
+                    "pattern": "\\S",
+                    "type": "string"
+                  },
+                  "message": {
+                    "description": "至少包含一个非空白字符的文本",
+                    "minLength": 1,
+                    "pattern": "\\S",
+                    "type": "string"
+                  },
+                  "status": {
+                    "const": "failed",
+                    "description": "当前控制状态",
+                    "type": "string"
+                  }
+                },
+                "required": ["status", "code", "message"],
+                "type": "object"
+              },
+              "runId": {
+                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                "type": "string"
+              },
+              "schemaVersion": {
+                "const": 1,
+                "description": "持久化事件结构版本；未知版本禁止静默解析",
+                "type": "number"
+              },
+              "seq": {
+                "description": "执行内严格递增的持久化序号",
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "type": {
+                "const": "run.failed",
+                "description": "事件或控制帧类型",
+                "type": "string"
+              }
+            },
+            "required": [
+              "schemaVersion",
+              "eventId",
+              "runId",
+              "seq",
+              "occurredAt",
+              "type",
+              "payload"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "执行已取消，不能继续交付",
+            "properties": {
+              "eventId": {
+                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                "type": "string"
+              },
+              "occurredAt": {
+                "description": "带 UTC 偏移的 ISO 8601 时间",
+                "format": "scova-instant",
+                "type": "string"
+              },
+              "payload": {
+                "additionalProperties": false,
+                "description": "由类型决定的结构化数据",
+                "properties": {
+                  "message": {
+                    "description": "至少包含一个非空白字符的文本",
+                    "minLength": 1,
+                    "pattern": "\\S",
+                    "type": "string"
+                  },
+                  "status": {
+                    "const": "canceled",
+                    "description": "当前控制状态",
+                    "type": "string"
+                  }
+                },
+                "required": ["status", "message"],
+                "type": "object"
+              },
+              "runId": {
+                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                "type": "string"
+              },
+              "schemaVersion": {
+                "const": 1,
+                "description": "持久化事件结构版本；未知版本禁止静默解析",
+                "type": "number"
+              },
+              "seq": {
+                "description": "执行内严格递增的持久化序号",
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "type": {
+                "const": "run.canceled",
+                "description": "事件或控制帧类型",
+                "type": "string"
+              }
+            },
+            "required": [
+              "schemaVersion",
+              "eventId",
+              "runId",
+              "seq",
+              "occurredAt",
+              "type",
+              "payload"
+            ],
+            "type": "object"
+          }
+        ],
+        "description": "版本化持久化业务事件，具有 eventId 和严格递增 seq；不包含传输控制帧"
+      },
+      "SessionResponse": {
+        "$id": "#/components/schemas/SessionResponse",
+        "additionalProperties": false,
+        "description": "登录或恢复会话结果；凭据只通过 HttpOnly Cookie 传递",
+        "properties": {
+          "csrfToken": {
+            "description": "后续写请求提交的 CSRF 校验值，不是会话 token",
+            "minLength": 1,
+            "type": "string"
+          },
+          "user": {
+            "$id": "#/components/schemas/User",
+            "additionalProperties": false,
+            "description": "当前会话用户，不返回密码、token 或数据库内部字段",
+            "properties": {
+              "createdAt": {
+                "description": "带 UTC 偏移的 ISO 8601 时间",
+                "format": "scova-instant",
+                "type": "string"
+              },
+              "email": {
+                "description": "邮箱地址，账号服务负责规范化与唯一性判断",
+                "maxLength": 254,
+                "minLength": 3,
+                "pattern": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+                "type": "string"
+              },
+              "id": {
+                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                "type": "string"
+              },
+              "preferences": {
+                "$id": "#/components/schemas/Preferences",
+                "additionalProperties": false,
+                "description": "账号默认偏好；只影响后续创建的任务草稿",
+                "properties": {
+                  "defaultTimezone": {
+                    "description": "明确的 IANA 时区，例如 Asia/Shanghai",
+                    "format": "scova-timezone",
+                    "type": "string"
+                  },
+                  "notificationPreference": {
+                    "additionalProperties": false,
+                    "description": "站内提醒偏好，不包含邮件或外部推送",
+                    "properties": {
+                      "mode": {
+                        "anyOf": [
+                          {
+                            "const": "summary",
+                            "type": "string"
+                          },
+                          {
+                            "const": "important_change",
+                            "type": "string"
+                          },
+                          {
+                            "const": "off",
+                            "type": "string"
+                          }
+                        ],
+                        "description": "每次汇总、仅重要变化或关闭提醒"
+                      },
+                      "runIssues": {
+                        "description": "是否提醒失败或不完整执行等运行问题",
+                        "type": "boolean"
+                      }
+                    },
+                    "required": ["mode", "runIssues"],
+                    "type": "object"
+                  }
+                },
+                "required": ["defaultTimezone", "notificationPreference"],
+                "type": "object"
+              }
+            },
+            "required": ["id", "email", "preferences", "createdAt"],
+            "type": "object"
+          }
+        },
+        "required": ["user", "csrfToken"],
+        "type": "object"
+      },
+      "Task": {
+        "$id": "#/components/schemas/Task",
+        "additionalProperties": false,
+        "description": "长期任务摘要，不等同于配置版本或单次执行",
+        "properties": {
+          "createdAt": {
+            "description": "带 UTC 偏移的 ISO 8601 时间",
+            "format": "scova-instant",
+            "type": "string"
+          },
+          "currentVersionId": {
+            "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+            "type": "string"
+          },
+          "id": {
+            "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+            "type": "string"
+          },
+          "nextRunAt": {
+            "anyOf": [
+              {
+                "description": "带 UTC 偏移的 ISO 8601 时间",
+                "format": "scova-instant",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "下次 UTC 执行时刻；手动、暂停或归档时可为空"
+          },
+          "revision": {
+            "description": "从 1 递增的资源修订版本",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "const": "active",
+                "type": "string"
+              },
+              {
+                "const": "paused",
+                "type": "string"
+              },
+              {
+                "const": "archived",
+                "type": "string"
+              }
+            ],
+            "description": "任务生命周期：启用、暂停计划、归档"
+          },
+          "title": {
+            "description": "当前任务标题",
+            "maxLength": 200,
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "带 UTC 偏移的 ISO 8601 时间",
+            "format": "scova-instant",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "status",
+          "revision",
+          "currentVersionId",
+          "nextRunAt",
+          "createdAt",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
+      "TaskConfig": {
+        "$id": "#/components/schemas/TaskConfig",
+        "additionalProperties": false,
+        "description": "可编辑查阅任务配置；持久化后以不可变版本保存",
+        "properties": {
+          "budget": {
+            "additionalProperties": false,
+            "description": "单次执行预算，服务端部署策略另行设置上限",
+            "properties": {
+              "maxDurationSeconds": {
+                "description": "单次执行总时间预算（秒），恢复不重置期限",
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "maxInputTokens": {
+                "description": "累计模型输入 token 上限",
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "maxOutputTokens": {
+                "description": "累计模型输出 token 上限",
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "maxPages": {
+                "description": "最多网页读取次数，包含重试",
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "maxSearches": {
+                "description": "最多搜索调用次数，包含重试",
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "maxSearches",
+              "maxPages",
+              "maxDurationSeconds",
+              "maxInputTokens",
+              "maxOutputTokens"
+            ],
+            "type": "object"
+          },
+          "exclusions": {
+            "description": "需要排除的主题或条件",
+            "items": {
+              "description": "至少包含一个非空白字符的文本",
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "focusPoints": {
+            "description": "重点关注事项",
+            "items": {
+              "description": "至少包含一个非空白字符的文本",
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "goal": {
+            "description": "至少包含一个非空白字符的文本",
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "notificationPreference": {
+            "additionalProperties": false,
+            "description": "站内提醒偏好，不包含邮件或外部推送",
+            "properties": {
+              "mode": {
+                "anyOf": [
+                  {
+                    "const": "summary",
+                    "type": "string"
+                  },
+                  {
+                    "const": "important_change",
+                    "type": "string"
+                  },
+                  {
+                    "const": "off",
+                    "type": "string"
+                  }
+                ],
+                "description": "每次汇总、仅重要变化或关闭提醒"
+              },
+              "runIssues": {
+                "description": "是否提醒失败或不完整执行等运行问题",
+                "type": "boolean"
+              }
+            },
+            "required": ["mode", "runIssues"],
+            "type": "object"
+          },
+          "outputFormat": {
+            "anyOf": [
+              {
+                "const": "brief",
+                "type": "string"
+              },
+              {
+                "const": "list",
+                "type": "string"
+              },
+              {
+                "const": "comparison",
+                "type": "string"
+              },
+              {
+                "const": "research_report",
+                "type": "string"
+              }
+            ],
+            "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
+          },
+          "schedule": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "description": "仅手动执行",
+                "properties": {
+                  "frequency": {
+                    "const": "manual",
+                    "description": "执行频率",
+                    "type": "string"
+                  }
+                },
+                "required": ["frequency"],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "description": "每日按当地时间执行",
+                "properties": {
+                  "frequency": {
+                    "const": "daily",
+                    "description": "执行频率",
+                    "type": "string"
+                  },
+                  "localTime": {
+                    "description": "任务时区的当地时分 HH:mm",
+                    "pattern": "^(?:[01][0-9]|2[0-3]):[0-5][0-9]$",
+                    "type": "string"
+                  }
+                },
+                "required": ["frequency", "localTime"],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "description": "每周按当地星期和时间执行",
+                "properties": {
+                  "frequency": {
+                    "const": "weekly",
+                    "description": "执行频率",
+                    "type": "string"
+                  },
+                  "localTime": {
+                    "description": "任务时区的当地时分 HH:mm",
+                    "pattern": "^(?:[01][0-9]|2[0-3]):[0-5][0-9]$",
+                    "type": "string"
+                  },
+                  "weekday": {
+                    "description": "ISO 星期：周一为 1，周日为 7",
+                    "maximum": 7,
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                },
+                "required": ["frequency", "localTime", "weekday"],
+                "type": "object"
+              }
+            ],
+            "description": "首版仅手动、每日、每周；DST 消歧由调度服务统一处理"
+          },
+          "sourcePreferences": {
+            "additionalProperties": false,
+            "description": "来源偏好，不授予任意网络地址访问权限",
+            "properties": {
+              "excludedUrls": {
+                "description": "排除查阅的来源 URL",
+                "items": {
+                  "description": "HTTP/HTTPS 来源原文链接，不包含用户名或密码；实际抓取另行执行网络安全校验",
+                  "format": "scova-http-url",
+                  "maxLength": 4096,
+                  "type": "string"
+                },
+                "type": "array",
+                "uniqueItems": true
+              },
+              "officialOnly": {
+                "description": "是否限定官方来源；Agent 仍需验证来源性质",
+                "type": "boolean"
+              },
+              "preferredUrls": {
+                "description": "优先查阅的来源 URL",
+                "items": {
+                  "description": "HTTP/HTTPS 来源原文链接，不包含用户名或密码；实际抓取另行执行网络安全校验",
+                  "format": "scova-http-url",
+                  "maxLength": 4096,
+                  "type": "string"
+                },
+                "type": "array",
+                "uniqueItems": true
+              }
+            },
+            "required": ["preferredUrls", "excludedUrls", "officialOnly"],
+            "type": "object"
+          },
+          "timeRange": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "description": "滚动查阅范围",
+                "properties": {
+                  "days": {
+                    "description": "每次执行向前查阅的天数",
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "kind": {
+                    "const": "rolling",
+                    "description": "范围或记录分类",
+                    "type": "string"
+                  }
+                },
+                "required": ["kind", "days"],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "description": "固定查阅范围，结束时间不得早于开始时间",
+                "properties": {
+                  "end": {
+                    "description": "带 UTC 偏移的 ISO 8601 时间",
+                    "format": "scova-instant",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "fixed",
+                    "description": "范围或记录分类",
+                    "type": "string"
+                  },
+                  "start": {
+                    "description": "带 UTC 偏移的 ISO 8601 时间",
+                    "format": "scova-instant",
+                    "type": "string"
+                  }
+                },
+                "required": ["kind", "start", "end"],
+                "type": "object"
+              }
+            ],
+            "description": "滚动或固定时间范围"
+          },
+          "timezone": {
+            "description": "明确的 IANA 时区，例如 Asia/Shanghai",
+            "format": "scova-timezone",
+            "type": "string"
+          },
+          "title": {
+            "description": "便于识别的任务标题",
+            "maxLength": 200,
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "topic": {
+            "description": "至少包含一个非空白字符的文本",
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "topic",
+          "goal",
+          "focusPoints",
+          "exclusions",
+          "sourcePreferences",
+          "timeRange",
+          "timezone",
+          "schedule",
+          "outputFormat",
+          "budget",
+          "notificationPreference"
+        ],
+        "type": "object"
+      },
+      "TaskVersion": {
+        "$id": "#/components/schemas/TaskVersion",
+        "additionalProperties": false,
+        "description": "不可变任务配置版本",
+        "properties": {
+          "comparisonScopeHash": {
+            "description": "服务端计算的语义比较范围 SHA-256，不由客户端指定",
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "config": {
+            "$id": "#/components/schemas/TaskConfig",
+            "additionalProperties": false,
+            "description": "可编辑查阅任务配置；持久化后以不可变版本保存",
+            "properties": {
+              "budget": {
+                "additionalProperties": false,
+                "description": "单次执行预算，服务端部署策略另行设置上限",
+                "properties": {
+                  "maxDurationSeconds": {
+                    "description": "单次执行总时间预算（秒），恢复不重置期限",
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "maxInputTokens": {
+                    "description": "累计模型输入 token 上限",
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "maxOutputTokens": {
+                    "description": "累计模型输出 token 上限",
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "maxPages": {
+                    "description": "最多网页读取次数，包含重试",
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "maxSearches": {
+                    "description": "最多搜索调用次数，包含重试",
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "maxSearches",
+                  "maxPages",
+                  "maxDurationSeconds",
+                  "maxInputTokens",
+                  "maxOutputTokens"
+                ],
+                "type": "object"
+              },
+              "exclusions": {
+                "description": "需要排除的主题或条件",
+                "items": {
+                  "description": "至少包含一个非空白字符的文本",
+                  "minLength": 1,
+                  "pattern": "\\S",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "focusPoints": {
+                "description": "重点关注事项",
+                "items": {
+                  "description": "至少包含一个非空白字符的文本",
+                  "minLength": 1,
+                  "pattern": "\\S",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "goal": {
+                "description": "至少包含一个非空白字符的文本",
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              "notificationPreference": {
+                "additionalProperties": false,
+                "description": "站内提醒偏好，不包含邮件或外部推送",
+                "properties": {
+                  "mode": {
+                    "anyOf": [
+                      {
+                        "const": "summary",
+                        "type": "string"
+                      },
+                      {
+                        "const": "important_change",
+                        "type": "string"
+                      },
+                      {
+                        "const": "off",
+                        "type": "string"
+                      }
+                    ],
+                    "description": "每次汇总、仅重要变化或关闭提醒"
+                  },
+                  "runIssues": {
+                    "description": "是否提醒失败或不完整执行等运行问题",
+                    "type": "boolean"
+                  }
+                },
+                "required": ["mode", "runIssues"],
+                "type": "object"
+              },
+              "outputFormat": {
+                "anyOf": [
+                  {
+                    "const": "brief",
+                    "type": "string"
+                  },
+                  {
+                    "const": "list",
+                    "type": "string"
+                  },
+                  {
+                    "const": "comparison",
+                    "type": "string"
+                  },
+                  {
+                    "const": "research_report",
+                    "type": "string"
+                  }
+                ],
+                "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
+              },
+              "schedule": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "description": "仅手动执行",
+                    "properties": {
+                      "frequency": {
+                        "const": "manual",
+                        "description": "执行频率",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["frequency"],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "description": "每日按当地时间执行",
+                    "properties": {
+                      "frequency": {
+                        "const": "daily",
+                        "description": "执行频率",
+                        "type": "string"
+                      },
+                      "localTime": {
+                        "description": "任务时区的当地时分 HH:mm",
+                        "pattern": "^(?:[01][0-9]|2[0-3]):[0-5][0-9]$",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["frequency", "localTime"],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "description": "每周按当地星期和时间执行",
+                    "properties": {
+                      "frequency": {
+                        "const": "weekly",
+                        "description": "执行频率",
+                        "type": "string"
+                      },
+                      "localTime": {
+                        "description": "任务时区的当地时分 HH:mm",
+                        "pattern": "^(?:[01][0-9]|2[0-3]):[0-5][0-9]$",
+                        "type": "string"
+                      },
+                      "weekday": {
+                        "description": "ISO 星期：周一为 1，周日为 7",
+                        "maximum": 7,
+                        "minimum": 1,
+                        "type": "integer"
+                      }
+                    },
+                    "required": ["frequency", "localTime", "weekday"],
+                    "type": "object"
+                  }
+                ],
+                "description": "首版仅手动、每日、每周；DST 消歧由调度服务统一处理"
+              },
+              "sourcePreferences": {
+                "additionalProperties": false,
+                "description": "来源偏好，不授予任意网络地址访问权限",
+                "properties": {
+                  "excludedUrls": {
+                    "description": "排除查阅的来源 URL",
+                    "items": {
+                      "description": "HTTP/HTTPS 来源原文链接，不包含用户名或密码；实际抓取另行执行网络安全校验",
+                      "format": "scova-http-url",
+                      "maxLength": 4096,
+                      "type": "string"
+                    },
+                    "type": "array",
+                    "uniqueItems": true
+                  },
+                  "officialOnly": {
+                    "description": "是否限定官方来源；Agent 仍需验证来源性质",
+                    "type": "boolean"
+                  },
+                  "preferredUrls": {
+                    "description": "优先查阅的来源 URL",
+                    "items": {
+                      "description": "HTTP/HTTPS 来源原文链接，不包含用户名或密码；实际抓取另行执行网络安全校验",
+                      "format": "scova-http-url",
+                      "maxLength": 4096,
+                      "type": "string"
+                    },
+                    "type": "array",
+                    "uniqueItems": true
+                  }
+                },
+                "required": ["preferredUrls", "excludedUrls", "officialOnly"],
+                "type": "object"
+              },
+              "timeRange": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "description": "滚动查阅范围",
+                    "properties": {
+                      "days": {
+                        "description": "每次执行向前查阅的天数",
+                        "maximum": 9007199254740991,
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "kind": {
+                        "const": "rolling",
+                        "description": "范围或记录分类",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["kind", "days"],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "description": "固定查阅范围，结束时间不得早于开始时间",
+                    "properties": {
+                      "end": {
+                        "description": "带 UTC 偏移的 ISO 8601 时间",
+                        "format": "scova-instant",
+                        "type": "string"
+                      },
+                      "kind": {
+                        "const": "fixed",
+                        "description": "范围或记录分类",
+                        "type": "string"
+                      },
+                      "start": {
+                        "description": "带 UTC 偏移的 ISO 8601 时间",
+                        "format": "scova-instant",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["kind", "start", "end"],
+                    "type": "object"
+                  }
+                ],
+                "description": "滚动或固定时间范围"
+              },
+              "timezone": {
+                "description": "明确的 IANA 时区，例如 Asia/Shanghai",
+                "format": "scova-timezone",
+                "type": "string"
+              },
+              "title": {
+                "description": "便于识别的任务标题",
+                "maxLength": 200,
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              "topic": {
+                "description": "至少包含一个非空白字符的文本",
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              }
+            },
+            "required": [
+              "title",
+              "topic",
+              "goal",
+              "focusPoints",
+              "exclusions",
+              "sourcePreferences",
+              "timeRange",
+              "timezone",
+              "schedule",
+              "outputFormat",
+              "budget",
+              "notificationPreference"
+            ],
+            "type": "object"
+          },
+          "configSchemaVersion": {
+            "const": 1,
+            "description": "配置结构版本",
+            "type": "number"
+          },
+          "createdAt": {
+            "description": "带 UTC 偏移的 ISO 8601 时间",
+            "format": "scova-instant",
+            "type": "string"
+          },
+          "id": {
+            "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+            "type": "string"
+          },
+          "taskId": {
+            "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+            "type": "string"
+          },
+          "version": {
+            "description": "从 1 递增的资源修订版本",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "taskId",
+          "version",
+          "configSchemaVersion",
+          "config",
+          "comparisonScopeHash",
+          "createdAt"
+        ],
+        "type": "object"
+      },
+      "UpdatePreferencesInput": {
+        "$id": "#/components/schemas/UpdatePreferencesInput",
+        "additionalProperties": false,
+        "description": "至少修改一个账号偏好，不追溯改写已有配置版本",
+        "minProperties": 1,
+        "properties": {
+          "defaultTimezone": {
+            "description": "明确的 IANA 时区，例如 Asia/Shanghai",
+            "format": "scova-timezone",
+            "type": "string"
+          },
+          "notificationPreference": {
+            "additionalProperties": false,
+            "description": "站内提醒偏好，不包含邮件或外部推送",
+            "properties": {
+              "mode": {
+                "anyOf": [
+                  {
+                    "const": "summary",
+                    "type": "string"
+                  },
+                  {
+                    "const": "important_change",
+                    "type": "string"
+                  },
+                  {
+                    "const": "off",
+                    "type": "string"
+                  }
+                ],
+                "description": "每次汇总、仅重要变化或关闭提醒"
+              },
+              "runIssues": {
+                "description": "是否提醒失败或不完整执行等运行问题",
+                "type": "boolean"
+              }
+            },
+            "required": ["mode", "runIssues"],
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "UpdateTaskInput": {
+        "$id": "#/components/schemas/CreateTaskInput",
+        "additionalProperties": false,
+        "description": "保存手工配置或已确认的自然语言草稿，不接受 owner/userId",
+        "properties": {
+          "config": {
+            "$id": "#/components/schemas/TaskConfig",
+            "additionalProperties": false,
+            "description": "可编辑查阅任务配置；持久化后以不可变版本保存",
+            "properties": {
+              "budget": {
+                "additionalProperties": false,
+                "description": "单次执行预算，服务端部署策略另行设置上限",
+                "properties": {
+                  "maxDurationSeconds": {
+                    "description": "单次执行总时间预算（秒），恢复不重置期限",
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "maxInputTokens": {
+                    "description": "累计模型输入 token 上限",
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "maxOutputTokens": {
+                    "description": "累计模型输出 token 上限",
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "maxPages": {
+                    "description": "最多网页读取次数，包含重试",
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "maxSearches": {
+                    "description": "最多搜索调用次数，包含重试",
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "maxSearches",
+                  "maxPages",
+                  "maxDurationSeconds",
+                  "maxInputTokens",
+                  "maxOutputTokens"
+                ],
+                "type": "object"
+              },
+              "exclusions": {
+                "description": "需要排除的主题或条件",
+                "items": {
+                  "description": "至少包含一个非空白字符的文本",
+                  "minLength": 1,
+                  "pattern": "\\S",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "focusPoints": {
+                "description": "重点关注事项",
+                "items": {
+                  "description": "至少包含一个非空白字符的文本",
+                  "minLength": 1,
+                  "pattern": "\\S",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "goal": {
+                "description": "至少包含一个非空白字符的文本",
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              "notificationPreference": {
+                "additionalProperties": false,
+                "description": "站内提醒偏好，不包含邮件或外部推送",
+                "properties": {
+                  "mode": {
+                    "anyOf": [
+                      {
+                        "const": "summary",
+                        "type": "string"
+                      },
+                      {
+                        "const": "important_change",
+                        "type": "string"
+                      },
+                      {
+                        "const": "off",
+                        "type": "string"
+                      }
+                    ],
+                    "description": "每次汇总、仅重要变化或关闭提醒"
+                  },
+                  "runIssues": {
+                    "description": "是否提醒失败或不完整执行等运行问题",
+                    "type": "boolean"
+                  }
+                },
+                "required": ["mode", "runIssues"],
+                "type": "object"
+              },
+              "outputFormat": {
+                "anyOf": [
+                  {
+                    "const": "brief",
+                    "type": "string"
+                  },
+                  {
+                    "const": "list",
+                    "type": "string"
+                  },
+                  {
+                    "const": "comparison",
+                    "type": "string"
+                  },
+                  {
+                    "const": "research_report",
+                    "type": "string"
+                  }
+                ],
+                "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
+              },
+              "schedule": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "description": "仅手动执行",
+                    "properties": {
+                      "frequency": {
+                        "const": "manual",
+                        "description": "执行频率",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["frequency"],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "description": "每日按当地时间执行",
+                    "properties": {
+                      "frequency": {
+                        "const": "daily",
+                        "description": "执行频率",
+                        "type": "string"
+                      },
+                      "localTime": {
+                        "description": "任务时区的当地时分 HH:mm",
+                        "pattern": "^(?:[01][0-9]|2[0-3]):[0-5][0-9]$",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["frequency", "localTime"],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "description": "每周按当地星期和时间执行",
+                    "properties": {
+                      "frequency": {
+                        "const": "weekly",
+                        "description": "执行频率",
+                        "type": "string"
+                      },
+                      "localTime": {
+                        "description": "任务时区的当地时分 HH:mm",
+                        "pattern": "^(?:[01][0-9]|2[0-3]):[0-5][0-9]$",
+                        "type": "string"
+                      },
+                      "weekday": {
+                        "description": "ISO 星期：周一为 1，周日为 7",
+                        "maximum": 7,
+                        "minimum": 1,
+                        "type": "integer"
+                      }
+                    },
+                    "required": ["frequency", "localTime", "weekday"],
+                    "type": "object"
+                  }
+                ],
+                "description": "首版仅手动、每日、每周；DST 消歧由调度服务统一处理"
+              },
+              "sourcePreferences": {
+                "additionalProperties": false,
+                "description": "来源偏好，不授予任意网络地址访问权限",
+                "properties": {
+                  "excludedUrls": {
+                    "description": "排除查阅的来源 URL",
+                    "items": {
+                      "description": "HTTP/HTTPS 来源原文链接，不包含用户名或密码；实际抓取另行执行网络安全校验",
+                      "format": "scova-http-url",
+                      "maxLength": 4096,
+                      "type": "string"
+                    },
+                    "type": "array",
+                    "uniqueItems": true
+                  },
+                  "officialOnly": {
+                    "description": "是否限定官方来源；Agent 仍需验证来源性质",
+                    "type": "boolean"
+                  },
+                  "preferredUrls": {
+                    "description": "优先查阅的来源 URL",
+                    "items": {
+                      "description": "HTTP/HTTPS 来源原文链接，不包含用户名或密码；实际抓取另行执行网络安全校验",
+                      "format": "scova-http-url",
+                      "maxLength": 4096,
+                      "type": "string"
+                    },
+                    "type": "array",
+                    "uniqueItems": true
+                  }
+                },
+                "required": ["preferredUrls", "excludedUrls", "officialOnly"],
+                "type": "object"
+              },
+              "timeRange": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "description": "滚动查阅范围",
+                    "properties": {
+                      "days": {
+                        "description": "每次执行向前查阅的天数",
+                        "maximum": 9007199254740991,
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "kind": {
+                        "const": "rolling",
+                        "description": "范围或记录分类",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["kind", "days"],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "description": "固定查阅范围，结束时间不得早于开始时间",
+                    "properties": {
+                      "end": {
+                        "description": "带 UTC 偏移的 ISO 8601 时间",
+                        "format": "scova-instant",
+                        "type": "string"
+                      },
+                      "kind": {
+                        "const": "fixed",
+                        "description": "范围或记录分类",
+                        "type": "string"
+                      },
+                      "start": {
+                        "description": "带 UTC 偏移的 ISO 8601 时间",
+                        "format": "scova-instant",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["kind", "start", "end"],
+                    "type": "object"
+                  }
+                ],
+                "description": "滚动或固定时间范围"
+              },
+              "timezone": {
+                "description": "明确的 IANA 时区，例如 Asia/Shanghai",
+                "format": "scova-timezone",
+                "type": "string"
+              },
+              "title": {
+                "description": "便于识别的任务标题",
+                "maxLength": 200,
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              "topic": {
+                "description": "至少包含一个非空白字符的文本",
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              }
+            },
+            "required": [
+              "title",
+              "topic",
+              "goal",
+              "focusPoints",
+              "exclusions",
+              "sourcePreferences",
+              "timeRange",
+              "timezone",
+              "schedule",
+              "outputFormat",
+              "budget",
+              "notificationPreference"
+            ],
+            "type": "object"
+          },
+          "inputText": {
+            "description": "至少包含一个非空白字符的文本",
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          }
+        },
+        "required": ["config"],
+        "type": "object"
+      },
+      "User": {
+        "$id": "#/components/schemas/User",
+        "additionalProperties": false,
+        "description": "当前会话用户，不返回密码、token 或数据库内部字段",
+        "properties": {
+          "createdAt": {
+            "description": "带 UTC 偏移的 ISO 8601 时间",
+            "format": "scova-instant",
+            "type": "string"
+          },
+          "email": {
+            "description": "邮箱地址，账号服务负责规范化与唯一性判断",
+            "maxLength": 254,
+            "minLength": 3,
+            "pattern": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+            "type": "string"
+          },
+          "id": {
+            "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+            "type": "string"
+          },
+          "preferences": {
+            "$id": "#/components/schemas/Preferences",
+            "additionalProperties": false,
+            "description": "账号默认偏好；只影响后续创建的任务草稿",
+            "properties": {
+              "defaultTimezone": {
+                "description": "明确的 IANA 时区，例如 Asia/Shanghai",
+                "format": "scova-timezone",
+                "type": "string"
+              },
+              "notificationPreference": {
+                "additionalProperties": false,
+                "description": "站内提醒偏好，不包含邮件或外部推送",
+                "properties": {
+                  "mode": {
+                    "anyOf": [
+                      {
+                        "const": "summary",
+                        "type": "string"
+                      },
+                      {
+                        "const": "important_change",
+                        "type": "string"
+                      },
+                      {
+                        "const": "off",
+                        "type": "string"
+                      }
+                    ],
+                    "description": "每次汇总、仅重要变化或关闭提醒"
+                  },
+                  "runIssues": {
+                    "description": "是否提醒失败或不完整执行等运行问题",
+                    "type": "boolean"
+                  }
+                },
+                "required": ["mode", "runIssues"],
+                "type": "object"
+              }
+            },
+            "required": ["defaultTimezone", "notificationPreference"],
+            "type": "object"
+          }
+        },
+        "required": ["id", "email", "preferences", "createdAt"],
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "知巡后端接口文档。成功返回领域 JSON；错误使用真实 HTTP 状态与 code/message/requestId/fieldErrors。",
+    "title": "知巡 Scova API",
+    "version": "1.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/health": {
+      "get": {
+        "description": "返回 API 服务与当前运行时状态。",
+        "operationId": "getHealth",
+        "responses": {
+          "200": {
+            "$id": "#/components/schemas/HealthResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              },
+              "multipart/form-data": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            },
+            "description": "进程健康状态"
+          }
+        },
+        "summary": "健康检查",
+        "tags": ["系统"]
+      }
+    }
+  },
+  "tags": [
+    {
+      "description": "服务运行状态接口",
+      "name": "系统"
+    }
+  ]
+}

@@ -170,6 +170,14 @@
       "kind": "test",
       "covers": ["root"],
       "argv": ["vp", "run", "test:runtime:node"]
+    },
+    {
+      "id": "api-openapi",
+      "workspace": "root",
+      "argv": ["vp", "run", "api:openapi:check"],
+      "covers": ["root"],
+      "timeoutMs": 120000,
+      "kind": "lint"
     }
   ],
   "publicationTargets": [],
