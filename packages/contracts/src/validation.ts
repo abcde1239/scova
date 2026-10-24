@@ -4,8 +4,10 @@ import { RefinementBase, type ApiError, type FieldError } from "./common.ts";
 
 export class ContractValidationError extends Error {
   readonly code = "VALIDATION_ERROR";
-  constructor(readonly fieldErrors: FieldError[]) {
+  readonly fieldErrors: FieldError[];
+  constructor(fieldErrors: FieldError[]) {
     super("请求字段不符合接口契约");
+    this.fieldErrors = fieldErrors;
     this.name = "ContractValidationError";
   }
   toResponse(requestId: string): ApiError {

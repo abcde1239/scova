@@ -13,7 +13,14 @@ export default defineConfig({
   },
   test: {
     include: ["{apps,packages}/*/{src,tests}/**/*.{test,spec}.ts"],
-    exclude: ["**/node_modules/**", "**/dist/**", "**/artifacts/**", "**/coverage/**", "**/e2e/**"],
+    exclude: [
+      "**/node_modules/**",
+      "**/dist/**",
+      "**/artifacts/**",
+      "**/coverage/**",
+      "**/e2e/**",
+      "**/*.integration.test.ts",
+    ],
   },
   run: {
     // 治理入口读取 Git index，必须每次执行；需要缓存的构建另用显式 task 配置。

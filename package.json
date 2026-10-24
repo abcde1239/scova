@@ -11,7 +11,8 @@
     "prepare": "vp config",
     "test:processes": "vpx scripts/smoke-processes.mjs",
     "test:runtime": "vpx scripts/run-bun.mjs scripts/runtime-test.mjs",
-    "test:runtime:node": "vpx scripts/runtime-test.mjs"
+    "test:runtime:node": "vpx scripts/runtime-test.mjs",
+    "test:database": "vp test --config .harness/database-vitest.config.ts"
   },
   "dependencies": {
     "@js-temporal/polyfill": "catalog:",

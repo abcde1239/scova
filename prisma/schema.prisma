@@ -1,0 +1,720 @@
+// Scova 业务 schema。LangGraph checkpoint 使用独立迁移，不由 Prisma 管理。
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TaskStatus {
+  active
+  paused
+  archived
+}
+
+enum OccurrenceStatus {
+  created
+  skipped_overlap
+  missed
+  paused
+}
+
+enum ServiceMode {
+  demo
+  live
+}
+
+enum RunTrigger {
+  manual
+  scheduled
+  retry
+  followup
+}
+
+enum RunStatus {
+  queued
+  running
+  recovering
+  cancel_requested
+  canceled
+  succeeded
+  partial
+  failed
+}
+
+enum RunOutcome {
+  baseline
+  important_change
+  new_findings
+  no_important_change
+  inconclusive
+}
+
+enum ToolCallStatus {
+  reserved
+  running
+  succeeded
+  failed
+  unknown
+}
+
+enum IdempotencyStatus {
+  pending
+  completed
+}
+
+enum FetchStatus {
+  succeeded
+  failed
+}
+
+enum OutputFormat {
+  brief
+  list
+  comparison
+  research_report
+}
+
+enum Completeness {
+  complete
+  partial
+}
+
+enum ClaimKind {
+  fact
+  inference
+  conflict
+  insufficient
+}
+
+enum EvidenceRelation {
+  supports
+  contradicts
+}
+
+enum ChangeKind {
+  baseline
+  new
+  duplicate
+  duplicate_candidate
+  changed
+  non_material
+  uncertain
+}
+
+enum EvidenceSide {
+  old
+  new
+}
+
+enum NotificationKind {
+  summary
+  important_change
+  run_issue
+}
+
+enum FeedbackKind {
+  irrelevant
+  known
+  deeper
+}
+
+model User {
+  id                     String   @id @default(uuid()) @db.Uuid
+  email                  String
+  normalizedEmail        String   @unique @map("normalized_email")
+  passwordHash           String   @map("password_hash")
+  defaultTimezone        String   @default("UTC") @map("default_timezone")
+  notificationPreference Json     @default("{\"mode\":\"summary\",\"runIssues\":true}") @map("notification_preference")
+  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  sessionRows            Session[]            @relation("User_Session")
+  taskRows               Task[]               @relation("User_Task")
+  taskVersionRows        TaskVersion[]        @relation("User_TaskVersion")
+  scheduleOccurrenceRows ScheduleOccurrence[] @relation("User_ScheduleOccurrence")
+  baselineRows           Baseline[]           @relation("User_Baseline")
+  runRows                Run[]                @relation("User_Run")
+  toolCallRows           ToolCall[]           @relation("User_ToolCall")
+  runEventRows           RunEvent[]           @relation("User_RunEvent")
+  outboxRows             Outbox[]             @relation("User_Outbox")
+  idempotencyRecordRows  IdempotencyRecord[]  @relation("User_IdempotencyRecord")
+  sourceRows             Source[]             @relation("User_Source")
+  sourceSnapshotRows     SourceSnapshot[]     @relation("User_SourceSnapshot")
+  runSourceRows          RunSource[]          @relation("User_RunSource")
+  evidenceRows           Evidence[]           @relation("User_Evidence")
+  reportRows             Report[]             @relation("User_Report")
+  claimRows              Claim[]              @relation("User_Claim")
+  claimEvidenceRows      ClaimEvidence[]      @relation("User_ClaimEvidence")
+  changeRecordRows       ChangeRecord[]       @relation("User_ChangeRecord")
+  changeEvidenceRows     ChangeEvidence[]     @relation("User_ChangeEvidence")
+  inboxItemRows          InboxItem[]          @relation("User_InboxItem")
+  notificationRows       Notification[]       @relation("User_Notification")
+  feedbackRows           Feedback[]           @relation("User_Feedback")
+  bookmarkRows           Bookmark[]           @relation("User_Bookmark")
+  noteRows               Note[]               @relation("User_Note")
+  reportQuestionRows     ReportQuestion[]     @relation("User_ReportQuestion")
+  questionEvidenceRows   QuestionEvidence[]   @relation("User_QuestionEvidence")
+
+  @@map("users")
+}
+
+model Session {
+  id            String    @id @default(uuid()) @db.Uuid
+  userId        String    @map("user_id") @db.Uuid
+  tokenHash     String    @unique @map("token_hash")
+  csrfTokenHash String    @map("csrf_token_hash")
+  expiresAt     DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt     DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  owner User @relation("User_Session", fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([userId, id])
+  @@index([userId, expiresAt])
+  @@map("sessions")
+}
+
+model Task {
+  id               String     @id @default(uuid()) @db.Uuid
+  userId           String     @map("user_id") @db.Uuid
+  title            String
+  status           TaskStatus @default(active)
+  revision         Int        @default(1)
+  currentVersionId String?    @map("current_version_id") @db.Uuid
+  scheduleRevision Int        @default(1) @map("schedule_revision")
+  nextRunAt        DateTime?  @map("next_run_at") @db.Timestamptz(6)
+  createdAt        DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+  archivedAt       DateTime?  @map("archived_at") @db.Timestamptz(6)
+
+  owner          User                 @relation("User_Task", fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  versions       TaskVersion[]        @relation("TaskVersion_task")
+  currentVersion TaskVersion?         @relation("Task_currentVersion", fields: [userId, id, currentVersionId], references: [userId, taskId, id], onDelete: NoAction, onUpdate: NoAction)
+  occurrences    ScheduleOccurrence[] @relation("ScheduleOccurrence_task")
+  baselines      Baseline[]           @relation("Baseline_task")
+  runs           Run[]                @relation("Run_task")
+  feedback       Feedback[]           @relation("Feedback_task")
+
+  @@unique([userId, id])
+  @@index([userId, status, updatedAt])
+  @@map("tasks")
+}
+
+model TaskVersion {
+  id                  String   @id @default(uuid()) @db.Uuid
+  userId              String   @map("user_id") @db.Uuid
+  taskId              String   @map("task_id") @db.Uuid
+  version             Int
+  inputText           String?  @map("input_text")
+  configSchemaVersion Int      @default(1) @map("config_schema_version")
+  configJson          Json     @map("config_json")
+  comparisonScopeHash String   @map("comparison_scope_hash") @db.Char(64)
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  owner           User   @relation("User_TaskVersion", fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  task            Task   @relation("TaskVersion_task", fields: [userId, taskId], references: [userId, id], onDelete: NoAction, onUpdate: NoAction)
+  currentForTasks Task[] @relation("Task_currentVersion")
+  runs            Run[]  @relation("Run_version")
+
+  @@unique([userId, id])
+  @@unique([userId, taskId, version])
+  @@unique([userId, taskId, id])
+  @@map("task_versions")
+}
+
+model ScheduleOccurrence {
+  id               String           @id @default(uuid()) @db.Uuid
+  userId           String           @map("user_id") @db.Uuid
+  taskId           String           @map("task_id") @db.Uuid
+  scheduleRevision Int              @map("schedule_revision")
+  scheduledAt      DateTime         @map("scheduled_at") @db.Timestamptz(6)
+  status           OccurrenceStatus @default(created)
+  runId            String?          @map("run_id") @db.Uuid
+  missedCount      Int              @default(0) @map("missed_count")
+
+  owner       User  @relation("User_ScheduleOccurrence", fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  task        Task  @relation("ScheduleOccurrence_task", fields: [userId, taskId], references: [userId, id], onDelete: NoAction, onUpdate: NoAction)
+  run         Run?  @relation("ScheduleOccurrence_run", fields: [userId, taskId, runId], references: [userId, taskId, id], onDelete: NoAction, onUpdate: NoAction)
+  createdRuns Run[] @relation("Run_occurrence")
+
+  @@unique([userId, id])
+  @@unique([taskId, scheduleRevision, scheduledAt])
+  @@unique([userId, taskId, id])
+  @@map("schedule_occurrences")
+}
+
+model Baseline {
+  id                  String   @id @default(uuid()) @db.Uuid
+  userId              String   @map("user_id") @db.Uuid
+  taskId              String   @map("task_id") @db.Uuid
+  comparisonScopeHash String   @map("comparison_scope_hash") @db.Char(64)
+  completeRunId       String   @map("complete_run_id") @db.Uuid
+  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  owner       User @relation("User_Baseline", fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  task        Task @relation("Baseline_task", fields: [userId, taskId], references: [userId, id], onDelete: NoAction, onUpdate: NoAction)
+  completeRun Run  @relation("Baseline_completeRun", fields: [userId, taskId, comparisonScopeHash, completeRunId], references: [userId, taskId, comparisonScopeHash, id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([userId, id])
+  @@unique([userId, taskId, comparisonScopeHash])
+  @@map("baselines")
+}
+
+model Run {
+  id                   String      @id @default(uuid()) @db.Uuid
+  userId               String      @map("user_id") @db.Uuid
+  taskId               String      @map("task_id") @db.Uuid
+  taskVersionId        String      @map("task_version_id") @db.Uuid
+  comparisonScopeHash  String      @map("comparison_scope_hash") @db.Char(64)
+  mode                 ServiceMode
+  trigger              RunTrigger
+  occurrenceId         String?     @map("occurrence_id") @db.Uuid
+  parentRunId          String?     @map("parent_run_id") @db.Uuid
+  status               RunStatus   @default(queued)
+  queuedAt             DateTime    @default(now()) @map("queued_at") @db.Timestamptz(6)
+  startedAt            DateTime?   @map("started_at") @db.Timestamptz(6)
+  deadlineAt           DateTime?   @map("deadline_at") @db.Timestamptz(6)
+  finishedAt           DateTime?   @map("finished_at") @db.Timestamptz(6)
+  leaseOwner           String?     @map("lease_owner")
+  leaseEpoch           Int         @default(0) @map("lease_epoch")
+  leaseExpiresAt       DateTime?   @map("lease_expires_at") @db.Timestamptz(6)
+  recoveryCount        Int         @default(0) @map("recovery_count")
+  cancelRequestedAt    DateTime?   @map("cancel_requested_at") @db.Timestamptz(6)
+  baselineRunId        String?     @map("baseline_run_id") @db.Uuid
+  feedbackSnapshotJson Json        @default("[]") @map("feedback_snapshot_json")
+  budgetJson           Json        @map("budget_json")
+  usageJson            Json        @default("{}") @map("usage_json")
+  coverageJson         Json?       @map("coverage_json")
+  outcome              RunOutcome?
+  failureCode          String?     @map("failure_code")
+  checkpointRef        Json?       @map("checkpoint_ref")
+
+  owner              User                 @relation("User_Run", fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  scheduleLinks      ScheduleOccurrence[] @relation("ScheduleOccurrence_run")
+  baselinePointers   Baseline[]           @relation("Baseline_completeRun")
+  version            TaskVersion          @relation("Run_version", fields: [userId, taskId, taskVersionId], references: [userId, taskId, id], onDelete: NoAction, onUpdate: NoAction)
+  task               Task                 @relation("Run_task", fields: [userId, taskId], references: [userId, id], onDelete: NoAction, onUpdate: NoAction)
+  occurrence         ScheduleOccurrence?  @relation("Run_occurrence", fields: [userId, taskId, occurrenceId], references: [userId, taskId, id], onDelete: NoAction, onUpdate: NoAction)
+  parent             Run?                 @relation("Run_parent", fields: [userId, taskId, parentRunId], references: [userId, taskId, id], onDelete: NoAction, onUpdate: NoAction)
+  children           Run[]                @relation("Run_parent")
+  baseline           Run?                 @relation("Run_baseline", fields: [userId, taskId, comparisonScopeHash, baselineRunId], references: [userId, taskId, comparisonScopeHash, id], onDelete: NoAction, onUpdate: NoAction)
+  comparisons        Run[]                @relation("Run_baseline")
+  toolCalls          ToolCall[]           @relation("ToolCall_run")
+  events             RunEvent[]           @relation("RunEvent_run")
+  sources            RunSource[]          @relation("RunSource_run")
+  reports            Report[]             @relation("Report_run")
+  referencingReports Report[]             @relation("Report_baseline")
+  notifications      Notification[]       @relation("Notification_run")
+  questions          ReportQuestion[]     @relation("ReportQuestion_followupRun")
+  outbox             Outbox[]             @relation("Outbox_run")
+
+  @@unique([userId, id])
+  @@unique([userId, taskId, id])
+  @@unique([userId, taskId, comparisonScopeHash, id])
+  @@unique([userId, id, taskId, taskVersionId])
+  @@index([userId, taskId, queuedAt(sort: Desc)])
+  @@index([status, leaseExpiresAt])
+  @@map("runs")
+}
+
+model ToolCall {
+  id             String         @id @default(uuid()) @db.Uuid
+  userId         String         @map("user_id") @db.Uuid
+  runId          String         @map("run_id") @db.Uuid
+  operationKey   String         @map("operation_key")
+  tool           String
+  attemptNo      Int            @map("attempt_no")
+  status         ToolCallStatus @default(reserved)
+  inputSummary   String         @map("input_summary")
+  reservedBudget Json           @map("reserved_budget")
+  usage          Json?
+  outputRef      Json?          @map("output_ref")
+  startedAt      DateTime?      @map("started_at") @db.Timestamptz(6)
+  finishedAt     DateTime?      @map("finished_at") @db.Timestamptz(6)
+
+  owner User @relation("User_ToolCall", fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  run   Run  @relation("ToolCall_run", fields: [userId, runId], references: [userId, id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([userId, id])
+  @@unique([runId, operationKey, attemptNo])
+  @@map("tool_calls")
+}
+
+model RunEvent {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  runId         String   @map("run_id") @db.Uuid
+  seq           Int
+  schemaVersion Int      @default(1) @map("schema_version")
+  type          String
+  payload       Json
+  occurredAt    DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
+
+  owner User @relation("User_RunEvent", fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  run   Run  @relation("RunEvent_run", fields: [userId, runId], references: [userId, id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([userId, id])
+  @@unique([runId, seq])
+  @@map("run_events")
+}
+
+model Outbox {
+  id             String    @id @default(uuid()) @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  aggregateType  String    @default("run") @map("aggregate_type")
+  aggregateId    String    @map("aggregate_id") @db.Uuid
+  eventType      String    @map("event_type")
+  dedupeKey      String    @unique @map("dedupe_key")
+  payload        Json
+  availableAt    DateTime  @default(now()) @map("available_at") @db.Timestamptz(6)
+  leaseExpiresAt DateTime? @map("lease_expires_at") @db.Timestamptz(6)
+  attempts       Int       @default(0)
+  sentAt         DateTime? @map("sent_at") @db.Timestamptz(6)
+
+  owner User @relation("User_Outbox", fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  run   Run  @relation("Outbox_run", fields: [userId, aggregateId], references: [userId, id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([userId, id])
+  @@index([sentAt, availableAt])
+  @@map("outbox")
+}
+
+model IdempotencyRecord {
+  id           String            @id @default(uuid()) @db.Uuid
+  userId       String            @map("user_id") @db.Uuid
+  scope        String
+  keyHash      String            @map("key_hash")
+  payloadHash  String            @map("payload_hash")
+  status       IdempotencyStatus @default(pending)
+  responseCode Int?              @map("response_code")
+  resourceId   String?           @map("resource_id") @db.Uuid
+  expiresAt    DateTime          @map("expires_at") @db.Timestamptz(6)
+
+  owner User @relation("User_IdempotencyRecord", fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([userId, id])
+  @@unique([userId, scope, keyHash])
+  @@index([expiresAt])
+  @@map("idempotency_records")
+}
+
+model Source {
+  id               String   @id @default(uuid()) @db.Uuid
+  userId           String   @map("user_id") @db.Uuid
+  canonicalUrl     String   @map("canonical_url")
+  canonicalUrlHash String   @map("canonical_url_hash") @db.Char(64)
+  firstSeenAt      DateTime @default(now()) @map("first_seen_at") @db.Timestamptz(6)
+
+  owner        User             @relation("User_Source", fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  snapshots    SourceSnapshot[] @relation("SourceSnapshot_source")
+  observations RunSource[]      @relation("RunSource_source")
+  changes      ChangeRecord[]   @relation("ChangeRecord_source")
+  feedback     Feedback[]       @relation("Feedback_source")
+  bookmarks    Bookmark[]       @relation("Bookmark_source")
+  notes        Note[]           @relation("Note_source")
+
+  @@unique([userId, id])
+  @@unique([userId, canonicalUrlHash])
+  @@map("sources")
+}
+
+model SourceSnapshot {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  sourceId         String    @map("source_id") @db.Uuid
+  contentHash      String    @map("content_hash") @db.Char(64)
+  extractorVersion String    @map("extractor_version")
+  title            String
+  publishedAt      DateTime? @map("published_at") @db.Timestamptz(6)
+  textBody         String?   @map("text_body")
+  textExpiresAt    DateTime? @map("text_expires_at") @db.Timestamptz(6)
+  metadataJson     Json      @default("{}") @map("metadata_json")
+
+  owner        User           @relation("User_SourceSnapshot", fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  source       Source         @relation("SourceSnapshot_source", fields: [userId, sourceId], references: [userId, id], onDelete: NoAction, onUpdate: NoAction)
+  observations RunSource[]    @relation("RunSource_snapshot")
+  oldChanges   ChangeRecord[] @relation("ChangeRecord_oldSnapshot")
+  newChanges   ChangeRecord[] @relation("ChangeRecord_newSnapshot")
+
+  @@unique([userId, id])
+  @@unique([userId, sourceId, extractorVersion, contentHash])
+  @@unique([userId, sourceId, id])
+  @@map("source_snapshots")
+}
+
+model RunSource {
+  id           String      @id @default(uuid()) @db.Uuid
+  userId       String      @map("user_id") @db.Uuid
+  runId        String      @map("run_id") @db.Uuid
+  sourceId     String      @map("source_id") @db.Uuid
+  snapshotId   String?     @map("snapshot_id") @db.Uuid
+  requestedUrl String      @map("requested_url")
+  fetchedUrl   String?     @map("fetched_url")
+  observedAt   DateTime    @default(now()) @map("observed_at") @db.Timestamptz(6)
+  fetchStatus  FetchStatus @map("fetch_status")
+  errorCode    String?     @map("error_code")
+  relevance    Float?
+
+  owner    User            @relation("User_RunSource", fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  run      Run             @relation("RunSource_run", fields: [userId, runId], references: [userId, id], onDelete: NoAction, onUpdate: NoAction)
+  source   Source          @relation("RunSource_source", fields: [userId, sourceId], references: [userId, id], onDelete: NoAction, onUpdate: NoAction)
+  snapshot SourceSnapshot? @relation("RunSource_snapshot", fields: [userId, sourceId, snapshotId], references: [userId, sourceId, id], onDelete: NoAction, onUpdate: NoAction)
+  evidence Evidence[]      @relation("Evidence_observation")
+
+  @@unique([userId, id])
+  @@unique([runId, sourceId])
+  @@unique([userId, runId, snapshotId])
+  @@map("run_sources")
+}
+
+model Evidence {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  runId        String   @map("run_id") @db.Uuid
+  snapshotId   String   @map("snapshot_id") @db.Uuid
+  quote        String
+  selectorJson Json     @map("selector_json")
+  quoteHash    String   @map("quote_hash") @db.Char(64)
+  capturedAt   DateTime @default(now()) @map("captured_at") @db.Timestamptz(6)
+
+  owner       User               @relation("User_Evidence", fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  observation RunSource          @relation("Evidence_observation", fields: [userId, runId, snapshotId], references: [userId, runId, snapshotId], onDelete: NoAction, onUpdate: NoAction)
+  claims      ClaimEvidence[]    @relation("ClaimEvidence_evidence")
+  changes     ChangeEvidence[]   @relation("ChangeEvidence_evidence")
+  questions   QuestionEvidence[] @relation("QuestionEvidence_evidence")
+
+  @@unique([userId, id])
+  @@map("evidence")
+}
+
+model Report {
+  id              String       @id @default(uuid()) @db.Uuid
+  userId          String       @map("user_id") @db.Uuid
+  runId           String       @map("run_id") @db.Uuid
+  taskId          String       @map("task_id") @db.Uuid
+  taskVersionId   String       @map("task_version_id") @db.Uuid
+  baselineRunId   String?      @map("baseline_run_id") @db.Uuid
+  schemaVersion   Int          @default(1) @map("schema_version")
+  title           String
+  summary         String
+  format          OutputFormat
+  completeness    Completeness
+  limitationsJson Json         @default("[]") @map("limitations_json")
+  publishedAt     DateTime     @default(now()) @map("published_at") @db.Timestamptz(6)
+
+  owner         User             @relation("User_Report", fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  run           Run              @relation("Report_run", fields: [userId, runId, taskId, taskVersionId], references: [userId, id, taskId, taskVersionId], onDelete: NoAction, onUpdate: NoAction)
+  baseline      Run?             @relation("Report_baseline", fields: [userId, taskId, baselineRunId], references: [userId, taskId, id], onDelete: NoAction, onUpdate: NoAction)
+  claims        Claim[]          @relation("Claim_report")
+  changes       ChangeRecord[]   @relation("ChangeRecord_report")
+  inboxItems    InboxItem[]      @relation("InboxItem_report")
+  notifications Notification[]   @relation("Notification_report")
+  notes         Note[]           @relation("Note_report")
+  questions     ReportQuestion[] @relation("ReportQuestion_report")
+
+  @@unique([userId, id])
+  @@unique([userId, runId])
+  @@unique([userId, taskId, id])
+  @@unique([userId, runId, id])
+  @@index([userId, publishedAt(sort: Desc)])
+  @@map("reports")
+}
+
+model Claim {
+  id              String    @id @default(uuid()) @db.Uuid
+  userId          String    @map("user_id") @db.Uuid
+  taskId          String    @map("task_id") @db.Uuid
+  reportId        String    @map("report_id") @db.Uuid
+  kind            ClaimKind
+  text            String
+  confidenceLabel String    @map("confidence_label")
+  order           Int
+
+  owner     User            @relation("User_Claim", fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  report    Report          @relation("Claim_report", fields: [userId, taskId, reportId], references: [userId, taskId, id], onDelete: NoAction, onUpdate: NoAction)
+  citations ClaimEvidence[] @relation("ClaimEvidence_claim")
+  feedback  Feedback[]      @relation("Feedback_claim")
+
+  @@unique([userId, id])
+  @@unique([userId, taskId, id])
+  @@unique([reportId, order])
+  @@map("claims")
+}
+
+model ClaimEvidence {
+  id         String           @id @default(uuid()) @db.Uuid
+  userId     String           @map("user_id") @db.Uuid
+  claimId    String           @map("claim_id") @db.Uuid
+  evidenceId String           @map("evidence_id") @db.Uuid
+  relation   EvidenceRelation
+
+  owner    User     @relation("User_ClaimEvidence", fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  claim    Claim    @relation("ClaimEvidence_claim", fields: [userId, claimId], references: [userId, id], onDelete: NoAction, onUpdate: NoAction)
+  evidence Evidence @relation("ClaimEvidence_evidence", fields: [userId, evidenceId], references: [userId, id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([userId, id])
+  @@unique([claimId, evidenceId])
+  @@map("claim_evidence")
+}
+
+model ChangeRecord {
+  id            String     @id @default(uuid()) @db.Uuid
+  userId        String     @map("user_id") @db.Uuid
+  reportId      String     @map("report_id") @db.Uuid
+  sourceId      String     @map("source_id") @db.Uuid
+  kind          ChangeKind
+  oldSourceId   String?    @map("old_source_id") @db.Uuid
+  oldSnapshotId String?    @map("old_snapshot_id") @db.Uuid
+  newSnapshotId String?    @map("new_snapshot_id") @db.Uuid
+  factKey       String     @map("fact_key")
+  oldValue      String?    @map("old_value")
+  newValue      String?    @map("new_value")
+  importance    String
+  reason        String
+
+  owner       User             @relation("User_ChangeRecord", fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  report      Report           @relation("ChangeRecord_report", fields: [userId, reportId], references: [userId, id], onDelete: NoAction, onUpdate: NoAction)
+  source      Source           @relation("ChangeRecord_source", fields: [userId, sourceId], references: [userId, id], onDelete: NoAction, onUpdate: NoAction)
+  oldSnapshot SourceSnapshot?  @relation("ChangeRecord_oldSnapshot", fields: [userId, oldSourceId, oldSnapshotId], references: [userId, sourceId, id], onDelete: NoAction, onUpdate: NoAction)
+  newSnapshot SourceSnapshot?  @relation("ChangeRecord_newSnapshot", fields: [userId, sourceId, newSnapshotId], references: [userId, sourceId, id], onDelete: NoAction, onUpdate: NoAction)
+  citations   ChangeEvidence[] @relation("ChangeEvidence_change")
+
+  @@unique([userId, id])
+  @@map("change_records")
+}
+
+model ChangeEvidence {
+  id             String       @id @default(uuid()) @db.Uuid
+  userId         String       @map("user_id") @db.Uuid
+  changeRecordId String       @map("change_record_id") @db.Uuid
+  evidenceId     String       @map("evidence_id") @db.Uuid
+  side           EvidenceSide
+
+  owner    User         @relation("User_ChangeEvidence", fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  change   ChangeRecord @relation("ChangeEvidence_change", fields: [userId, changeRecordId], references: [userId, id], onDelete: NoAction, onUpdate: NoAction)
+  evidence Evidence     @relation("ChangeEvidence_evidence", fields: [userId, evidenceId], references: [userId, id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([userId, id])
+  @@unique([changeRecordId, evidenceId, side])
+  @@map("change_evidence")
+}
+
+model InboxItem {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  reportId  String    @map("report_id") @db.Uuid
+  readAt    DateTime? @map("read_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  owner  User   @relation("User_InboxItem", fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  report Report @relation("InboxItem_report", fields: [userId, reportId], references: [userId, id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([userId, id])
+  @@unique([userId, reportId])
+  @@index([userId, readAt, createdAt])
+  @@map("inbox_items")
+}
+
+model Notification {
+  id        String           @id @default(uuid()) @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  runId     String           @map("run_id") @db.Uuid
+  reportId  String?          @map("report_id") @db.Uuid
+  kind      NotificationKind
+  readAt    DateTime?        @map("read_at") @db.Timestamptz(6)
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  owner  User    @relation("User_Notification", fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  run    Run     @relation("Notification_run", fields: [userId, runId], references: [userId, id], onDelete: NoAction, onUpdate: NoAction)
+  report Report? @relation("Notification_report", fields: [userId, runId, reportId], references: [userId, runId, id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([userId, id])
+  @@unique([userId, runId, kind])
+  @@map("notifications")
+}
+
+model Feedback {
+  id        String       @id @default(uuid()) @db.Uuid
+  userId    String       @map("user_id") @db.Uuid
+  taskId    String       @map("task_id") @db.Uuid
+  sourceId  String?      @map("source_id") @db.Uuid
+  claimId   String?      @map("claim_id") @db.Uuid
+  kind      FeedbackKind
+  active    Boolean      @default(true)
+  updatedAt DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  owner  User    @relation("User_Feedback", fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  task   Task    @relation("Feedback_task", fields: [userId, taskId], references: [userId, id], onDelete: NoAction, onUpdate: NoAction)
+  source Source? @relation("Feedback_source", fields: [userId, sourceId], references: [userId, id], onDelete: NoAction, onUpdate: NoAction)
+  claim  Claim?  @relation("Feedback_claim", fields: [userId, taskId, claimId], references: [userId, taskId, id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([userId, id])
+  @@map("feedback")
+}
+
+model Bookmark {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  sourceId  String   @map("source_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  owner  User   @relation("User_Bookmark", fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  source Source @relation("Bookmark_source", fields: [userId, sourceId], references: [userId, id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([userId, id])
+  @@unique([userId, sourceId])
+  @@map("bookmarks")
+}
+
+model Note {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  sourceId  String?  @map("source_id") @db.Uuid
+  reportId  String?  @map("report_id") @db.Uuid
+  body      String
+  revision  Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  owner  User    @relation("User_Note", fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  source Source? @relation("Note_source", fields: [userId, sourceId], references: [userId, id], onDelete: NoAction, onUpdate: NoAction)
+  report Report? @relation("Note_report", fields: [userId, reportId], references: [userId, id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([userId, id])
+  @@map("notes")
+}
+
+model ReportQuestion {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  reportId      String   @map("report_id") @db.Uuid
+  question      String
+  answerJson    Json?    @map("answer_json")
+  followupRunId String?  @map("followup_run_id") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  owner       User               @relation("User_ReportQuestion", fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  report      Report             @relation("ReportQuestion_report", fields: [userId, reportId], references: [userId, id], onDelete: NoAction, onUpdate: NoAction)
+  followupRun Run?               @relation("ReportQuestion_followupRun", fields: [userId, followupRunId], references: [userId, id], onDelete: NoAction, onUpdate: NoAction)
+  evidence    QuestionEvidence[] @relation("QuestionEvidence_question")
+
+  @@unique([userId, id])
+  @@map("report_questions")
+}
+
+model QuestionEvidence {
+  id         String @id @default(uuid()) @db.Uuid
+  userId     String @map("user_id") @db.Uuid
+  questionId String @map("question_id") @db.Uuid
+  evidenceId String @map("evidence_id") @db.Uuid
+
+  owner    User           @relation("User_QuestionEvidence", fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  question ReportQuestion @relation("QuestionEvidence_question", fields: [userId, questionId], references: [userId, id], onDelete: NoAction, onUpdate: NoAction)
+  evidence Evidence       @relation("QuestionEvidence_evidence", fields: [userId, evidenceId], references: [userId, id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([userId, id])
+  @@unique([questionId, evidenceId])
+  @@map("question_evidence")
+}
