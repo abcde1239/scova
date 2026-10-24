@@ -25,7 +25,10 @@
     },
     {
       "root": "packages/contracts",
-      "id": "packages-contracts"
+      "id": "packages-contracts",
+      "tests": {
+        "requireConfiguredTask": true
+      }
     },
     {
       "root": "packages/agent-core",
@@ -133,7 +136,7 @@
       "workspace": "root",
       "kind": "test",
       "argv": ["vp", "test"],
-      "covers": ["apps-api", "packages-utils"],
+      "covers": ["apps-api", "packages-utils", "packages-contracts"],
       "timeoutMs": 120000,
       "cwd": ".",
       "dependsOn": [],

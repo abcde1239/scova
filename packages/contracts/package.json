@@ -11,6 +11,9 @@
     "test": "vp test",
     "check": "vp check"
   },
+  "dependencies": {
+    "@sinclair/typebox": "0.34.52"
+  },
   "devDependencies": {
     "typescript": "catalog:"
   }

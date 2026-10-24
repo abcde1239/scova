@@ -339,6 +339,10 @@ importers:
         version: 7.0.2
 
   packages/contracts:
+    dependencies:
+      '@sinclair/typebox':
+        specifier: 0.34.52
+        version: 0.34.52
     devDependencies:
       typescript:
         specifier: 'catalog:'

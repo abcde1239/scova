@@ -1,2 +1,10 @@
-/** API 契约占位入口；Issue #4 将在此导出运行时校验与版本化 DTO。 */
-export const contractsVersion = "0.0.0";
+export * from "./common.ts";
+export * from "./auth.ts";
+export * from "./tasks.ts";
+export * from "./runs.ts";
+export * from "./reports.ts";
+export * from "./events.ts";
+export * from "./validation.ts";
+
+/** API 与事件的结构版本，不等同于数据库 migration 版本。 */
+export const contractsVersion = "1.0.0";
