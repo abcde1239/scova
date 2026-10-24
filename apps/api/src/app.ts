@@ -16,6 +16,7 @@ import {
   TaskVersionSchema,
   RunSchema,
   RunCommandResponseSchema,
+  RunCommandInputSchema,
   ReportSchema,
   RunEventSchema,
   TaskDetailResponseSchema,
@@ -25,6 +26,7 @@ import { createAuthPlugin } from "./auth.ts";
 import { createApiErrorPlugin } from "./errors.ts";
 import { createDefaultServices, type ApiServices } from "./services.ts";
 import { createTaskPlugin } from "./tasks.ts";
+import { createRunPlugin } from "./runs.ts";
 
 /** 系统健康检查返回值；只代表进程存活，不宣称数据库、队列或 Agent 已就绪。 */
 export const HealthResponseSchema = t.Object(
@@ -54,6 +56,7 @@ export const contractModels = {
   TaskListResponse: TaskListResponseSchema,
   Run: RunSchema,
   RunCommandResponse: RunCommandResponseSchema,
+  RunCommandInput: RunCommandInputSchema,
   Report: ReportSchema,
   RunEvent: RunEventSchema,
 };
@@ -106,6 +109,7 @@ export const createApiApp = (
       },
     )
     .use(createAuthPlugin(services))
-    .use(createTaskPlugin(services));
+    .use(createTaskPlugin(services))
+    .use(createRunPlugin(services));
 
 export const apiApp = createApiApp();

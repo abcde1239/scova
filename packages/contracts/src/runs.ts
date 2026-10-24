@@ -90,9 +90,25 @@ export const RunCommandResponseSchema = Type.Object(
   { run: RunSchema, reused: Type.Boolean({ description: "是否返回已经存在的活动执行" }) },
   { additionalProperties: false, description: "执行命令的普通 JSON 响应；首次入队使用 HTTP 202" },
 );
-for (const schema of [UsageSchema, CoverageSchema, RunSchema, RunCommandResponseSchema])
+export const RunCommandInputSchema = Type.Object(
+  {
+    mode: Type.Optional(ModeSchema),
+  },
+  {
+    additionalProperties: false,
+    description: "手动启动执行的模式；未提供时使用演示模式，避免未配置服务时伪装真实检索",
+  },
+);
+for (const schema of [
+  UsageSchema,
+  CoverageSchema,
+  RunSchema,
+  RunCommandInputSchema,
+  RunCommandResponseSchema,
+])
   describeProperties(schema);
 export type Usage = Static<typeof UsageSchema>;
 export type Coverage = Static<typeof CoverageSchema>;
 export type Run = Static<typeof RunSchema>;
 export type RunCommandResponse = Static<typeof RunCommandResponseSchema>;
+export type RunCommandInput = Static<typeof RunCommandInputSchema>;

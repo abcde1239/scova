@@ -11,9 +11,12 @@
     "check": "vp check"
   },
   "dependencies": {
+    "@prisma/client": "catalog:",
     "@scova/agent-core": "workspace:*",
     "@scova/connectors": "workspace:*",
-    "@scova/contracts": "workspace:*"
+    "@scova/contracts": "workspace:*",
+    "bullmq": "catalog:",
+    "ioredis": "catalog:"
   },
   "devDependencies": {
     "@types/node": "catalog:",

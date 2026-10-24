@@ -148,9 +148,9 @@ function listItem(task: StoredTask) {
 
 type Database = Prisma.TransactionClient | ReturnType<ApiServices["db"]>;
 
-async function ownedTask(
+export async function ownedTask(
   taskId: string,
-  session: AuthenticatedSession,
+  session: Pick<AuthenticatedSession, "userId">,
   services: ApiServices,
   database: Database = services.db(),
 ) {
