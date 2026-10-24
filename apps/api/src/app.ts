@@ -18,10 +18,13 @@ import {
   RunCommandResponseSchema,
   ReportSchema,
   RunEventSchema,
+  TaskDetailResponseSchema,
+  TaskListResponseSchema,
 } from "@scova/contracts";
 import { createAuthPlugin } from "./auth.ts";
 import { createApiErrorPlugin } from "./errors.ts";
 import { createDefaultServices, type ApiServices } from "./services.ts";
+import { createTaskPlugin } from "./tasks.ts";
 
 /** 系统健康检查返回值；只代表进程存活，不宣称数据库、队列或 Agent 已就绪。 */
 export const HealthResponseSchema = t.Object(
@@ -47,6 +50,8 @@ export const contractModels = {
   UpdateTaskInput: UpdateTaskInputSchema,
   Task: TaskSchema,
   TaskVersion: TaskVersionSchema,
+  TaskDetailResponse: TaskDetailResponseSchema,
+  TaskListResponse: TaskListResponseSchema,
   Run: RunSchema,
   RunCommandResponse: RunCommandResponseSchema,
   Report: ReportSchema,
@@ -100,6 +105,7 @@ export const createApiApp = (
         },
       },
     )
-    .use(createAuthPlugin(services));
+    .use(createAuthPlugin(services))
+    .use(createTaskPlugin(services));
 
 export const apiApp = createApiApp();

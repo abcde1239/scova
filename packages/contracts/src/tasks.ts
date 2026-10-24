@@ -183,6 +183,26 @@ export const TaskSchema = Type.Object(
   },
   { additionalProperties: false, description: "长期任务摘要，不等同于配置版本或单次执行" },
 );
+export const TaskDetailResponseSchema = Type.Object(
+  {
+    task: TaskSchema,
+    version: TaskVersionSchema,
+    baselineResetRequired: Type.Boolean({
+      description: "语义查阅范围是否变化，下一次完整执行需要建立新基线",
+    }),
+  },
+  { additionalProperties: false, description: "任务摘要与当前不可变配置版本" },
+);
+export const TaskListResponseSchema = Type.Object(
+  {
+    items: Type.Array(TaskSchema, { description: "当前账号可见的任务摘要" }),
+    nextCursor: Type.Union([
+      Type.String({ minLength: 1, description: "下一页游标" }),
+      Type.Null({ description: "没有下一页" }),
+    ]),
+  },
+  { additionalProperties: false, description: "按更新时间倒序的任务列表" },
+);
 for (const schema of [
   TimeRangeSchema,
   ScheduleSchema,
@@ -191,6 +211,8 @@ for (const schema of [
   UpdateTaskInputSchema,
   TaskVersionSchema,
   TaskSchema,
+  TaskDetailResponseSchema,
+  TaskListResponseSchema,
 ])
   describeProperties(schema);
 export type Budget = Static<typeof BudgetSchema>;
@@ -201,3 +223,5 @@ export type CreateTaskInput = Static<typeof CreateTaskInputSchema>;
 export type UpdateTaskInput = Static<typeof UpdateTaskInputSchema>;
 export type Task = Static<typeof TaskSchema>;
 export type TaskVersion = Static<typeof TaskVersionSchema>;
+export type TaskDetailResponse = Static<typeof TaskDetailResponseSchema>;
+export type TaskListResponse = Static<typeof TaskListResponseSchema>;
