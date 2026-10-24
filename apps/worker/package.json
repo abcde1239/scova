@@ -1,0 +1,22 @@
+{
+  "name": "worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vpx --env-file-if-exists=.env src/start.ts",
+    "start": "bun run src/start.ts",
+    "build": "tsc --noEmit",
+    "test": "vp test",
+    "check": "vp check"
+  },
+  "dependencies": {
+    "@scova/agent-core": "workspace:*",
+    "@scova/connectors": "workspace:*",
+    "@scova/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  }
+}

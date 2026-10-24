@@ -1,0 +1,27 @@
+{
+  "name": "scova",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "ready": "vp run harness-verify",
+    "harness-lint": "vpx scripts/harness.mjs lint",
+    "harness-verify": "vpx scripts/harness.mjs verify",
+    "dev": "vp run web#dev",
+    "prepare": "vp config",
+    "test:processes": "vp node scripts/smoke-processes.mjs"
+  },
+  "devDependencies": {
+    "vite-plus": "catalog:"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "12.15.0",
+      "onFail": "download"
+    }
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  }
+}

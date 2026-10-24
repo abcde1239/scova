@@ -1,0 +1,163 @@
+{
+  "schemaVersion": 1,
+  "repository": {
+    "visibility": "private"
+  },
+  "workspaces": [
+    {
+      "root": ".",
+      "id": "root"
+    },
+    {
+      "root": "apps/web",
+      "id": "apps-web"
+    },
+    {
+      "root": "apps/api",
+      "tests": {
+        "requireConfiguredTask": true
+      },
+      "id": "apps-api"
+    },
+    {
+      "root": "apps/worker",
+      "id": "apps-worker"
+    },
+    {
+      "root": "packages/contracts",
+      "id": "packages-contracts"
+    },
+    {
+      "root": "packages/agent-core",
+      "id": "packages-agent-core"
+    },
+    {
+      "root": "packages/connectors",
+      "id": "packages-connectors"
+    },
+    {
+      "root": "packages/utils",
+      "tests": {
+        "requireConfiguredTask": true
+      },
+      "id": "packages-utils"
+    }
+  ],
+  "documents": {
+    "defaultAudience": "internal",
+    "publicRoots": ["docs/public"],
+    "internalRoots": [
+      "docs/overall",
+      "docs/prd",
+      "docs/decision",
+      "docs/verification",
+      ".harness",
+      ".agents",
+      ".codex"
+    ],
+    "publicPatterns": [
+      "README.md",
+      "AGENTS.md",
+      ".gitignore",
+      "package.json",
+      "pnpm-lock.yaml",
+      "pnpm-workspace.yaml",
+      "tsconfig.json",
+      "vite.config.ts",
+      "harness.config.json",
+      ".vite-hooks/pre-commit",
+      ".vscode/settings.json",
+      ".vscode/extensions.json",
+      "apps/**",
+      "packages/**",
+      "scripts/**",
+      ".github/workflows/**",
+      "compose.yaml",
+      "Dockerfile",
+      ".dockerignore",
+      ".env.example",
+      "tests/**"
+    ],
+    "internalPatterns": [
+      "docs/structure.md",
+      "docs/agent_guide.md",
+      "docs/*-prd.md",
+      "**/MEMORY.md",
+      "**/memory/**",
+      "**/memories/**",
+      "**/decision/**",
+      "**/decisions/**",
+      "**/.env",
+      "**/.env.local",
+      "**/.env.*.local",
+      "**/.env.production",
+      "**/.env.development",
+      "**/.env.test",
+      "**/.env.staging",
+      "**/node_modules/**",
+      "**/dist/**",
+      "**/coverage/**",
+      "**/artifacts/**"
+    ]
+  },
+  "tests": {
+    "include": ["**/*.test.ts", "**/*.spec.ts"],
+    "exclude": [
+      "node_modules/**",
+      "dist/**",
+      "artifacts/**",
+      "coverage/**",
+      "scripts/vendor/**",
+      "compose.test.yaml"
+    ],
+    "artifacts": ["artifacts", "coverage"],
+    "requireConfiguredTask": false
+  },
+  "tasks": [
+    {
+      "id": "static-check",
+      "workspace": "root",
+      "kind": "lint",
+      "argv": ["vp", "check"],
+      "timeoutMs": 120000,
+      "cwd": ".",
+      "dependsOn": [],
+      "required": true,
+      "enabled": true,
+      "covers": ["root"]
+    },
+    {
+      "id": "unit-tests",
+      "workspace": "root",
+      "kind": "test",
+      "argv": ["vp", "test"],
+      "covers": ["apps-api", "packages-utils"],
+      "timeoutMs": 120000,
+      "cwd": ".",
+      "dependsOn": [],
+      "required": true,
+      "enabled": true
+    },
+    {
+      "id": "workspace-build",
+      "workspace": "root",
+      "kind": "build",
+      "argv": ["vp", "run", "-r", "build"],
+      "timeoutMs": 120000,
+      "cwd": ".",
+      "dependsOn": [],
+      "required": true,
+      "enabled": true,
+      "covers": ["root"]
+    }
+  ],
+  "publicationTargets": [],
+  "rules": {
+    "tests.layout": "error",
+    "tests.configured": "error",
+    "tests.artifacts": "error",
+    "documents.links": "error",
+    "tasks.graph": "error"
+  },
+  "baseline": []
+}

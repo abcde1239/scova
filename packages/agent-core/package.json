@@ -1,0 +1,20 @@
+{
+  "name": "@scova/agent-core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "test": "vp test",
+    "check": "vp check"
+  },
+  "dependencies": {
+    "@scova/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "catalog:"
+  }
+}
