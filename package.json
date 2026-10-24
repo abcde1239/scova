@@ -11,7 +11,9 @@
     "prepare": "vp config",
     "test:processes": "vpx scripts/smoke-processes.mjs",
     "test:runtime": "vpx scripts/run-bun.mjs scripts/runtime-test.mjs",
-    "test:runtime:node": "vpx scripts/runtime-test.mjs"
+    "test:runtime:node": "vpx scripts/runtime-test.mjs",
+    "api:openapi": "vpx scripts/generate-openapi.mjs",
+    "api:openapi:check": "vpx scripts/generate-openapi.mjs --check"
   },
   "dependencies": {
     "@js-temporal/polyfill": "catalog:",
