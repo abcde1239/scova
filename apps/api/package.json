@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "bun run src/main.ts",
-    "dev:node": "vp node src/node.ts",
+    "dev:node": "vpx src/node.ts",
     "start": "bun run src/main.ts",
-    "start:node": "vp node src/node.ts",
+    "start:node": "vpx src/node.ts",
     "build": "tsc --noEmit",
     "test": "vp test",
     "check": "vp check"

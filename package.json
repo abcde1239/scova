@@ -9,7 +9,7 @@
     "harness-verify": "vpx scripts/harness.mjs verify",
     "dev": "vp run web#dev",
     "prepare": "vp config",
-    "test:processes": "vp node scripts/smoke-processes.mjs"
+    "test:processes": "vpx scripts/smoke-processes.mjs"
   },
   "devDependencies": {
     "vite-plus": "catalog:"
