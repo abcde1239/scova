@@ -19,6 +19,7 @@ Scova 是一个任务驱动的 AI 信息查阅与研究工作台：设置主题�
 
 ```bash
 vp install
+docker compose -f compose.test.yaml -p scova-runtime-test up -d --wait
 vp run harness-lint
 vp run harness-verify
 ```

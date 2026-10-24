@@ -76,7 +76,8 @@
       "Dockerfile",
       ".dockerignore",
       ".env.example",
-      "tests/**"
+      "tests/**",
+      "compose.test.yaml"
     ],
     "internalPatterns": [
       "docs/structure.md",
@@ -108,7 +109,8 @@
       "artifacts/**",
       "coverage/**",
       "scripts/vendor/**",
-      "compose.test.yaml"
+      "compose.test.yaml",
+      "**/.generated/**"
     ],
     "artifacts": ["artifacts", "coverage"],
     "requireConfiguredTask": false
@@ -149,6 +151,22 @@
       "required": true,
       "enabled": true,
       "covers": ["root"]
+    },
+    {
+      "id": "runtime-bun",
+      "timeoutMs": 180000,
+      "workspace": "root",
+      "kind": "test",
+      "covers": ["root"],
+      "argv": ["vp", "run", "test:runtime"]
+    },
+    {
+      "id": "runtime-node",
+      "timeoutMs": 180000,
+      "workspace": "root",
+      "kind": "test",
+      "covers": ["root"],
+      "argv": ["vp", "run", "test:runtime:node"]
     }
   ],
   "publicationTargets": [],

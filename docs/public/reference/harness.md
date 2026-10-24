@@ -28,6 +28,8 @@ vp run harness-verify
 
 ## 工具可移植性
 
+完整门禁还包含 `runtime-bun`（`vp run test:runtime`）与 `runtime-node`（`vp run test:runtime:node`），验证真实 PostgreSQL/Redis 的事务、队列、跨进程 checkpoint 恢复和 fencing。先运行 `docker compose -f compose.test.yaml -p scova-runtime-test up -d --wait`；没有服务时明确失败，不回退内存。实验每次创建并清理独立 schema 和命名队列，详见源码中的 `tests/runtime/README.md`。
+
 `scripts/vendor/harness-kit.mjs` 是 harness-kit 随附 CLI 的原样快照（schemaVersion 1，SHA-256 `cc523948f6244abe42aa0f7d6be4a5bf14c39c9547bd88e2b2a7322ef594e5e2`），仅依赖 Bun 和 Git，不依赖全局安装的技能。`scripts/harness.mjs` 固定项目根、校验摘要，并使用 `BUN_BIN`、用户目录下独立 Bun 或 PATH 中的 Bun。指定 `BUN_BIN` 时必须是可执行文件路径，不含命令参数。
 
 更新快照时比较上游内容，原样替换文件，更新包装器和本文摘要，重新运行治理检查及验证。仅该快照排除自动格式化和 lint，项目自有包装器正常接受检查。不要手工修补生成代码再沿用旧摘要。

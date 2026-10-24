@@ -45,6 +45,7 @@ decisions/
 /.codex/
 playwright-report/
 test-results/
+tests/runtime/.generated/
 .idea
 .DS_Store
 *.suo
