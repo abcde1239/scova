@@ -14,7 +14,8 @@
     "test:runtime:node": "vpx scripts/runtime-test.mjs",
     "api:openapi": "vpx scripts/generate-openapi.mjs",
     "api:openapi:check": "vpx scripts/generate-openapi.mjs --check",
-    "test:database": "vp test --config tests/database.vite.config.ts"
+    "test:database": "vp test --config tests/database.vite.config.ts",
+    "test:auth": "vp test --config tests/auth.vite.config.ts"
   },
   "dependencies": {
     "@js-temporal/polyfill": "catalog:",

@@ -19,6 +19,9 @@ import {
   ReportSchema,
   RunEventSchema,
 } from "@scova/contracts";
+import { createAuthPlugin } from "./auth.ts";
+import { createApiErrorPlugin } from "./errors.ts";
+import { createDefaultServices, type ApiServices } from "./services.ts";
 
 /** 系统健康检查返回值；只代表进程存活，不宣称数据库、队列或 Agent 已就绪。 */
 export const HealthResponseSchema = t.Object(
@@ -50,13 +53,17 @@ export const contractModels = {
   RunEvent: RunEventSchema,
 };
 
-/** API 应用工厂。业务路由将在后续 Issue 中按 contracts 注册。 */
-export const createApiApp = (runtime: "bun" | "node" = "bun") =>
+/** API 应用工厂；服务依赖可注入，文档生成不会主动连接数据库或 Redis。 */
+export const createApiApp = (
+  runtime: "bun" | "node" = "bun",
+  services: ApiServices = createDefaultServices(),
+) =>
   new Elysia({
     name: "scova-api",
     normalize: false,
     ...(runtime === "node" ? { adapter: node() } : {}),
   })
+    .use(createApiErrorPlugin())
     // contracts 与 apps/api 通过 workspace 依赖共享运行时 schema；这里的 unknown 边界只消除
     // TypeBox 在不同 package 解析路径下重复安装造成的 unique-symbol 类型差异。
     .model({ ...contractModels, HealthResponse: HealthResponseSchema } as unknown as Record<
@@ -92,6 +99,7 @@ export const createApiApp = (runtime: "bun" | "node" = "bun") =>
           description: "返回 API 服务与当前运行时状态。",
         },
       },
-    );
+    )
+    .use(createAuthPlugin(services));
 
 export const apiApp = createApiApp();
