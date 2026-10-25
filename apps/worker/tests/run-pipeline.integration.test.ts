@@ -93,6 +93,54 @@ beforeEach(async () => {
 });
 
 describe("生产 Run 租约、消费与恢复（真实 PG/Redis，串行）", () => {
+  it("C12-08 active deadline独立中断，不等待慢续期SQL返回", async () => {
+    const seed = await seedRun(fixture.db);
+    await fixture.db
+      .$executeRaw`UPDATE runs SET deadline_at = clock_timestamp() + interval '800 milliseconds' WHERE id = ${seed.run.id}::uuid`;
+    const entered = deferred();
+    const renewing = deferred();
+    const releaseRenew = deferred();
+    let context!: RunExecutionContext;
+    let renewalReleased = false;
+    const slowRepository = {
+      ...repository,
+      async renew(...args: Parameters<typeof repository.renew>) {
+        renewing.resolve();
+        await releaseRenew.promise;
+        renewalReleased = true;
+        return repository.renew(...args);
+      },
+    };
+    const pending = new RunService({
+      repository: slowRepository,
+      leaseMs: 5_000,
+      renewIntervalMs: 30,
+      executor: {
+        async execute(value) {
+          context = value;
+          entered.resolve();
+          await new Promise(() => {});
+        },
+      },
+    }).execute(seed.run.id);
+    try {
+      await entered.promise;
+      await renewing.promise;
+      await waitUntil(async () => context.signal.aborted, "慢续期未返回时deadline独立abort", 2_000);
+      expect(renewalReleased).toBe(false);
+    } finally {
+      releaseRenew.resolve();
+    }
+    expect(await pending).toBe("processed");
+    expect(await stored(seed.run.id)).toMatchObject({
+      status: "failed",
+      failureCode: "DEADLINE_EXCEEDED",
+    });
+    expect(await fixture.db.report.count({ where: { runId: seed.run.id } })).toBe(0);
+    expect((await events(seed.run.id)).filter((event) => event.type === "run.failed")).toHaveLength(
+      1,
+    );
+  });
   it("C12-10 仅切断consumer的TCP代理，Redis失联时仍可停止并保留Run恢复事实", async () => {
     const upstream = new URL(fixture.redisUrl);
     const sockets = new Set<Socket>();

@@ -109,14 +109,23 @@ export class RunService {
       }
       if (controller.signal.aborted) throw new Error("Run 执行已停止");
     };
-    // 使用数据库返回的剩余时长调度检查，不把宿主机与 PG 的绝对时钟作比较。
-    let remainingMs = run.deadlineAt!.getTime() - claimed.now.getTime();
+    // 用 PG 返回的剩余时长和单调时钟独立计时；慢续期不能推迟外部调用中断。
+    const deadlineDelayMs = run.deadlineAt!.getTime() - claimed.now.getTime();
+    const deadlineStartedAt = performance.now();
+    let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+    const scheduleDeadline = () => {
+      const remainingMs = deadlineDelayMs - (performance.now() - deadlineStartedAt);
+      if (remainingMs <= 0) {
+        abort("deadline");
+        return;
+      }
+      // 正常预算只需一次定时；极长的已有快照分段，避免 Node 定时器整数溢出。
+      deadlineTimer = setTimeout(scheduleDeadline, Math.min(Math.ceil(remainingMs), 2_147_483_647));
+    };
+    scheduleDeadline();
     const heartbeat = (async () => {
       while (!controller.signal.aborted) {
-        const interval = Math.max(1, Math.min(this.renewIntervalMs, remainingMs));
-        const started = performance.now();
-        await waitForPoll(interval, controller.signal);
-        remainingMs -= performance.now() - started;
+        await waitForPoll(this.renewIntervalMs, controller.signal);
         if (controller.signal.aborted) return;
         try {
           const result = await this.repository.renew(token, this.leaseMs);
@@ -189,6 +198,7 @@ export class RunService {
       return "processed";
     } finally {
       abort("finished");
+      clearTimeout(deadlineTimer);
       signal?.removeEventListener("abort", stopping);
       if (wakeAbort) controller.signal.removeEventListener("abort", wakeAbort);
       await heartbeat;
