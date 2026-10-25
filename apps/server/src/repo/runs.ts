@@ -6,6 +6,25 @@ import { createTaskStore } from "@/repo/tasks.ts";
 function createRunStore(database: Prisma.TransactionClient) {
   const tasks = createTaskStore(database);
   return {
+    lockTask(taskId: string, userId: string) {
+      return database.$queryRaw<{ id: string }[]>`
+        SELECT id FROM tasks WHERE id = ${taskId}::uuid AND user_id = ${userId}::uuid FOR UPDATE
+      `;
+    },
+    lockRun(runId: string, userId: string) {
+      return database.$queryRaw<{ id: string }[]>`
+        SELECT id FROM runs WHERE id = ${runId}::uuid AND user_id = ${userId}::uuid FOR UPDATE
+      `;
+    },
+    findActiveRun(taskId: string, userId: string) {
+      return database.run.findFirst({
+        where: {
+          taskId,
+          userId,
+          status: { in: ["queued", "running", "recovering", "cancel_requested"] },
+        },
+      });
+    },
     findTask: (...args: Parameters<typeof tasks.findTask>) => tasks.findTask(...args),
     findVersion: (...args: Parameters<typeof tasks.findVersion>) => tasks.findVersion(...args),
     findRun(runId: string, userId: string) {

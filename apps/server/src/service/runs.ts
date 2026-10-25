@@ -75,12 +75,16 @@ export function createRunService(services: ApiServices) {
     parentRunId: string | null = null,
     taskVersionId?: string,
   ) {
+    if (!UUID.test(taskId)) throw new ApiError(404, "NOT_FOUND", "资源不存在");
     const command = commandBody(input);
     const scope = `run:${taskId}:${parentRunId ? "retry" : "create"}`;
     const keyHash = sha256(idempotencyKey);
     const payloadHash = sha256(JSON.stringify({ taskId, parentRunId, ...command }));
     try {
       return await repo.transaction(async (store) => {
+        // 所有启动命令先锁定同一任务，串行决定幂等重放、活动复用及配置快照。
+        if (!(await store.lockTask(taskId, userId)).length)
+          throw new ApiError(404, "NOT_FOUND", "资源不存在");
         const existing = await store.findIdempotency(userId, scope, keyHash);
         if (existing) {
           if (existing.payloadHash !== payloadHash)
@@ -111,6 +115,11 @@ export function createRunService(services: ApiServices) {
           payloadHash,
           expiresAt: new Date(services.clock().getTime() + 24 * 60 * 60 * 1000),
         });
+        const active = await store.findActiveRun(task.id, userId);
+        if (active) {
+          await store.completeIdempotency(idempotency.id, active.id);
+          return { run: active, reused: true };
+        }
         const run = await store.createRun({
           userId,
           taskId: task.id,
@@ -168,15 +177,20 @@ export function createRunService(services: ApiServices) {
     async cancel(userId: string, runId: string) {
       if (!UUID.test(runId)) throw new ApiError(404, "NOT_FOUND", "资源不存在");
       const result = await repo.transaction(async (store) => {
+        await store.lockRun(runId, userId);
         const run = await store.findRun(runId, userId);
         if (!run) throw new ApiError(404, "NOT_FOUND", "资源不存在");
-        if (!ACTIVE.includes(run.status as (typeof ACTIVE)[number])) return { run, reused: true };
+        if (
+          run.status === "cancel_requested" ||
+          !ACTIVE.includes(run.status as (typeof ACTIVE)[number])
+        )
+          return { run, reused: true };
         const updated = await store.requestCancel(run.id, services.clock());
         await store.createOutbox({
           userId,
           aggregateId: run.id,
           eventType: "run.cancel_requested",
-          dedupeKey: `run-${run.id}-cancel-${run.cancelRequestedAt?.getTime() ?? services.clock().getTime()}`,
+          dedupeKey: `run-${run.id}-cancel`,
           payload: { runId: run.id },
         });
         return { run: updated, reused: false };

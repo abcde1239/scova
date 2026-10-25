@@ -198,7 +198,8 @@ describe("Run API、事务 Outbox 与事件回放", () => {
       headers: authHeaders(auth, { "idempotency-key": "run-key-different1" }),
       body: JSON.stringify({ mode: "demo" }),
     });
-    expect(otherKey.status).toBe(409);
+    expect(otherKey.status).toBe(202);
+    expect(await json(otherKey)).toMatchObject({ reused: true, run: { id: run.run.id } });
     const denied = await request(`/api/v1/runs/${run.run.id}`, {
       headers: { cookie: other.cookie },
     });
@@ -209,6 +210,52 @@ describe("Run API、事务 Outbox 与事件回放", () => {
       body: JSON.stringify({}),
     });
     expect(missingKey.status).toBe(428);
+  });
+
+  it("并发启动复用唯一活动执行，重复取消只写入一个取消命令", async () => {
+    const auth = await register();
+    const task = await createTask(auth);
+    const start = (key: string) =>
+      request(`/api/v1/tasks/${task.id}/runs`, {
+        method: "POST",
+        headers: authHeaders(auth, { "idempotency-key": key }),
+        body: JSON.stringify({ mode: "demo" }),
+      });
+    const started = await Promise.all([
+      start("concurrent-start-one"),
+      start("concurrent-start-two"),
+    ]);
+    expect(started.map((response) => response.status)).toEqual([202, 202]);
+    const bodies = await Promise.all(started.map(json));
+    expect(bodies[0]!.run.id).toBe(bodies[1]!.run.id);
+    const runId = bodies[0]!.run.id as string;
+    expect(await prisma.run.count({ where: { taskId: task.id } })).toBe(1);
+    expect(await prisma.outbox.count({ where: { aggregateId: runId } })).toBe(1);
+    expect(await prisma.runEvent.count({ where: { runId } })).toBe(1);
+
+    const cancel = () =>
+      request(`/api/v1/runs/${runId}/cancel`, {
+        method: "POST",
+        headers: authHeaders(auth),
+      });
+    const canceled = await Promise.all([cancel(), cancel()]);
+    expect(canceled.map((response) => response.status)).toEqual([200, 200]);
+    expect((await Promise.all(canceled.map(json))).map((body) => body.reused).sort()).toEqual([
+      false,
+      true,
+    ]);
+    const repeated = await cancel();
+    expect(repeated.status).toBe(200);
+    expect((await json(repeated)).reused).toBe(true);
+    expect(
+      await prisma.outbox.count({
+        where: { aggregateId: runId, eventType: "run.cancel_requested" },
+      }),
+    ).toBe(1);
+    await prisma.run.update({ where: { id: runId }, data: { status: "canceled" } });
+    expect((await json(await start("concurrent-start-two"))).run.id).toBe(runId);
+    expect(await prisma.run.count({ where: { taskId: task.id } })).toBe(1);
+    expect((await json(await cancel())).run.status).toBe("canceled");
   });
 
   it("配置修改后重试仍固定原版本、预算和比较范围，并可幂等重放", async () => {
@@ -290,6 +337,12 @@ describe("Run API、事务 Outbox 与事件回放", () => {
     });
     expect(canceled.status).toBe(200);
     expect((await json(canceled)).run.status).toBe("cancel_requested");
+    const repeatedCancel = await request(`/api/v1/runs/${original.run.id}/cancel`, {
+      method: "POST",
+      headers: authHeaders(auth),
+    });
+    expect(repeatedCancel.status).toBe(200);
+    expect((await json(repeatedCancel)).reused).toBe(true);
     await prisma.run.update({
       where: { id: original.run.id },
       data: { status: "failed", failureCode: "TEST_FAILURE" },
