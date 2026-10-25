@@ -34,10 +34,10 @@ vp exec prisma generate
 vp run dev                # 前端
 vp run server#start       # Bun 后端
 vp run server#start:node  # Node.js 后端
-vp run worker#start       # Worker 启动入口
+vp run worker#start       # Outbox 后台投递
 ```
 
-后端提供 `/health`、`/swagger` 和 `/swagger/json`。Worker 执行闭环尚未完成。
+后端提供 `/health`、`/swagger` 和 `/swagger/json`。Worker 已接通 Outbox 轮询与投递，Agent 消费执行仍待实现，配置见 [Worker 说明](apps/worker/README.md)。
 
 ## 验证
 

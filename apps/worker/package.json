@@ -4,8 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vpx --env-file-if-exists=.env src/start.ts",
-    "start": "bun run src/start.ts",
+    "dev": "bun --watch src/main.ts",
+    "dev:node": "vpx --watch --env-file-if-exists=.env src/node.ts",
+    "start": "bun run src/main.ts",
+    "start:node": "vpx --env-file-if-exists=.env src/node.ts",
     "build": "tsc --noEmit",
     "test": "vp test",
     "check": "vp check"

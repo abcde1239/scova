@@ -21,7 +21,8 @@
     },
     {
       "root": "apps/worker",
-      "id": "apps-worker"
+      "id": "apps-worker",
+      "tests": { "requireConfiguredTask": true }
     },
     {
       "root": "packages/contracts",
@@ -140,7 +141,7 @@
       "workspace": "root",
       "kind": "test",
       "argv": ["vp", "test"],
-      "covers": ["apps-server", "packages-utils", "packages-contracts"],
+      "covers": ["apps-server", "apps-worker", "packages-utils", "packages-contracts"],
       "timeoutMs": 120000,
       "cwd": ".",
       "dependsOn": [],
@@ -182,6 +183,14 @@
       "covers": ["root"],
       "timeoutMs": 120000,
       "kind": "lint"
+    },
+    {
+      "id": "worker-integration",
+      "workspace": "root",
+      "argv": ["vp", "run", "test:worker"],
+      "covers": ["apps-worker"],
+      "timeoutMs": 180000,
+      "kind": "test"
     }
   ],
   "publicationTargets": [],

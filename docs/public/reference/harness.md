@@ -22,6 +22,8 @@ vp run harness-verify
 
 根聚合测试只声明实际覆盖的工作区，没有额外配置相同的子任务，避免重复执行。暂无测试的工作区保持 `not-configured`；这不代表业务验收通过。新建工作区或接入真实业务测试后须同时更新 `harness.config.json`、框架扫描配置和真实测试任务；`covers` 只记录覆盖关系，不创建测试。
 
+Worker 的配置与生命周期单元纳入根测试；`worker-integration` 通过 `vp run test:worker` 串行验证真实 Outbox、故障恢复和 Bun/Node 进程。需要专用数据库/Redis和独立 Bun；不会启动 Agent 消费者。
+
 任务图中不包含 `ready`、`harness-lint` 或 `harness-verify`，避免递归。检查退出码：0 表示所请求门禁通过，1 表示规则或任务失败，2 表示配置或执行条件错误。查看 JSON 中每个工作区和任务的状态，不以外层命令成功替代测试覆盖判断。
 
 根 Vitest 只扫描 `apps/*`、`packages/*` 的 `src`/`tests` 下 `*.test.ts` 和 `*.spec.ts`，排除产物、E2E 和 `*.integration.test.ts`，避免临时快照被重复发现。数据库、认证、任务、执行与 Outbox 集成须启动专用服务，再依次运行 `vp test --config tests/<suite>.vite.config.ts`，其中 suite 分别为 `database`、`auth`、`tasks`、`runs`、`worker-outbox`；使用同一测试 Redis 的套件不要并行。根命令和覆盖声明不能代替这些真实集成。
@@ -44,4 +46,4 @@ Windows 上包装器会从 PATH 定位原生 `vp.exe` 并放到子进程 PATH �
 
 公开模式的 lint 会检查已暂存/跟踪内容。仓库尚无提交、文件未暂存时，index 为空，因此通过不意味着全部工作文件已接受发布检查；新增文件应核对 `git status --short` 和 `git check-ignore -v <path>`。私有源仓库的普通 lint 不执行公开 index 审计；可在独立测试快照中显式模拟公开模式验证文档保护。`.gitignore` 无法清除已经跟踪的内容或历史。日常治理检查不包含完整 Git 历史、托管平台资料或发布产物审计。
 
-当前 GitHub Actions 验证中文 OpenAPI、契约测试与 Bun/Node 进程启停；完整部署与业务端到端门禁按交付计划补齐。
+GitHub Actions 已配置中文 OpenAPI、契约测试、API 进程启停，以及独立 PostgreSQL/Redis 下的 Worker 单元、构建与集成验证。完整部署与业务端到端门禁按交付计划补齐。
