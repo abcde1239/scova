@@ -170,6 +170,41 @@ describe("长期任务、不可变版本与并发编辑", () => {
     expect(cross.status).toBe(404);
   });
 
+  it("HTTP 分页 limit 可解析、游标无重复且不泄露其他账号任务", async () => {
+    const owner = await register();
+    const other = await register();
+    for (const auth of [owner, owner, other]) {
+      const created = await request("/api/v1/tasks", {
+        method: "POST",
+        headers: authHeaders(auth),
+        body: JSON.stringify({ config: config() }),
+      });
+      expect(created.status).toBe(201);
+    }
+    const first = await request("/api/v1/tasks?limit=1", { headers: { cookie: owner.cookie } });
+    expect(first.status).toBe(200);
+    const page = await json(first);
+    expect(page.items).toHaveLength(1);
+    expect(page.nextCursor).toEqual(expect.any(String));
+    const next = await request(
+      `/api/v1/tasks?limit=1&cursor=${encodeURIComponent(page.nextCursor)}`,
+      {
+        headers: { cookie: owner.cookie },
+      },
+    );
+    expect(next.status).toBe(200);
+    const nextPage = await json(next);
+    expect(nextPage.items).toHaveLength(1);
+    expect(nextPage.items[0].id).not.toBe(page.items[0].id);
+    expect(nextPage.nextCursor).toBeNull();
+    for (const limit of ["0", "-1", "1.5", "abc", "9007199254740992"]) {
+      const invalid = await request(`/api/v1/tasks?limit=${limit}`, {
+        headers: { cookie: owner.cookie },
+      });
+      expect(invalid.status, limit).toBe(422);
+    }
+  });
+
   it("保留旧版本；标题、格式和提醒不重置基线，语义变更会提示", async () => {
     const owner = await register();
     const created = await request("/api/v1/tasks", {

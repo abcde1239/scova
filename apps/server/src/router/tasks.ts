@@ -13,6 +13,21 @@ import {
 import type { ApiServices } from "@/app/context.ts";
 import { createTaskHandlers } from "@/handler/tasks.ts";
 
+// URL 查询串使用 Elysia 数值解码；service 继续按共享整数契约校验。
+const HttpPageQuerySchema = t.Object(
+  {
+    ...PageQuerySchema.properties,
+    limit: t.Optional(
+      t.Numeric({
+        minimum: 1,
+        maximum: Number.MAX_SAFE_INTEGER,
+        description: PageQuerySchema.properties.limit.description,
+      }),
+    ),
+  },
+  { additionalProperties: false, description: PageQuerySchema.description },
+);
+
 const OptionalRevisionHeadersSchema = t.Object(
   {
     "if-match": t.Optional(
@@ -45,7 +60,7 @@ export function createTaskPlugin(services: ApiServices) {
       TaskListResponse: TaskListResponseSchema,
     })
     .get("/tasks", handlers.list, {
-      query: "PageQuery",
+      query: HttpPageQuerySchema,
       response: { 200: TaskListResponseSchema, ...errors },
       detail: {
         operationId: "listTasks",

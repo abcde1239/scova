@@ -12564,9 +12564,21 @@
             "name": "limit",
             "required": false,
             "schema": {
+              "anyOf": [
+                {
+                  "default": 0,
+                  "format": "numeric",
+                  "type": "string"
+                },
+                {
+                  "description": "请求条数；默认值和运行上限由部署策略决定",
+                  "maximum": 9007199254740991,
+                  "minimum": 1,
+                  "type": "number"
+                }
+              ],
               "maximum": 9007199254740991,
-              "minimum": 1,
-              "type": "integer"
+              "minimum": 1
             }
           }
         ],
