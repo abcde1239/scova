@@ -16,6 +16,8 @@ describe("Worker 配置与脱敏校验", () => {
       failureDelayMs: 5000,
       batchSize: 50,
       leaseSeconds: 30,
+      runLeaseSeconds: 30,
+      runConcurrency: 2,
     });
     expect(
       readWorkerConfig({
@@ -30,6 +32,8 @@ describe("Worker 配置与脱敏校验", () => {
     ["WORKER_FAILURE_DELAY_MS", "failureDelayMs", 300_000],
     ["WORKER_BATCH_SIZE", "batchSize", 1000],
     ["WORKER_LEASE_SECONDS", "leaseSeconds", 3600],
+    ["WORKER_RUN_LEASE_SECONDS", "runLeaseSeconds", 3600],
+    ["WORKER_RUN_CONCURRENCY", "runConcurrency", 32],
   ] as const)("%s 接受边界并拒绝非整数、越界和空值", (variable, field, maximum) => {
     for (const accepted of [1, maximum])
       expect(readWorkerConfig({ ...base, [variable]: String(accepted) })[field]).toBe(accepted);

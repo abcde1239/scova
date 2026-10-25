@@ -360,4 +360,36 @@ describe("Run API、事务 Outbox 与事件回放", () => {
       await prisma.outbox.count({ where: { aggregateId: { in: [original.run.id, body.run.id] } } }),
     ).toBe(3);
   });
+
+  it("同一任务版本的 demo/live 使用独立比较范围，重试同模式保持范围", async () => {
+    const auth = await register();
+    const task = await createTask(auth);
+    const start = async (mode: "demo" | "live", key: string) => {
+      const response = await request(`/api/v1/tasks/${task.id}/runs`, {
+        method: "POST",
+        headers: authHeaders(auth, { "idempotency-key": key }),
+        body: JSON.stringify({ mode }),
+      });
+      expect(response.status).toBe(202);
+      return (await json(response)).run;
+    };
+    const demo = await start("demo", "mode-scope-demo-key");
+    const demoStored = await prisma.run.findUniqueOrThrow({ where: { id: demo.id } });
+    await prisma.run.update({ where: { id: demo.id }, data: { status: "failed" } });
+    const live = await start("live", "mode-scope-live-key");
+    const liveStored = await prisma.run.findUniqueOrThrow({ where: { id: live.id } });
+    expect(live.taskVersionId).toBe(demo.taskVersionId);
+    expect(liveStored.comparisonScopeHash).not.toBe(demoStored.comparisonScopeHash);
+    await prisma.run.update({ where: { id: live.id }, data: { status: "failed" } });
+    const retry = await request(`/api/v1/runs/${live.id}/retry`, {
+      method: "POST",
+      headers: authHeaders(auth, { "idempotency-key": "mode-scope-retry-key" }),
+      body: JSON.stringify({ mode: "live" }),
+    });
+    expect(retry.status).toBe(202);
+    const retried = (await json(retry)).run;
+    expect(
+      (await prisma.run.findUniqueOrThrow({ where: { id: retried.id } })).comparisonScopeHash,
+    ).toBe(liveStored.comparisonScopeHash);
+  });
 });

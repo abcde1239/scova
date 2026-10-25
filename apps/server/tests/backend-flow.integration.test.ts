@@ -124,8 +124,8 @@ const taskConfig = () => ({
   notificationPreference: { mode: "summary", runIssues: true },
 });
 
-/** TC-F-FLOW-001：只验收到 BullMQ 的既有链路，不代表 Agent 已消费或报告已交付。 */
-describe("整体后端：真实 HTTP → PostgreSQL Outbox → Worker 进程 → BullMQ", () => {
+/** 真实 consumer 控制链；未配置 Agent 时明确失败，不生成报告。 */
+describe("整体后端：真实 HTTP → PostgreSQL Outbox → BullMQ → Run consumer", () => {
   beforeAll(() => fixture.setup(), 120_000);
   afterAll(() => fixture.cleanup());
 
@@ -273,9 +273,15 @@ describe("整体后端：真实 HTTP → PostgreSQL Outbox → Worker 进程 →
           runId: first.run.id,
           taskVersionId: task.currentVersionId,
         });
+        await waitUntil(
+          async () =>
+            (await fixture.db.run.findUniqueOrThrow({ where: { id: first.run.id } })).status ===
+            "failed",
+          worker,
+        );
         expect(
-          await queue.getJobCounts("wait", "active", "completed", "failed", "delayed"),
-        ).toMatchObject({ wait: 1, active: 0, completed: 0, failed: 0, delayed: 0 });
+          (await fixture.db.run.findUniqueOrThrow({ where: { id: first.run.id } })).failureCode,
+        ).toBe("EXECUTOR_NOT_CONFIGURED");
         await stop(worker);
         worker = undefined;
         // 新的待投递行作为重启扫描的同步屏障，避免用固定 sleep 猜测已执行一轮。
@@ -286,6 +292,12 @@ describe("整体后端：真实 HTTP → PostgreSQL Outbox → Worker 进程 →
           async () =>
             (await fixture.db.outbox.findFirstOrThrow({ where: { aggregateId: second.run.id } }))
               .sentAt !== null,
+          worker,
+        );
+        await waitUntil(
+          async () =>
+            (await fixture.db.run.findUniqueOrThrow({ where: { id: second.run.id } })).status ===
+            "failed",
           worker,
         );
         await stop(worker);
@@ -299,13 +311,24 @@ describe("整体后端：真实 HTTP → PostgreSQL Outbox → Worker 进程 →
         });
         expect(await fixture.db.outbox.count({ where: { aggregateId: first.run.id } })).toBe(1);
         const jobs = await queue.getJobs(["wait", "active", "completed", "failed", "delayed"]);
-        expect(new Set(jobs.map((item) => item.id))).toEqual(
-          new Set([`run-${first.run.id}`, `run-${second.run.id}`]),
+        expect(jobs.map((item) => item.id)).toEqual(
+          expect.arrayContaining([`run-${first.run.id}`, `run-${second.run.id}`]),
         );
-        expect(jobs).toHaveLength(2);
+        // 恢复扫描可以投递重复消息，但生产执行与终态事件只能推进一次。
+        expect(jobs.every((item) => [first.run.id, second.run.id].includes(item.data.runId))).toBe(
+          true,
+        );
+        expect(
+          await fixture.db.runEvent.count({ where: { runId: first.run.id, type: "run.failed" } }),
+        ).toBe(1);
+        expect(
+          (await fixture.db.run.findUniqueOrThrow({ where: { id: first.run.id } })).leaseEpoch,
+        ).toBe(1);
         const final = await request(`/api/v1/runs/${first.run.id}`, "GET", undefined, owner);
         expect(final.status).toBe(200);
-        expect(((await final.json()) as { status: string }).status).toBe("queued");
+        const result = (await final.json()) as { status: string; failureCode: string };
+        expect(result.status).toBe("failed");
+        expect(result.failureCode).toBe("EXECUTOR_NOT_CONFIGURED");
         expect(await fixture.db.report.count({ where: { runId: first.run.id } })).toBe(0);
       } finally {
         try {

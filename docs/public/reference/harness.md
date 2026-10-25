@@ -22,7 +22,7 @@ vp run harness-verify
 
 根聚合测试只声明实际覆盖的工作区，没有额外配置相同的子任务，避免重复执行。暂无测试的工作区保持 `not-configured`；这不代表业务验收通过。新建工作区或接入真实业务测试后须同时更新 `harness.config.json`、框架扫描配置和真实测试任务；`covers` 只记录覆盖关系，不创建测试。
 
-Worker 的配置与生命周期单元纳入根测试；`backend-integration` 通过 `vp run test:integration` 串行验证数据库约束、认证、任务与执行接口、API 到真实 BullMQ 的跨进程链路，以及 Outbox 故障恢复和 Bun/Node 进程。需要专用数据库/Redis和独立 Bun；Agent 消费者仍待实现。
+Worker 的配置与生命周期单元纳入根测试；`backend-integration` 通过 `vp run test:integration` 串行验证数据库约束、认证、任务与执行接口、API 到真实 Run consumer 的跨进程链路，以及 Outbox/Run 故障恢复、租约 fencing、取消和 Bun/Node 进程。需要专用数据库/Redis和独立 Bun；Agent 与报告交付仍待接入。
 
 任务图中不包含 `ready`、`harness-lint` 或 `harness-verify`，避免递归。检查退出码：0 表示所请求门禁通过，1 表示规则或任务失败，2 表示配置或执行条件错误。查看 JSON 中每个工作区和任务的状态，不以外层命令成功替代测试覆盖判断。
 

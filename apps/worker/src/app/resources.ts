@@ -5,21 +5,32 @@ import { createOutboxHandler } from "@/handler/outbox.ts";
 import { createOutboxRepository } from "@/repo/outbox.ts";
 import { createOutboxQueue, type OutboxQueue } from "@/queue/outbox.ts";
 import { OutboxService } from "@/service/outbox.ts";
+import { createRunRepository } from "@/repo/runs.ts";
+import { createRunHandler } from "@/handler/runs.ts";
+import { RunService, type RunExecutor } from "@/service/runs.ts";
+import { createRunConsumer, enqueueRecoverableRuns } from "@/queue/runs.ts";
 
 export interface WorkerResources {
   connect(): Promise<void>;
   dispatch(signal: AbortSignal): Promise<number>;
+  stop?(): Promise<void>;
+  finished?(): Promise<void>;
   close(): Promise<void>;
 }
 
 /** 应用拥有资源；导入/构造不联网，关闭时依次释放队列、Redis、数据库。 */
-export function createWorkerResources(config: WorkerConfig): WorkerResources {
+export function createWorkerResources(
+  config: WorkerConfig,
+  options: { executor?: RunExecutor } = {},
+): WorkerResources {
   let database: PrismaClient | undefined;
   let redis: Redis | undefined;
   let publisher: OutboxQueue | undefined;
   let handler: ReturnType<typeof createOutboxHandler> | undefined;
   let connecting: Promise<void> | undefined;
   let closing: Promise<void> | undefined;
+  let consumer: ReturnType<typeof createRunConsumer> | undefined;
+  let runRepository: ReturnType<typeof createRunRepository> | undefined;
   return {
     connect: () =>
       (connecting ??= (async () => {
@@ -45,14 +56,43 @@ export function createWorkerResources(config: WorkerConfig): WorkerResources {
           }),
           config.batchSize,
         );
+        runRepository = createRunRepository(database);
+        const leaseMs = config.runLeaseSeconds * 1000;
+        const runHandler = createRunHandler(
+          new RunService({
+            repository: runRepository,
+            executor: options.executor,
+            leaseMs,
+            renewIntervalMs: Math.min(10_000, Math.floor(leaseMs / 3)),
+          }),
+        );
+        consumer = createRunConsumer(
+          config.redisUrl,
+          config.queueName,
+          runHandler,
+          config.runConcurrency,
+        );
+        await consumer.start();
       })()),
-    dispatch: (signal) => {
-      if (!handler) return Promise.reject(new Error("Worker 依赖尚未就绪"));
-      return handler(signal);
+    dispatch: async (signal) => {
+      if (!handler || !runRepository || !publisher) throw new Error("Worker 依赖尚未就绪");
+      const delivered = await handler(signal);
+      if (!signal.aborted) {
+        const runs = await runRepository.listRecoverable(config.batchSize);
+        await enqueueRecoverableRuns(publisher.queue, runs, signal);
+      }
+      return delivered;
     },
+    stop: () => consumer?.stop() ?? Promise.resolve(),
+    finished: () => consumer?.finished() ?? Promise.resolve(),
     close: () =>
       (closing ??= (async () => {
         const errors: unknown[] = [];
+        try {
+          await consumer?.stop();
+        } catch (error) {
+          errors.push(error);
+        }
         try {
           await publisher?.close();
         } catch (error) {

@@ -6,6 +6,8 @@ export interface WorkerConfig {
   failureDelayMs: number;
   batchSize: number;
   leaseSeconds: number;
+  runLeaseSeconds: number;
+  runConcurrency: number;
 }
 
 function integerSetting(env: NodeJS.ProcessEnv, name: string, fallback: number, maximum: number) {
@@ -40,5 +42,7 @@ export function readWorkerConfig(env: NodeJS.ProcessEnv = process.env): WorkerCo
     failureDelayMs: integerSetting(env, "WORKER_FAILURE_DELAY_MS", 5000, 300_000),
     batchSize: integerSetting(env, "WORKER_BATCH_SIZE", 50, 1000),
     leaseSeconds: integerSetting(env, "WORKER_LEASE_SECONDS", 30, 3600),
+    runLeaseSeconds: integerSetting(env, "WORKER_RUN_LEASE_SECONDS", 30, 3600),
+    runConcurrency: integerSetting(env, "WORKER_RUN_CONCURRENCY", 2, 32),
   };
 }

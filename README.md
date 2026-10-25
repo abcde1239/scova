@@ -2,7 +2,7 @@
 
 任务驱动的 AI 信息查阅与研究工作台。围绕主题搜索、阅读和查证资料，生成带引用的报告，并持续追踪新增与变化。
 
-项目开发中：已实现账号会话、用户隔离、任务配置、执行命令和 Outbox 投递基础；Agent 研究、报告交付及完整前端仍在建设。
+项目开发中：已实现账号会话、用户隔离、任务配置、执行命令、Outbox 投递和 Run 消费/租约恢复；Agent 研究、报告交付及完整前端仍在建设。
 
 ## 技术与目录
 
@@ -28,16 +28,16 @@ docker compose -f compose.test.yaml -p scova-runtime-test up -d --wait
 vp exec prisma generate
 ```
 
-配置 `DATABASE_URL`、`REDIS_URL` 和 `APP_ORIGIN`，运行 `vp exec prisma migrate deploy` 初始化业务数据库。连接配置见[数据库说明](prisma/README.md)；本地环境文件不提交。
+配置 `DATABASE_URL`、`REDIS_URL` 和 `APP_ORIGIN`，运行 `vp exec prisma migrate deploy` 初始化业务数据库。连接配置见[数据库说明](packages/models/README.md)；本地环境文件不提交。
 
 ```sh
 vp run dev                # 前端
 vp run server#start       # Bun 后端
 vp run server#start:node  # Node.js 后端
-vp run worker#start       # Outbox 后台投递
+vp run worker#start       # Outbox 投递与 Run 消费控制
 ```
 
-后端提供 `/health`、`/swagger` 和 `/swagger/json`。Worker 已接通 Outbox 轮询与投递，Agent 消费执行仍待实现，配置见 [Worker 说明](apps/worker/README.md)。
+后端提供 `/health`、`/swagger` 和 `/swagger/json`。Worker 已接通 Run 消费、续期、取消和恢复；默认未接入 Agent 时明确失败，不生成报告。配置见 [Worker 说明](apps/worker/README.md)。
 
 ## 验证
 
