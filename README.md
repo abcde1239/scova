@@ -46,6 +46,7 @@ vp check
 vp test
 vp run -r build
 vp run api:openapi:check
+vp run test:integration  # 需专用 PostgreSQL / Redis
 ```
 
 `vp test` 运行单元与契约测试；数据库、队列和运行时集成需启动专用服务，参见[验证说明](docs/public/reference/harness.md)。完整门禁：`vp run ready`。

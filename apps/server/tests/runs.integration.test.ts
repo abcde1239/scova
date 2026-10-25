@@ -240,10 +240,11 @@ describe("Run API、事务 Outbox 与事件回放", () => {
       });
     const canceled = await Promise.all([cancel(), cancel()]);
     expect(canceled.map((response) => response.status)).toEqual([200, 200]);
-    expect((await Promise.all(canceled.map(json))).map((body) => body.reused).sort()).toEqual([
-      false,
-      true,
-    ]);
+    expect(
+      (await Promise.all(canceled.map(json)))
+        .map((body) => body.reused)
+        .sort((a, b) => Number(a) - Number(b)),
+    ).toEqual([false, true]);
     const repeated = await cancel();
     expect(repeated.status).toBe(200);
     expect((await json(repeated)).reused).toBe(true);

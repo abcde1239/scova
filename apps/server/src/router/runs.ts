@@ -56,7 +56,7 @@ export function createRunPlugin(services: ApiServices) {
         tags: ["执行"],
         summary: "启动查阅执行",
         description:
-          "固定当前任务配置版本，在同一事务写入执行、首个事件和 Outbox；重复幂等命令返回原执行。",
+          "固定当前任务配置版本，在同一事务写入执行、首个事件和 Outbox；重复幂等命令或同任务已有活动执行时返回原执行。",
       },
     })
     .get("/runs/:runId", handlers.get, {
@@ -74,7 +74,8 @@ export function createRunPlugin(services: ApiServices) {
         operationId: "cancelRun",
         tags: ["执行"],
         summary: "请求取消执行",
-        description: "将活动执行标记为取消请求，由 worker 在租约边界停止后续工作。",
+        description:
+          "将活动执行标记为取消请求；重复取消复用原命令，终态不回退。Worker 消费取消请求的执行闭环仍待实现。",
       },
     })
     .post("/runs/:runId/retry", handlers.retry, {

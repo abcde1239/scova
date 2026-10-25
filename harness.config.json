@@ -186,11 +186,19 @@
       "kind": "lint"
     },
     {
-      "id": "worker-integration",
+      "id": "api-processes",
       "workspace": "root",
-      "argv": ["vp", "run", "test:worker"],
-      "covers": ["apps-worker"],
-      "timeoutMs": 180000,
+      "argv": ["vp", "run", "test:processes"],
+      "covers": ["apps-server"],
+      "timeoutMs": 120000,
+      "kind": "test"
+    },
+    {
+      "id": "backend-integration",
+      "workspace": "root",
+      "argv": ["vp", "run", "test:integration"],
+      "covers": ["apps-server", "apps-worker"],
+      "timeoutMs": 300000,
       "kind": "test"
     }
   ],
