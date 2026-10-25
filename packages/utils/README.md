@@ -1,23 +1,12 @@
-# vite-plus-starter
+# utils
 
-A starter for creating a Vite Plus project.
+保留的 Vite+ 工具包模板，当前仅包含示例函数 `fn()`，暂无业务用途。
 
-## Development
+## 开发
 
-- Install dependencies:
+在仓库根目录运行：
 
-```bash
-vp install
-```
-
-- Run the unit tests:
-
-```bash
-vp test
-```
-
-- Build the library:
-
-```bash
-vp pack
+```sh
+vp run utils#test
+vp run utils#build
 ```

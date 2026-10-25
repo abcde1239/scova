@@ -146,7 +146,7 @@ function listItem(task: StoredTask) {
   });
 }
 
-type Database = Prisma.TransactionClient | ReturnType<ApiServices["db"]>;
+type Database = Prisma.TransactionClient;
 
 export async function ownedTask(
   taskId: string,

@@ -22,8 +22,8 @@ async function unusedPort() {
 }
 
 for (const [runtime, executable, entry] of [
-  ["bun", bunPath, "apps/api/src/main.ts"],
-  ["node", process.execPath, "apps/api/src/node.ts"],
+  ["bun", bunPath, "apps/server/src/main.ts"],
+  ["node", process.execPath, "apps/server/src/node.ts"],
 ]) {
   const port = await unusedPort();
   const child = spawn(executable, [entry], {

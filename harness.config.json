@@ -13,11 +13,11 @@
       "id": "apps-web"
     },
     {
-      "root": "apps/api",
+      "root": "apps/server",
       "tests": {
         "requireConfiguredTask": true
       },
-      "id": "apps-api"
+      "id": "apps-server"
     },
     {
       "root": "apps/worker",
@@ -136,7 +136,7 @@
       "workspace": "root",
       "kind": "test",
       "argv": ["vp", "test"],
-      "covers": ["apps-api", "packages-utils", "packages-contracts"],
+      "covers": ["apps-server", "packages-utils", "packages-contracts"],
       "timeoutMs": 120000,
       "cwd": ".",
       "dependsOn": [],

@@ -72,7 +72,7 @@ export const createApiApp = (
     ...(runtime === "node" ? { adapter: node() } : {}),
   })
     .use(createApiErrorPlugin())
-    // contracts 与 apps/api 通过 workspace 依赖共享运行时 schema；这里的 unknown 边界只消除
+    // contracts 与 apps/server 通过 workspace 依赖共享运行时 schema；这里的 unknown 边界只消除
     // TypeBox 在不同 package 解析路径下重复安装造成的 unique-symbol 类型差异。
     .model({ ...contractModels, HealthResponse: HealthResponseSchema } as unknown as Record<
       string,

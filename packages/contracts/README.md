@@ -1,42 +1,35 @@
 # @scova/contracts
 
-Scova 的纯 TypeScript/TypeBox 接口契约。Web、API、worker 从本包导入同一份 schema 与 `Static` DTO，不导出 Prisma 实体、密码哈希、会话凭据、租约或 checkpoint。Bun 为主运行时，Node.js 可导入同样的模块。
+Scova 前后端与 Worker 共用的 TypeBox schema、TypeScript DTO 和执行事件定义，兼容 Bun 与 Node.js。
 
-## 输入、响应与校验
+## 使用
 
-- 成功响应使用普通 JSON；列表为 `{ items, nextCursor }`，不增加固定 `data/code` 包装。
-- 错误为 `{ code, message, requestId, fieldErrors? }`，HTTP 状态反映真实错误；字段路径是 JSON Pointer，根路径为 `/`。
-- `parseContract(schema, input)` 返回 DTO 或抛出 `ContractValidationError`；`toResponse(requestId)` 生成标准错误体。不会隐式修剪文本、移除未知字段或接受客户端 `userId`。
-- API 直接把导出的 schema 交给 Elysia `body/query/headers/response`；相同 schema 中保留中文 `description`，用于 OpenAPI/Swagger 生成。
-- IANA 时区、HTTP/HTTPS URL、时间格式及修订头通过 TypeBox FormatRegistry 校验。固定时间先后、事实引用、变化双方证据、报告完整性等通过 TypeRegistry refinement 校验；Value 与 Elysia 的编译器执行同一规则。
-- 必须导入可执行 schema，不能从 OpenAPI JSON 反序列化替代服务端 validator；JSON 文档展示结构与中文约束说明，自定义 refinement 的执行代码只保留在本包。
+在消费方工作区添加 `"@scova/contracts": "workspace:*"`，直接导入 schema 和类型：
 
-主要导出：`RegisterInputSchema`、`LoginInputSchema`、`PreferencesSchema`、`UpdatePreferencesInputSchema`、`UserSchema`、`SessionResponseSchema`；`TaskConfigSchema`、`CreateTaskInputSchema`、`UpdateTaskInputSchema`、`TaskSchema`、`TaskVersionSchema`；`RunSchema`、`ReportSchema`、`EvidenceSchema`、`ClaimSchema`、`ChangeRecordSchema`；`ApiErrorSchema`、`PageQuerySchema`、`pageSchema`。每个领域 schema 同时导出对应 DTO 类型。
+```ts
+import { LoginInputSchema, parseContract, type LoginInput } from "@scova/contracts";
 
-预算 schema 仅限定正安全整数，不把产品默认值当成硬上限。部署者的上限通过 `createBudgetSchema(policy)` 生成同源运行时/文档 schema，默认值由 API 策略注入。URL 合法性不代替真实抓取时的 SSRF、DNS 和重定向检查，来源权限由领域服务校验。
+const input: LoginInput = parseContract(LoginInputSchema, {
+  email: "reader@example.com",
+  password: "example-password",
+});
+```
 
-## 修订与幂等
+Elysia 路由直接使用同一份 schema 声明请求与响应；中文字段说明用于生成 OpenAPI。
 
-任务编辑发送 `If-Match: "3"`，读取时返回相同格式的 `ETag`；修订从 1 递增，最大为 JavaScript 安全整数。`RevisionHeadersSchema`、`revisionEtag` 和 `parseRevisionEtag` 执行相同边界检查，拒绝弱标签、裸数字和溢出。资源已变化时 API 返回 HTTP 409。
+## 接口约定
 
-写命令发送 `Idempotency-Key`。`IdempotencyHeadersSchema` 校验格式；服务端仍需按当前用户、路由/资源及 payloadHash 持久化绑定，同一用户动作重发保持同一 key，同 key 不同 payload 返回 409。
+- 成功响应为普通 JSON；列表使用 `{ items, nextCursor }`。
+- 错误使用 `{ code, message, requestId, fieldErrors? }`。
+- 任务编辑使用 `ETag` / `If-Match`，写命令使用 `Idempotency-Key`。
+- 执行事件带版本与递增序号，支持 SSE 回放契约。
 
-## 持久化事件与 SSE
-
-`RunEventSchema` 的结构为 `{ schemaVersion: 1, eventId, runId, seq, type, occurredAt, payload }`。`eventId` 是稳定 UUID，`seq` 是 Run 内从 1 严格递增的持久化序号。已覆盖架构要求的类型：
-
-- `run.queued`、`run.started`、`run.recovering`；
-- `step.started`、`step.completed`；
-- `tool.started`、`tool.completed`、`tool.failed`；
-- `budget.updated`、`coverage.updated`、`report.published`；
-- `run.completed`、`run.failed`、`run.canceled`。
-
-每种类型有独立 payload schema，拒绝未知结构版本、类型或混用 payload。事件只包含脱敏摘要、工具元数据和用量，不包括密钥、完整提示词、网页全文或思维链。SSE `id` 使用 `eventId`，客户端按它去重；服务端在当前已授权 Run 内将 `Last-Event-ID` 映射为 seq。`EventCursorQuerySchema.after` 支持显式序号回放，两种游标同时存在时必须指向同一位置，否则 API 拒绝，不静默选取。
-
-游标早于保留范围时，发送 `SseResetControlSchema`：`{ schemaVersion: 1, type: "stream.reset", runId, payload: { reason: "cursor_expired", snapshot, resumeAfter } }`。这是传输控制帧，不入 RunEvent 表，不分配 `eventId/seq`，SSE 帧不得带 `id`，也不推进 `Last-Event-ID`。客户端替换快照、清理此前去重状态，再用 `after=resumeAfter` 重连；收到第一条新的持久化事件后更新 `Last-Event-ID`。`SseMessageSchema` 校验上述两类数据帧；15 秒心跳是 SSE 注释帧，不经过事件 schema。
-
-schema 只能验证单帧结构，不能证明跨帧顺序或权限；API/客户端必须保证授权、事务分配 seq、先回放再续传、单调性和重连去重。部分执行只允许 `inconclusive` 或有不完整标记的变化结果；不完整报告必须包含 `limitations` 或 `coverage.gaps`，不推进基线。
+字段校验、事件结构和 SSE 控制帧详见[契约参考](../../docs/public/reference/contracts.md)。
 
 ## 验证
 
-`vp test packages/contracts/tests/contracts.test.ts` 验证非法输入、边界、错误字段位置、TypeBox Value/Compiler 一致性、状态和证据语义、全部持久化事件及 reset 控制帧。真实 API/数据库/队列行为由对应后续 Issue 验证。
+在仓库根目录运行：
+
+```sh
+vp test packages/contracts/tests/contracts.test.ts
+```

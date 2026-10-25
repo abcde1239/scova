@@ -39,3 +39,7 @@ release. Add a tool name to select part of the graph. For example, run
 ## 前端与通信
 
 前端代码风格以 community 为主要参照，遵循 `docs/public/reference/frontend-conventions.md` 的 Vue SFC、目录分层、命名与前端格式约定；格式仍由 Vite+ 管理。前后端 HTTP 统一使用 requestlane，SSE 通过同一 Fetch transport 的 native 入口在统一通信模块中桥接。页面不得另建 fetch/axios 请求层；Vue Query 管服务端缓存，Pinia 管客户端状态，保留 Scova 的同源 Cookie 会话。
+
+## README 写作
+
+所有 README 面向阅读和使用仓库或包的人，保持简洁、准确。按需要提供名称与简介、当前功能或状态、安装与快速开始、常用命令和文档入口；包级 README 聚焦用途、用法和验证。避免重复章节、模板占位、冗长约束和开发流水账，详细设计放在参考文档并链接。README 中的命令、路径与实现状态必须与代码一致，公开 README 不链接私有资料。

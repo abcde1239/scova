@@ -25,7 +25,7 @@
 
 - **Requirement**：Issue #4；PRD US-01
 - **Priority**：High
-- **Preconditions**：`packages/contracts` 已定义 Task/TaskVersion/Run 的输入和输出 schema；apps/api、apps/worker、apps/web 引用同一包。
+- **Preconditions**：`packages/contracts` 已定义 Task/TaskVersion/Run 的输入和输出 schema；apps/server、apps/worker、apps/web 引用同一包。
 - **Test Steps**：
   1. 使用 `vp test packages/contracts/tests/contracts.test.ts` 编译并执行契约测试。
   2. 分别从 API、worker、web 的 TypeScript 入口导入同一 DTO。
@@ -336,7 +336,7 @@
 ## Notes and Gaps
 
 - 本文件是需求驱动的 QA 设计，不代表这些接口已经实现或所有需求均已验证。“Complete”仅指表内测试设计映射，不能等同测试执行通过。目前 #2 工作区正在建立，API 健康检查和 OpenAPI 入口 smoke 不覆盖账号、任务、数据库、队列或恢复业务；常量/类型断言不得计作这些行为的验证。Prisma migration 尚未落地。
-- 当前可执行的基线命令仍是 `vp check`、`vp test` 和 `vp run ready`；Issue 对应的 `apps/api/tests/*.integration.test.ts`、真实 PostgreSQL/Redis 和 Elysia 注入测试需在后端工作区创建后加入 Vite+ task graph。
+- 当前可执行的基线命令仍是 `vp check`、`vp test` 和 `vp run ready`；Issue 对应的 `apps/server/tests/*.integration.test.ts`、真实 PostgreSQL/Redis 和 Elysia 注入测试需在后端工作区创建后加入 Vite+ task graph。
 - Swagger 生成器的具体插件版本应与 Elysia/Bun 兼容性 spike 一起锁定；测试只依赖 OpenAPI JSON 行为和中文描述，不预先假定不存在的插件 API。
 - Redis 队列采用 BullMQ；Redis 只作队列/租约辅助，PostgreSQL 仍是执行事实源。测试必须分别注入数据库成功、队列失败和 worker 迟到三类故障。
 - 真实 Tavily/模型服务不进入默认 CI；连接器烟测单独 opt-in。后端接口测试使用固定演示 provider 或可控 fake，避免费用和不确定网络响应。

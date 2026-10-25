@@ -33,7 +33,7 @@ API、worker 分别作为两个进程，PostgreSQL 和 Redis 是唯一首版基�
 | 目标目录            | 职责                                                                        | 依赖方向                                               |
 | ------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------ |
 | apps/web            | Vue 3、Router、Pinia、TanStack Vue Query、UnoCSS、naive-ui；页面与 SSE 订阅 | contracts                                              |
-| apps/api            | 认证、资源授权、任务版本、执行命令、报告/资料管理、事件读取                 | contracts；在组合根装配 Prisma                         |
+| apps/server         | 认证、资源授权、任务版本、执行命令、报告/资料管理、事件读取                 | contracts；在组合根装配 Prisma                         |
 | apps/worker         | 调度器、outbox dispatcher、BullMQ worker、租约、交付事务                    | contracts、agent-core、connectors；在组合根装配 Prisma |
 | packages/contracts  | 可运行时校验的请求/响应、事件版本、枚举与错误码；不暴露 ORM 实体            | 不依赖应用                                             |
 | packages/agent-core | LangGraph 状态图、预算策略、证据/变化规则、工具与模型接口                   | contracts；不直接使用 Elysia/BullMQ                    |

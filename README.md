@@ -1,55 +1,57 @@
 # Scova · 知巡
 
-Scova 是一个任务驱动的 AI 信息查阅与研究工作台：设置主题与查阅目标，由 Agent 搜索、阅读和查证，生成带引用的报告，并在后续执行中识别重复、新增与实质变化。适用主题包括学习、教育、行业动态和个人兴趣。
+任务驱动的 AI 信息查阅与研究工作台。围绕主题搜索、阅读和查证资料，生成带引用的报告，并持续追踪新增与变化。
 
-当前已建立 web/api/worker 与 contracts/agent-core/connectors 六个工作区，保留 utils 模板测试。Vue 页面、Bun/Elysia API（含 Node.js 兼容入口）和 worker 可独立启动；业务接口按 Issue 分期实现。
+项目开发中：已实现账号会话、用户隔离、任务配置、执行命令和 Outbox 投递基础；Agent 研究、报告交付及完整前端仍在建设。
 
-## 设计文档
+## 技术与目录
 
-- [系统架构与执行流程](docs/public/reference/architecture.md)
-- [数据模型与一致性约束](docs/public/reference/data-model.md)
-- [分期交付计划](docs/public/guides/delivery-plan.md)
-- [三个任务的两次执行验收](docs/public/examples/two-run-scenarios.md)
-- [harness 治理与验证](docs/public/reference/harness.md)
-- [前端风格与 requestlane 通信约定](docs/public/reference/frontend-conventions.md)
+Vite+ / TypeScript monorepo，Vue 3 前端，Bun + Elysia 后端（兼容 Node.js），PostgreSQL + Prisma，Redis + BullMQ。
 
-## 环境与安装
+| 目录                  | 用途                   |
+| --------------------- | ---------------------- |
+| `apps/web`            | 前端工作台             |
+| `apps/server`         | 后端接口与中文 Swagger |
+| `apps/worker`         | 后台执行与队列         |
+| `packages/contracts`  | 共享接口与事件定义     |
+| `packages/agent-core` | Agent 状态与执行逻辑   |
+| `packages/connectors` | 搜索及来源适配         |
 
-使用 Vite+ 1.4.0；Node.js 与 pnpm 版本由根 `package.json` 声明，依赖通过 `vp install` 安装。治理工具需要独立 Bun >= 1.3.4 和 Git；Bun 作为运行时使用，项目依赖继续由 Vite+ / pnpm 管理。
+## 本地开发
 
-```bash
+安装 [Vite+](https://viteplus.dev/guide/)、Node.js >= 22.18、Bun >= 1.3.4 和 Docker。依赖统一通过 Vite+ 安装。
+
+```sh
 vp install
 docker compose -f compose.test.yaml -p scova-runtime-test up -d --wait
-vp run harness-lint
-vp run harness-verify
+vp exec prisma generate
 ```
 
-`harness-lint` 只检查项目约定；`harness-verify` 检查约定并运行静态检查、测试和构建。当前 API 健康检查/中文 OpenAPI 与 utils 模板有测试，其余未实现模块不声明业务覆盖。
+配置 `DATABASE_URL`、`REDIS_URL` 和 `APP_ORIGIN`，运行 `vp exec prisma migrate deploy` 初始化业务数据库。连接配置见[数据库说明](prisma/README.md)；本地环境文件不提交。
 
-开发入口：`vp run dev` 启动 Vue；`vp run api#start` 使用 Bun，`vp run api#start:node` 使用 Node.js；`vp run worker#start` 启动 worker。API 提供 `/health`、`/swagger` 和 `/swagger/json`。
-
-## Development
-
-- Check everything is ready:
-
-```bash
-vp run ready
+```sh
+vp run dev                # 前端
+vp run server#start       # Bun 后端
+vp run server#start:node  # Node.js 后端
+vp run worker#start       # Worker 启动入口
 ```
 
-- Run the tests:
+后端提供 `/health`、`/swagger` 和 `/swagger/json`。Worker 执行闭环尚未完成。
 
-```bash
-vp run -r test
-```
+## 验证
 
-- Build the monorepo:
-
-```bash
+```sh
+vp check
+vp test
 vp run -r build
+vp run api:openapi:check
 ```
 
-- Run the development server:
+`vp test` 运行单元与契约测试；数据库、队列和运行时集成需启动专用服务，参见[验证说明](docs/public/reference/harness.md)。完整门禁：`vp run ready`。
 
-```bash
-vp run dev
-```
+## 文档
+
+- [系统架构](docs/public/reference/architecture.md) · [数据模型](docs/public/reference/data-model.md)
+- [接口文档](docs/public/reference/api.md) · [共享契约](packages/contracts/README.md)
+- [交付计划](docs/public/guides/delivery-plan.md) · [两次执行验收](docs/public/examples/two-run-scenarios.md)
+- [前端与通信约定](docs/public/reference/frontend-conventions.md)
