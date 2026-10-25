@@ -20,7 +20,7 @@ flowchart LR
   Queue --> Worker
   Worker --> Graph[LangGraph.js Agent]
   Graph --> CP[(PostgreSQL checkpoints)]
-  Graph --> Search[Tavily 适配器]
+  Graph --> Search[SearxNG / 显式可选 Tavily]
   Graph --> Reader[安全抓取 / Readability]
   Graph --> Model[可配置模型适配器]
   Graph -->|结构化候选成果| Worker
@@ -38,7 +38,7 @@ API、worker 分别作为两个进程，PostgreSQL 和 Redis 是唯一首版基�
 | packages/contracts  | 可运行时校验的请求/响应、事件版本、枚举与错误码；不暴露 ORM 实体            | 不依赖应用                                |
 | packages/models     | 业务数据模型、Prisma schema、迁移与服务端客户端                             | 不依赖应用或 contracts                    |
 | packages/agent-core | LangGraph 状态图、预算策略、证据/变化规则、工具与模型接口                   | contracts；不直接使用 Elysia/BullMQ       |
-| packages/connectors | Tavily、HTTP 抓取、Readability 和演示数据适配器                             | 实现 agent-core 的工具接口                |
+| packages/connectors | 默认 SearxNG、可选 Tavily、HTTP 抓取、Readability 和演示数据适配器          | 向 agent-core 提供工具接口                |
 
 API 不负责执行长任务，worker 不提供账号管理入口；Agent 没有通用 SQL、文件系统或任意脚本工具。`packages/models/prisma` 维护唯一业务 schema 和迁移；Server/Worker 从 `@scova/models` 引用生成模型，公开接口仍使用 `@scova/contracts`。
 
@@ -136,7 +136,7 @@ LangGraph checkpointer 使用 PostgreSQL，实现时在适配层验证 Bun 兼�
 
 | 接口                             | 首个实现                                    | 约束                                                        |
 | -------------------------------- | ------------------------------------------- | ----------------------------------------------------------- |
-| SearchProvider.search            | Tavily                                      | 返回结构化候选 URL、标题、片段；请求有超时/限额             |
+| SearchProvider.search            | 默认 SearxNG；Tavily 显式可选               | 结构化候选 URL、标题、片段、引擎与覆盖缺口；请求有超时/限额 |
 | PageReader.read                  | HTTP + jsdom + Readability                  | HTML 限长 2 MiB、正文限长、每次请求最多 15 秒，保留抓取状态 |
 | ModelProvider.generateStructured | 部署者配置的兼容模型服务                    | 通过适配层映射 structured output、usage、AbortSignal 与错误 |
 | EvidenceRepository               | worker 注入的受限领域接口                   | 仅当前用户、当前 Run；不暴露 Prisma client                  |
@@ -145,6 +145,8 @@ LangGraph checkpointer 使用 PostgreSQL，实现时在适配层验证 Bun 兼�
 默认每次 10 次搜索、20 次网页读取、5 分钟，另设累计输入 40,000 token、输出 8,000 token 上限。每次模型调用先预留估算输入和最大输出 token，最终按 usage 结算；供应商不返回 usage 时使用保守预留并标为估算。提示词/结构化修复调用同样计费和计入限制。恢复/重试不得绕过限制，预算修改只影响新版本。时间预算到达后停止所有外部调用，仅允许从已存证据用确定性模板交付 partial（无证据则 failed），不得再启动模型综合；用户取消则不交付。
 
 工具输出经过结构校验，来源内容是数据而不是指令。不展示模型隐式思维链；执行详情展示节点状态、工具类型、查询摘要、耗时、来源和用量。自然语言配置草稿也通过同一模型适配层，但与执行预算分开限流计量。
+
+SearxNG 通过部署者固定的内部 `/search` JSON 通道访问，不需要搜索密钥；该通道不开放任意地址或重定向，也不放宽网页阅读器的公共 IP 限制。上游失败保留覆盖缺口，全部失败报错；不得切换收费供应商。独立搜索/阅读无需模型，完整研究仍需要远程模型配置。[本机部署](../guides/search.md)使用独立可选的搜索容器，业务事实源仍是 PostgreSQL。
 
 ## 6. 去重、变化与完整性
 

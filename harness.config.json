@@ -41,7 +41,8 @@
     },
     {
       "root": "packages/connectors",
-      "id": "packages-connectors"
+      "id": "packages-connectors",
+      "tests": { "requireConfiguredTask": true }
     },
     {
       "root": "packages/utils",
@@ -82,6 +83,8 @@
       "scripts/**",
       ".github/workflows/**",
       "compose.yaml",
+      "compose.search.yaml",
+      "ops/searxng/**",
       "Dockerfile",
       ".dockerignore",
       ".env.example",
@@ -142,7 +145,13 @@
       "workspace": "root",
       "kind": "test",
       "argv": ["vp", "test"],
-      "covers": ["apps-server", "apps-worker", "packages-utils", "packages-contracts"],
+      "covers": [
+        "apps-server",
+        "apps-worker",
+        "packages-utils",
+        "packages-contracts",
+        "packages-connectors"
+      ],
       "timeoutMs": 120000,
       "cwd": ".",
       "dependsOn": [],
@@ -168,6 +177,14 @@
       "kind": "test",
       "covers": ["root"],
       "argv": ["vp", "run", "test:runtime"]
+    },
+    {
+      "id": "connectors-runtime",
+      "workspace": "root",
+      "kind": "test",
+      "covers": ["packages-connectors"],
+      "timeoutMs": 60000,
+      "argv": ["vp", "run", "test:connectors:runtime"]
     },
     {
       "id": "runtime-node",
