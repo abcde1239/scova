@@ -1,0 +1,102 @@
+import { Elysia, t } from "elysia";
+import {
+  ApiErrorSchema,
+  EventCursorHeadersSchema,
+  EventCursorQuerySchema,
+  IdempotencyHeadersSchema,
+  RunCommandInputSchema,
+  RunCommandResponseSchema,
+  RunSchema,
+} from "@scova/contracts";
+import type { ApiServices } from "@/app/context.ts";
+import { createRunHandlers } from "@/handler/runs.ts";
+
+const OptionalIdempotencyHeadersSchema = t.Object(
+  {
+    "idempotency-key": t.Optional(
+      t.String({
+        minLength: 16,
+        maxLength: 128,
+        pattern: "^[A-Za-z0-9._-]+$",
+        description: "重试同一命令时保持稳定的幂等键",
+      }),
+    ),
+  },
+  { additionalProperties: true, description: "执行命令幂等请求头；缺失时返回 428" },
+);
+
+export function createRunPlugin(services: ApiServices) {
+  const handlers = createRunHandlers(services);
+  const errors = {
+    400: ApiErrorSchema,
+    401: ApiErrorSchema,
+    403: ApiErrorSchema,
+    404: ApiErrorSchema,
+    409: ApiErrorSchema,
+    422: ApiErrorSchema,
+    428: ApiErrorSchema,
+  } as const;
+  const models = {
+    Run: RunSchema,
+    RunCommandInput: RunCommandInputSchema,
+    RunCommandResponse: RunCommandResponseSchema,
+    IdempotencyHeaders: IdempotencyHeadersSchema,
+    EventCursorQuery: EventCursorQuerySchema,
+    EventCursorHeaders: EventCursorHeadersSchema,
+  };
+
+  return new Elysia({ name: "scova-runs", prefix: "/api/v1", normalize: false })
+    .model(models)
+    .post("/tasks/:taskId/runs", handlers.create, {
+      body: "RunCommandInput",
+      headers: OptionalIdempotencyHeadersSchema,
+      response: { 202: RunCommandResponseSchema, ...errors },
+      detail: {
+        operationId: "createRun",
+        tags: ["执行"],
+        summary: "启动查阅执行",
+        description:
+          "固定当前任务配置版本，在同一事务写入执行、首个事件和 Outbox；重复幂等命令或同任务已有活动执行时返回原执行。",
+      },
+    })
+    .get("/runs/:runId", handlers.get, {
+      response: { 200: RunSchema, ...errors },
+      detail: {
+        operationId: "getRun",
+        tags: ["执行"],
+        summary: "查看执行详情",
+        description: "返回当前账号拥有的执行公共快照，不暴露租约、checkpoint 或数据库内部字段。",
+      },
+    })
+    .post("/runs/:runId/cancel", handlers.cancel, {
+      response: { 200: RunCommandResponseSchema, ...errors },
+      detail: {
+        operationId: "cancelRun",
+        tags: ["执行"],
+        summary: "请求取消执行",
+        description:
+          "将活动执行标记为取消请求；重复取消复用原命令，终态不回退。Worker 消费取消请求的执行闭环仍待实现。",
+      },
+    })
+    .post("/runs/:runId/retry", handlers.retry, {
+      body: "RunCommandInput",
+      headers: OptionalIdempotencyHeadersSchema,
+      response: { 202: RunCommandResponseSchema, ...errors },
+      detail: {
+        operationId: "retryRun",
+        tags: ["执行"],
+        summary: "重试失败执行",
+        description:
+          "以原执行为 parentRun 创建新执行，固定同一任务配置版本并通过事务 Outbox 入队。",
+      },
+    })
+    .get("/runs/:runId/events", handlers.events, {
+      detail: {
+        operationId: "streamRunEvents",
+        tags: ["执行"],
+        summary: "读取执行事件",
+        description:
+          "按 seq 回放当前账号执行的持久化事件，支持 Last-Event-ID 续传；本轮 API 返回已有事件后结束连接。",
+      },
+    });
+}

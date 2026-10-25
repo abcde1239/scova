@@ -1,0 +1,29 @@
+# Scova 数据库
+
+PostgreSQL 业务模型与迁移统一维护在 [@scova/models](../packages/models/README.md)，供 Server 和 Worker 共用。使用 Prisma 6.19，兼容 Bun 与 Node.js。
+
+## 初始化
+
+在仓库根目录配置 `DATABASE_URL`，再运行：
+
+```sh
+vp exec prisma generate
+vp exec prisma migrate deploy
+```
+
+本地测试容器的连接地址为 `postgresql://scova_test:scova_test@127.0.0.1:55432/scova_test`；Redis 为 `redis://127.0.0.1:56379`，通过 `REDIS_URL` 配置。仅用于本地测试，部署时使用独立账号和凭据。
+
+## 测试
+
+```sh
+docker compose -f compose.test.yaml -p scova-runtime-test up -d --wait
+vp run test:database
+```
+
+测试在专用数据库中创建并清理随机 schema。可通过 `SCOVA_TEST_DATABASE_URL` 覆盖连接，不读取业务 `DATABASE_URL`。
+
+## 维护
+
+模型定义在 `packages/models/prisma/schema.prisma`，SQL 变更保存在同目录的 `migrations/`。根命令已配置该路径；迁移包含的手写索引与 CHECK 应保留。
+
+详细约束见[数据库参考](../docs/public/reference/database.md)和[数据模型](../docs/public/reference/data-model.md)。

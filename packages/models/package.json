@@ -1,0 +1,24 @@
+{
+  "name": "@scova/models",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "generate": "prisma generate --schema prisma/schema.prisma",
+    "check": "vp check"
+  },
+  "dependencies": {
+    "@prisma/client": "catalog:"
+  },
+  "devDependencies": {
+    "prisma": "catalog:",
+    "typescript": "catalog:"
+  },
+  "prisma": {
+    "schema": "./prisma/schema.prisma"
+  }
+}
