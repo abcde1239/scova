@@ -73,6 +73,7 @@ export function createRunService(services: ApiServices) {
     input: RunCommandInput | undefined,
     idempotencyKey: string,
     parentRunId: string | null = null,
+    taskVersionId?: string,
   ) {
     const command = commandBody(input);
     const scope = `run:${taskId}:${parentRunId ? "retry" : "create"}`;
@@ -96,7 +97,11 @@ export function createRunService(services: ApiServices) {
           return { run: reused, reused: true };
         }
         const task = await ownedTask(taskId, userId, store);
-        const version = await store.findVersion(task.currentVersionId!, userId, task.id);
+        const version = await store.findVersion(
+          taskVersionId ?? task.currentVersionId!,
+          userId,
+          task.id,
+        );
         if (!version) throw new ApiError(409, "TASK_VERSION_MISSING", "任务配置版本不可用");
         const config = parseContract(TaskConfigSchema, version.configJson);
         const idempotency = await store.createIdempotency({
@@ -182,7 +187,7 @@ export function createRunService(services: ApiServices) {
       const old = await requireRun(userId, runId);
       if (!(old.status === "failed" || old.status === "canceled"))
         throw new ApiError(409, "RUN_NOT_RETRYABLE", "当前执行状态不允许重试");
-      const result = await createRun(old.taskId, userId, input, key, old.id);
+      const result = await createRun(old.taskId, userId, input, key, old.id, old.taskVersionId);
       return { run: toRun(result.run), reused: result.reused };
     },
     async events(userId: string, runId: string, after: number, lastEventId: string | null) {

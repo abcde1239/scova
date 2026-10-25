@@ -211,6 +211,70 @@ describe("Run API、事务 Outbox 与事件回放", () => {
     expect(missingKey.status).toBe(428);
   });
 
+  it("配置修改后重试仍固定原版本、预算和比较范围，并可幂等重放", async () => {
+    const auth = await register();
+    const task = await createTask(auth);
+    const created = await request(`/api/v1/tasks/${task.id}/runs`, {
+      method: "POST",
+      headers: authHeaders(auth, { "idempotency-key": "run-original-version" }),
+      body: JSON.stringify({ mode: "demo" }),
+    });
+    expect(created.status).toBe(202);
+    const original = (await json(created)).run;
+    const storedOriginal = await prisma.run.findUniqueOrThrow({ where: { id: original.id } });
+    const editedConfig = config();
+    editedConfig.topic = "官方招生通知";
+    editedConfig.budget.maxSearches = 2;
+    const edited = await request(`/api/v1/tasks/${task.id}`, {
+      method: "PATCH",
+      headers: authHeaders(auth, { "if-match": '"1"' }),
+      body: JSON.stringify({ config: editedConfig }),
+    });
+    expect(edited.status).toBe(200);
+    const latest = await json(edited);
+    expect(latest.task.currentVersionId).not.toBe(original.taskVersionId);
+    await prisma.run.update({ where: { id: original.id }, data: { status: "failed" } });
+
+    const retry = () =>
+      request(`/api/v1/runs/${original.id}/retry`, {
+        method: "POST",
+        headers: authHeaders(auth, { "idempotency-key": "run-retry-pinned-version" }),
+        body: JSON.stringify({ mode: "demo" }),
+      });
+    const retried = await retry();
+    expect(retried.status).toBe(202);
+    const body = await json(retried);
+    expect(body.run).toMatchObject({
+      taskVersionId: original.taskVersionId,
+      parentRunId: original.id,
+      budget: original.budget,
+    });
+    const storedRetry = await prisma.run.findUniqueOrThrow({ where: { id: body.run.id } });
+    expect(storedRetry.comparisonScopeHash).toBe(storedOriginal.comparisonScopeHash);
+    expect(
+      (await prisma.outbox.findFirstOrThrow({ where: { aggregateId: body.run.id } })).payload,
+    ).toMatchObject({ taskVersionId: original.taskVersionId });
+    expect(
+      (await prisma.runEvent.findFirstOrThrow({ where: { runId: body.run.id } })).payload,
+    ).toMatchObject({ taskVersionId: original.taskVersionId });
+    const replayed = await retry();
+    expect(replayed.status).toBe(202);
+    expect(await json(replayed)).toMatchObject({ reused: true, run: { id: body.run.id } });
+    expect(await prisma.outbox.count({ where: { aggregateId: body.run.id } })).toBe(1);
+
+    await prisma.run.update({ where: { id: body.run.id }, data: { status: "failed" } });
+    const fresh = await request(`/api/v1/tasks/${task.id}/runs`, {
+      method: "POST",
+      headers: authHeaders(auth, { "idempotency-key": "run-current-version" }),
+      body: JSON.stringify({ mode: "demo" }),
+    });
+    expect(fresh.status).toBe(202);
+    expect((await json(fresh)).run).toMatchObject({
+      taskVersionId: latest.task.currentVersionId,
+      budget: editedConfig.budget,
+    });
+  });
+
   it("取消活动执行并可从失败执行创建 parentRun 重试", async () => {
     const auth = await register();
     const task = await createTask(auth);
