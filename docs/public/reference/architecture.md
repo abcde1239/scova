@@ -1,6 +1,6 @@
 # Scova 系统架构
 
-状态：首版设计，2026-10-24。当前仓库仍是 Vite+ 模板；本文中的业务服务、页面与存储均待分期实现。接口和状态约定供后续开发验收使用。
+状态：持续演进的首版设计。已建立工作区、业务数据库、账号/任务/执行基础 API 与 Outbox 投递；Agent、交付闭环和完整界面按计划实现。下文也包含待验收的目标行为。
 
 ## 1. 产品闭环与边界
 
@@ -30,16 +30,21 @@ API、worker 分别作为两个进程，PostgreSQL 和 Redis 是唯一首版基�
 
 ## 2. 工作区与职责
 
-| 目标目录            | 职责                                                                        | 依赖方向                                               |
-| ------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------ |
-| apps/web            | Vue 3、Router、Pinia、TanStack Vue Query、UnoCSS、naive-ui；页面与 SSE 订阅 | contracts                                              |
-| apps/server         | 认证、资源授权、任务版本、执行命令、报告/资料管理、事件读取                 | contracts；在组合根装配 Prisma                         |
-| apps/worker         | 调度器、outbox dispatcher、BullMQ worker、租约、交付事务                    | contracts、agent-core、connectors；在组合根装配 Prisma |
-| packages/contracts  | 可运行时校验的请求/响应、事件版本、枚举与错误码；不暴露 ORM 实体            | 不依赖应用                                             |
-| packages/agent-core | LangGraph 状态图、预算策略、证据/变化规则、工具与模型接口                   | contracts；不直接使用 Elysia/BullMQ                    |
-| packages/connectors | Tavily、HTTP 抓取、Readability 和演示数据适配器                             | 实现 agent-core 的工具接口                             |
+| 目标目录            | 职责                                                                        | 依赖方向                                  |
+| ------------------- | --------------------------------------------------------------------------- | ----------------------------------------- |
+| apps/web            | Vue 3、Router、Pinia、TanStack Vue Query、UnoCSS、naive-ui；页面与 SSE 订阅 | contracts                                 |
+| apps/server         | 认证、资源授权、任务版本、执行命令、报告/资料管理、事件读取                 | contracts、models                         |
+| apps/worker         | 调度器、outbox dispatcher、BullMQ worker、租约、交付事务                    | contracts、models、agent-core、connectors |
+| packages/contracts  | 可运行时校验的请求/响应、事件版本、枚举与错误码；不暴露 ORM 实体            | 不依赖应用                                |
+| packages/models     | 业务数据模型、Prisma schema、迁移与服务端客户端                             | 不依赖应用或 contracts                    |
+| packages/agent-core | LangGraph 状态图、预算策略、证据/变化规则、工具与模型接口                   | contracts；不直接使用 Elysia/BullMQ       |
+| packages/connectors | Tavily、HTTP 抓取、Readability 和演示数据适配器                             | 实现 agent-core 的工具接口                |
 
-API 不负责执行长任务，worker 不提供账号管理入口；Agent 没有通用 SQL、文件系统或任意脚本工具。Prisma schema 与迁移在后续实现时置于根 `prisma/`，API/worker 共用同一生成客户端，在服务层封装事务和 owner 条件。先避免为少量共享查询创建额外“通用平台包”。
+API 不负责执行长任务，worker 不提供账号管理入口；Agent 没有通用 SQL、文件系统或任意脚本工具。`packages/models/prisma` 维护唯一业务 schema 和迁移；Server/Worker 从 `@scova/models` 引用生成模型，公开接口仍使用 `@scova/contracts`。
+
+Server 源码分层为 `main → app → router → handler → service → repo`：app 装配 Elysia、Node 适配与生命周期，router 声明路由和中文 OpenAPI，handler 处理 HTTP/会话/响应，service 编排业务规则及事务，repo 完成数据库与 Redis 访问。utils 放纯工具。Task CAS 与 Run/事件/Outbox 仍在同一事务中完成。
+
+所有 app/package 均以 `src` 保存源码，并配置 `@/* → ./src/*`。应用内使用别名，跨包引用包名；直接导出源码的共享包内部保留相对引用，避免消费方 TypeScript/Bun 对同名别名的解析冲突。Vite/Vitest 使用原生 tsconfig paths 解析，Node.js 启动入口由 `vpx` 处理。
 
 M1 已将前端迁至 `apps/web`，建立 API/worker 与三个共享包的最小入口，保留 utils 有效模板测试。业务模块仍按各自 Issue 实现；新增真实测试时同步 Vitest 与 harness 覆盖声明，不将类型/常量占位验证计为业务覆盖。Bun 为主运行时，Node.js 入口通过 Elysia 官方适配器保持兼容。
 

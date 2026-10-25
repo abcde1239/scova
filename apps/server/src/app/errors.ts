@@ -2,21 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Elysia } from "elysia";
 import { ContractValidationError, type FieldError } from "@scova/contracts";
 
-/** 可公开的错误，不把数据库消息、请求体或凭据拼接进响应。 */
-export class ApiError extends Error {
-  readonly status: number;
-  readonly code: string;
-  readonly fieldErrors?: FieldError[];
-  retryAfterSeconds?: number;
-  constructor(status: number, code: string, message: string, fieldErrors?: FieldError[]) {
-    super(message);
-    this.name = "ApiError";
-    this.status = status;
-    this.code = code;
-    this.fieldErrors = fieldErrors;
-  }
-}
-
+import { ApiError } from "@/utils/errors.ts";
 function validationFields(error: unknown): FieldError[] {
   if (typeof error !== "object" || error === null || !("all" in error) || !Array.isArray(error.all))
     return [{ path: "/", message: "请求字段不符合接口约束" }];

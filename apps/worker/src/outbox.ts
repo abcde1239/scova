@@ -1,4 +1,4 @@
-import { PrismaClient, type Outbox } from "@prisma/client";
+import { PrismaClient, type Outbox } from "@scova/models";
 import { Queue } from "bullmq";
 import type { Redis } from "ioredis";
 

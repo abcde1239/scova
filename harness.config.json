@@ -31,6 +31,10 @@
       }
     },
     {
+      "root": "packages/models",
+      "id": "packages-models"
+    },
+    {
       "root": "packages/agent-core",
       "id": "packages-agent-core"
     },

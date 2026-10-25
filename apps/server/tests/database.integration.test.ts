@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient } from "@scova/models";
 import pg from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 
@@ -165,7 +165,7 @@ describe("真实 PostgreSQL 业务模型与一致性约束", () => {
           "migrate",
           "deploy",
           "--schema",
-          "prisma/schema.prisma",
+          "packages/models/prisma/schema.prisma",
         ],
         {
           cwd: root,

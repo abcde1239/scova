@@ -16,8 +16,8 @@
     "@elysiajs/node": "catalog:",
     "@elysiajs/swagger": "^1.2.1",
     "@node-rs/argon2": "catalog:",
-    "@prisma/client": "catalog:",
     "@scova/contracts": "workspace:*",
+    "@scova/models": "workspace:*",
     "elysia": "^1.4.7",
     "ioredis": "catalog:"
   },

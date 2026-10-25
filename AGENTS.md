@@ -43,3 +43,9 @@ release. Add a tool name to select part of the graph. For example, run
 ## README 写作
 
 所有 README 面向阅读和使用仓库或包的人，保持简洁、准确。按需要提供名称与简介、当前功能或状态、安装与快速开始、常用命令和文档入口；包级 README 聚焦用途、用法和验证。避免重复章节、模板占位、冗长约束和开发流水账，详细设计放在参考文档并链接。README 中的命令、路径与实现状态必须与代码一致，公开 README 不链接私有资料。
+
+## 目录与后端分层
+
+每个 `apps/*`、`packages/*` 工作区均以 `src` 保存源码，配置本工作区的 `@/* → ./src/*` 别名。应用内部使用 `@/`，跨包通过包名和 exports 引用；直接导出源码的共享包内部保留相对引用，避免消费方 TypeScript 将 `@/` 解析到错误工作区。Vite/Vitest 开启按导入文件解析 tsconfig paths；Node.js 入口通过 `vpx` 执行。
+
+Server 按 `main → app → router → handler → service → repo` 调用：`app` 装配 Elysia、Node 兼容层和生命周期；`router` 声明接口契约与中文文档；`handler` 处理 HTTP、会话与响应；`service` 组织业务规则与事务；`repo` 执行数据库和 Redis 访问；`utils` 仅放小工具。业务数据模型、Prisma schema 和迁移统一放在 `packages/models`，Server/Worker 通过 `@scova/models` 引用；公开 DTO 与事件 schema 仍由 `@scova/contracts` 管理。

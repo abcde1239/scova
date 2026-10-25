@@ -266,12 +266,12 @@ importers:
       '@node-rs/argon2':
         specifier: 'catalog:'
         version: 2.2.2
-      '@prisma/client':
-        specifier: 'catalog:'
-        version: 6.19.0(prisma@6.19.0(typescript@7.0.2))(typescript@7.0.2)
       '@scova/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@scova/models':
+        specifier: workspace:*
+        version: link:../../packages/models
       elysia:
         specifier: ^1.4.7
         version: 1.4.30(@sinclair/typebox@0.34.52)(@types/bun@1.4.4)(exact-mirror@1.2.6)(file-type@22.2.0)(openapi-types@12.1.3)(typescript@7.0.2)
@@ -313,9 +313,6 @@ importers:
 
   apps/worker:
     dependencies:
-      '@prisma/client':
-        specifier: 'catalog:'
-        version: 6.19.0(prisma@6.19.0(typescript@7.0.2))(typescript@7.0.2)
       '@scova/agent-core':
         specifier: workspace:*
         version: link:../../packages/agent-core
@@ -325,6 +322,9 @@ importers:
       '@scova/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@scova/models':
+        specifier: workspace:*
+        version: link:../../packages/models
       bullmq:
         specifier: 'catalog:'
         version: 6.4.0(ioredis@6.0.0)(pg@8.23.1)
@@ -365,6 +365,19 @@ importers:
         specifier: 0.34.52
         version: 0.34.52
     devDependencies:
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
+  packages/models:
+    dependencies:
+      '@prisma/client':
+        specifier: 'catalog:'
+        version: 6.19.0(prisma@6.19.0(typescript@7.0.2))(typescript@7.0.2)
+    devDependencies:
+      prisma:
+        specifier: 'catalog:'
+        version: 6.19.0(typescript@7.0.2)
       typescript:
         specifier: 'catalog:'
         version: 7.0.2

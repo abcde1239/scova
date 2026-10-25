@@ -2,13 +2,14 @@ import { createHash, randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient } from "@scova/models";
 import { Redis as RedisClient } from "ioredis";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 import { Elysia } from "elysia";
-import { createAuthPlugin, requireOwnedTask } from "../src/auth.ts";
-import { createApiErrorPlugin } from "../src/errors.ts";
-import { createDefaultServices, type ApiServices } from "../src/services.ts";
+import { createAuthPlugin } from "../src/router/auth.ts";
+import { requireOwnedTask } from "../src/handler/session.ts";
+import { createApiErrorPlugin } from "../src/app/errors.ts";
+import { createDefaultServices, type ApiServices } from "../src/app/context.ts";
 
 const require = createRequire(import.meta.url);
 const root = fileURLToPath(new URL("../../../", import.meta.url));
@@ -93,7 +94,7 @@ describe("邮箱密码认证与租户隔离", () => {
           "migrate",
           "deploy",
           "--schema",
-          "prisma/schema.prisma",
+          "packages/models/prisma/schema.prisma",
         ],
         {
           cwd: root,

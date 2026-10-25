@@ -1,5 +1,5 @@
 import { createApp, h } from "vue";
-import "./style.css";
+import "@/style.css";
 
 // M1 仅建立可启动的 Vue 入口，业务工作台由后续 Issue 实现。
 createApp({

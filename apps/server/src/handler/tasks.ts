@@ -1,0 +1,48 @@
+import type { Context } from "elysia";
+import { parseRevisionEtag, revisionEtag } from "@scova/contracts";
+import type { ApiServices } from "@/app/context.ts";
+import { requireCsrf, requireSession } from "@/handler/session.ts";
+import { createTaskService } from "@/service/tasks.ts";
+import { ApiError } from "@/utils/errors.ts";
+
+type HttpContext = Pick<Context, "request" | "set">;
+type TaskParams = { taskId: string };
+
+/** HTTP 认证、头字段与状态适配；业务事务由 service 负责。 */
+export function createTaskHandlers(services: ApiServices) {
+  const tasks = createTaskService(services);
+  return {
+    async list(this: void, { request, query }: HttpContext & { query: unknown }) {
+      const session = await requireSession(request, services);
+      return tasks.list(session.userId, query);
+    },
+    async create(this: void, { request, set, body }: HttpContext & { body: unknown }) {
+      const session = await requireSession(request, services);
+      requireCsrf(request, session, services);
+      const result = await tasks.create(session.userId, body);
+      set.status = 201;
+      set.headers.etag = revisionEtag(result.task.revision);
+      return result;
+    },
+    async get(this: void, { request, set, params }: HttpContext & { params: TaskParams }) {
+      const session = await requireSession(request, services);
+      const result = await tasks.get(session.userId, params.taskId);
+      set.headers.etag = revisionEtag(result.task.revision);
+      return result;
+    },
+    async update(
+      this: void,
+      { request, set, params, body }: HttpContext & { params: TaskParams; body: unknown },
+    ) {
+      const session = await requireSession(request, services);
+      requireCsrf(request, session, services);
+      const ifMatch = request.headers.get("if-match");
+      if (!ifMatch)
+        throw new ApiError(428, "REVISION_REQUIRED", "编辑任务必须携带 If-Match 修订版本");
+      const expectedRevision = parseRevisionEtag(ifMatch);
+      const result = await tasks.update(session.userId, params.taskId, body, expectedRevision);
+      set.headers.etag = revisionEtag(result.task.revision);
+      return result;
+    },
+  };
+}

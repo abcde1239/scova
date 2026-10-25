@@ -8,14 +8,15 @@
 
 Vite+ / TypeScript monorepo，Vue 3 前端，Bun + Elysia 后端（兼容 Node.js），PostgreSQL + Prisma，Redis + BullMQ。
 
-| 目录                  | 用途                   |
-| --------------------- | ---------------------- |
-| `apps/web`            | 前端工作台             |
-| `apps/server`         | 后端接口与中文 Swagger |
-| `apps/worker`         | 后台执行与队列         |
-| `packages/contracts`  | 共享接口与事件定义     |
-| `packages/agent-core` | Agent 状态与执行逻辑   |
-| `packages/connectors` | 搜索及来源适配         |
+| 目录                  | 用途                     |
+| --------------------- | ------------------------ |
+| `apps/web`            | 前端工作台               |
+| `apps/server`         | 后端接口与中文 Swagger   |
+| `apps/worker`         | 后台执行与队列           |
+| `packages/contracts`  | 共享接口与事件定义       |
+| `packages/models`     | 服务端业务数据模型与迁移 |
+| `packages/agent-core` | Agent 状态与执行逻辑     |
+| `packages/connectors` | 搜索及来源适配           |
 
 ## 本地开发
 

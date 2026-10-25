@@ -4,7 +4,9 @@ import { once } from "node:events";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
+import { nodeScriptCommand } from "./process-runtime.mjs";
 
 const bunPath =
   process.env.BUN_BIN ??
@@ -21,12 +23,14 @@ async function unusedPort() {
   return port;
 }
 
-for (const [runtime, executable, entry] of [
-  ["bun", bunPath, "apps/server/src/main.ts"],
-  ["node", process.execPath, "apps/server/src/node.ts"],
+const serverRoot = fileURLToPath(new URL("../apps/server/", import.meta.url));
+for (const { runtime, executable, args } of [
+  { runtime: "bun", executable: bunPath, args: ["run", "src/main.ts"] },
+  { runtime: "node", ...nodeScriptCommand("src/node.ts") },
 ]) {
   const port = await unusedPort();
-  const child = spawn(executable, [entry], {
+  const child = spawn(executable, args, {
+    cwd: serverRoot,
     env: { ...process.env, PORT: String(port) },
     stdio: ["ignore", "pipe", "pipe", "ipc"],
     windowsHide: true,
@@ -72,6 +76,10 @@ for (const [runtime, executable, entry] of [
       ),
     ]);
     assert.equal(result.code, 0, `${runtime} 退出失败：${output}`);
+    await assert.rejects(
+      fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(500) }),
+      `${runtime} 退出后仍有服务监听端口`,
+    );
     console.log(`${runtime}: HTTP、中文 Swagger 与优雅退出通过`);
   } finally {
     if (!exit) child.kill();

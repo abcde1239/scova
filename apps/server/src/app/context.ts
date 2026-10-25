@@ -1,5 +1,5 @@
 import { createRequire } from "node:module";
-import type { PrismaClient } from "@prisma/client";
+import { createDatabaseClient, type PrismaClient } from "@scova/models";
 import type { Redis } from "ioredis";
 
 const require = createRequire(import.meta.url);
@@ -66,9 +66,7 @@ export function createDefaultServices(overrides: ApiServiceOverrides = {}): ApiS
       (() => {
         if (!database) {
           if (!process.env.DATABASE_URL) throw new Error("尚未配置业务数据库");
-          const { PrismaClient: Client } =
-            require("@prisma/client") as typeof import("@prisma/client");
-          database = new Client();
+          database = createDatabaseClient();
         }
         return database;
       }),

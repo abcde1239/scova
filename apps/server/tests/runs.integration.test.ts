@@ -2,11 +2,11 @@ import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient } from "@scova/models";
 import { Redis as RedisClient } from "ioredis";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
-import { createApiApp } from "../src/app.ts";
-import { createDefaultServices, type ApiServices } from "../src/services.ts";
+import { createApiApp } from "../src/app/index.ts";
+import { createDefaultServices, type ApiServices } from "../src/app/context.ts";
 
 const require = createRequire(import.meta.url);
 const root = fileURLToPath(new URL("../../../", import.meta.url));
@@ -94,7 +94,7 @@ describe("Run API、事务 Outbox 与事件回放", () => {
           "migrate",
           "deploy",
           "--schema",
-          "prisma/schema.prisma",
+          "packages/models/prisma/schema.prisma",
         ],
         {
           cwd: root,

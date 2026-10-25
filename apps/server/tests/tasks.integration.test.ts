@@ -2,12 +2,12 @@ import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient } from "@scova/models";
 import { Redis as RedisClient } from "ioredis";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
-import { createApiApp } from "../src/app.ts";
-import { createDefaultServices, type ApiServices } from "../src/services.ts";
-import { comparisonScopeHash } from "../src/tasks.ts";
+import { createApiApp } from "../src/app/index.ts";
+import { createDefaultServices, type ApiServices } from "../src/app/context.ts";
+import { comparisonScopeHash } from "../src/service/tasks.ts";
 import type { TaskConfig } from "@scova/contracts";
 
 const require = createRequire(import.meta.url);
@@ -101,7 +101,7 @@ describe("长期任务、不可变版本与并发编辑", () => {
           "migrate",
           "deploy",
           "--schema",
-          "prisma/schema.prisma",
+          "packages/models/prisma/schema.prisma",
         ],
         {
           cwd: root,

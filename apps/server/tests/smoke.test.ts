@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { apiApp } from "../src/app.ts";
+import { apiApp } from "../src/app/index.ts";
 
 describe("API workspace smoke", () => {
   it("exposes a documented Chinese health endpoint", async () => {

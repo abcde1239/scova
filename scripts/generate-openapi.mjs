@@ -1,7 +1,7 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { createApiApp, contractModels } from "../apps/server/src/app.ts";
+import { createApiApp, contractModels } from "../apps/server/src/app/index.ts";
 
 const chinese = /[\u3400-\u9fff]/u;
 const verbs = new Set(["get", "put", "post", "delete", "patch", "head", "options", "trace"]);

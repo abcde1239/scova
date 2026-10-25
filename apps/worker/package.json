@@ -11,10 +11,10 @@
     "check": "vp check"
   },
   "dependencies": {
-    "@prisma/client": "catalog:",
     "@scova/agent-core": "workspace:*",
     "@scova/connectors": "workspace:*",
     "@scova/contracts": "workspace:*",
+    "@scova/models": "workspace:*",
     "bullmq": "catalog:",
     "ioredis": "catalog:"
   },

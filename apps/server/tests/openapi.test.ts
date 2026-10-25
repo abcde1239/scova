@@ -5,8 +5,9 @@ import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vite-plus/test";
-import { createApiApp, HealthResponseSchema } from "../src/app.ts";
+import { createApiApp, HealthResponseSchema } from "../src/app/index.ts";
 import { generateOpenApi, validateOpenApi } from "../../../scripts/generate-openapi.mjs";
+import { nodeScriptCommand } from "../../../scripts/process-runtime.mjs";
 
 type Schema = {
   $ref?: string;
@@ -128,8 +129,9 @@ describe("中文 OpenAPI 生成与校验", () => {
         new URL("../../../scripts/generate-openapi.mjs", import.meta.url),
       );
       const execute = promisify(execFile);
+      const invocation = nodeScriptCommand(command, ["--output", target, "--check"]);
       await expect(
-        execute(process.execPath, [command, "--output", target, "--check"], { windowsHide: true }),
+        execute(invocation.executable, invocation.args, { windowsHide: true }),
       ).rejects.toMatchObject({ code: 1 });
       expect(await readFile(target, "utf8")).toBe(original);
     } finally {

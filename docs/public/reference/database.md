@@ -1,6 +1,6 @@
 # 业务数据库
 
-Prisma 6.19 管理 `schema.prisma` 中的 PostgreSQL 业务模型；Bun 为主运行时，Node.js 使用同一生成客户端。`DATABASE_URL` 必须由部署者环境配置，不提交密码。
+Prisma 6.19 管理 `packages/models/prisma/schema.prisma` 中的 PostgreSQL 业务模型与同目录迁移；Server/Worker 通过 `@scova/models` 引用同一生成客户端。Bun 为主运行时，Node.js 使用同一模型。`DATABASE_URL` 必须由部署者环境配置，不提交密码。
 
 首次部署先执行 `vp exec prisma generate` 与 `vp exec prisma migrate deploy`，确认成功后再启动 API/worker。再次执行 deploy 不重复建表。不使用 `db push` 替代已审查的 SQL migration，也不重置共享或用户数据库。
 
