@@ -74,7 +74,7 @@ describe("中文 OpenAPI 生成与校验", () => {
     const second = await generateOpenApi();
     expect(first).toEqual(second);
     const committed = JSON.parse(
-      await readFile(new URL("../openapi.json", import.meta.url), "utf8"),
+      await readFile(new URL("../../../swagger.json", import.meta.url), "utf8"),
     );
     expect(first).toEqual(committed);
   });

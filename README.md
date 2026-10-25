@@ -54,5 +54,6 @@ vp run api:openapi:check
 
 - [系统架构](docs/public/reference/architecture.md) · [数据模型](docs/public/reference/data-model.md)
 - [接口文档](docs/public/reference/api.md) · [共享契约](packages/contracts/README.md)
+- [Swagger / OpenAPI JSON](swagger.json)（`vp run api:openapi` 重新生成）
 - [交付计划](docs/public/guides/delivery-plan.md) · [两次执行验收](docs/public/examples/two-run-scenarios.md)
 - [前端与通信约定](docs/public/reference/frontend-conventions.md)

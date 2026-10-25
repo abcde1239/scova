@@ -65,6 +65,7 @@
     ],
     "publicPatterns": [
       "README.md",
+      "swagger.json",
       "AGENTS.md",
       ".gitignore",
       "package.json",

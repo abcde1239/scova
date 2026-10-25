@@ -77,7 +77,7 @@ if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.m
     const output =
       outputArg >= 0
         ? resolve(process.argv[outputArg + 1])
-        : fileURLToPath(new URL("../apps/server/openapi.json", import.meta.url));
+        : fileURLToPath(new URL("../swagger.json", import.meta.url));
     const expected = `${JSON.stringify(await generateOpenApi(), null, 2)}\n`;
     if (process.argv.includes("--check")) {
       if (
