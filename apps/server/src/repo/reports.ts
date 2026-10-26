@@ -53,23 +53,18 @@ export function createReportRepo(services: Pick<ApiServices, "db">) {
         select: { id: true, taskId: true, publishedAt: true },
       });
     },
-    listReports(userId: string, take: number, taskId?: string, cursor?: Cursor) {
+    async listReports(userId: string, take: number, taskId?: string, cursor?: Cursor) {
+      const task = taskId ? Prisma.sql`AND task_id=${taskId}::uuid` : Prisma.empty;
+      const boundary = cursor
+        ? Prisma.sql`AND (published_at,id)<(SELECT published_at,id FROM reports WHERE user_id=${userId}::uuid AND id=${cursor.id}::uuid)`
+        : Prisma.empty;
+      const ids = await services.db().$queryRaw<
+        { id: string }[]
+      >`SELECT id FROM reports WHERE user_id=${userId}::uuid ${task} ${boundary} ORDER BY published_at DESC,id DESC LIMIT ${take}`;
       return services.db().report.findMany({
-        where: {
-          userId,
-          ...(taskId ? { taskId } : {}),
-          ...(cursor
-            ? {
-                OR: [
-                  { publishedAt: { lt: cursor.time } },
-                  { publishedAt: cursor.time, id: { lt: cursor.id } },
-                ],
-              }
-            : {}),
-        },
+        where: { userId, id: { in: ids.map((row) => row.id) } },
         include: summaryInclude,
         orderBy: [{ publishedAt: "desc" }, { id: "desc" }],
-        take,
       });
     },
     findReport(userId: string, id: string) {
@@ -80,23 +75,27 @@ export function createReportRepo(services: Pick<ApiServices, "db">) {
         .db()
         .inboxItem.findFirst({ where: { id, userId }, select: { id: true, createdAt: true } });
     },
-    listInbox(userId: string, take: number, unread?: boolean, cursor?: Cursor) {
+    async listInbox(userId: string, take: number, unread?: boolean, cursor?: Cursor) {
+      const read =
+        unread === undefined
+          ? Prisma.empty
+          : unread
+            ? Prisma.sql`AND read_at IS NULL`
+            : Prisma.sql`AND read_at IS NOT NULL`;
+      const boundary = cursor
+        ? Prisma.sql`AND (created_at,id)<(SELECT created_at,id FROM inbox_items WHERE user_id=${userId}::uuid AND id=${cursor.id}::uuid)`
+        : Prisma.empty;
+      const ids = await services.db().$queryRaw<
+        { id: string }[]
+      >`SELECT id FROM inbox_items WHERE user_id=${userId}::uuid ${read} ${boundary} ORDER BY created_at DESC,id DESC LIMIT ${take}`;
       return services.db().inboxItem.findMany({
         where: {
           userId,
           ...(unread === undefined ? {} : { readAt: unread ? null : { not: null } }),
-          ...(cursor
-            ? {
-                OR: [
-                  { createdAt: { lt: cursor.time } },
-                  { createdAt: cursor.time, id: { lt: cursor.id } },
-                ],
-              }
-            : {}),
+          id: { in: ids.map((row) => row.id) },
         },
         include: inboxInclude,
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        take,
       });
     },
     setInboxRead(userId: string, id: string, read: boolean, now: Date) {

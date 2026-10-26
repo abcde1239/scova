@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { effectiveRunScopeHash } from "@scova/utils";
 import type { Run as StoredRun, RunEvent as StoredRunEvent } from "@scova/models";
 import {
+  PageQuerySchema,
+  RunListResponseSchema,
   RunCommandInputSchema,
   RunEventSchema,
   RunSchema,
@@ -170,6 +172,38 @@ export function createRunService(services: ApiServices) {
   }
 
   return {
+    async list(userId: string, taskId: string, input: unknown) {
+      await ownedTask(taskId, userId, repo);
+      const query = parseContract(PageQuerySchema, input),
+        scope = `runs:${taskId}`;
+      let cursorId: string | undefined;
+      if (query.cursor) {
+        try {
+          const cursor = JSON.parse(Buffer.from(query.cursor, "base64url").toString("utf8"));
+          if (!UUID.test(cursor.id) || cursor.scope !== scope || typeof cursor.time !== "string")
+            throw new Error();
+          const anchor = await repo.findRun(cursor.id, userId);
+          if (!anchor || anchor.taskId !== taskId || anchor.queuedAt.toISOString() !== cursor.time)
+            throw new Error();
+          cursorId = cursor.id;
+        } catch {
+          throw new ApiError(400, "INVALID_CURSOR", "执行历史游标无效或与任务不一致");
+        }
+      }
+      const limit = Math.min(query.limit ?? 50, 100),
+        rows = await repo.listRuns(userId, taskId, limit + 1, cursorId),
+        page = rows.slice(0, limit),
+        last = page.at(-1);
+      return parseContract(RunListResponseSchema, {
+        items: page.map(toRun),
+        nextCursor:
+          rows.length > limit && last
+            ? Buffer.from(
+                JSON.stringify({ id: last.id, time: last.queuedAt.toISOString(), scope }),
+              ).toString("base64url")
+            : null,
+      });
+    },
     async create(userId: string, taskId: string, input: RunCommandInput | undefined, key: string) {
       const result = await createRun(taskId, userId, input, key);
       return { run: toRun(result.run), reused: result.reused };

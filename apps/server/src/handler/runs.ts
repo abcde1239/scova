@@ -12,6 +12,14 @@ type RunParams = { runId: string };
 export function createRunHandlers(services: ApiServices) {
   const runs = createRunService(services);
   return {
+    async list(
+      this: void,
+      { request, set, params, query }: HttpContext & { params: { taskId: string }; query: unknown },
+    ) {
+      const session = await requireSession(request, services);
+      set.headers["cache-control"] = "no-store";
+      return runs.list(session.userId, params.taskId, query);
+    },
     async create(
       this: void,
       {

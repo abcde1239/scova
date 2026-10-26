@@ -16,6 +16,18 @@ function createRunStore(database: Prisma.TransactionClient) {
         SELECT id FROM runs WHERE id = ${runId}::uuid AND user_id = ${userId}::uuid FOR UPDATE
       `;
     },
+    async listRuns(userId: string, taskId: string, take: number, cursorId?: string) {
+      const boundary = cursorId
+        ? Prisma.sql`AND (queued_at,id)<(SELECT queued_at,id FROM runs WHERE user_id=${userId}::uuid AND task_id=${taskId}::uuid AND id=${cursorId}::uuid)`
+        : Prisma.empty;
+      const ids = await database.$queryRaw<
+        { id: string }[]
+      >`SELECT id FROM runs WHERE user_id=${userId}::uuid AND task_id=${taskId}::uuid ${boundary} ORDER BY queued_at DESC,id DESC LIMIT ${take}`;
+      return database.run.findMany({
+        where: { userId, taskId, id: { in: ids.map((row) => row.id) } },
+        orderBy: [{ queuedAt: "desc" }, { id: "desc" }],
+      });
+    },
     findActiveRun(taskId: string, userId: string) {
       return database.run.findFirst({
         where: {
@@ -78,6 +90,10 @@ export type RunStore = ReturnType<typeof createRunStore>;
 
 export function createRunRepo(services: Pick<ApiServices, "db">) {
   return {
+    findTask: (...args: Parameters<RunStore["findTask"]>) =>
+      createRunStore(services.db()).findTask(...args),
+    listRuns: (...args: Parameters<RunStore["listRuns"]>) =>
+      createRunStore(services.db()).listRuns(...args),
     findRun: (...args: Parameters<RunStore["findRun"]>) =>
       createRunStore(services.db()).findRun(...args),
     requireRun: (...args: Parameters<RunStore["requireRun"]>) =>

@@ -1,5 +1,7 @@
 import { Elysia, t } from "elysia";
 import {
+  PageQuerySchema,
+  RunListResponseSchema,
   ApiErrorSchema,
   EventCursorHeadersSchema,
   EventCursorQuerySchema,
@@ -47,6 +49,29 @@ export function createRunPlugin(services: ApiServices) {
 
   return new Elysia({ name: "scova-runs", prefix: "/api/v1", normalize: false })
     .model(models)
+    .get("/tasks/:taskId/runs", handlers.list, {
+      query: t.Object(
+        {
+          ...PageQuerySchema.properties,
+          limit: t.Optional(
+            t.Numeric({
+              minimum: 1,
+              maximum: Number.MAX_SAFE_INTEGER,
+              description: "每页数量，默认50上限100",
+            }),
+          ),
+        },
+        { additionalProperties: false },
+      ),
+      response: { 200: RunListResponseSchema, ...errors },
+      detail: {
+        operationId: "listTaskRuns",
+        tags: ["执行"],
+        summary: "读取任务执行历史",
+        description:
+          "仅返回当前账号指定任务的执行历史，按排队时间与ID倒序分页；包含版本、模式、预算、覆盖范围和状态，不返回提示词、工具正文或租约。",
+      },
+    })
     .post("/tasks/:taskId/runs", handlers.create, {
       body: "RunCommandInput",
       headers: OptionalIdempotencyHeadersSchema,

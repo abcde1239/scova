@@ -142,7 +142,13 @@ export function createTaskService(services: ApiServices) {
     async list(userId: string, query: unknown) {
       const page = parseContract(PageQuerySchema, query);
       const take = Math.min(page.limit ?? 50, 100);
-      const tasks = await repo.listTasks(userId, take + 1, decodeCursor(page.cursor));
+      const cursor = decodeCursor(page.cursor);
+      if (cursor) {
+        const anchor = await repo.findTask(cursor.id, userId);
+        if (!anchor || anchor.updatedAt.getTime() !== cursor.updatedAt.getTime())
+          throw new ApiError(400, "INVALID_CURSOR", "分页游标无效或已变化");
+      }
+      const tasks = await repo.listTasks(userId, take + 1, cursor);
       return parseContract(TaskListResponseSchema, {
         items: tasks.slice(0, take).map(listItem),
         nextCursor: tasks.length > take ? cursorFor(tasks[take - 1]!) : null,

@@ -22,21 +22,16 @@ export function createTaskStore(database: Prisma.TransactionClient) {
     requireVersion(versionId: string, userId: string, taskId: string) {
       return database.taskVersion.findFirstOrThrow({ where: { id: versionId, userId, taskId } });
     },
-    listTasks(userId: string, take: number, cursor?: { updatedAt: Date; id: string }) {
+    async listTasks(userId: string, take: number, cursor?: { updatedAt: Date; id: string }) {
+      const boundary = cursor
+        ? Prisma.sql`AND (updated_at,id)<(SELECT updated_at,id FROM tasks WHERE user_id=${userId}::uuid AND id=${cursor.id}::uuid)`
+        : Prisma.empty;
+      const ids = await database.$queryRaw<
+        { id: string }[]
+      >`SELECT id FROM tasks WHERE user_id=${userId}::uuid ${boundary} ORDER BY updated_at DESC,id DESC LIMIT ${take}`;
       return database.task.findMany({
-        where: {
-          userId,
-          ...(cursor
-            ? {
-                OR: [
-                  { updatedAt: { lt: cursor.updatedAt } },
-                  { updatedAt: cursor.updatedAt, id: { lt: cursor.id } },
-                ],
-              }
-            : {}),
-        },
+        where: { userId, id: { in: ids.map((row) => row.id) } },
         orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
-        take,
       });
     },
     createTask(data: Prisma.TaskUncheckedCreateInput) {

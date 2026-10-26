@@ -86,6 +86,14 @@ export const RunSchema = refineSchema(RunObject, "ScovaRun", (value) => {
     (value.status === "succeeded" && value.coverage?.completeness === "complete")
   );
 });
+export const RunListResponseSchema = Type.Object(
+  {
+    items: Type.Array(RunSchema, { description: "当前账号此任务的执行历史" }),
+    nextCursor: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+  },
+  { additionalProperties: false, description: "按排队时间与ID倒序的执行历史，游标绑定任务" },
+);
+describeProperties(RunListResponseSchema);
 export const RunCommandResponseSchema = Type.Object(
   { run: RunSchema, reused: Type.Boolean({ description: "是否返回已经存在的活动执行" }) },
   { additionalProperties: false, description: "执行命令的普通 JSON 响应；首次入队使用 HTTP 202" },

@@ -200,6 +200,7 @@ model Task {
   @@unique([userId, id])
   @@index([userId, status, updatedAt])
   @@map("tasks")
+  @@index([userId, updatedAt(sort: Desc), id(sort: Desc)], map: "tasks_history_page")
 }
 
 model TaskVersion {
@@ -317,6 +318,7 @@ model Run {
   @@index([userId, taskId, queuedAt(sort: Desc)])
   @@index([status, leaseExpiresAt])
   @@map("runs")
+  @@index([userId, taskId, queuedAt(sort: Desc), id(sort: Desc)], map: "runs_history_page")
 }
 
 model ToolCall {
@@ -522,6 +524,8 @@ model Report {
   @@unique([userId, runId, id])
   @@index([userId, publishedAt(sort: Desc)])
   @@map("reports")
+  @@index([userId, publishedAt(sort: Desc), id(sort: Desc)], map: "reports_history_page")
+  @@index([userId, taskId, publishedAt(sort: Desc), id(sort: Desc)], map: "reports_task_history_page")
 }
 
 model Claim {
@@ -617,6 +621,7 @@ model InboxItem {
   @@unique([userId, reportId])
   @@index([userId, readAt, createdAt])
   @@map("inbox_items")
+  @@index([userId, createdAt(sort: Desc), id(sort: Desc)], map: "inbox_history_page")
 }
 
 model Notification {
