@@ -46,7 +46,7 @@ erDiagram
 
 configJson 包括主题/目标/关注/排除/来源偏好、滚动或固定时间范围、manual/daily/weekly schedule、当地时分、weekday、timezone、outputFormat、预算、notificationPreference。用户默认时区与提醒偏好由 `PATCH /me/preferences` 保存，创建任务时复制到草稿，保存后以任务版本为准；修改用户默认值不追溯改写已有版本。重复字段仅用于索引的投影必须在保存版本的同一事务更新，禁止应用维护两份各自可写配置。
 
-TaskVersion 的 `comparisonScopeHash` 对标准化配置的语义子集和检索/提取策略版本计算，不把 nextRunAt、展示形式或提醒偏好加入。Run 的同名字段是 `hash(version.comparisonScopeHash + mode)`，即含服务模式的有效比较范围，不要求与版本字段相等。执行在创建时固化 mode，基线使用 Run 的有效范围。反馈快照独立保存，不原地修改配置版本。切换演示到真实执行必须建立真实基线。
+TaskVersion 的 `comparisonScopeHash` 对标准化配置的语义子集和检索/提取策略版本计算，不把 nextRunAt、展示形式或提醒偏好加入。Run 的同名字段对版本范围、mode 和比较策略版本一起计算，即含服务模式的有效比较范围，不要求与版本字段相等。执行在创建时固化 mode，首次领取固定 `baselineRunId`（也包括没有基线时的 null），恢复不重新选择。反馈快照独立保存，不原地修改配置版本。切换演示到真实执行或升级比较策略必须建立相应范围的基线。
 
 ## 3. 执行与持久化过程
 
@@ -68,18 +68,20 @@ LangGraph 自己的 checkpoint 表使用独立命名空间/迁移，不由 Prism
 
 ## 4. 来源、快照、引用与差异
 
-| 实体           | 主要字段                                                                                                                                   | 约束/语义                                                                                                                  |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
-| Source         | id、userId、canonicalUrl、canonicalUrlHash、firstSeenAt                                                                                    | unique(userId,canonicalUrlHash)；hash 命中仍比较原 URL 防碰撞；首版不跨用户共享正文                                        |
-| SourceSnapshot | id、userId、sourceId、contentHash、extractorVersion、title、publishedAt、textBody、textExpiresAt、metadataJson                             | unique(userId,sourceId,extractorVersion,contentHash)；快照不可变，过期仅清理正文大字段                                     |
-| RunSource      | id、userId、runId、sourceId、snapshotId、requestedUrl、fetchedUrl、observedAt、fetchStatus、errorCode、relevance                           | unique(runId,sourceId)；抓取失败时 snapshotId 可空；本次观测时间独立于快照首次建立时间                                     |
-| Evidence       | id、userId、runId、snapshotId、quote、selectorJson、quoteHash、capturedAt                                                                  | 引用不可变；保存短原文、段落/字符位置及提取版本；关联同用户 snapshot                                                       |
-| Report         | id、userId、runId、taskId、taskVersionId、baselineRunId、schemaVersion、title、summary、format、completeness、limitationsJson、publishedAt | unique(userId,runId)；任务/版本与 Run 一致；不可原地重写历史报告                                                           |
-| Claim          | id、userId、reportId、kind、text、confidenceLabel、order                                                                                   | kind=fact/inference/conflict/insufficient；事实型关键结论必须有引用                                                        |
-| ClaimEvidence  | userId、claimId、evidenceId、relation                                                                                                      | unique(claimId,evidenceId)；relation=supports/contradicts；全部外键同 owner                                                |
-| ChangeRecord   | id、userId、reportId、sourceId、kind、oldSnapshotId、newSnapshotId、factKey、oldValue、newValue、importance、reason、evidenceIds           | kind=baseline/new/duplicate/duplicate_candidate/changed/non_material/uncertain；快照必须属于本用户及对应来源或显式转载来源 |
+| 实体           | 主要字段                                                                                                                                                   | 约束/语义                                                                                                                  |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Source         | id、userId、canonicalUrl、canonicalUrlHash、firstSeenAt                                                                                                    | unique(userId,canonicalUrlHash)；hash 命中仍比较原 URL 防碰撞；首版不跨用户共享正文                                        |
+| SourceSnapshot | id、userId、sourceId、contentHash、extractorVersion、title、publishedAt、textBody、textExpiresAt、metadataJson                                             | unique(userId,sourceId,extractorVersion,contentHash)；快照不可变，过期仅清理正文大字段                                     |
+| RunSource      | id、userId、runId、sourceId、snapshotId、requestedUrl、fetchedUrl、observedAt、fetchStatus、errorCode、relevance                                           | unique(runId,sourceId)；抓取失败时 snapshotId 可空；本次观测时间独立于快照首次建立时间                                     |
+| Evidence       | id、userId、runId、snapshotId、quote、selectorJson、quoteHash、capturedAt                                                                                  | 引用不可变；保存短原文、段落/字符位置及提取版本；关联同用户 snapshot                                                       |
+| Report         | id、userId、runId、taskId、taskVersionId、baselineRunId、schemaVersion、title、summary、format、completeness、limitationsJson、comparisonJson、publishedAt | unique(userId,runId)；任务/版本与 Run 一致；不可原地重写历史报告                                                           |
+| Claim          | id、userId、reportId、kind、text、confidenceLabel、order                                                                                                   | kind=fact/inference/conflict/insufficient；事实型关键结论必须有引用                                                        |
+| ClaimEvidence  | userId、claimId、evidenceId、relation                                                                                                                      | unique(claimId,evidenceId)；relation=supports/contradicts；全部外键同 owner                                                |
+| ChangeRecord   | id、userId、reportId、sourceId、kind、oldSnapshotId、newSnapshotId、factKey、oldValue、newValue、importance、reason、evidenceIds                           | kind=baseline/new/duplicate/duplicate_candidate/changed/non_material/uncertain；快照必须属于本用户及对应来源或显式转载来源 |
 
 正文稳定指纹只用于内容去重，不代替来源 ID。一个 Source 可对应多个快照，同一个快照可以被多次执行观测。相同规范 URL 先比较自己上一版本的事实，再判断是否与其他页面重复。跨 URL 转载保留独立 Source 和可解释匹配，不把不同机构的相似招生通知合并成一条事实。
+
+`Report.comparisonJson` 保存版本化事实清单：本次 Run、有效范围与模式、各来源的规范 URL/正文指纹/提取版本，以及带逐字引用的事实键和值。它不复制完整正文；对应引用证据随报告保留。历史缺少可授权事实清单时保留比较缺口，不由空数据推导“无重要变化”。
 
 最终交付校验：每条 Claim 的引用必须来自本执行证据或明确引用的基线证据；引用不能是另一用户的数据。changed 必须有 old/new 证据；new 不能伪造旧值。证据不足时降级为 inference/insufficient，不通过生成一个 URL 充当引用。
 

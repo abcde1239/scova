@@ -24,6 +24,62 @@ export interface AgentContext {
   /** Must check cancellation/lease. With allowDeadline=true, only elapsed deadline is permitted. */
   assertActive: (allowDeadline?: boolean) => Promise<void>;
   demoReason?: string;
+  /** Effective task scope including service mode; absent only for legacy executions. */
+  comparisonScopeHash?: string;
+  baselineRunId?: string | null;
+  baseline?: AgentBaseline | null;
+}
+
+export interface ComparisonFact {
+  id: string;
+  subject: string;
+  predicate: string;
+  value: string;
+  quote: string;
+  relevance: "relevant" | "excluded" | "unknown";
+  importance: "important" | "non_material" | "unknown";
+  relation?: { kind: "secondary" | "revision" | "contrasting"; url: string; quote: string };
+}
+export interface ComparisonManifest {
+  schemaVersion: 1;
+  runId: string;
+  comparisonScopeHash: string;
+  mode: Mode;
+  pages: {
+    pageId: string;
+    url: string;
+    contentHash: string;
+    extractorVersion: string;
+    facts: ComparisonFact[];
+  }[];
+}
+export interface AgentBaseline {
+  runId: string;
+  userId: string;
+  comparisonScopeHash: string;
+  mode: Mode;
+  status: "ready" | "unavailable";
+  manifest: ComparisonManifest | null;
+  evidence: { id: string; pageId: string; quote: string }[];
+}
+export interface AgentChange {
+  kind:
+    | "baseline"
+    | "new"
+    | "duplicate"
+    | "duplicate_candidate"
+    | "changed"
+    | "non_material"
+    | "uncertain";
+  pageId: string;
+  url: string;
+  factKey: string;
+  oldValue: string | null;
+  newValue: string | null;
+  oldEvidenceIds: string[];
+  newCitations: AgentCitation[];
+  important: boolean;
+  reason: string;
 }
 
 export interface AgentCitation {
@@ -54,8 +110,9 @@ export interface AgentCandidate {
   claims: AgentClaim[];
   pages: AgentPage[];
   coverage: Coverage;
-  /** Comparison requires #17 baseline contract; this Agent never invents a baseline outcome. */
-  comparison: "not_performed";
+  comparison: "not_performed" | "completed";
+  manifest?: ComparisonManifest;
+  changes?: AgentChange[];
 }
 
 export interface AgentDependencies {

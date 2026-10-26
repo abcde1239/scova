@@ -16,6 +16,7 @@ import {
 import { validatePublication, type ReadPage, type SearchResponse } from "@scova/connectors";
 import type { PrismaClient, Run, ToolCall } from "@scova/models";
 import { appendEvent, withRunFence } from "@/repo/runs.ts";
+import { loadBaseline } from "@/repo/comparison.ts";
 import { RunExecutionError, RunFenceError, type RunLeaseToken } from "@/utils/runs.ts";
 
 const hash = (text: string) => createHash("sha256").update(text, "utf8").digest("hex");
@@ -99,6 +100,9 @@ export function createDeliveryRepository(db: PrismaClient) {
             if (!version) return invalid();
             const config = parseContract(TaskConfigSchema, version.configJson);
             const context = contextFor(run, config);
+            context.comparisonScopeHash = run.comparisonScopeHash;
+            context.baselineRunId = run.baselineRunId;
+            context.baseline = await loadBaseline(tx, run);
             const calls = await tx.toolCall.findMany({
               where: { userId: run.userId, runId: run.id },
               orderBy: [{ operationKey: "asc" }, { attemptNo: "asc" }],
@@ -155,6 +159,29 @@ export function createDeliveryRepository(db: PrismaClient) {
                 )
               )
                 invalid();
+            }
+            if (candidate.manifest) {
+              const extraction = successful.find(
+                (call) =>
+                  call.tool === "model" && call.operationKey.startsWith("compare-facts-v1:"),
+              );
+              const modelPages = extraction
+                ? (
+                    output(extraction) as {
+                      data?: { pages?: { pageId: string; facts: unknown[] }[] };
+                    }
+                  ).data?.pages
+                : undefined;
+              if (
+                !Array.isArray(modelPages) ||
+                modelPages.length !== candidate.manifest.pages.length
+              )
+                invalid();
+              for (const page of candidate.manifest.pages) {
+                const extracted = modelPages!.find((entry) => entry.pageId === page.pageId);
+                const facts = page.facts.map(({ id: _id, ...fact }) => fact);
+                if (!extracted || !isDeepStrictEqual(facts, extracted.facts)) invalid();
+              }
             }
             const gaps = [...candidate.coverage.gaps];
             // These checks are independent of a model/caller's completeness flag.
@@ -216,7 +243,7 @@ export function createDeliveryRepository(db: PrismaClient) {
             const byUrl = new Map<string, string>();
             const pageRecords = new Map<
               string,
-              { snapshotId: string; text: string; extractor: string }
+              { sourceId: string; snapshotId: string; text: string; extractor: string }
             >();
             for (const page of candidate.pages) {
               const publication = validatePublication(page.publication);
@@ -306,6 +333,7 @@ export function createDeliveryRepository(db: PrismaClient) {
                 update: {},
               });
               pageRecords.set(page.id, {
+                sourceId: source.id,
                 snapshotId: snapshot.id,
                 text: page.text,
                 extractor: page.extractionVersion,
@@ -320,7 +348,7 @@ export function createDeliveryRepository(db: PrismaClient) {
                 },
               },
             });
-            if (baseline && candidate.comparison === "not_performed") {
+            if ((baseline || run.baselineRunId) && candidate.comparison === "not_performed") {
               candidate.coverage = parseContract(CoverageSchema, {
                 ...candidate.coverage,
                 completeness: "partial",
@@ -329,23 +357,83 @@ export function createDeliveryRepository(db: PrismaClient) {
                 ],
               });
             }
+            if (run.baselineRunId && context.baseline?.status !== "ready") {
+              candidate.coverage.completeness = "partial";
+              candidate.coverage.gaps = [
+                ...new Set([
+                  ...candidate.coverage.gaps,
+                  "冻结基线的比较清单或引用不可用，未推断无变化",
+                ]),
+              ];
+            }
             const complete = candidate.coverage.completeness === "complete";
-            const outcome = complete && !baseline ? "baseline" : "inconclusive";
+            const changes = candidate.changes ?? [];
+            const outcome = !complete
+              ? "inconclusive"
+              : !run.baselineRunId
+                ? "baseline"
+                : changes.some((change) => change.important && change.kind === "changed")
+                  ? "important_change"
+                  : changes.some((change) => change.kind === "new")
+                    ? "new_findings"
+                    : "no_important_change";
             const report = await tx.report.create({
               data: {
                 userId: run.userId,
                 runId: run.id,
                 taskId: run.taskId,
                 taskVersionId: run.taskVersionId,
-                baselineRunId: candidate.comparison === "not_performed" ? null : run.baselineRunId,
+                baselineRunId: run.baselineRunId,
                 title: candidate.title,
                 summary: candidate.claims.map((claim) => claim.text).join("\n\n"),
                 format: config.outputFormat,
                 completeness: candidate.coverage.completeness,
                 limitationsJson: candidate.coverage.gaps,
+                comparisonJson: candidate.manifest
+                  ? JSON.parse(JSON.stringify(candidate.manifest))
+                  : undefined,
               },
             });
             const evidence = new Map<string, string>();
+            async function saveEvidence(citation: {
+              pageId: string;
+              quote: string;
+            }): Promise<string> {
+              const page = pageRecords.get(citation.pageId);
+              if (!page) return invalid();
+              const start = page.text.indexOf(citation.quote);
+              if (
+                start < 0 ||
+                !citation.quote.trim() ||
+                citation.quote.length > 2000 ||
+                hash(page.text.slice(start, start + citation.quote.length)) !== hash(citation.quote)
+              )
+                invalid();
+              const key = `${page.snapshotId}:${hash(citation.quote)}`;
+              const previous = evidence.get(key);
+              if (previous) return previous;
+              const record = await tx.evidence.create({
+                data: {
+                  userId: run.userId,
+                  runId: run.id,
+                  snapshotId: page.snapshotId,
+                  quote: citation.quote,
+                  quoteHash: hash(citation.quote),
+                  capturedAt: now,
+                  selectorJson: {
+                    type: "text_offset",
+                    start,
+                    end: start + citation.quote.length,
+                    extractorVersion: page.extractor,
+                  },
+                },
+              });
+              evidence.set(key, record.id);
+              return record.id;
+            }
+            for (const page of candidate.manifest?.pages ?? [])
+              for (const fact of page.facts)
+                await saveEvidence({ pageId: page.pageId, quote: fact.quote });
             for (const [order, item] of candidate.claims.entries()) {
               const claim = await tx.claim.create({
                 data: {
@@ -407,6 +495,83 @@ export function createDeliveryRepository(db: PrismaClient) {
                   update: {},
                 });
               }
+            }
+            for (const item of changes) {
+              const page = pageRecords.get(item.pageId);
+              if (!page) return invalid();
+              if (candidate.comparison !== "completed") invalid();
+              const oldIds = [...new Set(item.oldEvidenceIds)];
+              const allowedOld = new Set(context.baseline?.evidence.map((entry) => entry.id) ?? []);
+              if (oldIds.some((id) => !allowedOld.has(id))) invalid();
+              const oldEvidence = oldIds.length
+                ? await tx.evidence.findMany({
+                    where: {
+                      id: { in: oldIds },
+                      userId: run.userId,
+                      runId: run.baselineRunId!,
+                    },
+                    include: { observation: { include: { source: true, snapshot: true } } },
+                  })
+                : [];
+              if (
+                oldEvidence.length !== oldIds.length ||
+                oldEvidence.some(
+                  (entry) =>
+                    entry.observation.snapshotId !== entry.snapshotId ||
+                    entry.observation.fetchStatus !== "succeeded",
+                )
+              )
+                invalid();
+              const oldSnapshotIds = new Set(oldEvidence.map((entry) => entry.snapshotId));
+              if (oldSnapshotIds.size > 1) invalid();
+              if (
+                item.kind === "changed" &&
+                (!oldEvidence.length ||
+                  !item.newCitations.length ||
+                  item.oldValue === null ||
+                  item.newValue === null)
+              )
+                invalid();
+              if (
+                item.kind === "new" &&
+                (oldEvidence.length || item.oldValue !== null || !item.newCitations.length)
+              )
+                invalid();
+              if (item.important && item.kind !== "changed") invalid();
+              const change = await tx.changeRecord.create({
+                data: {
+                  userId: run.userId,
+                  reportId: report.id,
+                  sourceId: page.sourceId,
+                  kind: item.kind,
+                  factKey: item.factKey,
+                  oldValue: item.oldValue,
+                  newValue: item.newValue,
+                  oldSourceId: oldEvidence[0]?.observation.sourceId ?? null,
+                  oldSnapshotId: oldEvidence[0]?.snapshotId ?? null,
+                  newSnapshotId: page.snapshotId,
+                  importance: item.important ? "important" : "normal",
+                  reason: item.reason,
+                },
+              });
+              for (const old of oldEvidence)
+                await tx.changeEvidence.create({
+                  data: {
+                    userId: run.userId,
+                    changeRecordId: change.id,
+                    evidenceId: old.id,
+                    side: "old",
+                  },
+                });
+              const newIds = new Set<string>();
+              for (const citation of item.newCitations) {
+                if (citation.pageId !== item.pageId) invalid();
+                newIds.add(await saveEvidence(citation));
+              }
+              for (const evidenceId of newIds)
+                await tx.changeEvidence.create({
+                  data: { userId: run.userId, changeRecordId: change.id, evidenceId, side: "new" },
+                });
             }
             if (!evidence.size) throw new RunExecutionError("NO_EVIDENCE");
             await tx.inboxItem.create({ data: { userId: run.userId, reportId: report.id } });

@@ -333,4 +333,25 @@ describe("长期任务、不可变版本与并发编辑", () => {
     const b = config({ timezone: "UTC" });
     expect(comparisonScopeHash(a as TaskConfig)).toBe(comparisonScopeHash(b as TaskConfig));
   });
+
+  it("比较范围保留预算调整，关键来源和时间窗口改变则隔离", () => {
+    const original = config();
+    const baselineScope = comparisonScopeHash(original as TaskConfig);
+    expect(
+      comparisonScopeHash(config({ budget: { ...original.budget, maxSearches: 2 } }) as TaskConfig),
+    ).toBe(baselineScope);
+    expect(
+      comparisonScopeHash(
+        config({
+          sourcePreferences: {
+            ...original.sourcePreferences,
+            preferredUrls: ["https://example.org/admission"],
+          },
+        }) as TaskConfig,
+      ),
+    ).not.toBe(baselineScope);
+    expect(
+      comparisonScopeHash(config({ timeRange: { kind: "rolling", days: 30 } }) as TaskConfig),
+    ).not.toBe(baselineScope);
+  });
 });

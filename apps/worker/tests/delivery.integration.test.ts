@@ -1,4 +1,8 @@
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { nodeScriptCommand } from "../../../scripts/process-runtime.mjs";
+import type { Report } from "@scova/contracts";
 import { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test";
@@ -80,8 +84,15 @@ async function liveResearch(
       "user" | "task" | "version" | "config" | "run"
     >;
     body?: string;
+    bodyByUrl?: Record<string, string>;
+    extractionVersion?: string;
     maxTextChars?: number;
     claimKind?: "fact" | "inference" | "insufficient" | "conflict";
+    importance?: "important" | "non_material" | "unknown";
+    factValue?: string;
+    pageUrl?: string;
+    failUrls?: string[];
+    skipExecute?: boolean;
   } = {},
 ) {
   const initial = options.previous ?? (await seedRun(fixture.db, { mode: "live" }));
@@ -101,17 +112,18 @@ async function liveResearch(
     : initial.run;
   const claimed = await runs.claim(run.id, "delivery-live", 60_000);
   if (claimed.kind !== "claimed") throw new Error("Expected claimed live Run");
-  const url = "https://example.com/publication";
+  const url = options.pageUrl ?? "https://example.com/publication";
   const publication = new Date(Date.now() - 60_000).toISOString();
   const reader = createPageReader({
     maxTextChars: options.maxTextChars,
     http: {
       async request(requestedUrl) {
+        if (options.failUrls?.includes(requestedUrl)) throw new Error("Injected missing source");
         return {
           url: requestedUrl,
           status: 200,
           headers: { "content-type": "text/html; charset=utf-8" },
-          body: `<html><head><title>采集公告</title><meta property="article:published_time" content="${publication}"></head><body><article><p>${options.body ?? (requestedUrl.endsWith("alternate") ? "第二来源称申请截止日期为十一月十六日。" : "这是已发布的公共公告，申请截止日期为十一月十五日。")}</p></article></body></html>`,
+          body: `<html><head><title>采集公告</title><meta property="article:published_time" content="${publication}"></head><body><article><p>${options.bodyByUrl?.[requestedUrl] ?? options.body ?? (requestedUrl.endsWith("alternate") ? "第二来源称申请截止日期为十一月十六日。" : "这是已发布的公共公告，申请截止日期为十一月十五日。")}</p></article></body></html>`,
         };
       },
     },
@@ -119,7 +131,14 @@ async function liveResearch(
   const base = createConnectorBundle();
   const bundle: ConnectorBundle = {
     mode: "live",
-    reader,
+    reader: {
+      async read(url, context) {
+        const page = await reader.read(url, context);
+        return options.extractionVersion
+          ? { ...page, extractionVersion: options.extractionVersion }
+          : page;
+      },
+    },
     search: {
       async search(query, context) {
         const result = await base.search.search(query, context);
@@ -146,6 +165,29 @@ async function liveResearch(
         const source = input.untrustedSources?.[0] as { pageId: string; text: string } | undefined;
         const sources = input.untrustedSources as { pageId: string; text: string }[] | undefined;
         const claimKind = options.claimKind ?? "fact";
+        if (Object.hasOwn((input.schema.properties ?? {}) as object, "pages"))
+          return {
+            mode: "live",
+            usage: { inputTokens: 1, outputTokens: 1, estimated: false },
+            data: {
+              pages: sources!.map((page) => ({
+                pageId: page.pageId,
+                facts:
+                  claimKind === "insufficient"
+                    ? []
+                    : [
+                        {
+                          subject: "公开公告",
+                          predicate: "公告内容",
+                          value: options.factValue ?? page.text,
+                          quote: page.text,
+                          relevance: "relevant",
+                          importance: options.importance ?? "important",
+                        },
+                      ],
+              })),
+            } as T,
+          };
         return {
           mode: "live",
           usage: { inputTokens: 1, outputTokens: 1, estimated: false },
@@ -200,7 +242,7 @@ async function liveResearch(
     context,
     bundle,
   });
-  const candidate = await session.execute();
+  const candidate = options.skipExecute ? undefined : await session.execute();
   return {
     user: initial.user,
     task: initial.task,
@@ -210,11 +252,388 @@ async function liveResearch(
     claimed,
     context,
     session,
-    candidate,
+    bundle,
+    candidate: candidate!,
   };
 }
 
 describe("原子证据与报告交付（真实 PostgreSQL，不使用 Redis）", () => {
+  it.each(["new", "repost"] as const)("新增URL按%s分类，不把转载当独立新增", async (kind) => {
+    const first = await liveResearch();
+    await delivery.deliver(first.claimed.token, first.candidate);
+    const addedUrl = "https://example.com/new-material?programme=ai";
+    const second = await liveResearch({
+      previous: first,
+      pageUrl: addedUrl,
+      bodyByUrl:
+        kind === "new" ? { [addedUrl]: "新增公开课程，报名截止日期为十二月一日。" } : undefined,
+    });
+    const result = await delivery.deliver(second.claimed.token, second.candidate);
+    const changes = await fixture.db.changeRecord.findMany({
+      where: { reportId: result.reportId },
+      include: { source: true },
+    });
+    expect(changes.find((change) => change.source.canonicalUrl === addedUrl)).toMatchObject({
+      kind: kind === "new" ? "new" : "duplicate_candidate",
+      importance: "normal",
+    });
+    expect(await fixture.db.run.findUniqueOrThrow({ where: { id: second.run.id } })).toMatchObject({
+      status: "succeeded",
+      outcome: kind === "new" ? "new_findings" : "no_important_change",
+    });
+  });
+
+  it("提取版本变化保守partial而非完整重复，旧完整基线不变", async () => {
+    const first = await liveResearch();
+    await delivery.deliver(first.claimed.token, first.candidate);
+    const second = await liveResearch({
+      previous: first,
+      extractionVersion: "readability/future-v2",
+    });
+    const result = await delivery.deliver(second.claimed.token, second.candidate);
+    expect(
+      await fixture.db.report.findUniqueOrThrow({ where: { id: result.reportId } }),
+    ).toMatchObject({ completeness: "partial" });
+    expect(await fixture.db.run.findUniqueOrThrow({ where: { id: second.run.id } })).toMatchObject({
+      outcome: "inconclusive",
+    });
+    expect(
+      await fixture.db.baseline.findFirstOrThrow({ where: { taskId: first.task.id } }),
+    ).toMatchObject({ completeRunId: first.run.id });
+  });
+
+  it.each(["foreign-page", "missing-quote"] as const)(
+    "基线manifest %s损坏不借用别人的snapshot或无引用事实",
+    async (kind) => {
+      const first = await liveResearch();
+      await delivery.deliver(first.claimed.token, first.candidate);
+      const manifest = structuredClone(first.candidate.manifest!);
+      if (kind === "foreign-page") manifest.pages[0].url = "https://foreign.example/source";
+      else {
+        manifest.pages[0].facts[0].quote = "没有保留引用的旧事实";
+        manifest.pages[0].facts[0].value = "旧事实";
+      }
+      await fixture.db.report.updateMany({
+        where: { runId: first.run.id },
+        data: { comparisonJson: JSON.parse(JSON.stringify(manifest)) },
+      });
+      const second = await liveResearch({ previous: first });
+      expect(
+        await createAgentRepository(fixture.db, second.claimed.token).comparison(),
+      ).toMatchObject({ baselineRunId: first.run.id, baseline: { status: "unavailable" } });
+      await delivery.deliver(second.claimed.token, second.candidate);
+      expect(
+        await fixture.db.run.findUniqueOrThrow({ where: { id: second.run.id } }),
+      ).toMatchObject({ status: "partial", outcome: "inconclusive" });
+      expect(
+        await fixture.db.baseline.findFirstOrThrow({ where: { taskId: first.task.id } }),
+      ).toMatchObject({ completeRunId: first.run.id });
+    },
+  );
+
+  it("首次冻结null后即使出现新指针，恢复仍保持null；模式不匹配的基线不采用", async () => {
+    const initial = await liveResearch({ skipExecute: true });
+    expect(initial.claimed.run.baselineRunId).toBeNull();
+    const history = await fixture.db.run.create({
+      data: {
+        userId: initial.user.id,
+        taskId: initial.task.id,
+        taskVersionId: initial.version.id,
+        comparisonScopeHash: initial.run.comparisonScopeHash,
+        mode: "live",
+        trigger: "manual",
+        status: "succeeded",
+        outcome: "baseline",
+        budgetJson: initial.config.budget,
+        coverageJson: { completeness: "complete", gaps: [], searchedQueries: [], exhausted: [] },
+      },
+    });
+    await fixture.db.report.create({
+      data: {
+        userId: initial.user.id,
+        taskId: initial.task.id,
+        taskVersionId: initial.version.id,
+        runId: history.id,
+        title: "历史报告",
+        summary: "历史完整来源",
+        format: "brief",
+        completeness: "complete",
+      },
+    });
+    await fixture.db.baseline.create({
+      data: {
+        userId: initial.user.id,
+        taskId: initial.task.id,
+        comparisonScopeHash: initial.run.comparisonScopeHash,
+        completeRunId: history.id,
+      },
+    });
+    await fixture.db.run.update({
+      where: { id: initial.run.id },
+      data: { leaseExpiresAt: new Date(0) },
+    });
+    const recovered = await runs.claim(initial.run.id, "null-recovery", 60_000);
+    if (recovered.kind !== "claimed") throw new Error("Expected recovery");
+    expect(recovered.run.baselineRunId).toBeNull();
+    expect(await createAgentRepository(fixture.db, recovered.token).comparison()).toMatchObject({
+      baselineRunId: null,
+      baseline: null,
+    });
+    await runs.finish(recovered.token, { code: "EXECUTOR_FAILED" });
+    const demo = await fixture.db.run.create({
+      data: {
+        userId: initial.user.id,
+        taskId: initial.task.id,
+        taskVersionId: initial.version.id,
+        comparisonScopeHash: initial.run.comparisonScopeHash,
+        mode: "demo",
+        trigger: "manual",
+        budgetJson: initial.config.budget,
+        usageJson: { searches: 0, pages: 0, inputTokens: 0, outputTokens: 0, estimated: false },
+      },
+    });
+    const demoClaim = await runs.claim(demo.id, "demo-isolation");
+    if (demoClaim.kind !== "claimed") throw new Error("Expected demo claim");
+    expect(demoClaim.run.baselineRunId).toBeNull();
+  });
+
+  it("同URL关键事实变化保存双方真实证据，完整重要变化推进基线；第三次不完整不推进", async () => {
+    const first = await liveResearch({ body: "申请截止日期为十一月十五日。" });
+    const firstDelivery = await delivery.deliver(first.claimed.token, first.candidate);
+    const second = await liveResearch({ previous: first, body: "申请截止日期为十一月二十日。" });
+    expect(second.claimed.run.baselineRunId).toBe(first.run.id);
+    const result = await delivery.deliver(second.claimed.token, second.candidate);
+    const report = await fixture.db.report.findUniqueOrThrow({
+      where: { id: result.reportId },
+      include: { changes: { include: { citations: { include: { evidence: true } } } } },
+    });
+    expect(report).toMatchObject({ baselineRunId: first.run.id, completeness: "complete" });
+    expect(await fixture.db.run.findUniqueOrThrow({ where: { id: second.run.id } })).toMatchObject({
+      status: "succeeded",
+      outcome: "important_change",
+    });
+    const change = report.changes.find((entry) => entry.kind === "changed")!;
+    expect(change).toMatchObject({
+      oldValue: "申请截止日期为十一月十五日。",
+      newValue: "申请截止日期为十一月二十日。",
+      importance: "important",
+    });
+    const old = change.citations.find((entry) => entry.side === "old")!.evidence;
+    const current = change.citations.find((entry) => entry.side === "new")!.evidence;
+    expect(old).toMatchObject({
+      runId: first.run.id,
+      quote: change.oldValue,
+      snapshotId: change.oldSnapshotId,
+    });
+    expect(current).toMatchObject({
+      runId: second.run.id,
+      quote: change.newValue,
+      snapshotId: change.newSnapshotId,
+    });
+    expect(change.oldSourceId).toBe(change.sourceId);
+    const probe = nodeScriptCommand("tests/support/read-delivered-report.ts");
+    const readReport = JSON.parse(
+      execFileSync(probe.executable, probe.args, {
+        cwd: fileURLToPath(new URL("../../server/", import.meta.url)),
+        env: {
+          ...process.env,
+          SCOVA_REPORT_PROBE_DATABASE_URL: fixture.databaseUrl,
+          SCOVA_REPORT_PROBE_USER_ID: first.user.id,
+          SCOVA_REPORT_PROBE_REPORT_ID: result.reportId,
+        },
+        encoding: "utf8",
+        windowsHide: true,
+        timeout: 20_000,
+      }),
+    ) as Report;
+    expect(readReport).toMatchObject({
+      baselineRunId: first.run.id,
+      outcome: "important_change",
+      coverage: { completeness: "complete" },
+    });
+    const readChange = readReport.changes.find((entry) => entry.kind === "changed")!;
+    expect(readChange.oldEvidenceIds).toContain(old.id);
+    expect(readChange.newEvidenceIds).toContain(current.id);
+    expect(readReport.evidence.find((entry) => entry.id === old.id)?.quote).toBe(old.quote);
+    expect(readReport.evidence.find((entry) => entry.id === current.id)?.quote).toBe(current.quote);
+    const third = await liveResearch({
+      previous: second,
+      body: "申请截止日期为十一月二十一日。额外未采集内容",
+      maxTextChars: 14,
+    });
+    await delivery.deliver(third.claimed.token, third.candidate);
+    expect(await fixture.db.run.findUniqueOrThrow({ where: { id: third.run.id } })).toMatchObject({
+      status: "partial",
+      outcome: "inconclusive",
+    });
+    expect(
+      await fixture.db.baseline.findFirstOrThrow({ where: { taskId: first.task.id } }),
+    ).toMatchObject({ completeRunId: second.run.id });
+    expect(await delivery.deliver(second.claimed.token, second.candidate)).toMatchObject({
+      reportId: result.reportId,
+      reused: true,
+    });
+    expect(await fixture.db.report.count({ where: { runId: first.run.id } })).toBe(1);
+    const immutableFirst = await fixture.db.report.findUniqueOrThrow({
+      where: { id: firstDelivery.reportId },
+    });
+    expect(immutableFirst.comparisonJson).toEqual(first.candidate.manifest);
+    expect(JSON.stringify(immutableFirst.comparisonJson)).not.toContain('"text":');
+  });
+
+  it("正文噪声变化但稳定事实未变为non_material，完整无重要变化", async () => {
+    const first = await liveResearch({
+      body: "Deadline: 15 November. Navigation: v1.",
+      factValue: "15 November",
+    });
+    await delivery.deliver(first.claimed.token, first.candidate);
+    const second = await liveResearch({
+      previous: first,
+      body: "Deadline: 15 November. Navigation: v2.",
+      factValue: "15 November",
+    });
+    const result = await delivery.deliver(second.claimed.token, second.candidate);
+    expect(
+      await fixture.db.changeRecord.findMany({ where: { reportId: result.reportId } }),
+    ).toMatchObject([{ kind: "non_material", importance: "normal" }]);
+    expect(await fixture.db.run.findUniqueOrThrow({ where: { id: second.run.id } })).toMatchObject({
+      outcome: "no_important_change",
+      status: "succeeded",
+    });
+  });
+
+  it("缺旧来源或未知重要性均partial，不推断撤回/无变化或覆盖既有基线", async () => {
+    const first = await liveResearch();
+    await delivery.deliver(first.claimed.token, first.candidate);
+    const second = await liveResearch({
+      previous: first,
+      pageUrl: "https://example.com/new",
+      failUrls: ["https://example.com/publication"],
+      importance: "unknown",
+    });
+    const result = await delivery.deliver(second.claimed.token, second.candidate);
+    const report = await fixture.db.report.findUniqueOrThrow({
+      where: { id: result.reportId },
+      include: { changes: true },
+    });
+    expect(report).toMatchObject({ completeness: "partial", baselineRunId: first.run.id });
+    expect(report.changes.every((entry) => entry.importance !== "important")).toBe(true);
+    expect(await fixture.db.run.findUniqueOrThrow({ where: { id: second.run.id } })).toMatchObject({
+      outcome: "inconclusive",
+    });
+    expect(
+      await fixture.db.baseline.findFirstOrThrow({ where: { taskId: first.task.id } }),
+    ).toMatchObject({ completeRunId: first.run.id });
+  });
+
+  it("冻结基线在恢复时不追随当前指针；promoted比较状态恢复复用账本结果", async () => {
+    const first = await liveResearch();
+    await delivery.deliver(first.claimed.token, first.candidate);
+    const prior = await liveResearch({ previous: first });
+    await delivery.deliver(prior.claimed.token, prior.candidate);
+    const current = await liveResearch({ previous: prior });
+    expect(current.claimed.run.baselineRunId).toBe(prior.run.id);
+    await fixture.db.baseline.updateMany({
+      where: { taskId: first.task.id },
+      data: { completeRunId: first.run.id },
+    });
+    const count = await fixture.db.toolCall.count({ where: { runId: current.run.id } });
+    await fixture.db.run.update({
+      where: { id: current.run.id },
+      data: { leaseExpiresAt: new Date(0) },
+    });
+    const next = await runs.claim(current.run.id, "comparison-recovery", 60_000);
+    if (next.kind !== "claimed") throw new Error("Expected recovered claim");
+    expect(next.run.baselineRunId).toBe(prior.run.id);
+    const repo = createAgentRepository(fixture.db, next.token);
+    expect(await repo.comparison()).toMatchObject({
+      baselineRunId: prior.run.id,
+      baseline: { status: "ready", runId: prior.run.id },
+    });
+    const session = createAgentSession({
+      repository: repo,
+      saver,
+      token: next.token,
+      bundle: current.bundle,
+      context: {
+        ...current.context,
+        usage: next.usage,
+        assertActive: () => runs.assertActive(next.token),
+        emit: (event) => runs.emit(next.token, event),
+      },
+    });
+    const candidate = await session.execute();
+    expect(await fixture.db.toolCall.count({ where: { runId: current.run.id } })).toBe(count);
+    expect(candidate).toEqual(current.candidate);
+    await expect(delivery.deliver(current.claimed.token, current.candidate)).rejects.toMatchObject({
+      code: "INVALID_DELIVERY_EVIDENCE",
+    });
+    await delivery.deliver(next.token, candidate);
+  });
+
+  it("历史无manifest的合法基线保留冻结指针但比较保守partial，不当首次建基线", async () => {
+    const first = await liveResearch();
+    await delivery.deliver(first.claimed.token, first.candidate);
+    await fixture.db
+      .$executeRaw`UPDATE reports SET comparison_json=NULL WHERE run_id=${first.run.id}::uuid`;
+    const second = await liveResearch({ previous: first });
+    expect(second.claimed.run.baselineRunId).toBe(first.run.id);
+    expect(
+      await createAgentRepository(fixture.db, second.claimed.token).comparison(),
+    ).toMatchObject({ baseline: { status: "unavailable" } });
+    await delivery.deliver(second.claimed.token, second.candidate);
+    expect(await fixture.db.run.findUniqueOrThrow({ where: { id: second.run.id } })).toMatchObject({
+      status: "partial",
+      outcome: "inconclusive",
+    });
+    expect(
+      await fixture.db.baseline.findFirstOrThrow({ where: { taskId: first.task.id } }),
+    ).toMatchObject({ completeRunId: first.run.id });
+  });
+
+  it("篡改已提升manifest重要性或候选oldEvidenceIds无法绕过成功模型账本/冻结证据授权", async () => {
+    const first = await liveResearch();
+    await delivery.deliver(first.claimed.token, first.candidate);
+    const second = await liveResearch({
+      previous: first,
+      body: "内容已变化。",
+      importance: "non_material",
+    });
+    const other = await liveResearch();
+    await delivery.deliver(other.claimed.token, other.candidate);
+    const foreign = await fixture.db.evidence.findFirstOrThrow({ where: { runId: other.run.id } });
+    const forged = structuredClone(second.candidate);
+    forged.changes![0].oldEvidenceIds = [foreign.id];
+    await expect(delivery.deliver(second.claimed.token, forged)).rejects.toMatchObject({
+      code: "INVALID_DELIVERY_EVIDENCE",
+    });
+    const row = await fixture.db.run.findUniqueOrThrow({ where: { id: second.run.id } });
+    const ref = row.checkpointRef as {
+      threadId: string;
+      namespace: "";
+      checkpointId: string;
+      leaseEpoch: number;
+    };
+    const config = {
+      configurable: { thread_id: ref.threadId, checkpoint_ns: "", checkpoint_id: ref.checkpointId },
+    };
+    const tuple = (await saver.getTuple(config))!;
+    const checkpoint = structuredClone(tuple.checkpoint);
+    const state = checkpoint.channel_values.research as { manifest: AgentCandidate["manifest"] };
+    state.manifest!.pages[0].facts[0].importance = "important";
+    checkpoint.id = crypto.randomUUID();
+    const saved = await saver.put(config, checkpoint, tuple.metadata!, checkpoint.channel_versions);
+    await createAgentRepository(fixture.db, second.claimed.token).promoteCheckpoint({
+      ...ref,
+      checkpointId: saved.configurable!.checkpoint_id as string,
+    });
+    const comparison = await createAgentRepository(fixture.db, second.claimed.token).comparison();
+    const promotedForgery = candidateFromCheckpoint({ ...second.context, ...comparison }, state);
+    await expect(delivery.deliver(second.claimed.token, promotedForgery)).rejects.toMatchObject({
+      code: "INVALID_DELIVERY_EVIDENCE",
+    });
+    await assertEmpty(second.run.id);
+  });
   it.each(["inference", "conflict"] as const)(
     "%s以明确标签和真实引用保存，冲突保留双方引用",
     async (kind) => {
@@ -288,35 +707,41 @@ describe("原子证据与报告交付（真实 PostgreSQL，不使用 Redis）",
     });
   });
 
-  it("首次完整基线后，第二轮完整采集但未连续比较必须partial并保留原基线", async () => {
+  it("首次完整基线后，第二轮完成比较的重复资料可声明无重要变化并推进基线", async () => {
     const first = await liveResearch();
     expect(first.candidate.coverage.completeness).toBe("complete");
     await delivery.deliver(first.claimed.token, first.candidate);
     const second = await liveResearch({ previous: first });
     expect(second.candidate).toMatchObject({
-      comparison: "not_performed",
+      comparison: "completed",
       coverage: { completeness: "complete", gaps: [] },
     });
     const result = await delivery.deliver(second.claimed.token, second.candidate);
     const report = await fixture.db.report.findUniqueOrThrow({ where: { id: result.reportId } });
-    expect(report).toMatchObject({ completeness: "partial", baselineRunId: null });
-    expect(report.limitationsJson).toContain("连续比较尚未执行，不能推进已有基线");
+    expect(report).toMatchObject({ completeness: "complete", baselineRunId: first.run.id });
+    expect(report.limitationsJson).toEqual([]);
     expect(await fixture.db.run.findUniqueOrThrow({ where: { id: second.run.id } })).toMatchObject({
-      status: "partial",
-      outcome: "inconclusive",
+      status: "succeeded",
+      outcome: "no_important_change",
       coverageJson: {
-        completeness: "partial",
-        gaps: ["连续比较尚未执行，不能推进已有基线"],
+        completeness: "complete",
+        gaps: [],
       },
     });
     expect(
       await fixture.db.baseline.findFirstOrThrow({ where: { taskId: first.task.id } }),
-    ).toMatchObject({ completeRunId: first.run.id });
+    ).toMatchObject({ completeRunId: second.run.id });
     expect(await fixture.db.inboxItem.count({ where: { reportId: result.reportId } })).toBe(1);
     const completed = await fixture.db.runEvent.findFirstOrThrow({
       where: { runId: second.run.id, type: "run.completed" },
     });
-    expect(completed.payload).toMatchObject({ status: "partial", outcome: "inconclusive" });
+    expect(completed.payload).toMatchObject({
+      status: "succeeded",
+      outcome: "no_important_change",
+    });
+    expect(
+      await fixture.db.changeRecord.findMany({ where: { reportId: report.id } }),
+    ).toMatchObject([{ kind: "duplicate" }]);
   });
 
   it.each([false, true])(

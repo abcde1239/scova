@@ -174,12 +174,27 @@ function detail(row: StoredReport): Report {
       oldEvidenceIds: change.citations
         .filter((citation) => citation.side === "old")
         .map((citation) => {
-          if (!row.baselineRunId) throw invalidEvidence();
+          if (
+            !row.baselineRunId ||
+            !change.oldSourceId ||
+            !change.oldSnapshotId ||
+            citation.evidence.observation.sourceId !== change.oldSourceId ||
+            citation.evidence.snapshotId !== change.oldSnapshotId
+          )
+            throw invalidEvidence();
           return addEvidence(citation.evidence, row.baselineRunId);
         }),
       newEvidenceIds: change.citations
         .filter((citation) => citation.side === "new")
-        .map((citation) => addEvidence(citation.evidence, row.runId)),
+        .map((citation) => {
+          if (
+            !change.newSnapshotId ||
+            citation.evidence.observation.sourceId !== change.sourceId ||
+            citation.evidence.snapshotId !== change.newSnapshotId
+          )
+            throw invalidEvidence();
+          return addEvidence(citation.evidence, row.runId);
+        }),
     }));
     return parseContract(ReportSchema, {
       ...summary(row),

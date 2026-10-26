@@ -2,6 +2,8 @@ import { BudgetSchema, UsageSchema, parseContract, type Usage } from "@scova/con
 import type { Prisma, PrismaClient, Run, ToolCall } from "@scova/models";
 import { appendEvent, withRunFence } from "@/repo/runs.ts";
 import type { RunLeaseToken } from "@/utils/runs.ts";
+import { loadBaseline } from "@/repo/comparison.ts";
+import type { AgentBaseline } from "@scova/agent-core";
 
 export type AgentTool = "search" | "read" | "model";
 export type AgentJson =
@@ -31,6 +33,11 @@ export type AgentReservation = {
 } & ({ kind: "reserved" } | { kind: "reused"; output: AgentJson });
 
 export interface AgentRepository {
+  comparison(): Promise<{
+    comparisonScopeHash: string;
+    baselineRunId: string | null;
+    baseline: AgentBaseline | null;
+  }>;
   reserve(input: AgentReservationInput): Promise<AgentReservation>;
   settle(input: {
     toolCallId: string;
@@ -195,6 +202,12 @@ export function createAgentRepository(db: PrismaClient, token: RunLeaseToken): A
     return call;
   };
   return {
+    comparison: () =>
+      fence(async (tx, run) => ({
+        comparisonScopeHash: run.comparisonScopeHash,
+        baselineRunId: run.baselineRunId,
+        baseline: await loadBaseline(tx, run),
+      })),
     async reserve(input) {
       const reserved = reservation(input);
       return fence(async (tx, run, now) => {

@@ -262,7 +262,8 @@ describe("报告证据与收件箱 API", () => {
   });
   afterAll(async () => {
     await prisma.$disconnect();
-    await redis.quit();
+    if (redis.status === "ready") await redis.quit();
+    else redis.disconnect();
     if (schemaCreated) await admin.query(`DROP SCHEMA "${schema}" CASCADE`);
     await admin.end();
   });
@@ -471,6 +472,103 @@ describe("报告证据与收件箱 API", () => {
     expect(response.status).toBe(409);
     expect((await json(response)).code).toBe("INVALID_REPORT_EVIDENCE");
   });
+
+  it.each(["valid", "old_source", "old_snapshot", "new_source", "new_snapshot", "reversed"])(
+    "逐项校验变化的双方来源与快照：%s",
+    async (variant) => {
+      const auth = await register();
+      const previous = await fixture(auth);
+      const current = await fixture(auth, previous.task, 1);
+      await prisma.run.update({
+        where: { id: previous.run.id },
+        data: {
+          status: "succeeded",
+          outcome: "baseline",
+          coverageJson: {
+            completeness: "complete",
+            searchedQueries: ["query"],
+            gaps: [],
+            exhausted: [],
+          },
+        },
+      });
+      await prisma.report.update({
+        where: { id: previous.report.id },
+        data: { completeness: "complete", limitationsJson: [] },
+      });
+      await prisma.run.update({
+        where: { id: current.run.id },
+        data: { baselineRunId: previous.run.id },
+      });
+      await prisma.report.update({
+        where: { id: current.report.id },
+        data: { baselineRunId: previous.run.id },
+      });
+      async function alternateSnapshot(sourceId: string) {
+        return prisma.sourceSnapshot.create({
+          data: {
+            userId: auth.userId,
+            sourceId,
+            title: "另一次正文版本",
+            contentHash: sha(randomUUID()),
+            extractorVersion: "reader-v1",
+            metadataJson: {},
+          },
+        });
+      }
+      const oldSnapshot =
+        variant === "old_snapshot"
+          ? await alternateSnapshot(previous.source.id)
+          : previous.snapshot;
+      const newSnapshot =
+        variant === "new_snapshot" ? await alternateSnapshot(current.source.id) : current.snapshot;
+      const change = await prisma.changeRecord.create({
+        data: {
+          userId: auth.userId,
+          reportId: current.report.id,
+          sourceId: variant === "new_source" ? previous.source.id : current.source.id,
+          kind: "changed",
+          oldSourceId: variant === "old_source" ? current.source.id : previous.source.id,
+          oldSnapshotId: variant === "old_source" ? current.snapshot.id : oldSnapshot.id,
+          newSnapshotId: variant === "new_source" ? previous.snapshot.id : newSnapshot.id,
+          factKey: "deadline",
+          oldValue: previous.quote,
+          newValue: current.quote,
+          importance: "important",
+          reason: "基线与本次事实对比",
+        },
+      });
+      await prisma.changeEvidence.createMany({
+        data: [
+          {
+            userId: auth.userId,
+            changeRecordId: change.id,
+            evidenceId: previous.evidence.id,
+            side: variant === "reversed" ? "new" : "old",
+          },
+          {
+            userId: auth.userId,
+            changeRecordId: change.id,
+            evidenceId: current.evidence.id,
+            side: variant === "reversed" ? "old" : "new",
+          },
+        ],
+      });
+      const response = await request(`/reports/${current.report.id}`, { headers: headers(auth) });
+      expect(response.status).toBe(variant === "valid" ? 200 : 409);
+      const body = await json(response);
+      if (variant === "valid") {
+        expect(body.baselineRunId).toBe(previous.run.id);
+        expect(body.changes[0]).toMatchObject({
+          oldEvidenceIds: [previous.evidence.id],
+          newEvidenceIds: [current.evidence.id],
+        });
+      } else {
+        expect(body.code).toBe("INVALID_REPORT_EVIDENCE");
+        expect(body).not.toHaveProperty("evidence");
+      }
+    },
+  );
 
   it("同账号其他 Run 的证据不能被报告引用，拒绝整个详情", async () => {
     const auth = await register();

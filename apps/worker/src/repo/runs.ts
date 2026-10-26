@@ -207,6 +207,33 @@ export function createRunRepository(db: PrismaClient): RunRepository {
           return { kind: "ignored" };
         }
         const startedAt = run.startedAt ?? now;
+        // Freeze once, including null. Recovery must never silently choose a newer baseline.
+        let baselineRunId = run.baselineRunId;
+        if (run.startedAt === null) {
+          const baseline = await tx.baseline.findUnique({
+            where: {
+              userId_taskId_comparisonScopeHash: {
+                userId: run.userId,
+                taskId: run.taskId,
+                comparisonScopeHash: run.comparisonScopeHash,
+              },
+            },
+            include: { completeRun: { include: { reports: true } } },
+          });
+          const prior = baseline?.completeRun;
+          baselineRunId =
+            prior &&
+            prior.id !== run.id &&
+            prior.userId === run.userId &&
+            prior.taskId === run.taskId &&
+            prior.comparisonScopeHash === run.comparisonScopeHash &&
+            prior.mode === run.mode &&
+            prior.status === "succeeded" &&
+            (prior.coverageJson as { completeness?: string } | null)?.completeness === "complete" &&
+            prior.reports.some((report) => report.completeness === "complete")
+              ? prior.id
+              : null;
+        }
         const deadlineAt =
           run.deadlineAt ?? new Date(startedAt.getTime() + budget.maxDurationSeconds * 1000);
         if (
@@ -222,6 +249,7 @@ export function createRunRepository(db: PrismaClient): RunRepository {
             status: "running",
             startedAt,
             deadlineAt,
+            baselineRunId,
             leaseOwner,
             leaseEpoch: { increment: 1 },
             leaseExpiresAt: leaseExpiry(now, leaseMs),

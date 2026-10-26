@@ -346,6 +346,7 @@ export function createAgentSession({
     },
     async execute(): Promise<AgentCandidate> {
       if (bundle.mode !== context.mode) throw new RunExecutionError("AGENT_CONFIGURATION_INVALID");
+      Object.assign(agentContext, await repository.comparison());
       const opened = await openCheckpoint();
       const startedSteps = new Map<string, number>();
       const candidate = await runResearchAgent(agentContext, {
