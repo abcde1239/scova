@@ -10,6 +10,7 @@ import { Redis } from "ioredis";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { createDefaultServices } from "../../server/src/app/context.ts";
 import { createRunService as createCommandService } from "../../server/src/service/runs.ts";
+import { eventMessage } from "../../server/src/service/run-events.ts";
 import { nodeScriptCommand } from "../../../scripts/process-runtime.mjs";
 import { createRunRepository, withRunFence, type ClaimedRun } from "../src/repo/runs.ts";
 import { RunService, type RunExecutionContext } from "../src/service/runs.ts";
@@ -579,7 +580,7 @@ describe("生产 Run 租约、消费与恢复（真实 PG/Redis，串行）", ()
       });
       expect(result).not.toHaveProperty("checkpointRef");
       expect(result).not.toHaveProperty("leaseOwner");
-      const publicEvents = await commands.events(seed.user.id, seed.run.id, 0, null);
+      const publicEvents = (await events(seed.run.id)).map(eventMessage);
       expect(publicEvents.at(-1)?.type).toBe("run.failed");
       expect(JSON.stringify(publicEvents)).not.toContain("must-not-leak");
     }

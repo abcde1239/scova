@@ -62,15 +62,6 @@ function createRunStore(database: Prisma.TransactionClient) {
         data: { status: "cancel_requested", cancelRequestedAt: requestedAt },
       });
     },
-    findEvent(eventId: string, runId: string, userId: string) {
-      return database.runEvent.findFirst({ where: { id: eventId, runId, userId } });
-    },
-    listEvents(runId: string, userId: string, after: number) {
-      return database.runEvent.findMany({
-        where: { runId, userId, seq: { gt: after } },
-        orderBy: { seq: "asc" },
-      });
-    },
   };
 }
 
@@ -84,10 +75,6 @@ export function createRunRepo(services: Pick<ApiServices, "db">) {
       createRunStore(services.db()).requireRun(...args),
     findIdempotency: (...args: Parameters<RunStore["findIdempotency"]>) =>
       createRunStore(services.db()).findIdempotency(...args),
-    findEvent: (...args: Parameters<RunStore["findEvent"]>) =>
-      createRunStore(services.db()).findEvent(...args),
-    listEvents: (...args: Parameters<RunStore["listEvents"]>) =>
-      createRunStore(services.db()).listEvents(...args),
     transaction<T>(work: (store: RunStore) => Promise<T>): Promise<T> {
       return services.db().$transaction((database) => work(createRunStore(database)));
     },

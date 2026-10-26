@@ -19,7 +19,7 @@ const sha256 = (value: string) => createHash("sha256").update(value).digest("hex
 const ACTIVE = ["queued", "running", "recovering", "cancel_requested"] as const;
 const usage = { searches: 0, pages: 0, inputTokens: 0, outputTokens: 0, estimated: true };
 
-function toRun(run: StoredRun) {
+export function toRun(run: StoredRun) {
   return parseContract(RunSchema, {
     id: run.id,
     taskId: run.taskId,
@@ -206,17 +206,6 @@ export function createRunService(services: ApiServices) {
         throw new ApiError(409, "RUN_NOT_RETRYABLE", "当前执行状态不允许重试");
       const result = await createRun(old.taskId, userId, input, key, old.id, old.taskVersionId);
       return { run: toRun(result.run), reused: result.reused };
-    },
-    async events(userId: string, runId: string, after: number, lastEventId: string | null) {
-      const run = await requireRun(userId, runId);
-      if (lastEventId) {
-        const last = await repo.findEvent(lastEventId, run.id, userId);
-        if (last) after = Math.max(after, last.seq);
-      }
-      if (!Number.isSafeInteger(after) || after < 0)
-        throw new ApiError(400, "INVALID_EVENT_CURSOR", "事件游标无效");
-      const events = await repo.listEvents(run.id, userId, after);
-      return events.map(eventDto);
     },
   };
 }

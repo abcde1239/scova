@@ -35,8 +35,14 @@ Scova 的纯 TypeScript/TypeBox 接口契约。Web、API、worker 从本包导�
 
 游标早于保留范围时，发送 `SseResetControlSchema`：`{ schemaVersion: 1, type: "stream.reset", runId, payload: { reason: "cursor_expired", snapshot, resumeAfter } }`。这是传输控制帧，不入 RunEvent 表，不分配 `eventId/seq`，SSE 帧不得带 `id`，也不推进 `Last-Event-ID`。客户端替换快照、清理此前去重状态，再用 `after=resumeAfter` 重连；收到第一条新的持久化事件后更新 `Last-Event-ID`。`SseMessageSchema` 校验上述两类数据帧；15 秒心跳是 SSE 注释帧，不经过事件 schema。
 
+服务端 `/api/v1/runs/:runId/events` 通过同源 Cookie 验证当前账号，每次最多读取 100 条事件，并从最后已发送 seq 查询下一页。`after` 只接受非负安全整数的十进制文本；超出最新序号或与可定位的 `Last-Event-ID` 不一致时返回 400。无法在当前 Run 定位的事件 ID、已删除历史前缀和序列缺口返回当前 Run 的 reset 快照后关闭，重连时移除旧 `Last-Event-ID`。本接口检测现存事件边界，不新增事件过期天数或删除策略。
+
+流按客户端读取需求逐帧输出，单帧上限 64 KiB；无新事件时每 15 秒发送心跳，客户端 30 秒不继续读取则断开。会话撤销或到期、连接取消和服务停止都会终止查询并清理计时器。终态与事件上界在同一短数据库快照读取，全部终态事件发送完成后关闭连接。前端统一通信模块的接入与重连界面仍待后续交付。
+
 schema 只能验证单帧结构，不能证明跨帧顺序或权限；API/客户端必须保证授权、事务分配 seq、先回放再续传、单调性和重连去重。部分执行只允许 `inconclusive` 或有不完整标记的变化结果；不完整报告必须包含 `limitations` 或 `coverage.gaps`，不推进基线。
 
 ## 验证
 
 `vp test packages/contracts/tests/contracts.test.ts` 验证非法输入、边界、错误字段位置、TypeBox Value/Compiler 一致性、状态和证据语义、全部持久化事件及 reset 控制帧。真实 API/数据库/队列行为由对应后续 Issue 验证。
+
+`vp run test:sse` 验证真实 PostgreSQL 回放、续传、reset、会话失效，以及 Bun/Node 的 socket 背压、取消与带活跃连接的优雅停止。

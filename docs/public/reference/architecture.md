@@ -52,7 +52,7 @@ Run 另有独立租约与递增 epoch。统一 `withRunFence` 门在 Run 行锁�
 
 所有 app/package 均以 `src` 保存源码，并配置 `@/* → ./src/*`。应用内使用别名，跨包引用包名；直接导出源码的共享包内部保留相对引用，避免消费方 TypeScript/Bun 对同名别名的解析冲突。Vite/Vitest 使用原生 tsconfig paths 解析，Node.js 启动入口由 `vpx` 处理。
 
-M1 已将前端迁至 `apps/web`，建立 API/worker 与三个共享包的最小入口，保留 utils 有效模板测试。业务模块仍按各自 Issue 实现；新增真实测试时同步 Vitest 与 harness 覆盖声明，不将类型/常量占位验证计为业务覆盖。Bun 为主运行时，Node.js 入口通过 Elysia 官方适配器保持兼容。
+M1 已将前端迁至 `apps/web`，建立 API/worker 与三个共享包的最小入口，保留 utils 有效模板测试。业务模块仍按各自 Issue 实现；新增真实测试时同步 Vitest 与 harness 覆盖声明，不将类型/常量占位验证计为业务覆盖。Bun 为主运行时；Bun/Node.js 的 API 均使用 Elysia 官方 Node Web 适配器与显式 `srvx/node` HTTP 服务，通过 `node:http` 的 write/drain 传播 SSE socket 背压。
 
 依赖由 Vite+ 1.4.0 支持的 `pnpm-workspace.yaml` 管理；使用 `workspace:*` 声明包关系。`vp run <script>` 执行包脚本，`vp check` / `vp test` 使用内置工具；Bun 运行 API/worker，不能用另一份 Bun lockfile 分裂依赖来源。
 
@@ -195,6 +195,8 @@ REST 采用 `/api/v1`，标准错误包含 `code/message/requestId/fieldErrors`�
 写命令携带 `Idempotency-Key`，服务端绑定 user、路由/资源、payloadHash，并保存响应引用；同 key 不同 payload 返回 409。任务编辑另用 revision 防止丢失更新。跨账号资源统一 404，集合查询同样 owner 过滤，不能只验证详情页。
 
 RunEvent 按 `(runId, seq)` 严格递增，包含 `schemaVersion/eventId/type/occurredAt/payload`。API 首先重放数据库事件，再持续拉取更大 seq，避免切换实时流的缺口；首版直接短周期查询 PostgreSQL，Redis pub/sub 日后可作唤醒优化。SSE 每 15 秒心跳，重连按事件 ID 去重；慢客户端断开后可重连。游标越过保留范围时返回 reset 信号并加载 Run 快照，而不是永久等待。
+
+SSE 每页最多 100 条，按 HTTP 流的读取需求逐帧输出，并限制单帧 64 KiB；没有继续读取的连接在 30 秒后断开。每页在短 Repeatable Read 事务内复核会话、owner、终态和事件上界，事务不会跨网络等待。服务停止先中止流并等待在途数据库查询结束，再关闭 HTTP 与数据库。当前实现检测已保留事件的序列边界；维护清理需保留每个 Run 的最新事件，避免现有 `MAX(seq)+1` 分配器重用历史序号。
 
 事件类型包括 run.queued/started/recovering、step.started/completed、tool.started/completed/failed、budget.updated、coverage.updated、report.published、run.completed/failed/canceled。持久化业务事件，不把逐 token 流写入事件表；不得暴露密钥、完整网页或敏感提示词。
 
