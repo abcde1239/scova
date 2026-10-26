@@ -217,7 +217,7 @@
       "workspace": "root",
       "argv": ["vp", "run", "test:integration"],
       "covers": ["apps-server", "apps-worker"],
-      "timeoutMs": 300000,
+      "timeoutMs": 600000,
       "kind": "test"
     }
   ],

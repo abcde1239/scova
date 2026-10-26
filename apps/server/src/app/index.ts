@@ -6,6 +6,7 @@ import { createApiErrorPlugin } from "@/app/errors.ts";
 import { createDefaultServices, type ApiServices } from "@/app/context.ts";
 import { createAuthPlugin } from "@/router/auth.ts";
 import { createTaskPlugin } from "@/router/tasks.ts";
+import { createTaskDraftPlugin } from "@/router/task-drafts.ts";
 import { createRunPlugin } from "@/router/runs.ts";
 import { createReportPlugin } from "@/router/reports.ts";
 import { createSystemPlugin } from "@/router/system.ts";
@@ -44,6 +45,7 @@ export const createApiApp = (
     .use(createSystemPlugin())
     .use(createAuthPlugin(services))
     .use(createTaskPlugin(services))
+    .use(createTaskDraftPlugin(services))
     .use(createRunPlugin(services))
     .use(createReportPlugin(services));
 

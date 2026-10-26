@@ -14,6 +14,7 @@ import {
 } from "@scova/contracts";
 import type { ApiServices } from "@/app/context.ts";
 import { ApiError } from "@/utils/errors.ts";
+import { TASK_BUDGET_LIMITS } from "@/app/task-policy.ts";
 import { createTaskRepo, type TaskStore } from "@/repo/tasks.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -21,11 +22,10 @@ const hash = (value: string) => createHash("sha256").update(value).digest("hex")
 /** 检索与正文提取策略升级时递增，避免错误复用旧比较范围。 */
 const RETRIEVAL_STRATEGY_VERSION = 1;
 const EXTRACTION_STRATEGY_VERSION = "readability-v1";
-const DEFAULT_BUDGET_LIMITS = { maxSearches: 10, maxPages: 20, maxDurationSeconds: 300 } as const;
 
 function assertBudget(config: TaskConfig): void {
-  const fieldErrors = Object.entries(DEFAULT_BUDGET_LIMITS)
-    .filter(([key, maximum]) => config.budget[key as keyof typeof DEFAULT_BUDGET_LIMITS]! > maximum)
+  const fieldErrors = Object.entries(TASK_BUDGET_LIMITS)
+    .filter(([key, maximum]) => config.budget[key as keyof typeof TASK_BUDGET_LIMITS]! > maximum)
     .map(([key, maximum]) => ({
       path: `/config/budget/${key}`,
       message: `部署默认上限为 ${maximum}`,

@@ -1,6 +1,12 @@
 import { createRequire } from "node:module";
 import { createDatabaseClient, type PrismaClient } from "@scova/models";
 import type { Redis } from "ioredis";
+import type { ModelProvider } from "@scova/connectors";
+import {
+  createTaskDraftModel,
+  createTaskDraftPolicy,
+  type TaskDraftPolicy,
+} from "@/app/task-drafts.ts";
 
 const require = createRequire(import.meta.url);
 
@@ -21,12 +27,15 @@ export interface ApiServices {
   registrationEnabled: boolean;
   sessionTtlSeconds: number;
   rateLimit: AuthRateLimitConfig;
+  taskDraftPolicy: TaskDraftPolicy;
+  taskDraftModel(): ModelProvider | null;
   clock(): Date;
   close(): Promise<void>;
 }
 
-export type ApiServiceOverrides = Partial<Omit<ApiServices, "rateLimit">> & {
+export type ApiServiceOverrides = Partial<Omit<ApiServices, "rateLimit" | "taskDraftPolicy">> & {
   rateLimit?: Partial<AuthRateLimitConfig>;
+  taskDraftPolicy?: Partial<TaskDraftPolicy>;
 };
 
 function positiveSetting(name: string, fallback: number): number {
@@ -38,6 +47,7 @@ function positiveSetting(name: string, fallback: number): number {
 export function createDefaultServices(overrides: ApiServiceOverrides = {}): ApiServices {
   let database: PrismaClient | undefined;
   let cache: Redis | undefined;
+  let draftModel: ModelProvider | null | undefined;
   const origin = new URL(overrides.origin ?? process.env.APP_ORIGIN ?? "http://localhost:5173")
     .origin;
   const rateLimit: AuthRateLimitConfig = {
@@ -60,6 +70,13 @@ export function createDefaultServices(overrides: ApiServiceOverrides = {}): ApiS
     sessionTtlSeconds:
       overrides.sessionTtlSeconds ?? positiveSetting("SESSION_TTL_SECONDS", 7 * 24 * 60 * 60),
     rateLimit,
+    taskDraftPolicy: createTaskDraftPolicy(overrides.taskDraftPolicy),
+    taskDraftModel:
+      overrides.taskDraftModel ??
+      (() => {
+        if (draftModel === undefined) draftModel = createTaskDraftModel();
+        return draftModel;
+      }),
     clock: overrides.clock ?? (() => new Date()),
     db:
       overrides.db ??
@@ -80,6 +97,7 @@ export function createDefaultServices(overrides: ApiServiceOverrides = {}): ApiS
             lazyConnect: true,
             maxRetriesPerRequest: 1,
             connectTimeout: 5000,
+            commandTimeout: 5000,
             enableOfflineQueue: false,
           });
           // 错误由发起请求的认证服务转为脱敏 503；避免默认日志输出连接凭据。

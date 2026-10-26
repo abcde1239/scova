@@ -15,6 +15,8 @@ Scova 的纯 TypeScript/TypeBox 接口契约。Web、API、worker 从本包导�
 
 预算 schema 仅限定正安全整数，不把产品默认值当成硬上限。部署者的上限通过 `createBudgetSchema(policy)` 生成同源运行时/文档 schema，默认值由 API 策略注入。URL 合法性不代替真实抓取时的 SSRF、DNS 和重定向检查，来源权限由领域服务校验。
 
+`TaskDraftInputSchema` 与 `TaskDraftResponseSchema` 描述未保存的自然语言草稿。响应保留原文及完整配置，`mode` 区分模型和手工编辑，`manualReason` 提供脱敏回退原因；所有响应均要求再次确认。安全默认和建议计划通过 `warnings` 说明，`parsingUsage` 仅表示本次解析，不能作为任何 Run 的执行用量。
+
 ## 修订与幂等
 
 任务编辑发送 `If-Match: "3"`，读取时返回相同格式的 `ETag`；修订从 1 递增，最大为 JavaScript 安全整数。`RevisionHeadersSchema`、`revisionEtag` 和 `parseRevisionEtag` 执行相同边界检查，拒绝弱标签、裸数字和溢出。资源已变化时 API 返回 HTTP 409。
