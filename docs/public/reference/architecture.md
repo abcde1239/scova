@@ -217,3 +217,5 @@ Compose 最终包括 web 反向代理、api、worker、postgres、redis；健康
 验证顺序：纯逻辑 Vitest → PostgreSQL/Redis 集成与故障注入 → Playwright 主流程 → opt-in 真实供应商烟测。确定性演示数据验证重复/新增/变化；真实烟测单独报告凭据、服务和费用条件。首版优先 PostgreSQL 全文检索（中文效果先实测），再根据结果决定分词或 pgvector。
 
 相关文档：[数据模型](data-model.md)、[分期计划](../guides/delivery-plan.md)、[两次执行场景](../examples/two-run-scenarios.md)、[工程验证入口](harness.md)。
+
+资料库由 Server 四层提供 owner 隔离的收藏、笔记、历史与检索，不调用搜索供应商。PostgreSQL `simple` GIN 与有界字面检索服务中英文；过期正文在查询时隐藏，物理清理入口仅供内部维护。完整正文的工具结果与图 checkpoint 副本由部署保留策略另行处理。

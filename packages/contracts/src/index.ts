@@ -2,6 +2,7 @@ export * from "./common.ts";
 export * from "./auth.ts";
 export * from "./tasks.ts";
 export * from "./task-drafts.ts";
+export * from "./library.ts";
 export * from "./runs.ts";
 export * from "./reports.ts";
 export * from "./events.ts";
