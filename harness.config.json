@@ -96,7 +96,9 @@
       ".dockerignore",
       ".env.example",
       "tests/**",
-      "compose.test.yaml"
+      "compose.test.yaml",
+      ".gitattributes",
+      "ops/proxy/**"
     ],
     "internalPatterns": [
       "docs/structure.md",
@@ -117,7 +119,8 @@
       "**/node_modules/**",
       "**/dist/**",
       "**/coverage/**",
-      "**/artifacts/**"
+      "**/artifacts/**",
+      "backups/**"
     ]
   },
   "tests": {
