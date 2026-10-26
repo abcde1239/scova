@@ -29,3 +29,7 @@ vp run api:openapi:check
 历史正文只在保留期内返回，过期立即不读不搜；保存的原文片段、hash、定位和比较清单继续保留。历史快照按成功观测时间选择；列表游标保留 PostgreSQL 微秒精度并绑定账号与筛选范围。搜索使用 PostgreSQL `simple` 全文索引，中文及字面词辅以受超时限制的子串召回，返回 `matchedBy` 和有界摘录，不抓取新 URL。
 
 `GET /api/v1/notifications` 按游标读取当前账号通知，可按 `kind`、`unread` 筛选；失败通知的 `reportId` 可为空，使用 `runId` 查看执行原因。`PATCH /api/v1/notifications/:id` 使用会话和 CSRF，以 `{ "read": true }` 标为已读，`false` 恢复未读；重复已读保留首次时间。通知和收件箱的已读状态相互独立。
+
+报告证据问答：`POST /reports/:reportId/questions` 提交问题，`GET /reports/:reportId/questions/:questionId` 读取已保存回答。创建要求会话、CSRF 与稳定 `Idempotency-Key`，同键异问题返回 409；处理中重放返回 409 且不重复付费调用。问答仅使用此报告内已授权引用，事实回答采用逐字原文摘录，每条带 `evidenceId/quote`；缺模型、缺资料或无效输出明确标记不足。它使用独立 Redis 用户/全局请求与 token 额度，最多一次模型尝试，不调用搜索或网页阅读。
+
+只有另行 `POST /reports/:reportId/questions/:questionId/followup` 并提交 `{ "confirm": true }` 才启动新研究。该接口要求 CSRF 与幂等键，固定原报告的模式、配置与预算，以问题为目标生成独立 Run；Task 锁内原子写入执行、事件、Outbox 和问题关联。已有活动执行时返回 409，重复确认返回原关联执行。后续研究及其重试有独立比较范围，不覆盖原报告、任务配置或普通监控基线。取消及已撤销会话的晚返回不保存事实回答。问答仅支持报告内引用；额外资料应先进入受授权报告。

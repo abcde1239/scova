@@ -163,3 +163,5 @@ REFERENCES runs(user_id, task_id, comparison_scope_hash, id);
 相关文档：[架构](architecture.md)、[交付计划](../guides/delivery-plan.md)、[验收场景](../examples/two-run-scenarios.md)。
 
 资料库沿用 Source、SourceSnapshot、Bookmark、Note：收藏按 owner/source 唯一；笔记恰一来源或报告目标，同一来源允许多条笔记，创建幂等记录与 Note 同事务提交。历史快照必须存在同 owner/source 的成功 RunSource；正文过期仅清正文，保留 Evidence 原文片段、hash、定位、Report 比较清单及 Baseline。资料检索和历史分页索引由 models 迁移维护。
+
+ReportQuestion 保存原始问题、回答/独立计量和 followupRunId；QuestionEvidence 记录引用关系。问题与幂等认领先持久化，模型调用在事务外进行，回答与引用在短事务内完成；进程中断的未完成问题以 409 显示处理中，稳定键不会触发重复调用，用户可用新键重新提交。Run.followupConfigJson 固定显式后续研究的完整配置；原 TaskVersion 和 Task.currentVersionId 不变，Worker 执行与交付从同一固定配置读取，重试保留问题与隔离比较范围。

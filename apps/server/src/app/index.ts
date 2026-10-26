@@ -9,6 +9,7 @@ import { createTaskPlugin } from "@/router/tasks.ts";
 import { createTaskDraftPlugin } from "@/router/task-drafts.ts";
 import { createLibraryPlugin } from "@/router/library.ts";
 import { createRunPlugin } from "@/router/runs.ts";
+import { createReportQuestionPlugin } from "@/router/report-questions.ts";
 import { createReportPlugin } from "@/router/reports.ts";
 import { createNotificationPlugin } from "@/router/notifications.ts";
 import { createSystemPlugin } from "@/router/system.ts";
@@ -52,6 +53,7 @@ export const createApiApp = (
     .use(createReportPlugin(services))
     .use(createLibraryPlugin(services))
     .use(createNotificationPlugin(services))
+    .use(createReportQuestionPlugin(services))
     .onStop(() => services.streams.stop());
 
 export const apiApp = createApiApp();

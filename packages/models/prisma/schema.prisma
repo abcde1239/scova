@@ -284,6 +284,7 @@ model Run {
   recoveryCount        Int         @default(0) @map("recovery_count")
   cancelRequestedAt    DateTime?   @map("cancel_requested_at") @db.Timestamptz(6)
   baselineRunId        String?     @map("baseline_run_id") @db.Uuid
+  followupConfigJson   Json?       @map("followup_config_json")
   feedbackSnapshotJson Json        @default("[]") @map("feedback_snapshot_json")
   budgetJson           Json        @map("budget_json")
   usageJson            Json        @default("{}") @map("usage_json")

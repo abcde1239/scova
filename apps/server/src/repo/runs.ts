@@ -28,6 +28,17 @@ function createRunStore(database: Prisma.TransactionClient) {
         orderBy: [{ queuedAt: "desc" }, { id: "desc" }],
       });
     },
+    findQuestion(id: string, userId: string, reportRunId: string) {
+      return database.reportQuestion.findFirst({
+        where: { id, userId, report: { runId: reportRunId, userId } },
+      });
+    },
+    linkQuestion(id: string, userId: string, runId: string) {
+      return database.reportQuestion.updateMany({
+        where: { id, userId, followupRunId: null },
+        data: { followupRunId: runId },
+      });
+    },
     findActiveRun(taskId: string, userId: string) {
       return database.run.findFirst({
         where: {

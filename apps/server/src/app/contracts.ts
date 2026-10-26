@@ -1,5 +1,9 @@
 import { t } from "elysia";
 import {
+  ReportQuestionInputSchema,
+  ReportQuestionSchema,
+  QuestionAnswerSchema,
+  QuestionFollowupInputSchema,
   ApiErrorSchema,
   RegisterInputSchema,
   LoginInputSchema,
@@ -50,6 +54,10 @@ export const HealthResponseSchema = t.Object(
 );
 
 export const contractModels = {
+  ReportQuestionInput: ReportQuestionInputSchema,
+  ReportQuestion: ReportQuestionSchema,
+  QuestionAnswer: QuestionAnswerSchema,
+  QuestionFollowupInput: QuestionFollowupInputSchema,
   ApiError: ApiErrorSchema,
   RegisterInput: RegisterInputSchema,
   LoginInput: LoginInputSchema,
