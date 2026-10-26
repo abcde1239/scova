@@ -9,6 +9,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus
 import { nodeScriptCommand } from "../../../scripts/process-runtime.mjs";
 import { createOutboxQueue } from "../src/queue/outbox.ts";
 import { outboxDatabase } from "./support/outbox-database.ts";
+import { seedRun } from "./support/run-database.ts";
 
 const fixture = outboxDatabase();
 const workerRoot = fileURLToPath(new URL("../", import.meta.url));
@@ -84,7 +85,7 @@ describe("Worker Bun/Node 真实进程", () => {
   beforeEach(() => fixture.db.outbox.deleteMany());
 
   it.each(["bun", "node"] as const)("%s 启动后实际投递，IPC 停止并释放连接", async (runtime) => {
-    const item = await fixture.seed();
+    const { outbox: item } = await seedRun(fixture.db);
     const queueName = `scova-runtime-${runtime}-${randomUUID()}`;
     const connection = new Redis(fixture.redisUrl, {
       lazyConnect: true,
@@ -96,6 +97,7 @@ describe("Worker Bun/Node 真实进程", () => {
     const publisher = createOutboxQueue(connection, queueName);
     const process = launch(runtime, {
       DATABASE_URL: fixture.databaseUrl,
+      AGENT_CHECKPOINT_SCHEMA: fixture.checkpointSchema,
       REDIS_URL: fixture.redisUrl,
       WORKER_QUEUE_NAME: queueName,
       WORKER_POLL_INTERVAL_MS: "20",
@@ -110,9 +112,19 @@ describe("Worker Bun/Node 真实进程", () => {
       expect((await publisher.queue.getJob(`run-${item.aggregateId}`))?.data).toEqual({
         runId: item.aggregateId,
       });
+      await waitUntil(
+        async () =>
+          (await fixture.db.run.findUniqueOrThrow({ where: { id: item.aggregateId } })).status ===
+          "failed",
+        process,
+      );
       expect(
-        (await fixture.db.run.findUniqueOrThrow({ where: { id: item.aggregateId } })).status,
-      ).toBe("queued");
+        await fixture.db.run.findUniqueOrThrow({ where: { id: item.aggregateId } }),
+      ).toMatchObject({
+        status: "failed",
+        failureCode: "AGENT_DELIVERY_NOT_CONFIGURED",
+      });
+      expect(await fixture.db.report.count({ where: { runId: item.aggregateId } })).toBe(0);
       process.child.send("scova:shutdown");
       await ended(process);
       expect(process.exit?.code).toBe(0);

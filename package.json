@@ -4,6 +4,15 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "search:up": "vpx scripts/searxng.ts up",
+    "search:down": "vpx scripts/searxng.ts down",
+    "search:status": "vpx scripts/searxng.ts status",
+    "test:search:live": "vpx scripts/smoke-search.ts --live",
+    "test:search:read": "vpx scripts/smoke-search.ts --live --read",
+    "test:connectors:tavily": "vpx scripts/smoke-connectors.ts --live --provider=tavily",
+    "test:connectors:runtime": "vpx scripts/connectors-runtime.ts && vpx scripts/run-bun.mjs scripts/connectors-runtime.ts",
+    "test:connectors:live": "vpx scripts/smoke-connectors.ts --live",
+    "test:connectors:reader": "vpx scripts/smoke-connectors.ts --reader-only",
     "ready": "vp run harness-verify",
     "harness-lint": "vpx scripts/harness.mjs lint",
     "harness-verify": "vpx scripts/harness.mjs verify",
@@ -17,7 +26,8 @@
     "test:database": "vp test --config tests/database.vite.config.ts",
     "test:auth": "vp test --config tests/auth.vite.config.ts",
     "test:integration": "vp run test:database && vp run test:auth && vp test --config tests/tasks.vite.config.ts && vp test --config tests/runs.vite.config.ts && vp test --config tests/backend-flow.vite.config.ts && vp run test:worker",
-    "test:worker": "vp test --config tests/worker-outbox.vite.config.ts"
+    "test:worker": "vp test --config tests/worker-outbox.vite.config.ts",
+    "test:agent-recovery": "vp test --config tests/worker-outbox.vite.config.ts apps/worker/tests/recovery.integration.test.ts"
   },
   "dependencies": {
     "@js-temporal/polyfill": "catalog:",

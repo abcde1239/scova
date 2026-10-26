@@ -1,2 +1,7 @@
-/** 外部搜索、模型和正文提取适配器占位；实现由后续 Issue 提供。 */
-export type ConnectorKind = "search" | "model" | "reader";
+export * from "./types.ts";
+export * from "./http.ts";
+export { createTavilySearch, createModelProvider, estimateModelInputTokens } from "./providers.ts";
+export type { ProviderOptions } from "./providers.ts";
+export * from "./reader.ts";
+export * from "./pipeline.ts";
+export * from "./searxng.ts";

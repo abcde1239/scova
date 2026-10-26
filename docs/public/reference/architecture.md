@@ -1,6 +1,6 @@
 # Scova 系统架构
 
-状态：持续演进的首版设计。已建立工作区、业务数据库、账号/任务/执行基础 API 与 Outbox 投递；Agent、交付闭环和完整界面按计划实现。下文也包含待验收的目标行为。
+状态：持续演进的首版设计。已实现账号/任务/执行基础 API、Run 租约恢复、搜索阅读适配器与有预算的持久化 Agent。研究候选可恢复；报告交付、连续运行差异和完整界面仍按计划实现。下文也包含待验收的目标行为。
 
 ## 1. 产品闭环与边界
 
@@ -20,7 +20,7 @@ flowchart LR
   Queue --> Worker
   Worker --> Graph[LangGraph.js Agent]
   Graph --> CP[(PostgreSQL checkpoints)]
-  Graph --> Search[Tavily 适配器]
+  Graph --> Search[SearxNG / 显式可选 Tavily]
   Graph --> Reader[安全抓取 / Readability]
   Graph --> Model[可配置模型适配器]
   Graph -->|结构化候选成果| Worker
@@ -30,23 +30,25 @@ API、worker 分别作为两个进程，PostgreSQL 和 Redis 是唯一首版基�
 
 ## 2. 工作区与职责
 
-| 目标目录            | 职责                                                                        | 依赖方向                                  |
-| ------------------- | --------------------------------------------------------------------------- | ----------------------------------------- |
-| apps/web            | Vue 3、Router、Pinia、TanStack Vue Query、UnoCSS、naive-ui；页面与 SSE 订阅 | contracts                                 |
-| apps/server         | 认证、资源授权、任务版本、执行命令、报告/资料管理、事件读取                 | contracts、models                         |
-| apps/worker         | 调度器、outbox dispatcher、BullMQ worker、租约、交付事务                    | contracts、models、agent-core、connectors |
-| packages/contracts  | 可运行时校验的请求/响应、事件版本、枚举与错误码；不暴露 ORM 实体            | 不依赖应用                                |
-| packages/models     | 业务数据模型、Prisma schema、迁移与服务端客户端                             | 不依赖应用或 contracts                    |
-| packages/agent-core | LangGraph 状态图、预算策略、证据/变化规则、工具与模型接口                   | contracts；不直接使用 Elysia/BullMQ       |
-| packages/connectors | Tavily、HTTP 抓取、Readability 和演示数据适配器                             | 实现 agent-core 的工具接口                |
+| 目标目录            | 职责                                                                        | 依赖方向                                                    |
+| ------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| apps/web            | Vue 3、Router、Pinia、TanStack Vue Query、UnoCSS、naive-ui；页面与 SSE 订阅 | contracts                                                   |
+| apps/server         | 认证、资源授权、任务版本、执行命令、报告/资料管理、事件读取                 | contracts、models                                           |
+| apps/worker         | 调度器、outbox dispatcher、BullMQ worker、租约、交付事务                    | contracts、models、agent-core、connectors                   |
+| packages/contracts  | 可运行时校验的请求/响应、事件版本、枚举与错误码；不暴露 ORM 实体            | 不依赖应用                                                  |
+| packages/models     | 业务数据模型、Prisma schema、迁移与服务端客户端                             | 不依赖应用或 contracts                                      |
+| packages/agent-core | LangGraph 状态图、有限研究策略、候选和原文引用校验                          | contracts、connectors 类型、LangGraph；不使用 Elysia/BullMQ |
+| packages/connectors | 默认 SearxNG、可选 Tavily、HTTP 抓取、Readability 和演示数据适配器          | 向 agent-core 提供工具接口                                  |
 
 API 不负责执行长任务，worker 不提供账号管理入口；Agent 没有通用 SQL、文件系统或任意脚本工具。`packages/models/prisma` 维护唯一业务 schema 和迁移；Server/Worker 从 `@scova/models` 引用生成模型，公开接口仍使用 `@scova/contracts`。
 
 Server 源码分层为 `main → app → router → handler → service → repo`：app 装配 Elysia、Node 适配与生命周期，router 声明路由和中文 OpenAPI，handler 处理 HTTP/会话/响应，service 编排业务规则及事务，repo 完成数据库与 Redis 访问。utils 放纯工具。Task CAS 与 Run/事件/Outbox 仍在同一事务中完成。
 
-Worker 使用 `main/node → app → handler → service → repo + queue`：app 管配置、资源和串行轮询，handler 接收后台批次，service 编排 Outbox 领取、投递、确认及退避，repo 执行 PostgreSQL 条件写，queue 适配 BullMQ。停止先阻止新领取并等待在途批次，再依次关闭队列、Redis 和数据库。当前只投递 Outbox；Agent 消费、Run 租约恢复和报告交付仍按计划实现。
+Worker 使用 `main/node → app → handler → service → repo + queue`：app 管配置、资源和串行轮询，handler 接收后台批次和 Run 消息，service 编排 Outbox、Run 和 Agent，repo 执行 PostgreSQL 条件写，queue 适配 BullMQ。已实现 Run 消费、续期、有限接管、取消及持久化研究候选；报告交付未接入时明确失败。停止先阻止新领取、中断执行并等待在途领域写/checkpoint，再关闭 consumer、队列、Redis、saver 和数据库。
 
 Outbox 每次领取的 `attempts + leaseExpiresAt` 作为本次持有凭据，领取和确认/退避均使用 CAS。过期持有者不能覆盖接管后的状态；发送成功但确认失败保留租约，到期后用同一 jobId 重投。这一边界保证至少一次传递，后续业务执行仍须幂等。
+
+Run 另有独立租约与递增 epoch。统一 `withRunFence` 门在 Run 行锁内使用数据库当前时间校验 owner、epoch、有效期、取消和 deadline；普通进度写和受限控制终结分别处理。恢复扫描按数据库未终态事实补投 epoch 作业，并处理保留的 completed/failed job，避免仅依赖原消息。模式在创建 Run 时参与有效比较 hash，恢复保持该 hash。
 
 所有 app/package 均以 `src` 保存源码，并配置 `@/* → ./src/*`。应用内使用别名，跨包引用包名；直接导出源码的共享包内部保留相对引用，避免消费方 TypeScript/Bun 对同名别名的解析冲突。Vite/Vitest 使用原生 tsconfig paths 解析，Node.js 启动入口由 `vpx` 处理。
 
@@ -124,6 +126,8 @@ stateDiagram-v2
 
 LangGraph checkpointer 使用 PostgreSQL，实现时在适配层验证 Bun 兼容性。每个租约 epoch 使用独立 thread/namespace。checkpoint 写完后，在受 fencing 保护的事务中提升 Run 的 `checkpointRef`；只有已提升的 checkpoint 可用于恢复。新 epoch 从这个明确引用恢复已提交图状态，不读取旧线程的“最新”指针；旧 worker 的迟到 checkpoint 无法污染新运行。恢复后节点按工具调用幂等键跳过已完成操作。该 checkpoint 提升与跨 thread 恢复协议是 M1 必须做的技术实验，未验证前不得声称具备恢复能力。
 
+当前生产适配采用独立 epoch thread、根图空 namespace 和明确 checkpoint ID。新 epoch 复制已提升的 channel values，丢弃旧线程可能迟到的 pending writes；未完成节点重放时先复用已提交 ToolCall，即使额度已耗尽也不阻止成功结果复用。工具成功但 checkpoint 未提升的 Node/Bun 强杀恢复由真实 PostgreSQL 集成测试覆盖。候选、账本和 checkpoint 不作为公共 API 参数或报告交付替代品。
+
 工具调用先保存唯一 operationKey（基于 run、逻辑节点与计划序号）并预留预算，再访问供应商，再保存结果。若进程在外部调用成功、落库之前崩溃，该调用为 `unknown`；恢复时不假定未计费，不释放预留预算。确需重查则创建新的调用序号并再次占用预算；允许重复外部请求，但保证业务成果和提醒不会重复。首版不宣称外部工具调用 exactly-once。
 
 临时网络/429/5xx 最多重试 2 次（共 3 次尝试），指数退避和 jitter，遵守 Retry-After，所有尝试计入预算；配置/认证/结构错误直接终止或提示修正。基础恢复最多接管 3 次；执行 wall-clock 从首次开始计时，恢复不重置 5 分钟期限。失败后的用户“重试”创建新 Run 并记录 parentRunId，使用原版本和预算，仍需通过活动执行约束。
@@ -136,7 +140,7 @@ LangGraph checkpointer 使用 PostgreSQL，实现时在适配层验证 Bun 兼�
 
 | 接口                             | 首个实现                                    | 约束                                                        |
 | -------------------------------- | ------------------------------------------- | ----------------------------------------------------------- |
-| SearchProvider.search            | Tavily                                      | 返回结构化候选 URL、标题、片段；请求有超时/限额             |
+| SearchProvider.search            | 默认 SearxNG；Tavily 显式可选               | 结构化候选 URL、标题、片段、引擎与覆盖缺口；请求有超时/限额 |
 | PageReader.read                  | HTTP + jsdom + Readability                  | HTML 限长 2 MiB、正文限长、每次请求最多 15 秒，保留抓取状态 |
 | ModelProvider.generateStructured | 部署者配置的兼容模型服务                    | 通过适配层映射 structured output、usage、AbortSignal 与错误 |
 | EvidenceRepository               | worker 注入的受限领域接口                   | 仅当前用户、当前 Run；不暴露 Prisma client                  |
@@ -145,6 +149,8 @@ LangGraph checkpointer 使用 PostgreSQL，实现时在适配层验证 Bun 兼�
 默认每次 10 次搜索、20 次网页读取、5 分钟，另设累计输入 40,000 token、输出 8,000 token 上限。每次模型调用先预留估算输入和最大输出 token，最终按 usage 结算；供应商不返回 usage 时使用保守预留并标为估算。提示词/结构化修复调用同样计费和计入限制。恢复/重试不得绕过限制，预算修改只影响新版本。时间预算到达后停止所有外部调用，仅允许从已存证据用确定性模板交付 partial（无证据则 failed），不得再启动模型综合；用户取消则不交付。
 
 工具输出经过结构校验，来源内容是数据而不是指令。不展示模型隐式思维链；执行详情展示节点状态、工具类型、查询摘要、耗时、来源和用量。自然语言配置草稿也通过同一模型适配层，但与执行预算分开限流计量。
+
+SearxNG 通过部署者固定的内部 `/search` JSON 通道访问，不需要搜索密钥；该通道不开放任意地址或重定向，也不放宽网页阅读器的公共 IP 限制。上游失败保留覆盖缺口，全部失败报错；不得切换收费供应商。独立搜索/阅读无需模型，完整研究仍需要远程模型配置。[本机部署](../guides/search.md)使用独立可选的搜索容器，业务事实源仍是 PostgreSQL。
 
 ## 6. 去重、变化与完整性
 

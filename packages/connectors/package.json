@@ -12,9 +12,13 @@
     "check": "vp check"
   },
   "dependencies": {
-    "@scova/agent-core": "workspace:*"
+    "@mozilla/readability": "catalog:",
+    "ajv": "catalog:",
+    "jsdom": "catalog:"
   },
   "devDependencies": {
+    "@types/jsdom": "catalog:",
+    "@types/node": "catalog:",
     "typescript": "catalog:"
   }
 }

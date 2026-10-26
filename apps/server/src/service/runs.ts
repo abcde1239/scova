@@ -124,7 +124,9 @@ export function createRunService(services: ApiServices) {
           userId,
           taskId: task.id,
           taskVersionId: version.id,
-          comparisonScopeHash: version.comparisonScopeHash,
+          comparisonScopeHash: sha256(
+            JSON.stringify(["run-scope-v1", version.comparisonScopeHash, command.mode]),
+          ),
           mode: command.mode,
           trigger: parentRunId ? "retry" : "manual",
           parentRunId,

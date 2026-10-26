@@ -1,6 +1,7 @@
 import { readWorkerConfig, type WorkerConfig } from "@/app/config.ts";
 import { createWorkerResources, type WorkerResources } from "@/app/resources.ts";
 import { waitForPoll } from "@/utils/wait.ts";
+import type { RunExecutor } from "@/service/runs.ts";
 
 export interface WorkerLogger {
   info(message: string): void;
@@ -12,17 +13,20 @@ export interface WorkerAppOptions {
   resources?: WorkerResources;
   logger?: WorkerLogger;
   wait?: (milliseconds: number, signal: AbortSignal) => Promise<void>;
+  executor?: RunExecutor;
 }
 
 /** 串行轮询、启动失败清理与幂等停止；构造时不连接任何外部服务。 */
 export function createWorkerApp(options: WorkerAppOptions = {}) {
   const config = options.config ?? readWorkerConfig();
-  const resources = options.resources ?? createWorkerResources(config);
+  const resources =
+    options.resources ?? createWorkerResources(config, { executor: options.executor });
   const logger = options.logger ?? console;
   const wait = options.wait ?? waitForPoll;
   const controller = new AbortController();
   let starting: Promise<void> | undefined;
   let loop: Promise<void> | undefined;
+  let polling: Promise<void> | undefined;
   let stopping: Promise<void> | undefined;
   let closing: Promise<void> | undefined;
   const close = () => (closing ??= resources.close());
@@ -46,8 +50,9 @@ export function createWorkerApp(options: WorkerAppOptions = {}) {
       try {
         await resources.connect();
         if (controller.signal.aborted) return;
-        logger.info("Scova worker ready; Outbox dispatcher running");
-        loop = poll();
+        logger.info("Scova worker ready; Outbox dispatcher running; Run consumer running");
+        polling = poll();
+        loop = Promise.all([polling, resources.finished?.()]).then(() => undefined);
         // 捕获后台循环自身故障；正常单批错误已由 poll 退避处理。
         void loop.catch(() => controller.abort());
       } catch (error) {
@@ -68,7 +73,13 @@ export function createWorkerApp(options: WorkerAppOptions = {}) {
       // 启动失败已经报告给 start 调用方；仍完成所有已创建资源的清理。
       await starting?.catch(() => undefined);
       try {
-        await loop;
+        const settled = await Promise.allSettled([resources.stop?.(), polling, loop]);
+        const failures = settled.filter((result) => result.status === "rejected");
+        if (failures.length)
+          throw new AggregateError(
+            failures.map((result) => result.reason),
+            "Worker 在途操作停止失败",
+          );
       } finally {
         await close();
       }

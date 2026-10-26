@@ -12,9 +12,13 @@
     "check": "vp check"
   },
   "dependencies": {
+    "@langchain/core": "catalog:",
+    "@langchain/langgraph": "catalog:",
+    "@scova/connectors": "workspace:*",
     "@scova/contracts": "workspace:*"
   },
   "devDependencies": {
+    "@types/node": "catalog:",
     "typescript": "catalog:"
   }
 }

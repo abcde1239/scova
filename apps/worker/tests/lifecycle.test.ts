@@ -159,7 +159,9 @@ describe("Worker 启动、串行轮询与停止", () => {
       await vi.advanceTimersByTimeAsync(1);
       expect(resources.dispatch).toHaveBeenCalledTimes(2);
       expect(logger.error.mock.calls).toEqual([["Worker Outbox 批次失败，将退避后重试"]]);
-      expect(logger.info.mock.calls).toEqual([["Scova worker ready; Outbox dispatcher running"]]);
+      expect(logger.info.mock.calls).toEqual([
+        ["Scova worker ready; Outbox dispatcher running; Run consumer running"],
+      ]);
       await vi.advanceTimersByTimeAsync(config.pollIntervalMs);
       expect(resources.dispatch).toHaveBeenCalledTimes(3);
     } finally {
