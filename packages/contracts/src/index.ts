@@ -5,6 +5,7 @@ export * from "./task-drafts.ts";
 export * from "./library.ts";
 export * from "./runs.ts";
 export * from "./reports.ts";
+export * from "./notifications.ts";
 export * from "./events.ts";
 export * from "./validation.ts";
 

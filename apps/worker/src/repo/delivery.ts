@@ -17,6 +17,7 @@ import { validatePublication, type ReadPage, type SearchResponse } from "@scova/
 import type { PrismaClient, Run, ToolCall } from "@scova/models";
 import { appendEvent, withRunFence } from "@/repo/runs.ts";
 import { loadBaseline } from "@/repo/comparison.ts";
+import { createTerminalNotifications } from "@/repo/notifications.ts";
 import { RunExecutionError, RunFenceError, type RunLeaseToken } from "@/utils/runs.ts";
 
 const hash = (text: string) => createHash("sha256").update(text, "utf8").digest("hex");
@@ -575,6 +576,11 @@ export function createDeliveryRepository(db: PrismaClient) {
             }
             if (!evidence.size) throw new RunExecutionError("NO_EVIDENCE");
             await tx.inboxItem.create({ data: { userId: run.userId, reportId: report.id } });
+            await createTerminalNotifications(tx, run, {
+              status: complete ? "succeeded" : "partial",
+              outcome,
+              reportId: report.id,
+            });
             await tx.toolCall.updateMany({
               where: { userId: run.userId, runId: run.id, status: { in: ["reserved", "running"] } },
               data: { status: "unknown", finishedAt: now },

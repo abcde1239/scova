@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { createTerminalNotifications } from "@/repo/notifications.ts";
 import {
   BudgetSchema,
   RunEventSchema,
@@ -138,6 +139,7 @@ async function finishLocked(tx: Prisma.TransactionClient, run: Run, now: Date, c
   const canceled = !!run.cancelRequestedAt || run.status === "cancel_requested";
   const safeCode = Object.hasOwn(RUN_FAILURE_MESSAGES, code) ? code : "EXECUTOR_FAILED";
   const status = canceled ? "canceled" : "failed";
+  if (!canceled) await createTerminalNotifications(tx, run, { status: "failed" });
   // A terminal Run cannot later settle an in-flight supplier call; preserve its reservation as unknown.
   await tx.toolCall.updateMany({
     where: { userId: run.userId, runId: run.id, status: { in: ["reserved", "running"] } },
