@@ -1,3 +1,4 @@
+import { installedCheckpointVersion } from "@/utils/checkpoint-version.ts";
 import { createHash } from "node:crypto";
 import type { RunnableConfig } from "@langchain/core/runnables";
 import { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
@@ -422,6 +423,11 @@ export interface AgentRuntimeOptions {
 /** Construction is offline. App lifecycle explicitly owns setup and pool shutdown. */
 export function createAgentRuntime(options: AgentRuntimeOptions) {
   const env = options.env ?? process.env;
+  if (
+    env.AGENT_CHECKPOINT_MIGRATION !== undefined &&
+    !["external", "startup"].includes(env.AGENT_CHECKPOINT_MIGRATION)
+  )
+    throw new Error("AGENT_CHECKPOINT_MIGRATION 无效");
   const schema = options.checkpointSchema ?? env.AGENT_CHECKPOINT_SCHEMA ?? "scova_agent";
   if (!/^[a-z][a-z0-9_]{0,62}$/.test(schema)) throw new Error("AGENT_CHECKPOINT_SCHEMA 无效");
   const connection = new URL(options.databaseUrl);
@@ -468,7 +474,15 @@ export function createAgentRuntime(options: AgentRuntimeOptions) {
         await client.query("SELECT pg_advisory_lock(hashtext($1))", [
           `scova-agent-schema:${schema}`,
         ]);
-        await saver.setup();
+        if (env.AGENT_CHECKPOINT_MIGRATION === "external") {
+          const version = await client.query(
+            `SELECT version FROM "${schema}".scova_schema_version WHERE id=1`,
+          );
+          if (version.rows[0]?.version !== installedCheckpointVersion())
+            throw new Error("先执行独立图状态迁移");
+        } else {
+          await saver.setup();
+        }
         ready = true;
       } finally {
         await client

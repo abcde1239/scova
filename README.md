@@ -60,3 +60,5 @@ vp run test:integration  # 需专用 PostgreSQL / Redis
 - [Swagger / OpenAPI JSON](swagger.json)（`vp run api:openapi` 重新生成）
 - [交付计划](docs/public/guides/delivery-plan.md) · [两次执行验收](docs/public/examples/two-run-scenarios.md)
 - [前端与通信约定](docs/public/reference/frontend-conventions.md)
+
+单机后端启动、迁移、备份恢复与数据保留见 [部署指南](docs/public/guides/deployment.md)。

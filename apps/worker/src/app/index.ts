@@ -1,3 +1,4 @@
+import { writeFile, unlink } from "node:fs/promises";
 import { readWorkerConfig, type WorkerConfig } from "@/app/config.ts";
 import { createWorkerResources, type WorkerResources } from "@/app/resources.ts";
 import { waitForPoll } from "@/utils/wait.ts";
@@ -32,11 +33,15 @@ export function createWorkerApp(options: WorkerAppOptions = {}) {
   let closing: Promise<void> | undefined;
   const close = () => (closing ??= resources.close());
 
+  const heartbeatPath = process.env.WORKER_HEARTBEAT_PATH;
+  const heartbeat = () =>
+    heartbeatPath ? writeFile(heartbeatPath, "ready\n", { mode: 0o600 }) : Promise.resolve();
   async function poll() {
     while (!controller.signal.aborted) {
       let delay = config.pollIntervalMs;
       try {
         await resources.dispatch(controller.signal);
+        if (!controller.signal.aborted) await heartbeat();
       } catch {
         delay = config.failureDelayMs;
         logger.error("Worker Outbox 批次失败，将退避后重试");
@@ -65,6 +70,7 @@ export function createWorkerApp(options: WorkerAppOptions = {}) {
       try {
         await resources.connect();
         if (controller.signal.aborted) return;
+        await heartbeat();
         logger.info("Scova worker ready; Outbox dispatcher running; Run consumer running");
         polling = poll();
         scheduling = schedule();
@@ -97,6 +103,7 @@ export function createWorkerApp(options: WorkerAppOptions = {}) {
             "Worker 在途操作停止失败",
           );
       } finally {
+        if (heartbeatPath) await unlink(heartbeatPath).catch(() => undefined);
         await close();
       }
     })());
