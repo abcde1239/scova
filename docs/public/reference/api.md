@@ -21,3 +21,5 @@ vp run api:openapi:check
 报告接口使用当前会话的账号权限：`GET /api/v1/reports` 支持任务筛选与游标分页，`GET /api/v1/reports/:id` 返回结构化结论、来源快照元数据和原文引用。`GET /api/v1/inbox` 分页读取收件箱，`PATCH /api/v1/inbox/:id` 以 `{ "read": true }` 标记已读，传 `false` 恢复未读；写请求仍需 CSRF。报告读取保留演示模式、覆盖缺口和引用定位，完整网页正文及内部工具、checkpoint 不进入响应。
 
 报告的 `changes` 使用同一组可访问证据：`oldEvidenceIds` 来自本次执行首次领取时固定的完整基线，`newEvidenceIds` 来自当前执行；两侧还须分别匹配变化记录的来源与快照。非法关联使整个详情返回 `409 INVALID_REPORT_EVIDENCE`。正文过期清理后仍可读取保存的引用片段和定位。
+
+`GET /api/v1/notifications` 按游标读取当前账号通知，可按 `kind`、`unread` 筛选；失败通知的 `reportId` 可为空，使用 `runId` 查看执行原因。`PATCH /api/v1/notifications/:id` 使用会话和 CSRF，以 `{ "read": true }` 标为已读，`false` 恢复未读；重复已读保留首次时间。通知和收件箱的已读状态相互独立。

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { nodeScriptCommand } from "../../../scripts/process-runtime.mjs";
-import type { Report } from "@scova/contracts";
+import type { NotificationPreference, Report } from "@scova/contracts";
 import { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test";
@@ -93,9 +93,17 @@ async function liveResearch(
     pageUrl?: string;
     failUrls?: string[];
     skipExecute?: boolean;
+    notificationPreference?: NotificationPreference;
   } = {},
 ) {
   const initial = options.previous ?? (await seedRun(fixture.db, { mode: "live" }));
+  if (options.notificationPreference) {
+    initial.config.notificationPreference = options.notificationPreference;
+    await fixture.db.taskVersion.update({
+      where: { id: initial.version.id },
+      data: { configJson: initial.config },
+    });
+  }
   const run = options.previous
     ? await fixture.db.run.create({
         data: {
@@ -258,6 +266,84 @@ async function liveResearch(
 }
 
 describe("原子证据与报告交付（真实 PostgreSQL，不使用 Redis）", () => {
+  for (const mode of ["summary", "important_change", "off"] as const)
+    for (const runIssues of [true, false])
+      it(`通知${mode}/${runIssues}经真实完整/重要变化/partial交付，重放保留已读`, async () => {
+        const first = await liveResearch({
+          notificationPreference: { mode, runIssues },
+          body: "申请截止日期为十一月十五日。",
+        });
+        const firstDelivery = await delivery.deliver(first.claimed.token, first.candidate);
+        const firstRows = await fixture.db.notification.findMany({
+          where: { runId: first.run.id },
+        });
+        expect(firstRows.map((row) => row.kind)).toEqual(mode === "summary" ? ["summary"] : []);
+        expect(
+          await fixture.db.inboxItem.count({ where: { reportId: firstDelivery.reportId } }),
+        ).toBe(1);
+        const second = await liveResearch({
+          previous: first,
+          body: "申请截止日期为十一月二十日。",
+        });
+        const delivered = await delivery.deliver(second.claimed.token, second.candidate);
+        expect(
+          (await fixture.db.run.findUniqueOrThrow({ where: { id: second.run.id } })).outcome,
+        ).toBe("important_change");
+        const rows = await fixture.db.notification.findMany({ where: { runId: second.run.id } });
+        expect(rows.map((row) => row.kind)).toEqual(mode === "off" ? [] : [mode]);
+        const readAt = new Date("2026-01-01T00:00:00Z");
+        if (rows[0])
+          await fixture.db.notification.update({ where: { id: rows[0].id }, data: { readAt } });
+        expect(await delivery.deliver(second.claimed.token, second.candidate)).toMatchObject({
+          reportId: delivered.reportId,
+          reused: true,
+        });
+        if (rows[0])
+          expect(
+            (await fixture.db.notification.findUniqueOrThrow({ where: { id: rows[0].id } })).readAt,
+          ).toEqual(readAt);
+        const third = await liveResearch({
+          previous: first,
+          importance: "unknown",
+          body: "申请截止日期尚未确定。",
+        });
+        const partial = await delivery.deliver(third.claimed.token, third.candidate);
+        expect(
+          (await fixture.db.run.findUniqueOrThrow({ where: { id: third.run.id } })).status,
+        ).toBe("partial");
+        expect(
+          (await fixture.db.notification.findMany({ where: { runId: third.run.id } })).map(
+            (row) => row.kind,
+          ),
+        ).toEqual(runIssues ? ["run_issue"] : []);
+        expect(await fixture.db.inboxItem.count({ where: { reportId: partial.reportId } })).toBe(1);
+      });
+
+  it("通知SQL失败使报告/Inbox/基线/终态一起回滚，修复后可重试", async () => {
+    const researched = await liveResearch();
+    await fixture.db.$executeRawUnsafe(
+      `CREATE FUNCTION notification_fail() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected notification failure'; END $$`,
+    );
+    await fixture.db.$executeRawUnsafe(
+      "CREATE TRIGGER notification_fail BEFORE INSERT ON notifications FOR EACH ROW EXECUTE FUNCTION notification_fail()",
+    );
+    try {
+      await expect(
+        delivery.deliver(researched.claimed.token, researched.candidate),
+      ).rejects.toThrow();
+      await assertEmpty(researched.run.id);
+      expect(await fixture.db.notification.count({ where: { runId: researched.run.id } })).toBe(0);
+      expect(await fixture.db.baseline.count({ where: { taskId: researched.task.id } })).toBe(0);
+      expect(
+        (await fixture.db.run.findUniqueOrThrow({ where: { id: researched.run.id } })).status,
+      ).toBe("running");
+    } finally {
+      await fixture.db.$executeRawUnsafe("DROP TRIGGER notification_fail ON notifications");
+      await fixture.db.$executeRawUnsafe("DROP FUNCTION notification_fail()");
+    }
+    await delivery.deliver(researched.claimed.token, researched.candidate);
+    expect(await fixture.db.notification.count({ where: { runId: researched.run.id } })).toBe(1);
+  });
   it.each(["new", "repost"] as const)("新增URL按%s分类，不把转载当独立新增", async (kind) => {
     const first = await liveResearch();
     await delivery.deliver(first.claimed.token, first.candidate);
@@ -440,6 +526,7 @@ describe("原子证据与报告交付（真实 PostgreSQL，不使用 Redis）",
           SCOVA_REPORT_PROBE_DATABASE_URL: fixture.databaseUrl,
           SCOVA_REPORT_PROBE_USER_ID: first.user.id,
           SCOVA_REPORT_PROBE_REPORT_ID: result.reportId,
+          SCOVA_REPORT_PROBE_NOTIFICATION_KIND: "summary",
         },
         encoding: "utf8",
         windowsHide: true,

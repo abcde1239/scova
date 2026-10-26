@@ -942,6 +942,321 @@
         "required": ["email", "password"],
         "type": "object"
       },
+      "Notification": {
+        "$id": "#/components/schemas/Notification",
+        "additionalProperties": false,
+        "description": "当前账号的站内通知，独立于报告收件箱",
+        "properties": {
+          "createdAt": {
+            "description": "带 UTC 偏移的 ISO 8601 时间",
+            "format": "scova-instant",
+            "type": "string"
+          },
+          "failureCode": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "执行的脱敏失败分类；无失败为空"
+          },
+          "id": {
+            "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+            "type": "string"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "const": "summary",
+                "type": "string"
+              },
+              {
+                "const": "important_change",
+                "type": "string"
+              },
+              {
+                "const": "run_issue",
+                "type": "string"
+              }
+            ],
+            "description": "完整汇总、已确认重要变化或不完整/失败的运行问题"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "const": "demo",
+                "type": "string"
+              },
+              {
+                "const": "live",
+                "type": "string"
+              }
+            ],
+            "description": "服务模式，演示和真实资料的基线分别保存"
+          },
+          "readAt": {
+            "anyOf": [
+              {
+                "description": "带 UTC 偏移的 ISO 8601 时间",
+                "format": "scova-instant",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "首次已读时间；未读为空"
+          },
+          "reportId": {
+            "anyOf": [
+              {
+                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "关联报告；失败时可为空"
+          },
+          "runId": {
+            "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+            "type": "string"
+          },
+          "runStatus": {
+            "anyOf": [
+              {
+                "const": "queued",
+                "type": "string"
+              },
+              {
+                "const": "running",
+                "type": "string"
+              },
+              {
+                "const": "recovering",
+                "type": "string"
+              },
+              {
+                "const": "cancel_requested",
+                "type": "string"
+              },
+              {
+                "const": "canceled",
+                "type": "string"
+              },
+              {
+                "const": "succeeded",
+                "type": "string"
+              },
+              {
+                "const": "partial",
+                "type": "string"
+              },
+              {
+                "const": "failed",
+                "type": "string"
+              }
+            ],
+            "description": "执行控制状态，与业务结论分别保存"
+          },
+          "taskId": {
+            "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "runId",
+          "taskId",
+          "reportId",
+          "kind",
+          "readAt",
+          "createdAt",
+          "runStatus",
+          "mode",
+          "failureCode"
+        ],
+        "type": "object"
+      },
+      "NotificationListResponse": {
+        "$id": "#/components/schemas/NotificationListResponse",
+        "additionalProperties": false,
+        "description": "普通 JSON 分页结果",
+        "properties": {
+          "items": {
+            "description": "本页资源列表",
+            "items": {
+              "$id": "#/components/schemas/Notification",
+              "additionalProperties": false,
+              "description": "当前账号的站内通知，独立于报告收件箱",
+              "properties": {
+                "createdAt": {
+                  "description": "带 UTC 偏移的 ISO 8601 时间",
+                  "format": "scova-instant",
+                  "type": "string"
+                },
+                "failureCode": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "执行的脱敏失败分类；无失败为空"
+                },
+                "id": {
+                  "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                  "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                  "type": "string"
+                },
+                "kind": {
+                  "anyOf": [
+                    {
+                      "const": "summary",
+                      "type": "string"
+                    },
+                    {
+                      "const": "important_change",
+                      "type": "string"
+                    },
+                    {
+                      "const": "run_issue",
+                      "type": "string"
+                    }
+                  ],
+                  "description": "完整汇总、已确认重要变化或不完整/失败的运行问题"
+                },
+                "mode": {
+                  "anyOf": [
+                    {
+                      "const": "demo",
+                      "type": "string"
+                    },
+                    {
+                      "const": "live",
+                      "type": "string"
+                    }
+                  ],
+                  "description": "服务模式，演示和真实资料的基线分别保存"
+                },
+                "readAt": {
+                  "anyOf": [
+                    {
+                      "description": "带 UTC 偏移的 ISO 8601 时间",
+                      "format": "scova-instant",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "首次已读时间；未读为空"
+                },
+                "reportId": {
+                  "anyOf": [
+                    {
+                      "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "关联报告；失败时可为空"
+                },
+                "runId": {
+                  "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                  "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                  "type": "string"
+                },
+                "runStatus": {
+                  "anyOf": [
+                    {
+                      "const": "queued",
+                      "type": "string"
+                    },
+                    {
+                      "const": "running",
+                      "type": "string"
+                    },
+                    {
+                      "const": "recovering",
+                      "type": "string"
+                    },
+                    {
+                      "const": "cancel_requested",
+                      "type": "string"
+                    },
+                    {
+                      "const": "canceled",
+                      "type": "string"
+                    },
+                    {
+                      "const": "succeeded",
+                      "type": "string"
+                    },
+                    {
+                      "const": "partial",
+                      "type": "string"
+                    },
+                    {
+                      "const": "failed",
+                      "type": "string"
+                    }
+                  ],
+                  "description": "执行控制状态，与业务结论分别保存"
+                },
+                "taskId": {
+                  "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                  "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "runId",
+                "taskId",
+                "reportId",
+                "kind",
+                "readAt",
+                "createdAt",
+                "runStatus",
+                "mode",
+                "failureCode"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "下一页不透明游标，末页为空"
+          }
+        },
+        "required": ["items", "nextCursor"],
+        "type": "object"
+      },
       "PageQuery": {
         "$id": "#/components/schemas/PageQuery",
         "additionalProperties": false,
@@ -9946,6 +10261,2611 @@
         },
         "summary": "修改默认时区与提醒偏好",
         "tags": ["账号"]
+      }
+    },
+    "/api/v1/notifications": {
+      "get": {
+        "description": "按稳定游标读取当前账号的通知；失败通知可无报告，关闭通知不会删除收件箱成果。",
+        "operationId": "listNotifications",
+        "parameters": [
+          {
+            "description": "上页返回的不透明游标",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 1024,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "每页条数，默认50，上限100",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "default": 0,
+                  "format": "numeric",
+                  "type": "string"
+                },
+                {
+                  "description": "每页条数，默认50，上限100",
+                  "maximum": 9007199254740991,
+                  "minimum": 1,
+                  "type": "number"
+                }
+              ],
+              "maximum": 9007199254740991,
+              "minimum": 1
+            }
+          },
+          {
+            "description": "完整汇总、已确认重要变化或不完整/失败的运行问题",
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "summary",
+                  "type": "string"
+                },
+                {
+                  "const": "important_change",
+                  "type": "string"
+                },
+                {
+                  "const": "run_issue",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          {
+            "description": "只读未读或已读，省略返回全部",
+            "in": "query",
+            "name": "unread",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "description": "只读未读或已读，省略返回全部",
+                  "type": "boolean"
+                },
+                {
+                  "default": false,
+                  "format": "boolean",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$id": "#/components/schemas/NotificationListResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "description": "本页资源列表",
+                      "items": {
+                        "$id": "#/components/schemas/Notification",
+                        "additionalProperties": false,
+                        "description": "当前账号的站内通知，独立于报告收件箱",
+                        "properties": {
+                          "createdAt": {
+                            "description": "带 UTC 偏移的 ISO 8601 时间",
+                            "format": "scova-instant",
+                            "type": "string"
+                          },
+                          "failureCode": {
+                            "anyOf": [
+                              {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "执行的脱敏失败分类；无失败为空"
+                          },
+                          "id": {
+                            "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                            "type": "string"
+                          },
+                          "kind": {
+                            "anyOf": [
+                              {
+                                "const": "summary",
+                                "type": "string"
+                              },
+                              {
+                                "const": "important_change",
+                                "type": "string"
+                              },
+                              {
+                                "const": "run_issue",
+                                "type": "string"
+                              }
+                            ],
+                            "description": "完整汇总、已确认重要变化或不完整/失败的运行问题"
+                          },
+                          "mode": {
+                            "anyOf": [
+                              {
+                                "const": "demo",
+                                "type": "string"
+                              },
+                              {
+                                "const": "live",
+                                "type": "string"
+                              }
+                            ],
+                            "description": "服务模式，演示和真实资料的基线分别保存"
+                          },
+                          "readAt": {
+                            "anyOf": [
+                              {
+                                "description": "带 UTC 偏移的 ISO 8601 时间",
+                                "format": "scova-instant",
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "首次已读时间；未读为空"
+                          },
+                          "reportId": {
+                            "anyOf": [
+                              {
+                                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "关联报告；失败时可为空"
+                          },
+                          "runId": {
+                            "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                            "type": "string"
+                          },
+                          "runStatus": {
+                            "anyOf": [
+                              {
+                                "const": "queued",
+                                "type": "string"
+                              },
+                              {
+                                "const": "running",
+                                "type": "string"
+                              },
+                              {
+                                "const": "recovering",
+                                "type": "string"
+                              },
+                              {
+                                "const": "cancel_requested",
+                                "type": "string"
+                              },
+                              {
+                                "const": "canceled",
+                                "type": "string"
+                              },
+                              {
+                                "const": "succeeded",
+                                "type": "string"
+                              },
+                              {
+                                "const": "partial",
+                                "type": "string"
+                              },
+                              {
+                                "const": "failed",
+                                "type": "string"
+                              }
+                            ],
+                            "description": "执行控制状态，与业务结论分别保存"
+                          },
+                          "taskId": {
+                            "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "runId",
+                          "taskId",
+                          "reportId",
+                          "kind",
+                          "readAt",
+                          "createdAt",
+                          "runStatus",
+                          "mode",
+                          "failureCode"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "nextCursor": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "下一页不透明游标，末页为空"
+                    }
+                  },
+                  "required": ["items", "nextCursor"],
+                  "type": "object"
+                }
+              },
+              "multipart/form-data": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "description": "本页资源列表",
+                      "items": {
+                        "$id": "#/components/schemas/Notification",
+                        "additionalProperties": false,
+                        "description": "当前账号的站内通知，独立于报告收件箱",
+                        "properties": {
+                          "createdAt": {
+                            "description": "带 UTC 偏移的 ISO 8601 时间",
+                            "format": "scova-instant",
+                            "type": "string"
+                          },
+                          "failureCode": {
+                            "anyOf": [
+                              {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "执行的脱敏失败分类；无失败为空"
+                          },
+                          "id": {
+                            "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                            "type": "string"
+                          },
+                          "kind": {
+                            "anyOf": [
+                              {
+                                "const": "summary",
+                                "type": "string"
+                              },
+                              {
+                                "const": "important_change",
+                                "type": "string"
+                              },
+                              {
+                                "const": "run_issue",
+                                "type": "string"
+                              }
+                            ],
+                            "description": "完整汇总、已确认重要变化或不完整/失败的运行问题"
+                          },
+                          "mode": {
+                            "anyOf": [
+                              {
+                                "const": "demo",
+                                "type": "string"
+                              },
+                              {
+                                "const": "live",
+                                "type": "string"
+                              }
+                            ],
+                            "description": "服务模式，演示和真实资料的基线分别保存"
+                          },
+                          "readAt": {
+                            "anyOf": [
+                              {
+                                "description": "带 UTC 偏移的 ISO 8601 时间",
+                                "format": "scova-instant",
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "首次已读时间；未读为空"
+                          },
+                          "reportId": {
+                            "anyOf": [
+                              {
+                                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "关联报告；失败时可为空"
+                          },
+                          "runId": {
+                            "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                            "type": "string"
+                          },
+                          "runStatus": {
+                            "anyOf": [
+                              {
+                                "const": "queued",
+                                "type": "string"
+                              },
+                              {
+                                "const": "running",
+                                "type": "string"
+                              },
+                              {
+                                "const": "recovering",
+                                "type": "string"
+                              },
+                              {
+                                "const": "cancel_requested",
+                                "type": "string"
+                              },
+                              {
+                                "const": "canceled",
+                                "type": "string"
+                              },
+                              {
+                                "const": "succeeded",
+                                "type": "string"
+                              },
+                              {
+                                "const": "partial",
+                                "type": "string"
+                              },
+                              {
+                                "const": "failed",
+                                "type": "string"
+                              }
+                            ],
+                            "description": "执行控制状态，与业务结论分别保存"
+                          },
+                          "taskId": {
+                            "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "runId",
+                          "taskId",
+                          "reportId",
+                          "kind",
+                          "readAt",
+                          "createdAt",
+                          "runStatus",
+                          "mode",
+                          "failureCode"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "nextCursor": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "下一页不透明游标，末页为空"
+                    }
+                  },
+                  "required": ["items", "nextCursor"],
+                  "type": "object"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "description": "本页资源列表",
+                      "items": {
+                        "$id": "#/components/schemas/Notification",
+                        "additionalProperties": false,
+                        "description": "当前账号的站内通知，独立于报告收件箱",
+                        "properties": {
+                          "createdAt": {
+                            "description": "带 UTC 偏移的 ISO 8601 时间",
+                            "format": "scova-instant",
+                            "type": "string"
+                          },
+                          "failureCode": {
+                            "anyOf": [
+                              {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "执行的脱敏失败分类；无失败为空"
+                          },
+                          "id": {
+                            "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                            "type": "string"
+                          },
+                          "kind": {
+                            "anyOf": [
+                              {
+                                "const": "summary",
+                                "type": "string"
+                              },
+                              {
+                                "const": "important_change",
+                                "type": "string"
+                              },
+                              {
+                                "const": "run_issue",
+                                "type": "string"
+                              }
+                            ],
+                            "description": "完整汇总、已确认重要变化或不完整/失败的运行问题"
+                          },
+                          "mode": {
+                            "anyOf": [
+                              {
+                                "const": "demo",
+                                "type": "string"
+                              },
+                              {
+                                "const": "live",
+                                "type": "string"
+                              }
+                            ],
+                            "description": "服务模式，演示和真实资料的基线分别保存"
+                          },
+                          "readAt": {
+                            "anyOf": [
+                              {
+                                "description": "带 UTC 偏移的 ISO 8601 时间",
+                                "format": "scova-instant",
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "首次已读时间；未读为空"
+                          },
+                          "reportId": {
+                            "anyOf": [
+                              {
+                                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "关联报告；失败时可为空"
+                          },
+                          "runId": {
+                            "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                            "type": "string"
+                          },
+                          "runStatus": {
+                            "anyOf": [
+                              {
+                                "const": "queued",
+                                "type": "string"
+                              },
+                              {
+                                "const": "running",
+                                "type": "string"
+                              },
+                              {
+                                "const": "recovering",
+                                "type": "string"
+                              },
+                              {
+                                "const": "cancel_requested",
+                                "type": "string"
+                              },
+                              {
+                                "const": "canceled",
+                                "type": "string"
+                              },
+                              {
+                                "const": "succeeded",
+                                "type": "string"
+                              },
+                              {
+                                "const": "partial",
+                                "type": "string"
+                              },
+                              {
+                                "const": "failed",
+                                "type": "string"
+                              }
+                            ],
+                            "description": "执行控制状态，与业务结论分别保存"
+                          },
+                          "taskId": {
+                            "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "runId",
+                          "taskId",
+                          "reportId",
+                          "kind",
+                          "readAt",
+                          "createdAt",
+                          "runStatus",
+                          "mode",
+                          "failureCode"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "nextCursor": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "下一页不透明游标，末页为空"
+                    }
+                  },
+                  "required": ["items", "nextCursor"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "普通 JSON 分页结果"
+          },
+          "400": {
+            "$id": "#/components/schemas/ApiError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "fieldErrors": {
+                      "description": "输入校验失败时的字段错误列表",
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "可定位的字段校验错误",
+                        "properties": {
+                          "message": {
+                            "description": "至少包含一个非空白字符的文本",
+                            "minLength": 1,
+                            "pattern": "\\S",
+                            "type": "string"
+                          },
+                          "path": {
+                            "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "message"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "message": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["code", "message", "requestId"],
+                  "type": "object"
+                }
+              },
+              "multipart/form-data": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "fieldErrors": {
+                      "description": "输入校验失败时的字段错误列表",
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "可定位的字段校验错误",
+                        "properties": {
+                          "message": {
+                            "description": "至少包含一个非空白字符的文本",
+                            "minLength": 1,
+                            "pattern": "\\S",
+                            "type": "string"
+                          },
+                          "path": {
+                            "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "message"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "message": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["code", "message", "requestId"],
+                  "type": "object"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "fieldErrors": {
+                      "description": "输入校验失败时的字段错误列表",
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "可定位的字段校验错误",
+                        "properties": {
+                          "message": {
+                            "description": "至少包含一个非空白字符的文本",
+                            "minLength": 1,
+                            "pattern": "\\S",
+                            "type": "string"
+                          },
+                          "path": {
+                            "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "message"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "message": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["code", "message", "requestId"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+          },
+          "401": {
+            "$id": "#/components/schemas/ApiError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "fieldErrors": {
+                      "description": "输入校验失败时的字段错误列表",
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "可定位的字段校验错误",
+                        "properties": {
+                          "message": {
+                            "description": "至少包含一个非空白字符的文本",
+                            "minLength": 1,
+                            "pattern": "\\S",
+                            "type": "string"
+                          },
+                          "path": {
+                            "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "message"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "message": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["code", "message", "requestId"],
+                  "type": "object"
+                }
+              },
+              "multipart/form-data": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "fieldErrors": {
+                      "description": "输入校验失败时的字段错误列表",
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "可定位的字段校验错误",
+                        "properties": {
+                          "message": {
+                            "description": "至少包含一个非空白字符的文本",
+                            "minLength": 1,
+                            "pattern": "\\S",
+                            "type": "string"
+                          },
+                          "path": {
+                            "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "message"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "message": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["code", "message", "requestId"],
+                  "type": "object"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "fieldErrors": {
+                      "description": "输入校验失败时的字段错误列表",
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "可定位的字段校验错误",
+                        "properties": {
+                          "message": {
+                            "description": "至少包含一个非空白字符的文本",
+                            "minLength": 1,
+                            "pattern": "\\S",
+                            "type": "string"
+                          },
+                          "path": {
+                            "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "message"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "message": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["code", "message", "requestId"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+          },
+          "403": {
+            "$id": "#/components/schemas/ApiError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "fieldErrors": {
+                      "description": "输入校验失败时的字段错误列表",
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "可定位的字段校验错误",
+                        "properties": {
+                          "message": {
+                            "description": "至少包含一个非空白字符的文本",
+                            "minLength": 1,
+                            "pattern": "\\S",
+                            "type": "string"
+                          },
+                          "path": {
+                            "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "message"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "message": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["code", "message", "requestId"],
+                  "type": "object"
+                }
+              },
+              "multipart/form-data": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "fieldErrors": {
+                      "description": "输入校验失败时的字段错误列表",
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "可定位的字段校验错误",
+                        "properties": {
+                          "message": {
+                            "description": "至少包含一个非空白字符的文本",
+                            "minLength": 1,
+                            "pattern": "\\S",
+                            "type": "string"
+                          },
+                          "path": {
+                            "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "message"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "message": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["code", "message", "requestId"],
+                  "type": "object"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "fieldErrors": {
+                      "description": "输入校验失败时的字段错误列表",
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "可定位的字段校验错误",
+                        "properties": {
+                          "message": {
+                            "description": "至少包含一个非空白字符的文本",
+                            "minLength": 1,
+                            "pattern": "\\S",
+                            "type": "string"
+                          },
+                          "path": {
+                            "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "message"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "message": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["code", "message", "requestId"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+          },
+          "404": {
+            "$id": "#/components/schemas/ApiError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "fieldErrors": {
+                      "description": "输入校验失败时的字段错误列表",
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "可定位的字段校验错误",
+                        "properties": {
+                          "message": {
+                            "description": "至少包含一个非空白字符的文本",
+                            "minLength": 1,
+                            "pattern": "\\S",
+                            "type": "string"
+                          },
+                          "path": {
+                            "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "message"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "message": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["code", "message", "requestId"],
+                  "type": "object"
+                }
+              },
+              "multipart/form-data": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "fieldErrors": {
+                      "description": "输入校验失败时的字段错误列表",
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "可定位的字段校验错误",
+                        "properties": {
+                          "message": {
+                            "description": "至少包含一个非空白字符的文本",
+                            "minLength": 1,
+                            "pattern": "\\S",
+                            "type": "string"
+                          },
+                          "path": {
+                            "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "message"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "message": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["code", "message", "requestId"],
+                  "type": "object"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "fieldErrors": {
+                      "description": "输入校验失败时的字段错误列表",
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "可定位的字段校验错误",
+                        "properties": {
+                          "message": {
+                            "description": "至少包含一个非空白字符的文本",
+                            "minLength": 1,
+                            "pattern": "\\S",
+                            "type": "string"
+                          },
+                          "path": {
+                            "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "message"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "message": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["code", "message", "requestId"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+          },
+          "422": {
+            "$id": "#/components/schemas/ApiError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "fieldErrors": {
+                      "description": "输入校验失败时的字段错误列表",
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "可定位的字段校验错误",
+                        "properties": {
+                          "message": {
+                            "description": "至少包含一个非空白字符的文本",
+                            "minLength": 1,
+                            "pattern": "\\S",
+                            "type": "string"
+                          },
+                          "path": {
+                            "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "message"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "message": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["code", "message", "requestId"],
+                  "type": "object"
+                }
+              },
+              "multipart/form-data": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "fieldErrors": {
+                      "description": "输入校验失败时的字段错误列表",
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "可定位的字段校验错误",
+                        "properties": {
+                          "message": {
+                            "description": "至少包含一个非空白字符的文本",
+                            "minLength": 1,
+                            "pattern": "\\S",
+                            "type": "string"
+                          },
+                          "path": {
+                            "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "message"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "message": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["code", "message", "requestId"],
+                  "type": "object"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "fieldErrors": {
+                      "description": "输入校验失败时的字段错误列表",
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "可定位的字段校验错误",
+                        "properties": {
+                          "message": {
+                            "description": "至少包含一个非空白字符的文本",
+                            "minLength": 1,
+                            "pattern": "\\S",
+                            "type": "string"
+                          },
+                          "path": {
+                            "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "message"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "message": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["code", "message", "requestId"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+          }
+        },
+        "summary": "读取站内通知",
+        "tags": ["通知"]
+      }
+    },
+    "/api/v1/notifications/{notificationId}": {
+      "patch": {
+        "description": "使用会话和CSRF修改当前账号通知，重复已读保留首次时间，与报告收件箱的已读状态独立。",
+        "operationId": "updateNotificationRead",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "notificationId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "description": "修改通知已读状态",
+                "properties": {
+                  "read": {
+                    "description": "标为已读或恢复未读，不改变收件箱状态",
+                    "type": "boolean"
+                  }
+                },
+                "required": ["read"],
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "additionalProperties": false,
+                "description": "修改通知已读状态",
+                "properties": {
+                  "read": {
+                    "description": "标为已读或恢复未读，不改变收件箱状态",
+                    "type": "boolean"
+                  }
+                },
+                "required": ["read"],
+                "type": "object"
+              }
+            },
+            "text/plain": {
+              "schema": {
+                "additionalProperties": false,
+                "description": "修改通知已读状态",
+                "properties": {
+                  "read": {
+                    "description": "标为已读或恢复未读，不改变收件箱状态",
+                    "type": "boolean"
+                  }
+                },
+                "required": ["read"],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "$id": "#/components/schemas/Notification",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "createdAt": {
+                      "description": "带 UTC 偏移的 ISO 8601 时间",
+                      "format": "scova-instant",
+                      "type": "string"
+                    },
+                    "failureCode": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "执行的脱敏失败分类；无失败为空"
+                    },
+                    "id": {
+                      "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                      "type": "string"
+                    },
+                    "kind": {
+                      "anyOf": [
+                        {
+                          "const": "summary",
+                          "type": "string"
+                        },
+                        {
+                          "const": "important_change",
+                          "type": "string"
+                        },
+                        {
+                          "const": "run_issue",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "完整汇总、已确认重要变化或不完整/失败的运行问题"
+                    },
+                    "mode": {
+                      "anyOf": [
+                        {
+                          "const": "demo",
+                          "type": "string"
+                        },
+                        {
+                          "const": "live",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "服务模式，演示和真实资料的基线分别保存"
+                    },
+                    "readAt": {
+                      "anyOf": [
+                        {
+                          "description": "带 UTC 偏移的 ISO 8601 时间",
+                          "format": "scova-instant",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "首次已读时间；未读为空"
+                    },
+                    "reportId": {
+                      "anyOf": [
+                        {
+                          "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "关联报告；失败时可为空"
+                    },
+                    "runId": {
+                      "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                      "type": "string"
+                    },
+                    "runStatus": {
+                      "anyOf": [
+                        {
+                          "const": "queued",
+                          "type": "string"
+                        },
+                        {
+                          "const": "running",
+                          "type": "string"
+                        },
+                        {
+                          "const": "recovering",
+                          "type": "string"
+                        },
+                        {
+                          "const": "cancel_requested",
+                          "type": "string"
+                        },
+                        {
+                          "const": "canceled",
+                          "type": "string"
+                        },
+                        {
+                          "const": "succeeded",
+                          "type": "string"
+                        },
+                        {
+                          "const": "partial",
+                          "type": "string"
+                        },
+                        {
+                          "const": "failed",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "执行控制状态，与业务结论分别保存"
+                    },
+                    "taskId": {
+                      "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "runId",
+                    "taskId",
+                    "reportId",
+                    "kind",
+                    "readAt",
+                    "createdAt",
+                    "runStatus",
+                    "mode",
+                    "failureCode"
+                  ],
+                  "type": "object"
+                }
+              },
+              "multipart/form-data": {
+                "schema": {
+                  "properties": {
+                    "createdAt": {
+                      "description": "带 UTC 偏移的 ISO 8601 时间",
+                      "format": "scova-instant",
+                      "type": "string"
+                    },
+                    "failureCode": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "执行的脱敏失败分类；无失败为空"
+                    },
+                    "id": {
+                      "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                      "type": "string"
+                    },
+                    "kind": {
+                      "anyOf": [
+                        {
+                          "const": "summary",
+                          "type": "string"
+                        },
+                        {
+                          "const": "important_change",
+                          "type": "string"
+                        },
+                        {
+                          "const": "run_issue",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "完整汇总、已确认重要变化或不完整/失败的运行问题"
+                    },
+                    "mode": {
+                      "anyOf": [
+                        {
+                          "const": "demo",
+                          "type": "string"
+                        },
+                        {
+                          "const": "live",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "服务模式，演示和真实资料的基线分别保存"
+                    },
+                    "readAt": {
+                      "anyOf": [
+                        {
+                          "description": "带 UTC 偏移的 ISO 8601 时间",
+                          "format": "scova-instant",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "首次已读时间；未读为空"
+                    },
+                    "reportId": {
+                      "anyOf": [
+                        {
+                          "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "关联报告；失败时可为空"
+                    },
+                    "runId": {
+                      "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                      "type": "string"
+                    },
+                    "runStatus": {
+                      "anyOf": [
+                        {
+                          "const": "queued",
+                          "type": "string"
+                        },
+                        {
+                          "const": "running",
+                          "type": "string"
+                        },
+                        {
+                          "const": "recovering",
+                          "type": "string"
+                        },
+                        {
+                          "const": "cancel_requested",
+                          "type": "string"
+                        },
+                        {
+                          "const": "canceled",
+                          "type": "string"
+                        },
+                        {
+                          "const": "succeeded",
+                          "type": "string"
+                        },
+                        {
+                          "const": "partial",
+                          "type": "string"
+                        },
+                        {
+                          "const": "failed",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "执行控制状态，与业务结论分别保存"
+                    },
+                    "taskId": {
+                      "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "runId",
+                    "taskId",
+                    "reportId",
+                    "kind",
+                    "readAt",
+                    "createdAt",
+                    "runStatus",
+                    "mode",
+                    "failureCode"
+                  ],
+                  "type": "object"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "properties": {
+                    "createdAt": {
+                      "description": "带 UTC 偏移的 ISO 8601 时间",
+                      "format": "scova-instant",
+                      "type": "string"
+                    },
+                    "failureCode": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "执行的脱敏失败分类；无失败为空"
+                    },
+                    "id": {
+                      "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                      "type": "string"
+                    },
+                    "kind": {
+                      "anyOf": [
+                        {
+                          "const": "summary",
+                          "type": "string"
+                        },
+                        {
+                          "const": "important_change",
+                          "type": "string"
+                        },
+                        {
+                          "const": "run_issue",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "完整汇总、已确认重要变化或不完整/失败的运行问题"
+                    },
+                    "mode": {
+                      "anyOf": [
+                        {
+                          "const": "demo",
+                          "type": "string"
+                        },
+                        {
+                          "const": "live",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "服务模式，演示和真实资料的基线分别保存"
+                    },
+                    "readAt": {
+                      "anyOf": [
+                        {
+                          "description": "带 UTC 偏移的 ISO 8601 时间",
+                          "format": "scova-instant",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "首次已读时间；未读为空"
+                    },
+                    "reportId": {
+                      "anyOf": [
+                        {
+                          "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "关联报告；失败时可为空"
+                    },
+                    "runId": {
+                      "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                      "type": "string"
+                    },
+                    "runStatus": {
+                      "anyOf": [
+                        {
+                          "const": "queued",
+                          "type": "string"
+                        },
+                        {
+                          "const": "running",
+                          "type": "string"
+                        },
+                        {
+                          "const": "recovering",
+                          "type": "string"
+                        },
+                        {
+                          "const": "cancel_requested",
+                          "type": "string"
+                        },
+                        {
+                          "const": "canceled",
+                          "type": "string"
+                        },
+                        {
+                          "const": "succeeded",
+                          "type": "string"
+                        },
+                        {
+                          "const": "partial",
+                          "type": "string"
+                        },
+                        {
+                          "const": "failed",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "执行控制状态，与业务结论分别保存"
+                    },
+                    "taskId": {
+                      "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "runId",
+                    "taskId",
+                    "reportId",
+                    "kind",
+                    "readAt",
+                    "createdAt",
+                    "runStatus",
+                    "mode",
+                    "failureCode"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "当前账号的站内通知，独立于报告收件箱"
+          },
+          "400": {
+            "$id": "#/components/schemas/ApiError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "fieldErrors": {
+                      "description": "输入校验失败时的字段错误列表",
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "可定位的字段校验错误",
+                        "properties": {
+                          "message": {
+                            "description": "至少包含一个非空白字符的文本",
+                            "minLength": 1,
+                            "pattern": "\\S",
+                            "type": "string"
+                          },
+                          "path": {
+                            "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "message"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "message": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["code", "message", "requestId"],
+                  "type": "object"
+                }
+              },
+              "multipart/form-data": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "fieldErrors": {
+                      "description": "输入校验失败时的字段错误列表",
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "可定位的字段校验错误",
+                        "properties": {
+                          "message": {
+                            "description": "至少包含一个非空白字符的文本",
+                            "minLength": 1,
+                            "pattern": "\\S",
+                            "type": "string"
+                          },
+                          "path": {
+                            "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "message"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "message": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["code", "message", "requestId"],
+                  "type": "object"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "fieldErrors": {
+                      "description": "输入校验失败时的字段错误列表",
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "可定位的字段校验错误",
+                        "properties": {
+                          "message": {
+                            "description": "至少包含一个非空白字符的文本",
+                            "minLength": 1,
+                            "pattern": "\\S",
+                            "type": "string"
+                          },
+                          "path": {
+                            "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "message"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "message": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["code", "message", "requestId"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+          },
+          "401": {
+            "$id": "#/components/schemas/ApiError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "fieldErrors": {
+                      "description": "输入校验失败时的字段错误列表",
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "可定位的字段校验错误",
+                        "properties": {
+                          "message": {
+                            "description": "至少包含一个非空白字符的文本",
+                            "minLength": 1,
+                            "pattern": "\\S",
+                            "type": "string"
+                          },
+                          "path": {
+                            "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "message"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "message": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["code", "message", "requestId"],
+                  "type": "object"
+                }
+              },
+              "multipart/form-data": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "fieldErrors": {
+                      "description": "输入校验失败时的字段错误列表",
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "可定位的字段校验错误",
+                        "properties": {
+                          "message": {
+                            "description": "至少包含一个非空白字符的文本",
+                            "minLength": 1,
+                            "pattern": "\\S",
+                            "type": "string"
+                          },
+                          "path": {
+                            "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "message"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "message": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["code", "message", "requestId"],
+                  "type": "object"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "fieldErrors": {
+                      "description": "输入校验失败时的字段错误列表",
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "可定位的字段校验错误",
+                        "properties": {
+                          "message": {
+                            "description": "至少包含一个非空白字符的文本",
+                            "minLength": 1,
+                            "pattern": "\\S",
+                            "type": "string"
+                          },
+                          "path": {
+                            "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "message"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "message": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["code", "message", "requestId"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+          },
+          "403": {
+            "$id": "#/components/schemas/ApiError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "fieldErrors": {
+                      "description": "输入校验失败时的字段错误列表",
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "可定位的字段校验错误",
+                        "properties": {
+                          "message": {
+                            "description": "至少包含一个非空白字符的文本",
+                            "minLength": 1,
+                            "pattern": "\\S",
+                            "type": "string"
+                          },
+                          "path": {
+                            "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "message"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "message": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["code", "message", "requestId"],
+                  "type": "object"
+                }
+              },
+              "multipart/form-data": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "fieldErrors": {
+                      "description": "输入校验失败时的字段错误列表",
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "可定位的字段校验错误",
+                        "properties": {
+                          "message": {
+                            "description": "至少包含一个非空白字符的文本",
+                            "minLength": 1,
+                            "pattern": "\\S",
+                            "type": "string"
+                          },
+                          "path": {
+                            "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "message"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "message": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["code", "message", "requestId"],
+                  "type": "object"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "fieldErrors": {
+                      "description": "输入校验失败时的字段错误列表",
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "可定位的字段校验错误",
+                        "properties": {
+                          "message": {
+                            "description": "至少包含一个非空白字符的文本",
+                            "minLength": 1,
+                            "pattern": "\\S",
+                            "type": "string"
+                          },
+                          "path": {
+                            "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "message"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "message": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["code", "message", "requestId"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+          },
+          "404": {
+            "$id": "#/components/schemas/ApiError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "fieldErrors": {
+                      "description": "输入校验失败时的字段错误列表",
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "可定位的字段校验错误",
+                        "properties": {
+                          "message": {
+                            "description": "至少包含一个非空白字符的文本",
+                            "minLength": 1,
+                            "pattern": "\\S",
+                            "type": "string"
+                          },
+                          "path": {
+                            "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "message"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "message": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["code", "message", "requestId"],
+                  "type": "object"
+                }
+              },
+              "multipart/form-data": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "fieldErrors": {
+                      "description": "输入校验失败时的字段错误列表",
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "可定位的字段校验错误",
+                        "properties": {
+                          "message": {
+                            "description": "至少包含一个非空白字符的文本",
+                            "minLength": 1,
+                            "pattern": "\\S",
+                            "type": "string"
+                          },
+                          "path": {
+                            "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "message"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "message": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["code", "message", "requestId"],
+                  "type": "object"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "fieldErrors": {
+                      "description": "输入校验失败时的字段错误列表",
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "可定位的字段校验错误",
+                        "properties": {
+                          "message": {
+                            "description": "至少包含一个非空白字符的文本",
+                            "minLength": 1,
+                            "pattern": "\\S",
+                            "type": "string"
+                          },
+                          "path": {
+                            "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "message"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "message": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["code", "message", "requestId"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+          },
+          "422": {
+            "$id": "#/components/schemas/ApiError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "fieldErrors": {
+                      "description": "输入校验失败时的字段错误列表",
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "可定位的字段校验错误",
+                        "properties": {
+                          "message": {
+                            "description": "至少包含一个非空白字符的文本",
+                            "minLength": 1,
+                            "pattern": "\\S",
+                            "type": "string"
+                          },
+                          "path": {
+                            "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "message"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "message": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["code", "message", "requestId"],
+                  "type": "object"
+                }
+              },
+              "multipart/form-data": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "fieldErrors": {
+                      "description": "输入校验失败时的字段错误列表",
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "可定位的字段校验错误",
+                        "properties": {
+                          "message": {
+                            "description": "至少包含一个非空白字符的文本",
+                            "minLength": 1,
+                            "pattern": "\\S",
+                            "type": "string"
+                          },
+                          "path": {
+                            "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "message"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "message": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["code", "message", "requestId"],
+                  "type": "object"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "fieldErrors": {
+                      "description": "输入校验失败时的字段错误列表",
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "可定位的字段校验错误",
+                        "properties": {
+                          "message": {
+                            "description": "至少包含一个非空白字符的文本",
+                            "minLength": 1,
+                            "pattern": "\\S",
+                            "type": "string"
+                          },
+                          "path": {
+                            "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "message"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "message": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "description": "至少包含一个非空白字符的文本",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["code", "message", "requestId"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+          }
+        },
+        "summary": "修改通知已读状态",
+        "tags": ["通知"]
       }
     },
     "/api/v1/reports": {

@@ -100,7 +100,7 @@ LangGraph 自己的 checkpoint 表使用独立命名空间/迁移，不由 Prism
 
 Feedback 的条件唯一索引分别覆盖 sourceId 与 claimId，避免 NULL 导致重复；跨任务 claim 反馈须验证 claim 所属报告的 taskId。一种反馈可被撤销，执行保存当时快照以解释后续排序。问答中的事实同样要求引用。
 
-报告和 InboxItem 在同一事务中提交。Notification 按偏好生成：summary 对每次有成果交付提醒；important_change 仅已确认重要变化；run_issue 独立展示失败/不完整，按运行问题偏好控制。站内提醒不发送外部消息，重放交付不插入第二条。
+报告和 InboxItem 在同一事务中提交。Notification 使用 Run 固定 TaskVersion 的偏好：summary 对每次完整交付提醒；important_change 仅提醒完整且已确认的重要变化；partial/failed 仅生成 run_issue，按独立运行问题偏好控制，failed 可无报告。用户取消不发运行问题提醒。关闭通知不影响报告或收件箱，账号默认只影响后续草稿。损坏的版本提醒配置保守不发通知，不阻止失败终结；不回退读取其他版本或账号默认。通知与成果或失败终态同事务，重放不重复或重置已读状态，不发送外部消息。
 
 ## 6. 必须落实的数据库约束
 

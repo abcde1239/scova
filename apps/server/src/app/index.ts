@@ -8,6 +8,7 @@ import { createAuthPlugin } from "@/router/auth.ts";
 import { createTaskPlugin } from "@/router/tasks.ts";
 import { createRunPlugin } from "@/router/runs.ts";
 import { createReportPlugin } from "@/router/reports.ts";
+import { createNotificationPlugin } from "@/router/notifications.ts";
 import { createSystemPlugin } from "@/router/system.ts";
 
 export { contractModels, HealthResponseSchema } from "@/app/contracts.ts";
@@ -45,6 +46,7 @@ export const createApiApp = (
     .use(createAuthPlugin(services))
     .use(createTaskPlugin(services))
     .use(createRunPlugin(services))
-    .use(createReportPlugin(services));
+    .use(createReportPlugin(services))
+    .use(createNotificationPlugin(services));
 
 export const apiApp = createApiApp();

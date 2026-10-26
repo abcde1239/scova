@@ -3,6 +3,7 @@ export * from "./auth.ts";
 export * from "./tasks.ts";
 export * from "./runs.ts";
 export * from "./reports.ts";
+export * from "./notifications.ts";
 export * from "./events.ts";
 export * from "./validation.ts";
 
