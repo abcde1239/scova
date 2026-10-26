@@ -13,7 +13,7 @@
 | M0 当前：治理与设计      | harness-lint/verify、产品定义、架构、数据模型、分期与两次执行案例                                                                 | 治理、现有测试与构建通过；内部资料不进入公开 Git                                       |
 | M1：工作区与技术实验     | 迁移 apps/web，创建 api/worker/contracts/agent-core/connectors；PostgreSQL/Redis 开发环境；Prisma/BullMQ/LangGraph Bun 兼容性实验 | 真实数据库与队列读写、checkpoint 写入/恢复、epoch 接管隔离、迁移可重跑均验证           |
 | M2：账号、任务与执行骨架 | 会话账号、owner 授权、配置草稿/版本、手动执行、任务互斥、outbox、执行事件/SSE、中文页面框架                                       | 两账号隔离；重复点击/并发触发同一活动执行；SSE 断线回放无缺口                          |
-| M3：真实查阅与首次报告   | Tavily、模型适配、Readability、安全抓取、预算账本、持久化图、结构化引用与演示模式                                                 | 真实服务可完成一次报告，引用可定位；供应商缺失/失败与预算耗尽可解释；worker 重启可恢复 |
+| M3：真实查阅与首次报告   | SearxNG（默认）/Tavily（可选）、远程模型、Readability、安全抓取、预算账本、持久化图、引用与演示模式                               | 真实服务可完成一次报告，引用可定位；供应商缺失/失败与预算耗尽可解释；worker 重启可恢复 |
 | M4：增量与周期可靠性     | 基线、规范化/去重/事实变化、daily/weekly 时区调度、暂停/取消、失败重试、原子交付                                                  | 三类任务各连续两次正确分类；DST/停机/重投/旧 worker 竞争均通过                         |
 | M5：完整 MVP 与部署展示  | 收藏/笔记/反馈/报告问答、四种成果视图、收件箱/提醒、全文检索、Compose、GitHub Actions、公开使用文档                               | 一条命令启动、健康检查与迁移、E2E、备份恢复、真实检索烟测及可复现演示                  |
 
@@ -41,7 +41,7 @@ Run/Outbox/Event 和生产 consumer 已接通租约续期、有限接管、取�
 
 ### M3：检索、证据与首次成果
 
-实现 Tavily + 模型适配层、HTTP/Readability、安全 URL/DNS/重定向校验。实现预算预留/结算、有限循环、工具账本与 checkpoint 提升。使用外部服务时展示真实模式，缺少任一必要服务时进入显式全演示管线。
+实现默认自部署 SearxNG、显式可选 Tavily 与远程模型适配层，HTTP/Readability、安全 URL/DNS/重定向校验。搜索/阅读可独立验证，上游失败记录覆盖缺口。实现预算预留/结算、有限循环、工具账本与 checkpoint 提升；完整研究缺必要配置时进入明确标识的全演示管线，运行失败不切换供应商。
 
 首次完整执行建立基线和报告；先交付简报视图，底层结构支持后续其他视图。执行详情展示工具摘要、来源、用量和缺口，报告详情展示事实/推断/冲突/不足及引用。禁止把供应商失败吞成“没有变化”。
 
@@ -74,12 +74,12 @@ Compose 提供同源 web/api、独立 worker、PostgreSQL/Redis 持久卷，迁�
 
 ## 4. 验证层级与产物
 
-| 层级      | 工具与环境                        | 覆盖重点                                      | 是否需要外部服务           |
-| --------- | --------------------------------- | --------------------------------------------- | -------------------------- |
-| 单元/状态 | Vitest（vp test）                 | 配置、规范化、差异、预算、状态与 contracts    | 否，固定 fixture           |
-| 集成/故障 | Vitest + Compose PostgreSQL/Redis | 唯一键、owner 外键、outbox、租约与 checkpoint | 本地基础服务               |
-| 用户流程  | Playwright                        | 两账号、任务/执行/报告、重连、反馈/收藏       | 本地 API/worker 与演示服务 |
-| 真实烟测  | 显式脚本 + 测试账号/密钥          | Tavily、模型、公共网页和引用可达性            | 是，受预算约束             |
+| 层级      | 工具与环境                        | 覆盖重点                                      | 是否需要外部服务                 |
+| --------- | --------------------------------- | --------------------------------------------- | -------------------------------- |
+| 单元/状态 | Vitest（vp test）                 | 配置、规范化、差异、预算、状态与 contracts    | 否，固定 fixture                 |
+| 集成/故障 | Vitest + Compose PostgreSQL/Redis | 唯一键、owner 外键、outbox、租约与 checkpoint | 本地基础服务                     |
+| 用户流程  | Playwright                        | 两账号、任务/执行/报告、重连、反馈/收藏       | 本地 API/worker 与演示服务       |
+| 真实烟测  | 显式脚本 + 本机实例/测试密钥      | SearxNG、远程模型、公共网页及可选 Tavily      | 是，搜索无需模型密钥，受预算约束 |
 
 测试源代码保留在包内 `src/**/*.test.ts` 或 `tests/`；Playwright 放 `tests/e2e` 并设置独立配置。运行产物放 artifacts/coverage/playwright-report/test-results，不放进文档目录。每接入一个真实测试范围，更新 harness 的 covers 与 requireConfiguredTask；未配置不能写成 passed。
 
