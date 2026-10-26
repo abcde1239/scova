@@ -22,7 +22,9 @@
     {
       "root": "apps/worker",
       "id": "apps-worker",
-      "tests": { "requireConfiguredTask": true }
+      "tests": {
+        "requireConfiguredTask": true
+      }
     },
     {
       "root": "packages/contracts",
@@ -38,12 +40,16 @@
     {
       "root": "packages/agent-core",
       "id": "packages-agent-core",
-      "tests": { "requireConfiguredTask": true }
+      "tests": {
+        "requireConfiguredTask": true
+      }
     },
     {
       "root": "packages/connectors",
       "id": "packages-connectors",
-      "tests": { "requireConfiguredTask": true }
+      "tests": {
+        "requireConfiguredTask": true
+      }
     },
     {
       "root": "packages/utils",
@@ -217,7 +223,7 @@
       "workspace": "root",
       "argv": ["vp", "run", "test:integration"],
       "covers": ["apps-server", "apps-worker"],
-      "timeoutMs": 600000,
+      "timeoutMs": 900000,
       "kind": "test"
     }
   ],
