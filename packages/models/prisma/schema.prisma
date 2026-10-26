@@ -667,6 +667,7 @@ model Bookmark {
 
   @@unique([userId, id])
   @@unique([userId, sourceId])
+  @@index([userId, createdAt(sort: Desc), id(sort: Desc)], map: "bookmarks_library_page")
   @@map("bookmarks")
 }
 
@@ -685,6 +686,7 @@ model Note {
   report Report? @relation("Note_report", fields: [userId, reportId], references: [userId, id], onDelete: NoAction, onUpdate: NoAction)
 
   @@unique([userId, id])
+  @@index([userId, updatedAt(sort: Desc), id(sort: Desc)], map: "notes_library_page")
   @@map("notes")
 }
 

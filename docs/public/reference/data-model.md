@@ -161,3 +161,5 @@ REFERENCES runs(user_id, task_id, comparison_scope_hash, id);
 正文与详细工具日志默认 30 天后清理；报告引用片段、指纹和元数据随报告保留，避免全文过期后历史引用不可解释。清理不得删除仍被有效基线比较所需的事实快照摘要。备份保留窗口由部署设置明确，删除并不即时清除既有离线备份。
 
 相关文档：[架构](architecture.md)、[交付计划](../guides/delivery-plan.md)、[验收场景](../examples/two-run-scenarios.md)。
+
+资料库沿用 Source、SourceSnapshot、Bookmark、Note：收藏按 owner/source 唯一；笔记恰一来源或报告目标，同一来源允许多条笔记，创建幂等记录与 Note 同事务提交。历史快照必须存在同 owner/source 的成功 RunSource；正文过期仅清正文，保留 Evidence 原文片段、hash、定位、Report 比较清单及 Baseline。资料检索和历史分页索引由 models 迁移维护。
