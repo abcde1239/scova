@@ -161,3 +161,5 @@ REFERENCES runs(user_id, task_id, comparison_scope_hash, id);
 正文与详细工具日志默认 30 天后清理；报告引用片段、指纹和元数据随报告保留，避免全文过期后历史引用不可解释。清理不得删除仍被有效基线比较所需的事实快照摘要。备份保留窗口由部署设置明确，删除并不即时清除既有离线备份。
 
 相关文档：[架构](architecture.md)、[交付计划](../guides/delivery-plan.md)、[验收场景](../examples/two-run-scenarios.md)。
+
+ReportQuestion 保存原始问题、回答/独立计量和 followupRunId；QuestionEvidence 记录引用关系。问题与幂等认领先持久化，模型调用在事务外进行，回答与引用在短事务内完成；进程中断的未完成问题以 409 显示处理中，稳定键不会触发重复调用，用户可用新键重新提交。Run.followupConfigJson 固定显式后续研究的完整配置；原 TaskVersion 和 Task.currentVersionId 不变，Worker 执行与交付从同一固定配置读取，重试保留问题与隔离比较范围。

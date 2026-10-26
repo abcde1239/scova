@@ -8,6 +8,7 @@ import { createAuthPlugin } from "@/router/auth.ts";
 import { createTaskPlugin } from "@/router/tasks.ts";
 import { createTaskDraftPlugin } from "@/router/task-drafts.ts";
 import { createRunPlugin } from "@/router/runs.ts";
+import { createReportQuestionPlugin } from "@/router/report-questions.ts";
 import { createReportPlugin } from "@/router/reports.ts";
 import { createSystemPlugin } from "@/router/system.ts";
 
@@ -47,6 +48,7 @@ export const createApiApp = (
     .use(createTaskPlugin(services))
     .use(createTaskDraftPlugin(services))
     .use(createRunPlugin(services))
-    .use(createReportPlugin(services));
+    .use(createReportPlugin(services))
+    .use(createReportQuestionPlugin(services));
 
 export const apiApp = createApiApp();

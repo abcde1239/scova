@@ -28,14 +28,19 @@ export interface ApiServices {
   sessionTtlSeconds: number;
   rateLimit: AuthRateLimitConfig;
   taskDraftPolicy: TaskDraftPolicy;
+  reportQuestionPolicy: TaskDraftPolicy;
+  reportQuestionModel(): ModelProvider | null;
   taskDraftModel(): ModelProvider | null;
   clock(): Date;
   close(): Promise<void>;
 }
 
-export type ApiServiceOverrides = Partial<Omit<ApiServices, "rateLimit" | "taskDraftPolicy">> & {
+export type ApiServiceOverrides = Partial<
+  Omit<ApiServices, "rateLimit" | "taskDraftPolicy" | "reportQuestionPolicy">
+> & {
   rateLimit?: Partial<AuthRateLimitConfig>;
   taskDraftPolicy?: Partial<TaskDraftPolicy>;
+  reportQuestionPolicy?: Partial<TaskDraftPolicy>;
 };
 
 function positiveSetting(name: string, fallback: number): number {
@@ -48,6 +53,7 @@ export function createDefaultServices(overrides: ApiServiceOverrides = {}): ApiS
   let database: PrismaClient | undefined;
   let cache: Redis | undefined;
   let draftModel: ModelProvider | null | undefined;
+  let questionModel: ModelProvider | null | undefined;
   const origin = new URL(overrides.origin ?? process.env.APP_ORIGIN ?? "http://localhost:5173")
     .origin;
   const rateLimit: AuthRateLimitConfig = {
@@ -71,6 +77,16 @@ export function createDefaultServices(overrides: ApiServiceOverrides = {}): ApiS
       overrides.sessionTtlSeconds ?? positiveSetting("SESSION_TTL_SECONDS", 7 * 24 * 60 * 60),
     rateLimit,
     taskDraftPolicy: createTaskDraftPolicy(overrides.taskDraftPolicy),
+    reportQuestionPolicy: createTaskDraftPolicy({
+      keyPrefix: "scova:report-questions:",
+      ...overrides.reportQuestionPolicy,
+    }),
+    reportQuestionModel:
+      overrides.reportQuestionModel ??
+      (() => {
+        if (questionModel === undefined) questionModel = createTaskDraftModel();
+        return questionModel;
+      }),
     taskDraftModel:
       overrides.taskDraftModel ??
       (() => {

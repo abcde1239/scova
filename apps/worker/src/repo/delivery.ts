@@ -98,7 +98,10 @@ export function createDeliveryRepository(db: PrismaClient) {
               where: { id: run.taskVersionId, userId: run.userId, taskId: run.taskId },
             });
             if (!version) return invalid();
-            const config = parseContract(TaskConfigSchema, version.configJson);
+            const config = parseContract(
+              TaskConfigSchema,
+              run.followupConfigJson ?? version.configJson,
+            );
             const context = contextFor(run, config);
             context.comparisonScopeHash = run.comparisonScopeHash;
             context.baselineRunId = run.baselineRunId;

@@ -199,7 +199,7 @@ export function createRunRepository(db: PrismaClient): RunRepository {
           const version = await tx.taskVersion.findUnique({ where: { id: run.taskVersionId } });
           if (!version || version.userId !== run.userId || version.taskId !== run.taskId)
             throw new Error("执行版本不存在");
-          config = parseContract(TaskConfigSchema, version.configJson);
+          config = parseContract(TaskConfigSchema, run.followupConfigJson ?? version.configJson);
           budget = parseContract(BudgetSchema, run.budgetJson);
           usage = parseContract(UsageSchema, run.usageJson);
         } catch {
