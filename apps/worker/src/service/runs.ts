@@ -1,7 +1,12 @@
 import { randomUUID } from "node:crypto";
 import type { Budget, TaskConfig, Usage } from "@scova/contracts";
 import type { RunRepository } from "@/repo/runs.ts";
-import { RunFenceError, type RunProgressEvent } from "@/utils/runs.ts";
+import {
+  RunExecutionError,
+  RunFenceError,
+  type RunProgressEvent,
+  type RunLeaseToken,
+} from "@/utils/runs.ts";
 import { waitForPoll } from "@/utils/wait.ts";
 
 export interface RunExecutionContext {
@@ -22,11 +27,17 @@ export interface RunExecutionContext {
 export interface RunExecutor {
   /** #14 注入持久化 Agent；#16 交付事务负责成功，返回 void 本身不是成功。 */
   execute(context: RunExecutionContext): Promise<void>;
+  /** Trusted worker adapter: persisted evidence only, still fenced against cancel/lost lease. */
+  onDeadline?(context: RunExecutionContext): Promise<void>;
+  /** Wait only for already-started persistence work, never external provider promises. */
+  drain?(): Promise<void>;
 }
 
 export interface RunServiceOptions {
   repository: RunRepository;
   executor?: RunExecutor;
+  /** Trusted worker factory receives the lease; agent-core never receives it. */
+  executorFactory?: (token: RunLeaseToken) => RunExecutor;
   workerId?: string;
   leaseMs?: number;
   renewIntervalMs?: number;
@@ -39,6 +50,7 @@ type AbortReason = "stop" | "lost" | "canceled" | "deadline" | "finished";
 export class RunService {
   private readonly repository: RunRepository;
   private readonly executor: RunExecutor | undefined;
+  private readonly executorFactory: RunServiceOptions["executorFactory"];
   private readonly workerId: string;
   private readonly leaseMs: number;
   private readonly renewIntervalMs: number;
@@ -46,6 +58,7 @@ export class RunService {
   constructor(options: RunServiceOptions) {
     this.repository = options.repository;
     this.executor = options.executor;
+    this.executorFactory = options.executorFactory;
     this.workerId = options.workerId ?? `worker-${randomUUID()}`;
     this.leaseMs = options.leaseMs ?? 30_000;
     this.renewIntervalMs = options.renewIntervalMs ?? Math.max(1, Math.floor(this.leaseMs / 3));
@@ -61,9 +74,12 @@ export class RunService {
 
   async execute(runId: string, signal?: AbortSignal): Promise<RunExecutionResult> {
     if (signal?.aborted) return "stopped";
-    const claimed = await this.repository.claim(runId, this.workerId, this.leaseMs);
+    const claimed = await this.repository.claim(runId, this.workerId, this.leaseMs, {
+      allowDeadlineRecovery: !!(this.executor?.onDeadline || this.executorFactory),
+    });
     if (claimed.kind !== "claimed") return claimed.kind;
     const { token, run } = claimed;
+    const executor = this.executor ?? this.executorFactory?.(token);
     if (signal?.aborted) return "stopped";
     const controller = new AbortController();
     const pending = new Set<Promise<unknown>>();
@@ -80,7 +96,7 @@ export class RunService {
     const abort = (next: AbortReason) => {
       if (controller.signal.aborted) return;
       reason = next;
-      controller.abort();
+      controller.abort(next);
     };
     const stopping = () => abort("stop");
     signal?.addEventListener("abort", stopping, { once: true });
@@ -140,13 +156,20 @@ export class RunService {
         }
       }
     })();
+    let context: RunExecutionContext | undefined;
+    let deadlineHandled = false;
+    const handleDeadline = async () => {
+      if (reason !== "deadline" || deadlineHandled || !context || !executor?.onDeadline) return;
+      deadlineHandled = true;
+      await track(() => executor.onDeadline!(context!)).catch(() => undefined);
+    };
     try {
-      await assertActive();
-      if (!this.executor) {
+      if (!executor) {
+        await assertActive();
         await this.repository.finish(token, { code: "EXECUTOR_NOT_CONFIGURED" });
         return "processed";
       }
-      const context: RunExecutionContext = {
+      context = {
         runId: run.id,
         userId: run.userId,
         taskId: run.taskId,
@@ -168,30 +191,41 @@ export class RunService {
           }
         },
       };
+      await assertActive();
       // 不合作的执行器也不能阻止停止或租约失效；迟到返回只被丢弃。
       const execution = Promise.resolve()
         .then(async () => {
           await assertActive();
-          return this.executor!.execute(context);
+          return executor.execute(context!);
         })
         .then(
-          () => "returned" as const,
-          () => "failed" as const,
+          () => ({ kind: "returned" as const }),
+          (error: unknown) => ({
+            kind: "failed" as const,
+            code: error instanceof RunExecutionError ? error.code : "EXECUTOR_FAILED",
+          }),
         );
       const result = await Promise.race([execution, aborted]);
       if (reason === "stop" || reason === "lost") return reason === "stop" ? "stopped" : "ignored";
+      if (reason === "deadline") {
+        // This callback has no external tools; its domain read/delivery validates current lease and cancellation.
+        await handleDeadline();
+      }
       await this.repository.finish(token, {
         code:
           reason === "deadline"
             ? "DEADLINE_EXCEEDED"
-            : result === "returned"
+            : result !== "aborted" && result.kind === "returned"
               ? "EXECUTOR_RETURNED_WITHOUT_DELIVERY"
-              : "EXECUTOR_FAILED",
+              : result !== "aborted"
+                ? result.code
+                : "EXECUTOR_FAILED",
       });
       return "processed";
     } catch (error) {
       if (reason === "stop" || reason === "lost") return reason === "stop" ? "stopped" : "ignored";
       if (error instanceof RunFenceError && error.code === "LEASE_LOST") return "ignored";
+      await handleDeadline();
       await this.repository.finish(token, {
         code: reason === "deadline" ? "DEADLINE_EXCEEDED" : "EXECUTOR_FAILED",
       });
@@ -204,6 +238,7 @@ export class RunService {
       await heartbeat;
       // 停止后拒绝新领域操作，已发起的短数据库事务收敛后才能释放连接。
       await Promise.allSettled(pending);
+      await executor?.drain?.();
     }
   }
 }

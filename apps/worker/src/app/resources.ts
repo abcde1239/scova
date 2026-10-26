@@ -9,6 +9,7 @@ import { createRunRepository } from "@/repo/runs.ts";
 import { createRunHandler } from "@/handler/runs.ts";
 import { RunService, type RunExecutor } from "@/service/runs.ts";
 import { createRunConsumer, enqueueRecoverableRuns } from "@/queue/runs.ts";
+import { createAgentRuntime } from "@/service/agent.ts";
 
 export interface WorkerResources {
   connect(): Promise<void>;
@@ -31,6 +32,7 @@ export function createWorkerResources(
   let closing: Promise<void> | undefined;
   let consumer: ReturnType<typeof createRunConsumer> | undefined;
   let runRepository: ReturnType<typeof createRunRepository> | undefined;
+  let agent: ReturnType<typeof createAgentRuntime> | undefined;
   return {
     connect: () =>
       (connecting ??= (async () => {
@@ -57,11 +59,16 @@ export function createWorkerResources(
           config.batchSize,
         );
         runRepository = createRunRepository(database);
+        if (!options.executor) {
+          agent = createAgentRuntime({ databaseUrl: config.databaseUrl, database });
+          await agent.connect();
+        }
         const leaseMs = config.runLeaseSeconds * 1000;
         const runHandler = createRunHandler(
           new RunService({
             repository: runRepository,
             executor: options.executor,
+            executorFactory: agent ? (token) => agent!.executorFactory(token) : undefined,
             leaseMs,
             renewIntervalMs: Math.min(10_000, Math.floor(leaseMs / 3)),
           }),
@@ -106,6 +113,11 @@ export function createWorkerResources(
           } finally {
             redis.disconnect();
           }
+        }
+        try {
+          await agent?.close();
+        } catch (error) {
+          errors.push(error);
         }
         try {
           await database?.$disconnect();

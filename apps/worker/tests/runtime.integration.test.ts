@@ -97,6 +97,7 @@ describe("Worker Bun/Node 真实进程", () => {
     const publisher = createOutboxQueue(connection, queueName);
     const process = launch(runtime, {
       DATABASE_URL: fixture.databaseUrl,
+      AGENT_CHECKPOINT_SCHEMA: fixture.checkpointSchema,
       REDIS_URL: fixture.redisUrl,
       WORKER_QUEUE_NAME: queueName,
       WORKER_POLL_INTERVAL_MS: "20",
@@ -121,7 +122,7 @@ describe("Worker Bun/Node 真实进程", () => {
         await fixture.db.run.findUniqueOrThrow({ where: { id: item.aggregateId } }),
       ).toMatchObject({
         status: "failed",
-        failureCode: "EXECUTOR_NOT_CONFIGURED",
+        failureCode: "AGENT_DELIVERY_NOT_CONFIGURED",
       });
       expect(await fixture.db.report.count({ where: { runId: item.aggregateId } })).toBe(0);
       process.child.send("scova:shutdown");

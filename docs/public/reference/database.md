@@ -14,4 +14,6 @@ Outbox 首版只保存 Run 命令，其 aggregateId 由 owner 复合外键绑定
 
 LangGraph checkpoint 使用独立 schema 与迁移，不由 Prisma 管理。`Run.checkpointRef` 仅保存经过 fencing 提升的显式引用，不能将客户端输入作为 checkpoint 地址。
 
+Worker 显式启动 PostgreSQL saver，使用 `AGENT_CHECKPOINT_SCHEMA`（默认 `scova_agent`）和独立连接池；启动迁移跨进程串行执行。工具结果保存在当前 owner/Run 的 ToolCall 输出中，预留、结果与累计用量均受 Run 行锁和 epoch fencing 保护。接管只加载合法引用的 channel values，不继承旧线程后续 pending writes。业务表清理与 checkpoint 备份/清理须共同规划，不能仅删除 Prisma 数据就认为研究正文已清除；账号删除和保留期的完整入口仍须后续功能接入。
+
 `apps/server/tests/database.integration.test.ts` 使用专属随机 `scova_db_*` schema，在空 schema 执行 migrate deploy 两次，再用真实 PostgreSQL 验证外键、唯一键、CHECK 与并发互斥；结束后仅清理该次生成的 schema。测试优先读取 `SCOVA_TEST_DATABASE_URL`、其次 `RUNTIME_DATABASE_URL`，否则使用 compose.test.yaml 的本地测试端口。不会读取生产 DATABASE_URL，不执行 reset、TRUNCATE 全库或 Redis FLUSHALL。

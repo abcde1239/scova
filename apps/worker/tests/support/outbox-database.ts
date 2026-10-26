@@ -16,6 +16,7 @@ export function outboxDatabase() {
   const redisUrl =
     process.env.SCOVA_TEST_REDIS_URL ?? process.env.RUNTIME_REDIS_URL ?? "redis://127.0.0.1:56379";
   const schema = `scova_worker_${randomUUID().replaceAll("-", "")}`;
+  const checkpointSchema = `scova_agent_${randomUUID().replaceAll("-", "")}`;
   const scopedUrl = new URL(baseUrl);
   scopedUrl.searchParams.set("schema", schema);
   const databaseUrl = scopedUrl.toString();
@@ -25,6 +26,7 @@ export function outboxDatabase() {
   return {
     db,
     databaseUrl,
+    checkpointSchema,
     redisUrl,
     async setup() {
       await admin.connect();
@@ -52,6 +54,7 @@ export function outboxDatabase() {
     async cleanup() {
       await db.$disconnect();
       if (created) await admin.query(`DROP SCHEMA "${schema}" CASCADE`);
+      if (created) await admin.query(`DROP SCHEMA IF EXISTS "${checkpointSchema}" CASCADE`);
       await admin.end();
     },
     async seed(now = new Date()) {

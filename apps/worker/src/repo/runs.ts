@@ -31,7 +31,12 @@ export interface ClaimedRun {
 }
 export type RunClaim = ClaimedRun | { kind: "ignored" | "busy" };
 export interface RunRepository {
-  claim(runId: string, leaseOwner: string, leaseMs?: number): Promise<RunClaim>;
+  claim(
+    runId: string,
+    leaseOwner: string,
+    leaseMs?: number,
+    options?: { allowDeadlineRecovery?: boolean },
+  ): Promise<RunClaim>;
   renew(
     token: RunLeaseToken,
     leaseMs: number,
@@ -99,7 +104,7 @@ export function withRunFence<T>(
 }
 
 /** 调用者已持有 Run 行锁，序号分配与业务状态写入在同一事务内。 */
-async function appendEvent(
+export async function appendEvent(
   tx: Prisma.TransactionClient,
   run: Run,
   now: Date,
@@ -133,6 +138,11 @@ async function finishLocked(tx: Prisma.TransactionClient, run: Run, now: Date, c
   const canceled = !!run.cancelRequestedAt || run.status === "cancel_requested";
   const safeCode = Object.hasOwn(RUN_FAILURE_MESSAGES, code) ? code : "EXECUTOR_FAILED";
   const status = canceled ? "canceled" : "failed";
+  // A terminal Run cannot later settle an in-flight supplier call; preserve its reservation as unknown.
+  await tx.toolCall.updateMany({
+    where: { userId: run.userId, runId: run.id, status: { in: ["reserved", "running"] } },
+    data: { status: "unknown", finishedAt: now },
+  });
   await tx.run.update({
     where: { id: run.id },
     data: {
@@ -165,7 +175,7 @@ function leaseExpiry(now: Date, leaseMs: number) {
 /** PostgreSQL 是执行事实源；BullMQ 的锁与 payload 不授予任何业务写权限。 */
 export function createRunRepository(db: PrismaClient): RunRepository {
   return {
-    claim(runId, leaseOwner, leaseMs = 30_000) {
+    claim(runId, leaseOwner, leaseMs = 30_000, options = {}) {
       if (!leaseOwner || leaseOwner.length > 200) throw new Error("Run worker 标识无效");
       return db.$transaction(async (tx): Promise<RunClaim> => {
         const run = await lockRun(tx, runId);
@@ -199,7 +209,10 @@ export function createRunRepository(db: PrismaClient): RunRepository {
         const startedAt = run.startedAt ?? now;
         const deadlineAt =
           run.deadlineAt ?? new Date(startedAt.getTime() + budget.maxDurationSeconds * 1000);
-        if (!Number.isFinite(deadlineAt.getTime()) || deadlineAt <= now) {
+        if (
+          !Number.isFinite(deadlineAt.getTime()) ||
+          (deadlineAt <= now && !options.allowDeadlineRecovery)
+        ) {
           await finishLocked(tx, run, now, "DEADLINE_EXCEEDED");
           return { kind: "ignored" };
         }

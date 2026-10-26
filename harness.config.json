@@ -37,7 +37,8 @@
     },
     {
       "root": "packages/agent-core",
-      "id": "packages-agent-core"
+      "id": "packages-agent-core",
+      "tests": { "requireConfiguredTask": true }
     },
     {
       "root": "packages/connectors",
@@ -150,6 +151,7 @@
         "apps-worker",
         "packages-utils",
         "packages-contracts",
+        "packages-agent-core",
         "packages-connectors"
       ],
       "timeoutMs": 120000,

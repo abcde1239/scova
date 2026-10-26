@@ -1,6 +1,6 @@
 # Scova 系统架构
 
-状态：持续演进的首版设计。已建立工作区、业务数据库、账号/任务/执行基础 API 与 Outbox 投递；Agent、交付闭环和完整界面按计划实现。下文也包含待验收的目标行为。
+状态：持续演进的首版设计。已实现账号/任务/执行基础 API、Run 租约恢复、搜索阅读适配器与有预算的持久化 Agent。研究候选可恢复；报告交付、连续运行差异和完整界面仍按计划实现。下文也包含待验收的目标行为。
 
 ## 1. 产品闭环与边界
 
@@ -30,21 +30,21 @@ API、worker 分别作为两个进程，PostgreSQL 和 Redis 是唯一首版基�
 
 ## 2. 工作区与职责
 
-| 目标目录            | 职责                                                                        | 依赖方向                                  |
-| ------------------- | --------------------------------------------------------------------------- | ----------------------------------------- |
-| apps/web            | Vue 3、Router、Pinia、TanStack Vue Query、UnoCSS、naive-ui；页面与 SSE 订阅 | contracts                                 |
-| apps/server         | 认证、资源授权、任务版本、执行命令、报告/资料管理、事件读取                 | contracts、models                         |
-| apps/worker         | 调度器、outbox dispatcher、BullMQ worker、租约、交付事务                    | contracts、models、agent-core、connectors |
-| packages/contracts  | 可运行时校验的请求/响应、事件版本、枚举与错误码；不暴露 ORM 实体            | 不依赖应用                                |
-| packages/models     | 业务数据模型、Prisma schema、迁移与服务端客户端                             | 不依赖应用或 contracts                    |
-| packages/agent-core | LangGraph 状态图、预算策略、证据/变化规则、工具与模型接口                   | contracts；不直接使用 Elysia/BullMQ       |
-| packages/connectors | 默认 SearxNG、可选 Tavily、HTTP 抓取、Readability 和演示数据适配器          | 向 agent-core 提供工具接口                |
+| 目标目录            | 职责                                                                        | 依赖方向                                                    |
+| ------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| apps/web            | Vue 3、Router、Pinia、TanStack Vue Query、UnoCSS、naive-ui；页面与 SSE 订阅 | contracts                                                   |
+| apps/server         | 认证、资源授权、任务版本、执行命令、报告/资料管理、事件读取                 | contracts、models                                           |
+| apps/worker         | 调度器、outbox dispatcher、BullMQ worker、租约、交付事务                    | contracts、models、agent-core、connectors                   |
+| packages/contracts  | 可运行时校验的请求/响应、事件版本、枚举与错误码；不暴露 ORM 实体            | 不依赖应用                                                  |
+| packages/models     | 业务数据模型、Prisma schema、迁移与服务端客户端                             | 不依赖应用或 contracts                                      |
+| packages/agent-core | LangGraph 状态图、有限研究策略、候选和原文引用校验                          | contracts、connectors 类型、LangGraph；不使用 Elysia/BullMQ |
+| packages/connectors | 默认 SearxNG、可选 Tavily、HTTP 抓取、Readability 和演示数据适配器          | 向 agent-core 提供工具接口                                  |
 
 API 不负责执行长任务，worker 不提供账号管理入口；Agent 没有通用 SQL、文件系统或任意脚本工具。`packages/models/prisma` 维护唯一业务 schema 和迁移；Server/Worker 从 `@scova/models` 引用生成模型，公开接口仍使用 `@scova/contracts`。
 
 Server 源码分层为 `main → app → router → handler → service → repo`：app 装配 Elysia、Node 适配与生命周期，router 声明路由和中文 OpenAPI，handler 处理 HTTP/会话/响应，service 编排业务规则及事务，repo 完成数据库与 Redis 访问。utils 放纯工具。Task CAS 与 Run/事件/Outbox 仍在同一事务中完成。
 
-Worker 使用 `main/node → app → handler → service → repo + queue`：app 管配置、资源和串行轮询，handler 接收后台批次和 Run 消息，service 编排 Outbox 投递及 Run 执行控制，repo 执行 PostgreSQL 条件写，queue 适配 BullMQ。已实现 Run 消费、续期、有限接管和取消；Agent 与报告交付仍按计划接入，默认缺执行器时明确失败。停止先阻止新领取、中断执行并等待在途批次，再依次关闭 consumer、队列、Redis 和数据库。
+Worker 使用 `main/node → app → handler → service → repo + queue`：app 管配置、资源和串行轮询，handler 接收后台批次和 Run 消息，service 编排 Outbox、Run 和 Agent，repo 执行 PostgreSQL 条件写，queue 适配 BullMQ。已实现 Run 消费、续期、有限接管、取消及持久化研究候选；报告交付未接入时明确失败。停止先阻止新领取、中断执行并等待在途领域写/checkpoint，再关闭 consumer、队列、Redis、saver 和数据库。
 
 Outbox 每次领取的 `attempts + leaseExpiresAt` 作为本次持有凭据，领取和确认/退避均使用 CAS。过期持有者不能覆盖接管后的状态；发送成功但确认失败保留租约，到期后用同一 jobId 重投。这一边界保证至少一次传递，后续业务执行仍须幂等。
 
@@ -125,6 +125,8 @@ stateDiagram-v2
 活动状态包含 queued/running/recovering/cancel_requested。租约默认 30 秒、10 秒续约，所有业务写入必须在事务中验证 `leaseOwner + leaseEpoch + leaseExpiresAt`；每次接管递增 epoch，阻止旧 worker 继续提交。业务写入包括工具预留、证据、事件和报告，不能仅在最终交付时检查。
 
 LangGraph checkpointer 使用 PostgreSQL，实现时在适配层验证 Bun 兼容性。每个租约 epoch 使用独立 thread/namespace。checkpoint 写完后，在受 fencing 保护的事务中提升 Run 的 `checkpointRef`；只有已提升的 checkpoint 可用于恢复。新 epoch 从这个明确引用恢复已提交图状态，不读取旧线程的“最新”指针；旧 worker 的迟到 checkpoint 无法污染新运行。恢复后节点按工具调用幂等键跳过已完成操作。该 checkpoint 提升与跨 thread 恢复协议是 M1 必须做的技术实验，未验证前不得声称具备恢复能力。
+
+当前生产适配采用独立 epoch thread、根图空 namespace 和明确 checkpoint ID。新 epoch 复制已提升的 channel values，丢弃旧线程可能迟到的 pending writes；未完成节点重放时先复用已提交 ToolCall，即使额度已耗尽也不阻止成功结果复用。工具成功但 checkpoint 未提升的 Node/Bun 强杀恢复由真实 PostgreSQL 集成测试覆盖。候选、账本和 checkpoint 不作为公共 API 参数或报告交付替代品。
 
 工具调用先保存唯一 operationKey（基于 run、逻辑节点与计划序号）并预留预算，再访问供应商，再保存结果。若进程在外部调用成功、落库之前崩溃，该调用为 `unknown`；恢复时不假定未计费，不释放预留预算。确需重查则创建新的调用序号并再次占用预算；允许重复外部请求，但保证业务成果和提醒不会重复。首版不宣称外部工具调用 exactly-once。
 

@@ -13,15 +13,19 @@
     "check": "vp check"
   },
   "dependencies": {
+    "@langchain/core": "catalog:",
+    "@langchain/langgraph-checkpoint-postgres": "catalog:",
     "@scova/agent-core": "workspace:*",
     "@scova/connectors": "workspace:*",
     "@scova/contracts": "workspace:*",
     "@scova/models": "workspace:*",
     "bullmq": "catalog:",
-    "ioredis": "catalog:"
+    "ioredis": "catalog:",
+    "pg": "catalog:"
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "@types/pg": "catalog:",
     "typescript": "catalog:"
   }
 }

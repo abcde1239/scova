@@ -151,6 +151,7 @@ describe("整体后端：真实 HTTP → PostgreSQL Outbox → BullMQ → Run co
       const origin = `http://127.0.0.1:${port}`;
       const env = {
         DATABASE_URL: fixture.databaseUrl,
+        AGENT_CHECKPOINT_SCHEMA: fixture.checkpointSchema,
         REDIS_URL: fixture.redisUrl,
         NODE_ENV: "test",
         REGISTRATION_ENABLED: "true",
@@ -281,7 +282,7 @@ describe("整体后端：真实 HTTP → PostgreSQL Outbox → BullMQ → Run co
         );
         expect(
           (await fixture.db.run.findUniqueOrThrow({ where: { id: first.run.id } })).failureCode,
-        ).toBe("EXECUTOR_NOT_CONFIGURED");
+        ).toBe("AGENT_DELIVERY_NOT_CONFIGURED");
         await stop(worker);
         worker = undefined;
         // 新的待投递行作为重启扫描的同步屏障，避免用固定 sleep 猜测已执行一轮。
@@ -328,7 +329,7 @@ describe("整体后端：真实 HTTP → PostgreSQL Outbox → BullMQ → Run co
         expect(final.status).toBe(200);
         const result = (await final.json()) as { status: string; failureCode: string };
         expect(result.status).toBe("failed");
-        expect(result.failureCode).toBe("EXECUTOR_NOT_CONFIGURED");
+        expect(result.failureCode).toBe("AGENT_DELIVERY_NOT_CONFIGURED");
         expect(await fixture.db.report.count({ where: { runId: first.run.id } })).toBe(0);
       } finally {
         try {

@@ -2,7 +2,7 @@
 
 任务驱动的 AI 信息查阅与研究工作台。围绕主题搜索、阅读和查证资料，生成带引用的报告，并持续追踪新增与变化。
 
-项目开发中：已实现账号会话、用户隔离、任务配置、执行命令、Outbox 投递、Run 消费/租约恢复及搜索/模型/安全阅读适配器；Agent 研究、报告交付及完整前端仍在建设。
+项目开发中：已实现账号会话、用户隔离、任务配置、执行控制、搜索/模型/安全阅读适配器和有预算的持久化 Agent。研究候选可生成并恢复；报告交付、连续运行差异及完整前端仍在建设。
 
 ## 技术与目录
 
@@ -38,7 +38,7 @@ vp run worker#start       # Outbox 投递与 Run 消费控制
 vp run search:up          # 本机 SearxNG，无需搜索 API 密钥
 ```
 
-后端提供 `/health`、`/swagger` 和 `/swagger/json`。Worker 已接通 Run 消费、续期、取消和恢复；默认未接入 Agent 时明确失败，不生成报告。配置见 [Worker 说明](apps/worker/README.md)。
+后端提供 `/health`、`/swagger` 和 `/swagger/json`。Worker 已接通研究 Agent；当前报告交付未接入，候选保存后以明确原因终结，不生成报告。配置见 [Worker 说明](apps/worker/README.md)。
 
 ## 验证
 

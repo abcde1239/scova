@@ -28,7 +28,7 @@
   - 重复命令返回同一 Run，原任务 Run/事件/Outbox 各一条。
   - 队列 job 名称、payload、稳定 run jobId 正确；首次投递 attempts=1，租约清空。
   - 重启后第一条的 attempts/sentAt 不变，队列仅含两个预期 job；原命令仍复用 Run。
-  - Run 由真实 consumer 领取并以 EXECUTOR_NOT_CONFIGURED 失败，单一失败事件、epoch=1、Report 为零；明确尚无 Agent 研究或报告交付。
+  - Run 由真实 consumer 领取并执行固定演示 Agent，候选保存后以 AGENT_DELIVERY_NOT_CONFIGURED 失败，单一失败事件、epoch=1、Report 为零；明确报告交付尚未接入。
   - API/Worker 均接收关闭消息并以零退出。
 - **Postconditions**：清理自有随机 schema 与队列、断开连接；不执行 flushdb，不影响他人队列。
 

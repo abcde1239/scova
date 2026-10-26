@@ -1,6 +1,6 @@
 # Scova Worker
 
-后台执行控制进程：投递 PostgreSQL Outbox、消费 BullMQ Run 作业，并管理数据库租约、取消和崩溃恢复。Agent 研究与报告交付尚未接入；默认执行器明确终结为 `EXECUTOR_NOT_CONFIGURED`，不生成报告。
+后台研究执行进程：投递 PostgreSQL Outbox、消费 BullMQ Run 作业，管理租约、预算账本和 LangGraph 检查点，并生成带原文引用的研究候选。报告原子交付尚未接入；候选已保存时明确终结为 `AGENT_DELIVERY_NOT_CONFIGURED`，不生成报告。
 
 ## 启动
 
@@ -27,13 +27,20 @@ vp run worker#start:node  # Node.js
 
 Run 从数据库固定 owner、版本、模式和预算，队列只能选择 runId。同一 Run 只有一个有效租约，接管递增 epoch，最多恢复三次；恢复保留首次开始时间和 deadline。数据库恢复扫描独立于原始 job，能处理消息丢失和保留的 completed/failed job。
 
+`AGENT_CHECKPOINT_SCHEMA` 默认为 `scova_agent`，启动时在独立表空间串行运行 saver 迁移。真实执行使用 `SEARXNG_BASE_URL`（默认 `http://127.0.0.1:8080`）、`MODEL_API_KEY`、`MODEL_NAME` 和可选 `MODEL_BASE_URL`。`SEARCH_PROVIDER` 默认为 `searxng`，只有显式选择 `tavily` 时才读取 `TAVILY_API_KEY`。详情见[搜索部署](../../docs/public/guides/search.md)。密钥仅来自部署者环境，不写入任务或事件。真实 Run 缺配置以 `AGENT_CONFIGURATION_INVALID` 失败，禁止静默转为演示；demo Run 始终使用固定演示资料。
+
 执行层通过受限上下文发出进度事件并检查执行权限；受信领域 repository 必须通过 `withRunFence` 在同一 Run 行锁事务内写入。普通写入拒绝取消、超期或失效租约；失败/取消终结有单独入口。执行器返回本身不代表已交付成果。
+
+每个供应商 attempt 先提交 ToolCall 和累计预留，再调用外部服务。成功结果与可信用量原子结算；unknown/失败尝试保留预留。恢复按逻辑操作和输入指纹复用成功结果，即使用量恰已耗尽也无需再次付费调用。checkpoint 只从数据库已提升的明确引用恢复，新 epoch 不继承旧线程的未提升 pending writes。截止后不调用搜索、阅读或模型，只允许读取截止前已合法保存的正文构造 partial 候选；取消仍禁止交付。停止等待已开始的领域写和 checkpoint 操作后关闭连接。
+
+图与当前引用校验边界见 [Agent Core](../../packages/agent-core/README.md)。未核验发布日期、官方身份、来源失败或正文截断均显示覆盖缺口；当前候选不代表完整报告或已经完成基线比较。
 
 ## 验证
 
 ```sh
 vp test apps/worker/tests/lifecycle.test.ts apps/worker/tests/config.test.ts
 vp run test:worker
+vp run test:agent-recovery
 ```
 
 集成测试需专用 PostgreSQL、Redis 和独立 Bun，包含真实投递、租约接管及 Bun/Node 进程退出。目录分层见[系统架构](../../docs/public/reference/architecture.md)。
