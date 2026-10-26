@@ -76,27 +76,33 @@ export function createReportRepo(services: Pick<ApiServices, "db">) {
         .inboxItem.findFirst({ where: { id, userId }, select: { id: true, createdAt: true } });
     },
     async listInbox(userId: string, take: number, unread?: boolean, cursor?: Cursor) {
-      const read =
-        unread === undefined
-          ? Prisma.empty
-          : unread
-            ? Prisma.sql`AND read_at IS NULL`
-            : Prisma.sql`AND read_at IS NOT NULL`;
-      const boundary = cursor
-        ? Prisma.sql`AND (created_at,id)<(SELECT created_at,id FROM inbox_items WHERE user_id=${userId}::uuid AND id=${cursor.id}::uuid)`
-        : Prisma.empty;
-      const ids = await services.db().$queryRaw<
-        { id: string }[]
-      >`SELECT id FROM inbox_items WHERE user_id=${userId}::uuid ${read} ${boundary} ORDER BY created_at DESC,id DESC LIMIT ${take}`;
-      return services.db().inboxItem.findMany({
-        where: {
-          userId,
-          ...(unread === undefined ? {} : { readAt: unread ? null : { not: null } }),
-          id: { in: ids.map((row) => row.id) },
+      // ID selection and DTO hydration observe one short database snapshot.
+      return services.db().$transaction(
+        async (tx) => {
+          const read =
+            unread === undefined
+              ? Prisma.empty
+              : unread
+                ? Prisma.sql`AND read_at IS NULL`
+                : Prisma.sql`AND read_at IS NOT NULL`;
+          const boundary = cursor
+            ? Prisma.sql`AND (created_at,id)<(SELECT created_at,id FROM inbox_items WHERE user_id=${userId}::uuid AND id=${cursor.id}::uuid)`
+            : Prisma.empty;
+          const ids = await tx.$queryRaw<
+            { id: string }[]
+          >`SELECT id FROM inbox_items WHERE user_id=${userId}::uuid ${read} ${boundary} ORDER BY created_at DESC,id DESC LIMIT ${take}`;
+          return tx.inboxItem.findMany({
+            where: {
+              userId,
+              ...(unread === undefined ? {} : { readAt: unread ? null : { not: null } }),
+              id: { in: ids.map((row) => row.id) },
+            },
+            include: inboxInclude,
+            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          });
         },
-        include: inboxInclude,
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      });
+        { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+      );
     },
     setInboxRead(userId: string, id: string, read: boolean, now: Date) {
       return services.db().$transaction(async (database) => {
