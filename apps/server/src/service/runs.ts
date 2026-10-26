@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { effectiveRunScopeHash } from "@scova/utils";
 import type { Run as StoredRun, RunEvent as StoredRunEvent } from "@scova/models";
 import {
   RunCommandInputSchema,
@@ -101,6 +102,8 @@ export function createRunService(services: ApiServices) {
           return { run: reused, reused: true };
         }
         const task = await ownedTask(taskId, userId, store);
+        if (task.status === "archived")
+          throw new ApiError(409, "TASK_ARCHIVED", "已归档任务不能启动新执行");
         const version = await store.findVersion(
           taskVersionId ?? task.currentVersionId!,
           userId,
@@ -124,14 +127,7 @@ export function createRunService(services: ApiServices) {
           userId,
           taskId: task.id,
           taskVersionId: version.id,
-          comparisonScopeHash: sha256(
-            JSON.stringify([
-              "run-scope-v2",
-              version.comparisonScopeHash,
-              command.mode,
-              "scova-comparison-v1",
-            ]),
-          ),
+          comparisonScopeHash: effectiveRunScopeHash(version.comparisonScopeHash, command.mode),
           mode: command.mode,
           trigger: parentRunId ? "retry" : "manual",
           parentRunId,

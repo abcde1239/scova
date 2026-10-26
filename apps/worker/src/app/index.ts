@@ -27,6 +27,7 @@ export function createWorkerApp(options: WorkerAppOptions = {}) {
   let starting: Promise<void> | undefined;
   let loop: Promise<void> | undefined;
   let polling: Promise<void> | undefined;
+  let scheduling: Promise<void> | undefined;
   let stopping: Promise<void> | undefined;
   let closing: Promise<void> | undefined;
   const close = () => (closing ??= resources.close());
@@ -44,6 +45,20 @@ export function createWorkerApp(options: WorkerAppOptions = {}) {
     }
   }
 
+  async function schedule() {
+    if (!resources.schedule) return;
+    while (!controller.signal.aborted) {
+      let delay = config.schedulerIntervalMs;
+      try {
+        await resources.schedule(controller.signal);
+      } catch {
+        delay = Math.max(config.schedulerIntervalMs, config.failureDelayMs);
+        logger.error("Worker 调度批次失败，将退避后重试");
+      }
+      if (!controller.signal.aborted) await wait(delay, controller.signal);
+    }
+  }
+
   const start = () => {
     if (controller.signal.aborted) return Promise.reject(new Error("Worker 已停止，不能重新启动"));
     return (starting ??= (async () => {
@@ -52,7 +67,8 @@ export function createWorkerApp(options: WorkerAppOptions = {}) {
         if (controller.signal.aborted) return;
         logger.info("Scova worker ready; Outbox dispatcher running; Run consumer running");
         polling = poll();
-        loop = Promise.all([polling, resources.finished?.()]).then(() => undefined);
+        scheduling = schedule();
+        loop = Promise.all([polling, scheduling, resources.finished?.()]).then(() => undefined);
         // 捕获后台循环自身故障；正常单批错误已由 poll 退避处理。
         void loop.catch(() => controller.abort());
       } catch (error) {
@@ -73,7 +89,7 @@ export function createWorkerApp(options: WorkerAppOptions = {}) {
       // 启动失败已经报告给 start 调用方；仍完成所有已创建资源的清理。
       await starting?.catch(() => undefined);
       try {
-        const settled = await Promise.allSettled([resources.stop?.(), polling, loop]);
+        const settled = await Promise.allSettled([resources.stop?.(), polling, scheduling, loop]);
         const failures = settled.filter((result) => result.status === "rejected");
         if (failures.length)
           throw new AggregateError(

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { Temporal } from "@js-temporal/polyfill";
+import { nextScheduledAt } from "@scova/utils";
 import type { Task as StoredTask, TaskVersion as StoredTaskVersion } from "@scova/models";
 import {
   CreateTaskInputSchema,
@@ -65,27 +65,7 @@ export function comparisonScopeHash(config: TaskConfig): string {
 }
 
 export function nextRunAt(config: TaskConfig, now: Date): Date | null {
-  if (config.schedule.frequency === "manual") return null;
-  const current = Temporal.Instant.from(now.toISOString()).toZonedDateTimeISO(config.timezone);
-  const [hour, minute] = config.schedule.localTime.split(":").map(Number);
-  let candidate = current.with({
-    hour,
-    minute,
-    second: 0,
-    millisecond: 0,
-    microsecond: 0,
-    nanosecond: 0,
-  });
-  if (config.schedule.frequency === "daily") {
-    if (Temporal.ZonedDateTime.compare(candidate, current) <= 0)
-      candidate = candidate.add({ days: 1 });
-  } else {
-    const days = (config.schedule.weekday - current.dayOfWeek + 7) % 7;
-    candidate = candidate.add({ days });
-    if (Temporal.ZonedDateTime.compare(candidate, current) <= 0)
-      candidate = candidate.add({ days: 7 });
-  }
-  return new Date(Number(candidate.toInstant().epochMilliseconds));
+  return nextScheduledAt(config, now);
 }
 
 function listItem(task: StoredTask) {
@@ -200,7 +180,11 @@ export function createTaskService(services: ApiServices) {
       assertBudget(input.config);
       const result = await repo
         .transaction(async (store) => {
+          if (!UUID.test(taskId) || !(await store.lockTask(taskId, userId)).length)
+            throw new ApiError(404, "NOT_FOUND", "资源不存在");
           const task = await ownedTask(taskId, userId, store);
+          if (task.status === "archived")
+            throw new ApiError(409, "TASK_ARCHIVED", "已归档任务不能再编辑");
           if (task.revision !== expectedRevision)
             throw new ApiError(409, "REVISION_CONFLICT", "任务已被其他请求修改，请刷新后重试");
           const previous = await store.requireVersion(task.currentVersionId!, userId, task.id);
@@ -214,7 +198,11 @@ export function createTaskService(services: ApiServices) {
           const claimed = await store.claimRevision(task.id, userId, expectedRevision, {
             title: input.config.title,
             revision: { increment: 1 },
-            nextRunAt: nextRunAt(input.config, services.clock()),
+            ...(task.status !== "active"
+              ? { nextRunAt: null }
+              : scheduleChanged
+                ? { nextRunAt: nextRunAt(input.config, await store.now()) }
+                : {}),
             ...(scheduleChanged ? { scheduleRevision: { increment: 1 } } : {}),
           });
           if (claimed.count !== 1)
@@ -241,6 +229,44 @@ export function createTaskService(services: ApiServices) {
           throw error;
         });
       return taskResponse(result.task, result.version, result.baselineResetRequired);
+    },
+    async transition(
+      userId: string,
+      taskId: string,
+      action: "pause" | "resume" | "archive",
+      expectedRevision: number,
+    ) {
+      return repo.transaction(async (store) => {
+        if (!UUID.test(taskId) || !(await store.lockTask(taskId, userId)).length)
+          throw new ApiError(404, "NOT_FOUND", "资源不存在");
+        const task = await ownedTask(taskId, userId, store);
+        if (task.revision !== expectedRevision)
+          throw new ApiError(409, "REVISION_CONFLICT", "任务已被其他请求修改，请刷新后重试");
+        if (task.status === "archived" && action !== "archive")
+          throw new ApiError(409, "TASK_ARCHIVED", "已归档任务不能恢复或暂停");
+        const version = await store.requireVersion(task.currentVersionId!, userId, task.id);
+        const target = action === "pause" ? "paused" : action === "resume" ? "active" : "archived";
+        if (task.status === target) return taskResponse(task, version, false);
+        const now = await store.now();
+        const config = parseContract(TaskConfigSchema, version.configJson);
+        const claimed = await store.claimRevision(task.id, userId, expectedRevision, {
+          status: target,
+          revision: { increment: 1 },
+          scheduleRevision: { increment: 1 },
+          nextRunAt: target === "active" ? nextRunAt(config, now) : null,
+          ...(target === "archived" ? { archivedAt: now } : {}),
+        });
+        if (claimed.count !== 1)
+          throw new ApiError(409, "REVISION_CONFLICT", "任务已被其他请求修改，请刷新后重试");
+        if (target === "archived") {
+          const run = await store.lockActiveRun(task.id, userId);
+          if (run && run.status !== "cancel_requested") {
+            await store.requestCancel(run.id, await store.now());
+            await store.createCancelOutbox(userId, run.id);
+          }
+        }
+        return taskResponse(await ownedTask(task.id, userId, store), version, false);
+      });
     },
   };
 }

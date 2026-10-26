@@ -18,6 +18,9 @@ describe("Worker 配置与脱敏校验", () => {
       leaseSeconds: 30,
       runLeaseSeconds: 30,
       runConcurrency: 2,
+      schedulerIntervalMs: 30_000,
+      schedulerConcurrency: 2,
+      scheduledRunMode: "demo",
     });
     expect(
       readWorkerConfig({
@@ -34,6 +37,8 @@ describe("Worker 配置与脱敏校验", () => {
     ["WORKER_LEASE_SECONDS", "leaseSeconds", 3600],
     ["WORKER_RUN_LEASE_SECONDS", "runLeaseSeconds", 3600],
     ["WORKER_RUN_CONCURRENCY", "runConcurrency", 32],
+    ["WORKER_SCHEDULER_INTERVAL_MS", "schedulerIntervalMs", 300_000],
+    ["WORKER_SCHEDULER_CONCURRENCY", "schedulerConcurrency", 8],
   ] as const)("%s 接受边界并拒绝非整数、越界和空值", (variable, field, maximum) => {
     for (const accepted of [1, maximum])
       expect(readWorkerConfig({ ...base, [variable]: String(accepted) })[field]).toBe(accepted);
@@ -61,6 +66,17 @@ describe("Worker 配置与脱敏校验", () => {
     for (const queueName of ["", "a".repeat(101), "scova:runs", "含中文", "scova runs"])
       expect(() => readWorkerConfig({ ...base, WORKER_QUEUE_NAME: queueName })).toThrow(
         "WORKER_QUEUE_NAME",
+      );
+  });
+
+  it("周期执行 mode 仅由显式部署配置决定，不随模型凭据自动切换", () => {
+    expect(readWorkerConfig({ ...base, MODEL_API_KEY: "secret" }).scheduledRunMode).toBe("demo");
+    expect(readWorkerConfig({ ...base, WORKER_SCHEDULED_RUN_MODE: "live" }).scheduledRunMode).toBe(
+      "live",
+    );
+    for (const mode of ["", "auto", "LIVE"])
+      expect(() => readWorkerConfig({ ...base, WORKER_SCHEDULED_RUN_MODE: mode })).toThrow(
+        "WORKER_SCHEDULED_RUN_MODE",
       );
   });
 });

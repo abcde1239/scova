@@ -8,7 +8,7 @@ function createRunStore(database: Prisma.TransactionClient) {
   return {
     lockTask(taskId: string, userId: string) {
       return database.$queryRaw<{ id: string }[]>`
-        SELECT id FROM tasks WHERE id = ${taskId}::uuid AND user_id = ${userId}::uuid FOR UPDATE
+        SELECT id FROM tasks WHERE id = ${taskId}::uuid AND user_id = ${userId}::uuid FOR NO KEY UPDATE
       `;
     },
     lockRun(runId: string, userId: string) {

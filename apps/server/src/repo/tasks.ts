@@ -4,6 +4,15 @@ import type { ApiServices } from "@/app/context.ts";
 /** 绑定当前事务的任务持久化操作；不包含 HTTP、认证或产品决策。 */
 export function createTaskStore(database: Prisma.TransactionClient) {
   return {
+    lockTask(taskId: string, userId: string) {
+      return database.$queryRaw<
+        { id: string }[]
+      >`SELECT id FROM tasks WHERE id = ${taskId}::uuid AND user_id = ${userId}::uuid FOR NO KEY UPDATE`;
+    },
+    async now() {
+      const [result] = await database.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`;
+      return result!.now;
+    },
     findTask(taskId: string, userId: string) {
       return database.task.findFirst({ where: { id: taskId, userId } });
     },
@@ -50,6 +59,29 @@ export function createTaskStore(database: Prisma.TransactionClient) {
       data: Prisma.TaskUpdateManyMutationInput,
     ) {
       return database.task.updateMany({ where: { id: taskId, userId, revision }, data });
+    },
+    async lockActiveRun(taskId: string, userId: string) {
+      const [result] = await database.$queryRaw<{ id: string }[]>`
+        SELECT id FROM runs WHERE task_id = ${taskId}::uuid AND user_id = ${userId}::uuid
+        AND status IN ('queued', 'running', 'recovering', 'cancel_requested') FOR UPDATE`;
+      return result ? database.run.findFirst({ where: { id: result.id, userId } }) : null;
+    },
+    requestCancel(runId: string, requestedAt: Date) {
+      return database.run.update({
+        where: { id: runId },
+        data: { status: "cancel_requested", cancelRequestedAt: requestedAt },
+      });
+    },
+    createCancelOutbox(userId: string, runId: string) {
+      return database.outbox.create({
+        data: {
+          userId,
+          aggregateId: runId,
+          eventType: "run.cancel_requested",
+          dedupeKey: `run-${runId}-cancel`,
+          payload: { runId },
+        },
+      });
     },
   };
 }

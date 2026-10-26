@@ -11,7 +11,26 @@ type TaskParams = { taskId: string };
 /** HTTP 认证、头字段与状态适配；业务事务由 service 负责。 */
 export function createTaskHandlers(services: ApiServices) {
   const tasks = createTaskService(services);
+  const control = (action: "pause" | "resume" | "archive") =>
+    async function (this: void, { request, set, params }: HttpContext & { params: TaskParams }) {
+      const session = await requireSession(request, services);
+      requireCsrf(request, session, services);
+      const ifMatch = request.headers.get("if-match");
+      if (!ifMatch)
+        throw new ApiError(428, "REVISION_REQUIRED", "任务控制必须携带 If-Match 修订版本");
+      const result = await tasks.transition(
+        session.userId,
+        params.taskId,
+        action,
+        parseRevisionEtag(ifMatch),
+      );
+      set.headers.etag = revisionEtag(result.task.revision);
+      return result;
+    };
   return {
+    pause: control("pause"),
+    resume: control("resume"),
+    archive: control("archive"),
     async list(this: void, { request, query }: HttpContext & { query: unknown }) {
       const session = await requireSession(request, services);
       return tasks.list(session.userId, query);

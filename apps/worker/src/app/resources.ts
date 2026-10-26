@@ -10,10 +10,14 @@ import { createRunHandler } from "@/handler/runs.ts";
 import { RunService, type RunExecutor } from "@/service/runs.ts";
 import { createRunConsumer, enqueueRecoverableRuns } from "@/queue/runs.ts";
 import { createAgentRuntime } from "@/service/agent.ts";
+import { createSchedulerRepository } from "@/repo/scheduler.ts";
+import { SchedulerService } from "@/service/scheduler.ts";
+import { createSchedulerHandler } from "@/handler/scheduler.ts";
 
 export interface WorkerResources {
   connect(): Promise<void>;
   dispatch(signal: AbortSignal): Promise<number>;
+  schedule?(signal: AbortSignal): Promise<number>;
   stop?(): Promise<void>;
   finished?(): Promise<void>;
   close(): Promise<void>;
@@ -33,11 +37,20 @@ export function createWorkerResources(
   let consumer: ReturnType<typeof createRunConsumer> | undefined;
   let runRepository: ReturnType<typeof createRunRepository> | undefined;
   let agent: ReturnType<typeof createAgentRuntime> | undefined;
+  let scheduler: ReturnType<typeof createSchedulerHandler> | undefined;
   return {
     connect: () =>
       (connecting ??= (async () => {
         database = createDatabaseClient({ datasources: { db: { url: config.databaseUrl } } });
         await database.$connect();
+        scheduler = createSchedulerHandler(
+          new SchedulerService({
+            repository: createSchedulerRepository(database),
+            mode: config.scheduledRunMode,
+            concurrency: config.schedulerConcurrency,
+          }),
+          config.batchSize,
+        );
         redis = new Redis(config.redisUrl, {
           lazyConnect: true,
           enableOfflineQueue: false,
@@ -93,6 +106,10 @@ export function createWorkerResources(
         await enqueueRecoverableRuns(publisher.queue, runs, signal);
       }
       return delivered;
+    },
+    schedule: (signal) => {
+      if (!scheduler) throw new Error("Worker 依赖尚未就绪");
+      return scheduler(signal);
     },
     stop: () => consumer?.stop() ?? Promise.resolve(),
     finished: () => consumer?.finished() ?? Promise.resolve(),

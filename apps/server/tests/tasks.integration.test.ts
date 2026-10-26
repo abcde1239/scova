@@ -9,6 +9,7 @@ import { createApiApp } from "../src/app/index.ts";
 import { createDefaultServices, type ApiServices } from "../src/app/context.ts";
 import { comparisonScopeHash } from "../src/service/tasks.ts";
 import type { TaskConfig } from "@scova/contracts";
+import { nextScheduledAt } from "@scova/utils";
 
 const require = createRequire(import.meta.url);
 const root = fileURLToPath(new URL("../../../", import.meta.url));
@@ -353,5 +354,266 @@ describe("长期任务、不可变版本与并发编辑", () => {
     expect(
       comparisonScopeHash(config({ timeRange: { kind: "rolling", days: 30 } }) as TaskConfig),
     ).not.toBe(baselineScope);
+  });
+
+  it("暂停保留当前执行并仍允许显式手动运行，恢复只安排数据库时间之后的计划", async () => {
+    const owner = await register();
+    const created = await json(
+      await request("/api/v1/tasks", {
+        method: "POST",
+        headers: authHeaders(owner),
+        body: JSON.stringify({ config: config() }),
+      }),
+    );
+    const start = (key: string) =>
+      request(`/api/v1/tasks/${created.task.id}/runs`, {
+        method: "POST",
+        headers: authHeaders(owner, { "idempotency-key": key }),
+        body: JSON.stringify({ mode: "demo" }),
+      });
+    const first = await json(await start("paused-current-run-key"));
+    const paused = await request(`/api/v1/tasks/${created.task.id}/pause`, {
+      method: "POST",
+      headers: authHeaders(owner, { "if-match": '"1"' }),
+    });
+    expect(paused.status).toBe(200);
+    expect(paused.headers.get("etag")).toBe('"2"');
+    expect((await json(paused)).task).toMatchObject({
+      status: "paused",
+      nextRunAt: null,
+      currentVersionId: created.task.currentVersionId,
+    });
+    expect((await prisma.run.findUniqueOrThrow({ where: { id: first.run.id } })).status).toBe(
+      "queued",
+    );
+    expect(await json(await start("paused-reuse-active-key"))).toMatchObject({
+      reused: true,
+      run: { id: first.run.id },
+    });
+    await prisma.run.update({ where: { id: first.run.id }, data: { status: "failed" } });
+    const explicit = await start("paused-explicit-new-key");
+    expect(explicit.status).toBe(202);
+    expect((await json(explicit)).reused).toBe(false);
+    const [before] = await prisma.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`;
+    const resumed = await request(`/api/v1/tasks/${created.task.id}/resume`, {
+      method: "POST",
+      headers: authHeaders(owner, { "if-match": '"2"' }),
+    });
+    expect(resumed.status).toBe(200);
+    const body = await json(resumed);
+    expect(body.task).toMatchObject({ status: "active", revision: 3 });
+    expect(new Date(body.task.nextRunAt).getTime()).toBeGreaterThan(before!.now.getTime());
+    const [after] = await prisma.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`;
+    expect([
+      nextScheduledAt(config() as TaskConfig, before!.now)!.toISOString(),
+      nextScheduledAt(config() as TaskConfig, after!.now)!.toISOString(),
+    ]).toContain(body.task.nextRunAt);
+    expect(await prisma.taskVersion.count({ where: { taskId: created.task.id } })).toBe(1);
+    expect(
+      (await prisma.task.findUniqueOrThrow({ where: { id: created.task.id } })).scheduleRevision,
+    ).toBe(3);
+  });
+
+  it("归档与单独取消竞争保持唯一取消投递，并拒绝新执行而保留历史", async () => {
+    const owner = await register();
+    const created = await json(
+      await request("/api/v1/tasks", {
+        method: "POST",
+        headers: authHeaders(owner),
+        body: JSON.stringify({ config: config() }),
+      }),
+    );
+    const run = (
+      await json(
+        await request(`/api/v1/tasks/${created.task.id}/runs`, {
+          method: "POST",
+          headers: authHeaders(owner, { "idempotency-key": "archive-current-run-key" }),
+          body: JSON.stringify({}),
+        }),
+      )
+    ).run;
+    const responses = await Promise.all([
+      request(`/api/v1/tasks/${created.task.id}/archive`, {
+        method: "POST",
+        headers: authHeaders(owner, { "if-match": '"1"' }),
+      }),
+      request(`/api/v1/runs/${run.id}/cancel`, { method: "POST", headers: authHeaders(owner) }),
+    ]);
+    expect(responses.map((response) => response.status)).toEqual([200, 200]);
+    expect((await json(responses[0]!)).task).toMatchObject({
+      status: "archived",
+      nextRunAt: null,
+      revision: 2,
+    });
+    expect(
+      await prisma.outbox.count({
+        where: { aggregateId: run.id, eventType: "run.cancel_requested" },
+      }),
+    ).toBe(1);
+    expect((await prisma.run.findUniqueOrThrow({ where: { id: run.id } })).status).toBe(
+      "cancel_requested",
+    );
+    expect(
+      (await prisma.task.findUniqueOrThrow({ where: { id: created.task.id } })).archivedAt,
+    ).not.toBeNull();
+    const repeated = await request(`/api/v1/tasks/${created.task.id}/archive`, {
+      method: "POST",
+      headers: authHeaders(owner, { "if-match": '"2"' }),
+    });
+    expect(repeated.status).toBe(200);
+    expect((await json(repeated)).task.revision).toBe(2);
+    for (const action of ["pause", "resume"])
+      expect(
+        (
+          await request(`/api/v1/tasks/${created.task.id}/${action}`, {
+            method: "POST",
+            headers: authHeaders(owner, { "if-match": '"2"' }),
+          })
+        ).status,
+      ).toBe(409);
+    expect(
+      (
+        await request(`/api/v1/tasks/${created.task.id}/runs`, {
+          method: "POST",
+          headers: authHeaders(owner, { "idempotency-key": "archived-reject-new-key" }),
+          body: JSON.stringify({}),
+        })
+      ).status,
+    ).toBe(409);
+    const replay = await request(`/api/v1/tasks/${created.task.id}/runs`, {
+      method: "POST",
+      headers: authHeaders(owner, { "idempotency-key": "archive-current-run-key" }),
+      body: JSON.stringify({}),
+    });
+    expect(replay.status).toBe(202);
+    expect(await json(replay)).toMatchObject({
+      reused: true,
+      run: { id: run.id, status: "cancel_requested" },
+    });
+    await prisma.run.update({ where: { id: run.id }, data: { status: "canceled" } });
+    expect(
+      (
+        await request(`/api/v1/runs/${run.id}/retry`, {
+          method: "POST",
+          headers: authHeaders(owner, { "idempotency-key": "archived-reject-retry-key" }),
+          body: JSON.stringify({}),
+        })
+      ).status,
+    ).toBe(409);
+    expect(
+      (await request(`/api/v1/tasks/${created.task.id}`, { headers: authHeaders(owner) })).status,
+    ).toBe(200);
+    expect(await prisma.taskVersion.count({ where: { taskId: created.task.id } })).toBe(1);
+    expect(await prisma.run.count({ where: { taskId: created.task.id } })).toBe(1);
+    expect(
+      await prisma.outbox.count({ where: { aggregateId: run.id, eventType: "run.enqueue" } }),
+    ).toBe(1);
+  });
+
+  it("控制接口统一校验 owner、CSRF、If-Match，重复状态幂等且修订冲突不写入", async () => {
+    const owner = await register(),
+      other = await register();
+    const created = await json(
+      await request("/api/v1/tasks", {
+        method: "POST",
+        headers: authHeaders(owner),
+        body: JSON.stringify({ config: config() }),
+      }),
+    );
+    const path = `/api/v1/tasks/${created.task.id}/pause`;
+    expect((await request(path, { method: "POST", headers: authHeaders(owner) })).status).toBe(428);
+    expect(
+      (
+        await request(path, {
+          method: "POST",
+          headers: headers({ cookie: owner.cookie, "if-match": '"1"' }),
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      (await request(path, { method: "POST", headers: authHeaders(other, { "if-match": '"1"' }) }))
+        .status,
+    ).toBe(404);
+    const response = await request(path, {
+      method: "POST",
+      headers: authHeaders(owner, { "if-match": '"1"' }),
+    });
+    expect(response.status).toBe(200);
+    expect(
+      (await request(path, { method: "POST", headers: authHeaders(owner, { "if-match": '"1"' }) }))
+        .status,
+    ).toBe(409);
+    const repeated = await request(path, {
+      method: "POST",
+      headers: authHeaders(owner, { "if-match": '"2"' }),
+    });
+    expect((await json(repeated)).task.revision).toBe(2);
+    expect(await prisma.taskVersion.count({ where: { taskId: created.task.id } })).toBe(1);
+  });
+
+  it("非计划编辑保留到期时点，暂停后的计划编辑不重新启用触发", async () => {
+    const owner = await register();
+    const created = await json(
+      await request("/api/v1/tasks", {
+        method: "POST",
+        headers: authHeaders(owner),
+        body: JSON.stringify({ config: config() }),
+      }),
+    );
+    const due = new Date("2026-10-19T12:00:00Z");
+    await prisma.task.update({ where: { id: created.task.id }, data: { nextRunAt: due } });
+    const edited = await request(`/api/v1/tasks/${created.task.id}`, {
+      method: "PATCH",
+      headers: authHeaders(owner, { "if-match": '"1"' }),
+      body: JSON.stringify({ config: config({ title: "只改标题" }) }),
+    });
+    expect(edited.status).toBe(200);
+    expect((await json(edited)).task.nextRunAt).toBe(due.toISOString());
+    await request(`/api/v1/tasks/${created.task.id}/pause`, {
+      method: "POST",
+      headers: authHeaders(owner, { "if-match": '"2"' }),
+    });
+    const whilePaused = await request(`/api/v1/tasks/${created.task.id}`, {
+      method: "PATCH",
+      headers: authHeaders(owner, { "if-match": '"3"' }),
+      body: JSON.stringify({
+        config: config({ schedule: { frequency: "daily", localTime: "09:00" } }),
+      }),
+    });
+    expect(whilePaused.status).toBe(200);
+    expect((await json(whilePaused)).task).toMatchObject({
+      status: "paused",
+      nextRunAt: null,
+      revision: 4,
+    });
+    expect(
+      (await prisma.task.findUniqueOrThrow({ where: { id: created.task.id } })).scheduleRevision,
+    ).toBe(3);
+  });
+
+  it("并发计划控制与编辑共享修订互斥，只有一方生效", async () => {
+    const owner = await register();
+    const created = await json(
+      await request("/api/v1/tasks", {
+        method: "POST",
+        headers: authHeaders(owner),
+        body: JSON.stringify({ config: config() }),
+      }),
+    );
+    const responses = await Promise.all([
+      request(`/api/v1/tasks/${created.task.id}/pause`, {
+        method: "POST",
+        headers: authHeaders(owner, { "if-match": '"1"' }),
+      }),
+      request(`/api/v1/tasks/${created.task.id}`, {
+        method: "PATCH",
+        headers: authHeaders(owner, { "if-match": '"1"' }),
+        body: JSON.stringify({ config: config({ title: "并发修改" }) }),
+      }),
+    ]);
+    expect(responses.map((response) => response.status).sort((a, b) => a - b)).toEqual([200, 409]);
+    expect((await prisma.task.findUniqueOrThrow({ where: { id: created.task.id } })).revision).toBe(
+      2,
+    );
   });
 });
