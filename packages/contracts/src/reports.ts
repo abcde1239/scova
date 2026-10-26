@@ -13,6 +13,7 @@ import {
   pageSchema,
 } from "./common.ts";
 import { CoverageSchema } from "./runs.ts";
+import { FeedbackEffectsSchema } from "./feedback.ts";
 
 export const EvidenceSelectorSchema = refineSchema(
   Type.Object(
@@ -166,6 +167,7 @@ const ReportObject = Type.Object(
       description: "至少一条可查证证据；没有证据时不能发布报告",
     }),
     changes: Type.Array(ChangeRecordSchema),
+    feedbackEffects: Type.Optional(FeedbackEffectsSchema),
     publishedAt: InstantSchema,
   },
   { additionalProperties: false, description: "四种展示形式共用的不可变报告 DTO" },

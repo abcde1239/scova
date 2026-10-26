@@ -12,6 +12,7 @@ import {
   TaskConfigSchema,
   UsageSchema,
   parseContract,
+  readFeedbackSnapshot,
 } from "@scova/contracts";
 import { validatePublication, type ReadPage, type SearchResponse } from "@scova/connectors";
 import type { PrismaClient, Run, ToolCall } from "@scova/models";
@@ -47,6 +48,7 @@ function contextFor(run: Run, config: AgentContext["config"]): AgentContext {
     deadlineAt: run.deadlineAt!,
     signal: new AbortController().signal,
     assertActive: async () => undefined,
+    feedback: readFeedbackSnapshot(run.feedbackSnapshotJson, run.userId, run.taskId),
   };
 }
 function pageBody(page: AgentCandidate["pages"][number]) {
@@ -198,6 +200,7 @@ export function createDeliveryRepository(db: PrismaClient) {
               if (!state.queries.length || !state.searches.length) gaps.push("搜索计划未完成");
               for (const search of state.searches)
                 if (
+                  (search.response as SearchResponse).query !== search.query.query ||
                   !successful.some(
                     (call) =>
                       call.tool === "search" && isDeepStrictEqual(output(call), search.response),
@@ -389,6 +392,7 @@ export function createDeliveryRepository(db: PrismaClient) {
                 format: config.outputFormat,
                 completeness: candidate.coverage.completeness,
                 limitationsJson: candidate.coverage.gaps,
+                feedbackEffectsJson: candidate.feedbackEffects ?? [],
                 comparisonJson: candidate.manifest
                   ? JSON.parse(JSON.stringify(candidate.manifest))
                   : undefined,

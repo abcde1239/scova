@@ -39,6 +39,16 @@ Scova 的纯 TypeScript/TypeBox 接口契约。Web、API、worker 从本包导�
 
 schema 只能验证单帧结构，不能证明跨帧顺序或权限；API/客户端必须保证授权、事务分配 seq、先回放再续传、单调性和重连去重。部分执行只允许 `inconclusive` 或有不完整标记的变化结果；不完整报告必须包含 `limitations` 或 `coverage.gaps`，不推进基线。
 
+## 可撤销反馈
+
+`POST /api/v1/feedback` 接受 `{ taskId, sourceId 或 claimId, kind }`，kind 为 `irrelevant/known/deeper`；恰选一种目标。资料必须曾在当前账号的当前任务被观测，结论必须属于该任务。相同目标同种设置保持幂等，切换或重激活更新同一行；`DELETE /api/v1/feedback/:feedbackId` 逻辑撤销且重复撤销幂等。写操作要求同源会话与 CSRF。`GET /api/v1/tasks/:taskId/feedback` 返回 `{ items }`，仅列当前生效项；同一任务最多同时生效 200 条，超限返回 409。
+
+新 Run 在创建入队事务内冻结反馈，手动、周期和重试使用同一投影器。切换与撤销不修改已排队、执行中或恢复 Run 的快照；重试作为新执行捕获当前反馈。反馈不产生 TaskVersion、不清空比较基线、不重写历史报告或证据。
+
+`Report.feedbackEffects` 展示经本次实际计划、搜索和正文核验的作用：新发现排除、深入子查询、来源优先采集、未变结论降序和基线保护。预算不足或未匹配目标会明确说明，不能把请求当作已执行。基线来源始终参与复读；已了解只降低标记当时内容未变的重复结论顺序，保留引用，新值与重要条件变化继续正常比较。结论级不相关只调整已确认未变结论的展示顺序，不把承载其他事实的整份来源拉黑。前端标记与展示在后续界面工作中接入。
+
 ## 验证
 
 `vp test packages/contracts/tests/contracts.test.ts` 验证非法输入、边界、错误字段位置、TypeBox Value/Compiler 一致性、状态和证据语义、全部持久化事件及 reset 控制帧。真实 API/数据库/队列行为由对应后续 Issue 验证。
+
+`vp test packages/agent-core/tests/feedback.test.ts` 验证有界计划与新值保护；`vp run test:feedback` 使用真实 PostgreSQL、工具账本和 checkpoint 验证授权、快照冻结、恢复、实际作用与重要变化双侧证据。

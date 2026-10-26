@@ -132,6 +132,7 @@ export function createRunService(services: ApiServices) {
           trigger: parentRunId ? "retry" : "manual",
           parentRunId,
           budgetJson: config.budget,
+          feedbackSnapshotJson: await store.feedbackSnapshot(userId, task.id),
           usageJson: usage,
         });
         const queued = eventDto(

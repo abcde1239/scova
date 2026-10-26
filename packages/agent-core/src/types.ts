@@ -1,6 +1,14 @@
 import type { BaseCheckpointSaver } from "@langchain/langgraph";
 import type { RunnableConfig } from "@langchain/core/runnables";
-import type { Budget, Coverage, Mode, TaskConfig, Usage } from "@scova/contracts";
+import type {
+  Budget,
+  Coverage,
+  Mode,
+  TaskConfig,
+  Usage,
+  FeedbackSnapshot,
+  FeedbackEffect,
+} from "@scova/contracts";
 import type { ModelResponse, ReadPage, SearchResponse, StructuredInput } from "@scova/connectors";
 
 export interface AgentTools {
@@ -28,6 +36,7 @@ export interface AgentContext {
   comparisonScopeHash?: string;
   baselineRunId?: string | null;
   baseline?: AgentBaseline | null;
+  feedback?: FeedbackSnapshot;
 }
 
 export interface ComparisonFact {
@@ -100,6 +109,7 @@ export interface AgentPage extends ReadPage {
 }
 
 export interface AgentCandidate {
+  feedbackEffects?: FeedbackEffect[];
   schemaVersion: 1;
   runId: string;
   userId: string;

@@ -13,6 +13,12 @@ import {
 } from "./comparison.ts";
 import type { Coverage } from "@scova/contracts";
 import { AgentError } from "./types.ts";
+import {
+  feedbackDigest,
+  expandFeedbackQueries,
+  feedbackSelections,
+  explainFeedback,
+} from "./feedback.ts";
 import type {
   AgentCandidate,
   AgentClaim,
@@ -31,6 +37,7 @@ interface Selection {
   questionIds: string[];
 }
 interface ResearchState {
+  feedbackDigest?: string;
   schemaVersion: 1;
   runId: string;
   userId: string;
@@ -117,6 +124,7 @@ function verifyIdentity(state: ResearchState, context: AgentContext): void {
     state.userId !== context.userId ||
     state.taskVersionId !== context.taskVersionId ||
     state.mode !== context.mode ||
+    state.feedbackDigest !== feedbackDigest(context) ||
     !Array.isArray(state.pages) ||
     !Array.isArray(state.questions) ||
     JSON.stringify(state.questions) !== JSON.stringify(expectedQuestions) ||
@@ -389,6 +397,13 @@ function candidate(context: AgentContext, state: ResearchState, reason?: string)
       gaps.push("优先来源未完成正文采集");
   }
   const allGaps = unique(gaps);
+  const feedback = explainFeedback(
+    context,
+    state,
+    claims,
+    (url) => allowed(context, url),
+    comparison?.changes,
+  );
   const exhausted = [...state.exhausted];
   if (context.usage.searches >= context.budget.maxSearches) exhausted.push("searches");
   if (context.usage.pages >= context.budget.maxPages) exhausted.push("pages");
@@ -404,7 +419,8 @@ function candidate(context: AgentContext, state: ResearchState, reason?: string)
       ? { demoReason: context.demoReason ?? "固定演示资料，未验证互联网事实" }
       : {}),
     title: context.config.title,
-    claims,
+    claims: feedback.claims,
+    ...(context.feedback?.items.length ? { feedbackEffects: feedback.effects } : {}),
     pages: state.pages,
     coverage: {
       completeness: allGaps.length ? "partial" : "complete",
@@ -446,6 +462,7 @@ export function deterministicPartial(context: AgentContext, pages: AgentPage[]):
   )
     throw new AgentError("INVALID_STATE", "持久化正文不符合当前执行的证据约束");
   const state: ResearchState = {
+    feedbackDigest: feedbackDigest(context),
     schemaVersion: 1,
     runId: context.runId,
     userId: context.userId,
@@ -487,6 +504,7 @@ export async function runResearchAgent(
   )
     throw new AgentError("INVALID_STATE", "恢复必须指定已合法提升的 checkpoint");
   const initial: ResearchState = {
+    feedbackDigest: feedbackDigest(context),
     schemaVersion: 1,
     runId: context.runId,
     userId: context.userId,
@@ -551,7 +569,7 @@ export async function runResearchAgent(
             questionIds: [question.id],
           }));
         if (context.mode === "demo") {
-          state.queries = fallback();
+          state.queries = expandFeedbackQueries(context, fallback(), questions);
           return state;
         }
         try {
@@ -603,6 +621,7 @@ export async function runResearchAgent(
           state.gaps.push("模型规划失败，使用任务原文的确定性查询");
           state.queries = fallback();
         }
+        state.queries = expandFeedbackQueries(context, state.queries, questions);
         return state;
       }),
     )
@@ -678,8 +697,11 @@ export async function runResearchAgent(
               });
           }
         const limit = Math.min(MAX_PAGES, context.budget.maxPages);
-        if (selected.size > limit) state.gaps.push("候选来源超过正文读取预算，部分来源尚未读取");
-        state.selections = [...selected.values()].slice(0, limit);
+        const ranked = feedbackSelections(context, [...selected.values()], (url) =>
+          allowed(context, url),
+        );
+        if (ranked.length > limit) state.gaps.push("候选来源超过正文读取预算，部分来源尚未读取");
+        state.selections = ranked.slice(0, limit);
         return state;
       }),
     )

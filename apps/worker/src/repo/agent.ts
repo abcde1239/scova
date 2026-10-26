@@ -1,4 +1,11 @@
-import { BudgetSchema, UsageSchema, parseContract, type Usage } from "@scova/contracts";
+import {
+  BudgetSchema,
+  UsageSchema,
+  parseContract,
+  readFeedbackSnapshot,
+  type Usage,
+  type FeedbackSnapshot,
+} from "@scova/contracts";
 import type { Prisma, PrismaClient, Run, ToolCall } from "@scova/models";
 import { appendEvent, withRunFence } from "@/repo/runs.ts";
 import type { RunLeaseToken } from "@/utils/runs.ts";
@@ -37,6 +44,7 @@ export interface AgentRepository {
     comparisonScopeHash: string;
     baselineRunId: string | null;
     baseline: AgentBaseline | null;
+    feedback: FeedbackSnapshot;
   }>;
   reserve(input: AgentReservationInput): Promise<AgentReservation>;
   settle(input: {
@@ -207,6 +215,7 @@ export function createAgentRepository(db: PrismaClient, token: RunLeaseToken): A
         comparisonScopeHash: run.comparisonScopeHash,
         baselineRunId: run.baselineRunId,
         baseline: await loadBaseline(tx, run),
+        feedback: readFeedbackSnapshot(run.feedbackSnapshotJson, run.userId, run.taskId),
       })),
     async reserve(input) {
       const reserved = reservation(input);
