@@ -33,6 +33,7 @@ import {
 import type { PrismaClient } from "@scova/models";
 import type { RunExecutionContext, RunExecutor } from "@/service/runs.ts";
 import { RunExecutionError, type RunLeaseToken, type RunProgressEvent } from "@/utils/runs.ts";
+import { createDeliveryService } from "@/service/delivery.ts";
 
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
 const emptyUsage = (): Usage => ({
@@ -331,6 +332,7 @@ export function createAgentSession({
     budget: context.budget,
     usage: currentUsage,
     deadlineAt: context.deadlineAt,
+    startedAt: context.startedAt,
     signal: context.signal,
     assertActive: () => context.assertActive(),
     demoReason: bundle.reason,
@@ -338,6 +340,7 @@ export function createAgentSession({
   return {
     tools,
     openCheckpoint,
+    persist: trackDomain,
     drain: async () => {
       await Promise.allSettled(pending);
     },
@@ -405,6 +408,8 @@ export interface AgentRuntimeOptions {
   env?: NodeJS.ProcessEnv;
   checkpointSchema?: string;
   bundle?: ConnectorBundle;
+  /** Production application wires atomic domain delivery; standalone graph tests may omit it. */
+  enableDelivery?: boolean;
   /** #16 supplies a fenced domain delivery service; absent means explicit failure. */
   deliver?: (
     context: RunExecutionContext,
@@ -428,6 +433,9 @@ export function createAgentRuntime(options: AgentRuntimeOptions) {
     idleTimeoutMillis: 10_000,
   });
   const saver = new PostgresSaver(pool, undefined, { schema });
+  const delivery = options.enableDelivery
+    ? createDeliveryService(options.database, saver)
+    : undefined;
   let ready = false;
   let closing: Promise<void> | undefined;
   let liveBundle: ConnectorBundle | undefined;
@@ -480,10 +488,26 @@ export function createAgentRuntime(options: AgentRuntimeOptions) {
             context,
             bundle: bundle(context.mode),
           });
-          const candidate = await session.execute();
-          if (!options.deliver) throw new RunExecutionError("AGENT_DELIVERY_NOT_CONFIGURED");
+          let candidate: AgentCandidate;
+          try {
+            candidate = await session.execute();
+          } catch (error) {
+            if (
+              error &&
+              typeof error === "object" &&
+              "code" in error &&
+              error.code === "NO_EVIDENCE"
+            )
+              throw new RunExecutionError("NO_EVIDENCE");
+            throw error;
+          }
+          if (!options.deliver && !delivery)
+            throw new RunExecutionError("AGENT_DELIVERY_NOT_CONFIGURED");
           await context.assertActive();
-          await options.deliver(context, candidate, false);
+          await session.persist(async () => {
+            if (options.deliver) await options.deliver(context, candidate, false);
+            else await delivery!.deliver(token, candidate);
+          });
         },
         async onDeadline(context) {
           if (!session) {
@@ -507,7 +531,11 @@ export function createAgentRuntime(options: AgentRuntimeOptions) {
             });
           }
           const candidate = await session?.partial();
-          if (candidate && options.deliver) await options.deliver(context, candidate, true);
+          if (candidate && (options.deliver || delivery))
+            await session.persist(async () => {
+              if (options.deliver) await options.deliver(context, candidate, true);
+              else await delivery!.deliver(token, candidate, true);
+            }, true);
         },
         drain: () => session?.drain() ?? Promise.resolve(),
       };

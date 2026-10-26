@@ -18,6 +18,8 @@ export interface AgentContext {
   budget: Budget;
   usage: Usage;
   deadlineAt: Date;
+  /** First persisted Run start; required to validate rolling publication windows. */
+  startedAt?: Date;
   signal: AbortSignal;
   /** Must check cancellation/lease. With allowDeadline=true, only elapsed deadline is permitted. */
   assertActive: (allowDeadline?: boolean) => Promise<void>;

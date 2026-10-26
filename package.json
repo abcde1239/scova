@@ -25,7 +25,9 @@
     "api:openapi:check": "vpx scripts/generate-openapi.mjs --check",
     "test:database": "vp test --config tests/database.vite.config.ts",
     "test:auth": "vp test --config tests/auth.vite.config.ts",
-    "test:integration": "vp run test:database && vp run test:auth && vp test --config tests/tasks.vite.config.ts && vp test --config tests/runs.vite.config.ts && vp test --config tests/backend-flow.vite.config.ts && vp run test:worker",
+    "test:integration": "vp run test:database && vp run test:auth && vp test --config tests/tasks.vite.config.ts && vp test --config tests/runs.vite.config.ts && vp run test:reports && vp test --config tests/backend-flow.vite.config.ts && vp run test:worker",
+    "test:reports": "vp test --config tests/reports.vite.config.ts",
+    "test:delivery": "vp test --config tests/worker-outbox.vite.config.ts apps/worker/tests/delivery.integration.test.ts",
     "test:worker": "vp test --config tests/worker-outbox.vite.config.ts",
     "test:agent-recovery": "vp test --config tests/worker-outbox.vite.config.ts apps/worker/tests/recovery.integration.test.ts"
   },

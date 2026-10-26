@@ -371,7 +371,13 @@ export function createAgentRepository(db: PrismaClient, token: RunLeaseToken): A
         options.allowDeadline ? "deadline_delivery" : "work",
         async (tx, run) => {
           const calls = await tx.toolCall.findMany({
-            where: { userId: run.userId, runId: run.id, tool: "read", status: "succeeded" },
+            where: {
+              userId: run.userId,
+              runId: run.id,
+              tool: "read",
+              status: "succeeded",
+              finishedAt: { lte: run.deadlineAt! },
+            },
             orderBy: [{ operationKey: "asc" }, { attemptNo: "asc" }],
           });
           return calls.map(completedOutput);

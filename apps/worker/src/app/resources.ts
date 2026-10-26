@@ -60,7 +60,11 @@ export function createWorkerResources(
         );
         runRepository = createRunRepository(database);
         if (!options.executor) {
-          agent = createAgentRuntime({ databaseUrl: config.databaseUrl, database });
+          agent = createAgentRuntime({
+            databaseUrl: config.databaseUrl,
+            database,
+            enableDelivery: true,
+          });
           await agent.connect();
         }
         const leaseMs = config.runLeaseSeconds * 1000;

@@ -7,6 +7,7 @@ import { createDefaultServices, type ApiServices } from "@/app/context.ts";
 import { createAuthPlugin } from "@/router/auth.ts";
 import { createTaskPlugin } from "@/router/tasks.ts";
 import { createRunPlugin } from "@/router/runs.ts";
+import { createReportPlugin } from "@/router/reports.ts";
 import { createSystemPlugin } from "@/router/system.ts";
 
 export { contractModels, HealthResponseSchema } from "@/app/contracts.ts";
@@ -43,6 +44,7 @@ export const createApiApp = (
     .use(createSystemPlugin())
     .use(createAuthPlugin(services))
     .use(createTaskPlugin(services))
-    .use(createRunPlugin(services));
+    .use(createRunPlugin(services))
+    .use(createReportPlugin(services));
 
 export const apiApp = createApiApp();

@@ -1,6 +1,6 @@
 # Scova 系统架构
 
-状态：持续演进的首版设计。已实现账号/任务/执行基础 API、Run 租约恢复、搜索阅读适配器与有预算的持久化 Agent。研究候选可恢复；报告交付、连续运行差异和完整界面仍按计划实现。下文也包含待验收的目标行为。
+状态：持续演进的首版设计。已实现账号/任务/执行基础 API、Run 租约恢复、搜索阅读适配器、有预算的持久化 Agent，以及证据报告原子交付与报告/收件箱 API。当前优先完善后端，连续运行差异和完整界面仍按计划实现。下文也包含待验收的目标行为。
 
 ## 1. 产品闭环与边界
 
@@ -44,7 +44,7 @@ API 不负责执行长任务，worker 不提供账号管理入口；Agent 没有
 
 Server 源码分层为 `main → app → router → handler → service → repo`：app 装配 Elysia、Node 适配与生命周期，router 声明路由和中文 OpenAPI，handler 处理 HTTP/会话/响应，service 编排业务规则及事务，repo 完成数据库与 Redis 访问。utils 放纯工具。Task CAS 与 Run/事件/Outbox 仍在同一事务中完成。
 
-Worker 使用 `main/node → app → handler → service → repo + queue`：app 管配置、资源和串行轮询，handler 接收后台批次和 Run 消息，service 编排 Outbox、Run 和 Agent，repo 执行 PostgreSQL 条件写，queue 适配 BullMQ。已实现 Run 消费、续期、有限接管、取消及持久化研究候选；报告交付未接入时明确失败。停止先阻止新领取、中断执行并等待在途领域写/checkpoint，再关闭 consumer、队列、Redis、saver 和数据库。
+Worker 使用 `main/node → app → handler → service → repo + queue`：app 管配置、资源和串行轮询，handler 接收后台批次和 Run 消息，service 编排 Outbox、Run、Agent 与交付，repo 执行 PostgreSQL 条件写，queue 适配 BullMQ。已实现 Run 消费、续期、有限接管、取消及持久化研究候选；交付服务复核已提升 checkpoint、成功工具正文与逐字引用后，原子保存报告、收件箱和终态。停止先阻止新领取、中断执行并等待在途领域写/checkpoint/交付，再关闭 consumer、队列、Redis、saver 和数据库。
 
 Outbox 每次领取的 `attempts + leaseExpiresAt` 作为本次持有凭据，领取和确认/退避均使用 CAS。过期持有者不能覆盖接管后的状态；发送成功但确认失败保留租约，到期后用同一 jobId 重投。这一边界保证至少一次传递，后续业务执行仍须幂等。
 

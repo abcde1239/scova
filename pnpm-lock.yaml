@@ -281,6 +281,9 @@ importers:
       '@node-rs/argon2':
         specifier: 'catalog:'
         version: 2.2.2
+      '@scova/connectors':
+        specifier: workspace:*
+        version: link:../../packages/connectors
       '@scova/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts

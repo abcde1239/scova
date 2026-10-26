@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { Annotation, StateGraph, START, END } from "@langchain/langgraph";
 import type { RunnableConfig } from "@langchain/core/runnables";
 import type { SearchResponse, StructuredInput } from "@scova/connectors";
+import { assessPublication } from "@scova/connectors";
 import type { Coverage } from "@scova/contracts";
 import { AgentError } from "./types.ts";
 import type {
@@ -266,11 +267,33 @@ function deterministicClaims(state: ResearchState): AgentClaim[] {
     return { kind: "fact", text: quote, citations: [{ pageId: page.id, quote }], questionIds: [] };
   });
 }
+function publicationGaps(context: AgentContext, pages: AgentPage[]): string[] {
+  const range = context.config.timeRange;
+  const end = range.kind === "fixed" ? new Date(range.end) : context.startedAt;
+  const start =
+    range.kind === "fixed"
+      ? new Date(range.start)
+      : end && new Date(end.getTime() - range.days * 86_400_000);
+  if (!start || !end || !Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()))
+    return ["查阅时间窗口尚未固定，无法校验来源声明的发布时间"];
+  const gaps: string[] = [];
+  for (const page of pages) {
+    const result = assessPublication(page.publication, start, end);
+    if (result === "unknown") gaps.push("来源未提供可解析且带时区的发布时间，时间范围未核验");
+    if (result === "conflict") gaps.push("来源声明的发布时间存在冲突，时间范围未核验");
+    if (result === "outside") gaps.push("采集来源声明的发布时间超出本次查阅时间范围");
+  }
+  return unique(gaps);
+}
 function candidate(context: AgentContext, state: ResearchState, reason?: string): AgentCandidate {
   verifyIdentity(state, context);
   if (!state.pages.length)
     throw new AgentError("NO_EVIDENCE", "没有已采集的可用正文，不能生成候选成果");
-  const gaps = [...state.gaps, ...(reason ? [reason] : [])];
+  const gaps = [
+    ...state.gaps,
+    ...publicationGaps(context, state.pages),
+    ...(reason ? [reason] : []),
+  ];
   if (
     state.pages.some(
       (page) =>
@@ -333,6 +356,13 @@ function candidate(context: AgentContext, state: ResearchState, reason?: string)
 }
 
 /** Pure deadline projection. The worker must authorize cancellation/owner/lease before using it. */
+export function candidateFromCheckpoint(context: AgentContext, value: unknown): AgentCandidate {
+  const state = structuredClone(value) as ResearchState;
+  verifyIdentity(state, context);
+  if (state.ready !== true) throw new AgentError("INVALID_STATE", "checkpoint 尚未完成引用校验");
+  return candidate(context, state);
+}
+
 export function deterministicPartial(context: AgentContext, pages: AgentPage[]): AgentCandidate {
   const questions = unique([context.config.goal, ...context.config.focusPoints]).map(
     (text, index) => ({ id: `q${index}`, text }),
@@ -440,7 +470,6 @@ export async function runResearchAgent(
     .addNode(
       "load_context",
       node(async (state) => {
-        state.gaps.push("来源发布日期与配置时间范围尚未独立核验，不能保证所有正文满足时间筛选");
         if (context.config.sourcePreferences.officialOnly)
           state.gaps.push("来源已按用户指定范围筛选，官方身份尚需独立核验");
         if (

@@ -456,6 +456,7 @@ model RunSource {
   fetchStatus  FetchStatus @map("fetch_status")
   errorCode    String?     @map("error_code")
   relevance    Float?
+  metadataJson Json        @default("{}") @map("metadata_json")
 
   owner    User            @relation("User_RunSource", fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   run      Run             @relation("RunSource_run", fields: [userId, runId], references: [userId, id], onDelete: NoAction, onUpdate: NoAction)

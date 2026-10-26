@@ -1,2 +1,2 @@
 export * from "./types.ts";
-export { runResearchAgent, deterministicPartial } from "./agent.ts";
+export { runResearchAgent, deterministicPartial, candidateFromCheckpoint } from "./agent.ts";

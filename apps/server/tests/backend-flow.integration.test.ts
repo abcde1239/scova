@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { Queue } from "bullmq";
 import { Redis } from "ioredis";
 import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test";
+import { parseContract, ReportSchema } from "@scova/contracts";
 import { nodeScriptCommand } from "../../../scripts/process-runtime.mjs";
 import { outboxDatabase } from "../../worker/tests/support/outbox-database.ts";
 
@@ -124,7 +125,7 @@ const taskConfig = () => ({
   notificationPreference: { mode: "summary", runIssues: true },
 });
 
-/** 真实 consumer 控制链；未配置 Agent 时明确失败，不生成报告。 */
+/** 真实 API/worker 进程完成演示查阅与原子交付；不依赖远程供应商。 */
 describe("整体后端：真实 HTTP → PostgreSQL Outbox → BullMQ → Run consumer", () => {
   beforeAll(() => fixture.setup(), 120_000);
   afterAll(() => fixture.cleanup());
@@ -135,7 +136,7 @@ describe("整体后端：真实 HTTP → PostgreSQL Outbox → BullMQ → Run co
     ["node", "bun"],
     ["node", "node"],
   ] as const)(
-    "API=%s / Worker=%s：账号隔离、幂等投递及重启不重投",
+    "API=%s / Worker=%s：证据交付、账号隔离与重启不重复报告",
     async (apiRuntime, workerRuntime) => {
       const queueName = `scova-flow-${randomUUID()}`;
       const redis = new Redis(fixture.redisUrl, {
@@ -277,12 +278,12 @@ describe("整体后端：真实 HTTP → PostgreSQL Outbox → BullMQ → Run co
         await waitUntil(
           async () =>
             (await fixture.db.run.findUniqueOrThrow({ where: { id: first.run.id } })).status ===
-            "failed",
+            "partial",
           worker,
         );
         expect(
           (await fixture.db.run.findUniqueOrThrow({ where: { id: first.run.id } })).failureCode,
-        ).toBe("AGENT_DELIVERY_NOT_CONFIGURED");
+        ).toBeNull();
         await stop(worker);
         worker = undefined;
         // 新的待投递行作为重启扫描的同步屏障，避免用固定 sleep 猜测已执行一轮。
@@ -298,7 +299,7 @@ describe("整体后端：真实 HTTP → PostgreSQL Outbox → BullMQ → Run co
         await waitUntil(
           async () =>
             (await fixture.db.run.findUniqueOrThrow({ where: { id: second.run.id } })).status ===
-            "failed",
+            "partial",
           worker,
         );
         await stop(worker);
@@ -320,17 +321,53 @@ describe("整体后端：真实 HTTP → PostgreSQL Outbox → BullMQ → Run co
           true,
         );
         expect(
-          await fixture.db.runEvent.count({ where: { runId: first.run.id, type: "run.failed" } }),
+          await fixture.db.runEvent.count({
+            where: { runId: first.run.id, type: "run.completed" },
+          }),
         ).toBe(1);
         expect(
           (await fixture.db.run.findUniqueOrThrow({ where: { id: first.run.id } })).leaseEpoch,
         ).toBe(1);
         const final = await request(`/api/v1/runs/${first.run.id}`, "GET", undefined, owner);
         expect(final.status).toBe(200);
-        const result = (await final.json()) as { status: string; failureCode: string };
-        expect(result.status).toBe("failed");
-        expect(result.failureCode).toBe("AGENT_DELIVERY_NOT_CONFIGURED");
-        expect(await fixture.db.report.count({ where: { runId: first.run.id } })).toBe(0);
+        const result = (await final.json()) as { status: string; failureCode: string | null };
+        expect(result.status).toBe("partial");
+        expect(result.failureCode).toBeNull();
+        expect(await fixture.db.report.count({ where: { runId: first.run.id } })).toBe(1);
+        expect(
+          await fixture.db.inboxItem.count({ where: { report: { runId: first.run.id } } }),
+        ).toBe(1);
+        expect(await fixture.db.baseline.count({ where: { taskId: task.id } })).toBe(0);
+        const reportRow = await fixture.db.report.findFirstOrThrow({
+          where: { runId: first.run.id },
+        });
+        const reportResponse = await request(
+          `/api/v1/reports/${reportRow.id}`,
+          "GET",
+          undefined,
+          owner,
+        );
+        expect(reportResponse.status).toBe(200);
+        const report = parseContract(ReportSchema, await reportResponse.json());
+        expect(report).toMatchObject({
+          runId: first.run.id,
+          mode: "demo",
+          coverage: { completeness: "partial" },
+        });
+        expect(report.evidence.length).toBeGreaterThan(0);
+        const evidenceIds = new Set(report.evidence.map((evidence) => evidence.id));
+        for (const claim of report.claims) {
+          for (const id of claim.evidenceIds) expect(evidenceIds.has(id)).toBe(true);
+        }
+        expect(report.limitations.length).toBeGreaterThan(0);
+        expect(
+          (await request(`/api/v1/reports/${report.id}`, "GET", undefined, other)).status,
+        ).toBe(404);
+        expect(
+          await fixture.db.runEvent.count({
+            where: { runId: first.run.id, type: "report.published" },
+          }),
+        ).toBe(1);
       } finally {
         try {
           if (worker) await stop(worker);

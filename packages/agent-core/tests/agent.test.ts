@@ -116,6 +116,65 @@ function fixture() {
 }
 
 describe("persistent bounded research Agent", () => {
+  it.each([
+    ["2026-10-25T00:00:00Z", "complete"],
+    ["2026-09-01T00:00:00Z", "partial"],
+    ["2026-10-27T00:00:00Z", "partial"],
+    ["2026-10-25", "partial"],
+  ] as const)(
+    "validates source-declared publication %s against the fixed Run window",
+    async (rawValue, completeness) => {
+      const { context, deps, tools } = fixture();
+      context.startedAt = new Date("2026-10-26T00:00:00Z");
+      tools.read = vi.fn(async (): Promise<ReadPage> => ({
+        ...structuredClone(page),
+        publication: {
+          parserVersion: "scova-publication-v1",
+          status: "known",
+          instant: "2026-10-25T00:00:00Z",
+          observations: [{ field: "article:published_time", rawValue, locator: "meta[0]" }],
+        },
+      }));
+      const result = await runResearchAgent(context, deps);
+      expect(result.coverage.completeness).toBe(completeness);
+      if (completeness === "complete") expect(result.coverage.gaps).toEqual([]);
+      else expect(result.coverage.gaps.join(" ")).toMatch(/时间范围/);
+    },
+  );
+
+  it("uses configured fixed time bounds and retains official-source uncertainty", async () => {
+    const { context, deps, tools } = fixture();
+    context.config.timeRange = {
+      kind: "fixed",
+      start: "2026-10-01T00:00:00Z",
+      end: "2026-10-26T00:00:00Z",
+    };
+    context.config.sourcePreferences = {
+      preferredUrls: [url],
+      excludedUrls: [],
+      officialOnly: true,
+    };
+    tools.read = vi.fn(async (): Promise<ReadPage> => ({
+      ...structuredClone(page),
+      publication: {
+        parserVersion: "scova-publication-v1",
+        status: "known",
+        instant: null,
+        observations: [
+          {
+            field: "datePublished",
+            rawValue: "2026-10-25T00:00:00Z",
+            locator: "jsonld[0]$.datePublished",
+          },
+        ],
+      },
+    }));
+    const result = await runResearchAgent(context, deps);
+    expect(result.coverage.completeness).toBe("partial");
+    expect(result.coverage.gaps.join(" ")).toContain("官方身份");
+    expect(result.coverage.gaps.join(" ")).not.toContain("时间范围未核验");
+  });
+
   it("checkpoints every graph node and returns only quoted body evidence", async () => {
     const { context, deps, promote } = fixture();
     const output = await runResearchAgent(context, deps);
@@ -126,7 +185,7 @@ describe("persistent bounded research Agent", () => {
       quote: "The application deadline is 15 November 2026.",
     });
     expect(output.coverage.completeness).toBe("partial");
-    expect(output.coverage.gaps.join(" ")).toContain("时间范围尚未独立核验");
+    expect(output.coverage.gaps.join(" ")).toContain("时间窗口尚未固定");
     expect(output.comparison).toBe("not_performed");
     expect(promote).toHaveBeenCalledTimes(9);
     expect(
