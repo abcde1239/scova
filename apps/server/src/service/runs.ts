@@ -186,6 +186,7 @@ export function createRunService(services: ApiServices) {
           ...(question || inheritedConfig ? { followupConfigJson: config } : {}),
           parentRunId,
           budgetJson: config.budget,
+          feedbackSnapshotJson: await store.feedbackSnapshot(userId, task.id),
           usageJson: usage,
         });
         const queued = eventDto(

@@ -204,6 +204,7 @@ function detail(row: StoredReport): Report {
       claims,
       evidence: [...available.values()],
       changes,
+      feedbackEffects: row.feedbackEffectsJson,
     });
   } catch {
     throw invalidEvidence();

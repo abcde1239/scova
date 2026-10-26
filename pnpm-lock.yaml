@@ -440,6 +440,9 @@ importers:
       '@prisma/client':
         specifier: 'catalog:'
         version: 6.19.0(prisma@6.19.0(typescript@7.0.2))(typescript@7.0.2)
+      '@scova/contracts':
+        specifier: workspace:*
+        version: link:../contracts
     devDependencies:
       prisma:
         specifier: 'catalog:'

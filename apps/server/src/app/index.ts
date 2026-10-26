@@ -13,6 +13,7 @@ import { createReportQuestionPlugin } from "@/router/report-questions.ts";
 import { createReportPlugin } from "@/router/reports.ts";
 import { createNotificationPlugin } from "@/router/notifications.ts";
 import { createSystemPlugin } from "@/router/system.ts";
+import { createFeedbackPlugin } from "@/router/feedback.ts";
 
 export { contractModels, HealthResponseSchema } from "@/app/contracts.ts";
 
@@ -49,6 +50,7 @@ export const createApiApp = (
     .use(createAuthPlugin(services))
     .use(createTaskPlugin(services))
     .use(createTaskDraftPlugin(services))
+    .use(createFeedbackPlugin(services))
     .use(createRunPlugin(services))
     .use(createReportPlugin(services))
     .use(createLibraryPlugin(services))

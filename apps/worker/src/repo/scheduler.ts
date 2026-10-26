@@ -1,4 +1,4 @@
-import { Prisma, type PrismaClient } from "@scova/models";
+import { Prisma, captureFeedbackSnapshot, type PrismaClient } from "@scova/models";
 import { TaskConfigSchema, parseContract } from "@scova/contracts";
 import { dueSchedule, effectiveRunScopeHash } from "@scova/utils";
 import { SchedulerTaskError } from "@/utils/scheduler.ts";
@@ -92,6 +92,7 @@ export function createSchedulerRepository(database: PrismaClient): SchedulerRepo
                 occurrenceId: occurrence.id,
                 queuedAt: now,
                 budgetJson: config.budget,
+                feedbackSnapshotJson: await captureFeedbackSnapshot(tx, task.userId, taskId),
                 usageJson: {
                   searches: 0,
                   pages: 0,

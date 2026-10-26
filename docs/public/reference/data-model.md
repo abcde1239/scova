@@ -98,7 +98,9 @@ LangGraph 自己的 checkpoint 表使用独立命名空间/迁移，不由 Prism
 | Note           | id、userId、sourceId 或 reportId、body、revision、createdAt、updatedAt             | CHECK 恰有一种目标；纯文本，乐观锁编辑                                                |
 | ReportQuestion | id、userId、reportId、question、answerJson、evidenceRefs、followupRunId、createdAt | 仅检索当前用户已授权证据；新查阅显式关联执行                                          |
 
-Feedback 的条件唯一索引分别覆盖 sourceId 与 claimId，避免 NULL 导致重复；跨任务 claim 反馈须验证 claim 所属报告的 taskId。一种反馈可被撤销，执行保存当时快照以解释后续排序。问答中的事实同样要求引用。
+Feedback 的条件唯一索引分别覆盖 sourceId 与 claimId，避免 NULL 导致重复；跨任务 claim 反馈须验证 claim 所属报告的 taskId，资料须有本任务的 RunSource 关系。设置、切换与撤销先持有同一 Task 锁，和新 Run 创建串行决定快照。`Run.feedbackSnapshotJson` 包含结构版本、owner/task、反馈及目标的复制信息，空快照同样冻结；恢复不重捕获。资料的“已了解”指纹取标记时间之前最后一次观测，后续新值不会被自动视为已了解。
+
+`Report.feedbackEffectsJson` 仅保存本次经工具账本与冻结快照验证的作用解释，公开为 `feedbackEffects`；撤销不更改旧报告。它不替代事实比较、证据引用或覆盖限制。问答中的事实同样要求引用。
 
 报告和 InboxItem 在同一事务中提交。Notification 使用 Run 固定 TaskVersion 的偏好：summary 对每次完整交付提醒；important_change 仅提醒完整且已确认的重要变化；partial/failed 仅生成 run_issue，按独立运行问题偏好控制，failed 可无报告。用户取消不发运行问题提醒。关闭通知不影响报告或收件箱，账号默认只影响后续草稿。损坏的版本提醒配置保守不发通知，不阻止失败终结；不回退读取其他版本或账号默认。通知与成果或失败终态同事务，重放不重复或重置已读状态，不发送外部消息。
 

@@ -1,4 +1,4 @@
-import { Prisma } from "@scova/models";
+import { Prisma, captureFeedbackSnapshot } from "@scova/models";
 import type { ApiServices } from "@/app/context.ts";
 import { createTaskStore } from "@/repo/tasks.ts";
 
@@ -6,6 +6,9 @@ import { createTaskStore } from "@/repo/tasks.ts";
 function createRunStore(database: Prisma.TransactionClient) {
   const tasks = createTaskStore(database);
   return {
+    feedbackSnapshot(userId: string, taskId: string) {
+      return captureFeedbackSnapshot(database, userId, taskId);
+    },
     lockTask(taskId: string, userId: string) {
       return database.$queryRaw<{ id: string }[]>`
         SELECT id FROM tasks WHERE id = ${taskId}::uuid AND user_id = ${userId}::uuid FOR NO KEY UPDATE
