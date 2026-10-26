@@ -174,7 +174,9 @@ describe("Run API、事务 Outbox 与事件回放", () => {
     });
     expect(events.status).toBe(200);
     expect(events.headers.get("content-type")).toContain("text/event-stream");
-    expect(await events.text()).toContain("run.queued");
+    const reader = events.body!.getReader();
+    expect(new TextDecoder().decode((await reader.read()).value)).toContain("run.queued");
+    await reader.cancel();
   });
 
   it("活动执行互斥、幂等 payload 冲突和跨账号访问隔离", async () => {

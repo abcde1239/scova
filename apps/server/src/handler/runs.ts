@@ -4,6 +4,8 @@ import type { ApiServices } from "@/app/context.ts";
 import { requireCsrf, requireSession } from "@/handler/session.ts";
 import { createRunService } from "@/service/runs.ts";
 import { ApiError } from "@/utils/errors.ts";
+import { createRunEventService } from "@/service/run-events.ts";
+import { createSseBody } from "@/handler/sse.ts";
 
 type HttpContext = Pick<Context, "request" | "set">;
 type RunParams = { runId: string };
@@ -11,6 +13,7 @@ type RunParams = { runId: string };
 /** 只处理 HTTP 身份、命令头和 JSON/SSE 响应适配。 */
 export function createRunHandlers(services: ApiServices) {
   const runs = createRunService(services);
+  const events = createRunEventService(services);
   return {
     async list(
       this: void,
@@ -64,23 +67,32 @@ export function createRunHandlers(services: ApiServices) {
     async events(this: void, { request, params }: HttpContext & { params: RunParams }) {
       const session = await requireSession(request, services);
       const url = new URL(request.url);
-      const events = await runs.events(
-        session.userId,
+      if (
+        url.searchParams.getAll("after").length > 1 ||
+        [...url.searchParams.keys()].some((key) => key !== "after")
+      )
+        throw new ApiError(400, "INVALID_EVENT_CURSOR", "事件游标参数无效");
+      const first = await events.prepare(
+        session,
         params.runId,
-        Number(url.searchParams.get("after") ?? 0),
+        url.searchParams.get("after"),
         request.headers.get("last-event-id"),
       );
-      const body = events
-        .map(
-          (event) =>
-            `id: ${event.eventId}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
-        )
-        .join("");
+      const body = createSseBody({
+        first,
+        next: (after) => events.next(session, params.runId, after),
+        signal: request.signal,
+        expiresAt: session.expiresAt,
+        clock: () => services.clock(),
+        registry: services.streams,
+        policy: services.sse,
+      });
       return new Response(body, {
         headers: {
           "content-type": "text/event-stream; charset=utf-8",
           "cache-control": "no-store",
           connection: "keep-alive",
+          "x-accel-buffering": "no",
         },
       });
     },

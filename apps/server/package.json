@@ -21,7 +21,8 @@
     "@scova/models": "workspace:*",
     "@scova/utils": "workspace:*",
     "elysia": "^1.4.7",
-    "ioredis": "catalog:"
+    "ioredis": "catalog:",
+    "srvx": "0.11.22"
   },
   "devDependencies": {
     "@types/bun": "^1.2.0",

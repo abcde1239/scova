@@ -1,30 +1,43 @@
 import { createApiApp } from "@/app/index.ts";
-import { createDefaultServices } from "@/app/context.ts";
+import { createDefaultServices, type ApiServices } from "@/app/context.ts";
+import { serve } from "srvx/node";
 
-/** Bun 与 Node 共用生命周期；Node 的 server.stop 通过官方适配器回调获得。 */
-export function startServer(runtime: "bun" | "node") {
-  const services = createDefaultServices();
-  const app = createApiApp(runtime, services);
+/** 显式选用 node:http，使 Bun/Node 均通过 write/drain 传播 socket 背压。 */
+export function startServer(runtime: "bun" | "node", options: { services?: ApiServices } = {}) {
+  const services = options.services ?? createDefaultServices();
+  const app = createApiApp(runtime, services).compile();
   const port = Number(process.env.PORT ?? 3000);
-  let closeHttp: (() => Promise<void>) | undefined;
-  if (runtime === "node") {
-    app.listen(port, (server) => {
-      closeHttp = async () => {
-        await server.stop();
-      };
-    });
-  } else {
-    app.listen(port);
-    closeHttp = async () => {
-      await app.stop();
-    };
-  }
+  const server = serve({
+    port,
+    silent: true,
+    gracefulShutdown: false,
+    fetch(request) {
+      const node = request.runtime?.node;
+      if (node?.res) {
+        const { req, res } = node;
+        // Bun 1.3 的客户端断开只触发 req.aborted，不自动关闭 ServerResponse。
+        // 主动 destroy 使 srvx 的取消与 Request.signal 清理路径保持一致。
+        const abort = () => res.destroy();
+        const cleanup = () => {
+          req.off("aborted", abort);
+          res.off("close", cleanup);
+          res.off("finish", cleanup);
+        };
+        req.once("aborted", abort);
+        res.once("close", cleanup);
+        res.once("finish", cleanup);
+        if (req.aborted) abort();
+      }
+      return app.fetch(request);
+    },
+  });
   console.log(`Scova API listening on http://localhost:${port}`);
   let stopping: Promise<void> | undefined;
   const stop = () =>
     (stopping ??= (async () => {
       try {
-        await closeHttp?.();
+        await services.streams.stop();
+        await server.close();
       } finally {
         try {
           await services.close();

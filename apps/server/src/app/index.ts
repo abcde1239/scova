@@ -17,13 +17,13 @@ export { contractModels, HealthResponseSchema } from "@/app/contracts.ts";
 
 /** 统一装配 Elysia 与 Node 适配器；依赖保持惰性，生成文档无需外部服务。 */
 export const createApiApp = (
-  runtime: "bun" | "node" = "bun",
+  _runtime: "bun" | "node" = "bun",
   services: ApiServices = createDefaultServices(),
 ) =>
   new Elysia({
     name: "scova-api",
     normalize: false,
-    ...(runtime === "node" ? { adapter: node() } : {}),
+    adapter: node(),
   })
     .use(createApiErrorPlugin())
     .model({ ...contractModels, HealthResponse: HealthResponseSchema } as unknown as Record<
@@ -51,6 +51,7 @@ export const createApiApp = (
     .use(createRunPlugin(services))
     .use(createReportPlugin(services))
     .use(createLibraryPlugin(services))
-    .use(createNotificationPlugin(services));
+    .use(createNotificationPlugin(services))
+    .onStop(() => services.streams.stop());
 
 export const apiApp = createApiApp();

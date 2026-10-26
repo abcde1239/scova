@@ -7,6 +7,8 @@ import {
   createTaskDraftPolicy,
   type TaskDraftPolicy,
 } from "@/app/task-drafts.ts";
+import { createStreamRegistry, type ApiStreamRegistry } from "@/app/streams.ts";
+import { DEFAULT_SSE_POLICY, type SsePolicy } from "@/utils/sse.ts";
 
 const require = createRequire(import.meta.url);
 
@@ -29,12 +31,17 @@ export interface ApiServices {
   rateLimit: AuthRateLimitConfig;
   taskDraftPolicy: TaskDraftPolicy;
   taskDraftModel(): ModelProvider | null;
+  streams: ApiStreamRegistry;
+  sse: SsePolicy;
   clock(): Date;
   close(): Promise<void>;
 }
 
-export type ApiServiceOverrides = Partial<Omit<ApiServices, "rateLimit" | "taskDraftPolicy">> & {
+export type ApiServiceOverrides = Partial<
+  Omit<ApiServices, "rateLimit" | "sse" | "taskDraftPolicy">
+> & {
   rateLimit?: Partial<AuthRateLimitConfig>;
+  sse?: Partial<SsePolicy>;
   taskDraftPolicy?: Partial<TaskDraftPolicy>;
 };
 
@@ -48,6 +55,8 @@ export function createDefaultServices(overrides: ApiServiceOverrides = {}): ApiS
   let database: PrismaClient | undefined;
   let cache: Redis | undefined;
   let draftModel: ModelProvider | null | undefined;
+  const streams = overrides.streams ?? createStreamRegistry();
+  let closing: Promise<void> | undefined;
   const origin = new URL(overrides.origin ?? process.env.APP_ORIGIN ?? "http://localhost:5173")
     .origin;
   const rateLimit: AuthRateLimitConfig = {
@@ -77,6 +86,8 @@ export function createDefaultServices(overrides: ApiServiceOverrides = {}): ApiS
         if (draftModel === undefined) draftModel = createTaskDraftModel();
         return draftModel;
       }),
+    streams,
+    sse: { ...DEFAULT_SSE_POLICY, ...overrides.sse },
     clock: overrides.clock ?? (() => new Date()),
     db:
       overrides.db ??
@@ -105,9 +116,13 @@ export function createDefaultServices(overrides: ApiServiceOverrides = {}): ApiS
         }
         return cache;
       }),
-    close:
-      overrides.close ??
-      (async () => {
+    close: () =>
+      (closing ??= (async () => {
+        await streams.stop();
+        if (overrides.close) {
+          await overrides.close();
+          return;
+        }
         const tasks: Promise<unknown>[] = [];
         if (database) tasks.push(database.$disconnect());
         if (cache) {
@@ -115,6 +130,6 @@ export function createDefaultServices(overrides: ApiServiceOverrides = {}): ApiS
           else tasks.push(cache.quit());
         }
         await Promise.all(tasks);
-      }),
+      })()),
   };
 }

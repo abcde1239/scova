@@ -121,7 +121,29 @@ export function createRunPlugin(services: ApiServices) {
         tags: ["执行"],
         summary: "读取执行事件",
         description:
-          "按 seq 回放当前账号执行的持久化事件，支持 Last-Event-ID 续传；本轮 API 返回已有事件后结束连接。",
+          "按 seq 有界回放当前账号执行的持久化事件并持续查询后续事件；支持 after 与 Last-Event-ID 一致续传、15 秒心跳和过期游标 reset。终态回放完成后关闭；慢客户端需重连。",
+        parameters: [
+          {
+            in: "query",
+            name: "after",
+            description: "最后已处理的非负安全整数 seq；与 Last-Event-ID 同时提供时必须一致",
+            required: false,
+            schema: { type: "integer", minimum: 0, maximum: Number.MAX_SAFE_INTEGER },
+          },
+          {
+            in: "header",
+            name: "Last-Event-ID",
+            description: "当前执行最后已处理事件的 UUID；事件不可用时返回无 id 的 reset 后关闭",
+            required: false,
+            schema: { type: "string", format: "uuid" },
+          },
+        ],
+        responses: {
+          200: {
+            description: "有界历史回放和持续事件流；心跳为注释帧",
+            content: { "text/event-stream": { schema: { type: "string" } } },
+          },
+        },
       },
     });
 }
