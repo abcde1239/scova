@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { setTimeout as delay } from "node:timers/promises";
 import { join } from "node:path";
 import pg from "pg";
 import { Queue } from "bullmq";
@@ -420,6 +421,21 @@ describe("真实维护数据库、保留与账号依赖", () => {
   });
 });
 
+async function dropDisconnectedDatabases(admin: pg.Pool, names: string[]) {
+  // pg Pool.end() can resolve before its ending sockets disappear on the server.
+  // Observe every connection (including the recovered runtime's pool) before DDL;
+  // FORCE would turn that short close race into unhandled FATAL errors in clients.
+  const closeDeadline = Date.now() + 5000;
+  while (
+    (await admin.query("SELECT 1 FROM pg_stat_activity WHERE datname=ANY($1::text[])", [names]))
+      .rowCount
+  ) {
+    if (Date.now() >= closeDeadline) throw new Error("临时数据库连接未在清理期限内自然关闭");
+    await delay(25);
+  }
+  for (const name of names) await admin.query(`DROP DATABASE IF EXISTS "${name}"`);
+}
+
 it("真实pg_dump/pg_restore恢复报告和checkpoint，并从备份恢复未交付Run，拒绝覆盖非空库", async () => {
   const admin = new pg.Pool({ connectionString: config.connectionString });
   const names = [
@@ -524,10 +540,13 @@ it("真实pg_dump/pg_restore恢复报告和checkpoint，并从备份恢复未交
       services[1]!.execute(parseOperation(["restore", "--name=roundtrip.dump", "--apply"])),
     ).rejects.toThrow("空数据库");
   } finally {
-    await Promise.all(databases.map((db) => db.$disconnect()));
-    await Promise.all(pools.map((pool) => pool.end()));
-    for (const name of names) await admin.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
-    await admin.end();
-    await rm(directory, { recursive: true, force: true });
+    try {
+      await Promise.all(databases.map((db) => db.$disconnect()));
+      await Promise.all(pools.map((pool) => pool.end()));
+      await dropDisconnectedDatabases(admin, names);
+    } finally {
+      await admin.end();
+      await rm(directory, { recursive: true, force: true });
+    }
   }
 }, 180_000);
