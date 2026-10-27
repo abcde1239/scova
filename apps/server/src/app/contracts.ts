@@ -43,6 +43,7 @@ import {
     LibrarySearchResponseSchema,
 } from '@scova/contracts';
 /** 系统健康检查返回值；成功只代表进程存活 */
+
 export const HealthResponseSchema = t.Object(
     {
         status: t.Literal('ok', { description: 'API 进程正常响应' }),

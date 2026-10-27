@@ -5,7 +5,8 @@ export interface ApiStreamRegistry {
     stop(): Promise<void>;
 }
 
-/** 纯内存连接所有权；停止先广播中断，再等待在途查询与连接清理。 */
+/** 纯内存长连接管理: 停止时先广播中断信号，而后等待所有活跃流清理完成。 */
+
 export function createStreamRegistry(): ApiStreamRegistry {
     const streams = new Map<Promise<void>, () => void>();
     let stopping: Promise<void> | undefined;

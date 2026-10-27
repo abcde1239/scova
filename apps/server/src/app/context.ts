@@ -20,7 +20,7 @@ export interface AuthRateLimitConfig {
     keyPrefix: string;
 }
 
-/** 由应用装配注入的服务；文档生成只创建此对象，不构造数据库或 Redis 客户端。 */
+/** 接口文档生成只创建此对象，不构造数据库或 Redis 客户端。 */
 export interface ApiServices {
     db(): PrismaClient;
     redis(): Redis;
