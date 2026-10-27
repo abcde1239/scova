@@ -17,19 +17,19 @@
 - **Priority**：High。
 - **Preconditions**：专用 PostgreSQL/Redis；可运行独立 Bun 与官方 vpx；随机 schema、队列和测试邮箱。
 - **Test Steps**：
-  1. 启动真实 API 进程，通过 HTTP 注册并登录两个账号。
-  2. 所有者创建任务并以同一幂等键重复启动 Run；检查数据库中 Run、首事件、Outbox 各一条，尚未发送。
-  3. 另一账号读取任务、执行或启动该任务，检查拒绝状态及持久化记录数。
-  4. 启动独立 Worker 进程，等待真实 Outbox 的 sentAt，读取 BullMQ job。
-  5. 停止 Worker；通过 API 创建第二项任务及待投递执行，再启动 Worker。
-  6. 等第二行 sentAt 确认重启扫描确实运行，停止 Worker；重新发送原幂等命令，读取任务执行。
+    1. 启动真实 API 进程，通过 HTTP 注册并登录两个账号。
+    2. 所有者创建任务并以同一幂等键重复启动 Run；检查数据库中 Run、首事件、Outbox 各一条，尚未发送。
+    3. 另一账号读取任务、执行或启动该任务，检查拒绝状态及持久化记录数。
+    4. 启动独立 Worker 进程，等待真实 Outbox 的 sentAt，读取 BullMQ job。
+    5. 停止 Worker；通过 API 创建第二项任务及待投递执行，再启动 Worker。
+    6. 等第二行 sentAt 确认重启扫描确实运行，停止 Worker；重新发送原幂等命令，读取任务执行。
 - **Expected Results**：
-  - 注册登录成功并通过真实 Cookie/CSRF 写请求；跨账号均返回 404。
-  - 重复命令返回同一 Run，原任务 Run/事件/Outbox 各一条。
-  - 队列 job 名称、payload、稳定 run jobId 正确；首次投递 attempts=1，租约清空。
-  - 重启后第一条的 attempts/sentAt 不变，队列仅含两个预期 job；原命令仍复用 Run。
-  - Run 由真实 consumer 领取并执行固定演示 Agent，以 partial 交付；单一完成和发布事件、epoch=1、Report/Inbox 各一条，基线不推进。经 HTTP 读取的报告符合公开契约，结论引用均属于报告证据，跨账号读取报告返回404。
-  - API/Worker 均接收关闭消息并以零退出。
+    - 注册登录成功并通过真实 Cookie/CSRF 写请求；跨账号均返回 404。
+    - 重复命令返回同一 Run，原任务 Run/事件/Outbox 各一条。
+    - 队列 job 名称、payload、稳定 run jobId 正确；首次投递 attempts=1，租约清空。
+    - 重启后第一条的 attempts/sentAt 不变，队列仅含两个预期 job；原命令仍复用 Run。
+    - Run 由真实 consumer 领取并执行固定演示 Agent，以 partial 交付；单一完成和发布事件、epoch=1、Report/Inbox 各一条，基线不推进。经 HTTP 读取的报告符合公开契约，结论引用均属于报告证据，跨账号读取报告返回404。
+    - API/Worker 均接收关闭消息并以零退出。
 - **Postconditions**：清理自有随机 schema 与队列、断开连接；不执行 flushdb，不影响他人队列。
 
 ## Test Coverage Matrix

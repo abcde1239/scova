@@ -5,16 +5,16 @@ Scova 的搜索、远程模型与安全网页阅读适配器。默认搜索为�
 搜索与阅读可以独立于模型使用：
 
 ```ts
-import { createSearxngSearch, createPageReader } from "@scova/connectors";
+import { createSearxngSearch, createPageReader } from '@scova/connectors';
 
-const search = createSearxngSearch({ baseUrl: "http://127.0.0.1:8080" });
-const results = await search.search("IANA example domains", {
-  signal: AbortSignal.timeout(15_000),
+const search = createSearxngSearch({ baseUrl: 'http://127.0.0.1:8080' });
+const results = await search.search('IANA example domains', {
+    signal: AbortSignal.timeout(15_000),
 });
 const first = results.results[0];
 if (first) {
-  const page = await createPageReader().read(first.originalUrl);
-  console.log(page.text, page.contentHash);
+    const page = await createPageReader().read(first.originalUrl);
+    console.log(page.text, page.contentHash);
 }
 ```
 
@@ -27,13 +27,13 @@ if (first) {
 远程模型可以独立创建，也可与搜索一起装配：
 
 ```ts
-import { createConnectorBundle } from "@scova/connectors";
+import { createConnectorBundle } from '@scova/connectors';
 
 const connectors = createConnectorBundle({
-  searxngBaseUrl: process.env.SEARXNG_BASE_URL, // 默认本机 :8080
-  modelApiKey: process.env.MODEL_API_KEY,
-  model: process.env.MODEL_NAME,
-  modelBaseUrl: process.env.MODEL_BASE_URL, // 默认 https://api.openai.com/v1
+    searxngBaseUrl: process.env.SEARXNG_BASE_URL, // 默认本机 :8080
+    modelApiKey: process.env.MODEL_API_KEY,
+    model: process.env.MODEL_NAME,
+    modelBaseUrl: process.env.MODEL_BASE_URL, // 默认 https://api.openai.com/v1
 });
 ```
 

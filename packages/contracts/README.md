@@ -7,11 +7,11 @@ Scova 前后端与 Worker 共用的 TypeBox schema、TypeScript DTO 和执行事
 在消费方工作区添加 `"@scova/contracts": "workspace:*"`，直接导入 schema 和类型：
 
 ```ts
-import { LoginInputSchema, parseContract, type LoginInput } from "@scova/contracts";
+import { LoginInputSchema, parseContract, type LoginInput } from '@scova/contracts';
 
 const input: LoginInput = parseContract(LoginInputSchema, {
-  email: "reader@example.com",
-  password: "example-password",
+    email: 'reader@example.com',
+    password: 'example-password',
 });
 ```
 
