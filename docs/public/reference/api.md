@@ -24,7 +24,7 @@ vp run api:openapi:check
 
 报告的 `changes` 使用同一组可访问证据：`oldEvidenceIds` 来自本次执行首次领取时固定的完整基线，`newEvidenceIds` 来自当前执行；两侧还须分别匹配变化记录的来源与快照。非法关联使整个详情返回 `409 INVALID_REPORT_EVIDENCE`。正文过期清理后仍可读取保存的引用片段和定位。
 
-资料库提供 `/bookmarks` 收藏列表/创建/取消、`/notes` 纯文本笔记创建/查询/编辑/删除、`/sources/:sourceId/snapshots` 历史及详情，以及 `/library/search` 隔离检索。所有写接口使用会话与 CSRF；创建笔记要求稳定 `Idempotency-Key`，编辑和删除要求 `If-Match`。同键异参或旧修订返回 409，缺少命令头返回 428。取消收藏不删除来源、报告或引用。
+资料库提供 `/bookmarks` 收藏列表/创建/取消、`/notes` 纯文本笔记创建/查询/编辑/删除、`/library/sources/:sourceId/snapshots` 历史及详情，以及 `/library/search` 隔离检索。所有写接口使用会话与 CSRF；创建笔记要求稳定 `Idempotency-Key`，编辑和删除要求 `If-Match`。同键异参或旧修订返回 409，缺少命令头返回 428。取消收藏不删除来源、报告或引用。
 
 历史正文只在保留期内返回，过期立即不读不搜；保存的原文片段、hash、定位和比较清单继续保留。历史快照按成功观测时间选择；列表游标保留 PostgreSQL 微秒精度并绑定账号与筛选范围。搜索使用 PostgreSQL `simple` 全文索引，中文及字面词辅以受超时限制的子串召回，返回 `matchedBy` 和有界摘录，不抓取新 URL。
 
@@ -33,3 +33,9 @@ vp run api:openapi:check
 报告证据问答：`POST /reports/:reportId/questions` 提交问题，`GET /reports/:reportId/questions/:questionId` 读取已保存回答。创建要求会话、CSRF 与稳定 `Idempotency-Key`，同键异问题返回 409；处理中重放返回 409 且不重复付费调用。问答仅使用此报告内已授权引用，事实回答采用逐字原文摘录，每条带 `evidenceId/quote`；缺模型、缺资料或无效输出明确标记不足。它使用独立 Redis 用户/全局请求与 token 额度，最多一次模型尝试，不调用搜索或网页阅读。
 
 只有另行 `POST /reports/:reportId/questions/:questionId/followup` 并提交 `{ "confirm": true }` 才启动新研究。该接口要求 CSRF 与幂等键，固定原报告的模式、配置与预算，以问题为目标生成独立 Run；Task 锁内原子写入执行、事件、Outbox 和问题关联。已有活动执行时返回 409，重复确认返回原关联执行。后续研究及其重试有独立比较范围，不覆盖原报告、任务配置或普通监控基线。取消及已撤销会话的晚返回不保存事实回答。问答仅支持报告内引用；额外资料应先进入受授权报告。
+
+`GET /api/v1/tasks/:taskId/runs` 返回当前账号指定任务的执行历史，按排队时间倒序游标分页，`limit` 最大 100。公开字段包含固定任务版本、模式、预算、状态和覆盖情况，不返回租约、checkpoint、工具正文或反馈内部快照。历史游标绑定账号、任务与数据库原始时间；Task、Report、Inbox 列表同样使用数据库微秒精度边界。
+
+后端完整门禁、固定供应商场景与并发基准见[后端验证](../guides/backend-verification.md)；容器运行、迁移及恢复见[部署维护](../guides/deployment.md)。
+
+反馈接口：`POST /api/v1/feedback` 为指定任务的来源或结论设置 `irrelevant`、`known`、`deeper`；`DELETE /api/v1/feedback/:feedbackId` 撤销，`GET /api/v1/tasks/:taskId/feedback` 读取当前生效项。目标必须属于当前账号和任务，写请求需 CSRF。新执行在 Task 锁内冻结反馈快照；恢复沿用快照，重试及明确确认的后续研究作为新执行捕获当时反馈。反馈不改写历史报告、版本或普通比较范围，`Report.feedbackEffects` 解释实际生效情况；已了解不会遮蔽新值和重要变化。

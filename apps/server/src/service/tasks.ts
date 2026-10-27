@@ -113,23 +113,30 @@ export async function ownedTask(
   return task;
 }
 
-function cursorFor(task: StoredTask): string {
-  return Buffer.from(
-    JSON.stringify({ updatedAt: task.updatedAt.toISOString(), id: task.id }),
-    "utf8",
-  ).toString("base64url");
+function cursorFor(task: StoredTask, updatedAt: string): string {
+  return Buffer.from(JSON.stringify({ updatedAt, id: task.id }), "utf8").toString("base64url");
 }
-function decodeCursor(value: string | undefined): { updatedAt: Date; id: string } | undefined {
+function decodeCursor(value: string | undefined): { updatedAt: string; id: string } | undefined {
   if (!value) return undefined;
   try {
     const parsed = JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as {
       updatedAt?: string;
       id?: string;
     };
-    if (!parsed.updatedAt || !parsed.id || !UUID.test(parsed.id)) throw new Error();
+    if (
+      !parsed.updatedAt ||
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(parsed.updatedAt) ||
+      !parsed.id ||
+      !UUID.test(parsed.id)
+    )
+      throw new Error();
     const updatedAt = new Date(parsed.updatedAt);
-    if (!Number.isFinite(updatedAt.getTime())) throw new Error();
-    return { updatedAt, id: parsed.id };
+    if (
+      !Number.isFinite(updatedAt.getTime()) ||
+      updatedAt.toISOString() !== `${parsed.updatedAt.slice(0, 23)}Z`
+    )
+      throw new Error();
+    return { updatedAt: parsed.updatedAt, id: parsed.id };
   } catch {
     throw new ApiError(400, "INVALID_CURSOR", "分页游标无效");
   }
@@ -143,15 +150,21 @@ export function createTaskService(services: ApiServices) {
       const page = parseContract(PageQuerySchema, query);
       const take = Math.min(page.limit ?? 50, 100);
       const cursor = decodeCursor(page.cursor);
-      if (cursor) {
-        const anchor = await repo.findTask(cursor.id, userId);
-        if (!anchor || anchor.updatedAt.getTime() !== cursor.updatedAt.getTime())
-          throw new ApiError(400, "INVALID_CURSOR", "分页游标无效或已变化");
-      }
-      const tasks = await repo.listTasks(userId, take + 1, cursor);
-      return parseContract(TaskListResponseSchema, {
-        items: tasks.slice(0, take).map(listItem),
-        nextCursor: tasks.length > take ? cursorFor(tasks[take - 1]!) : null,
+      return repo.readTransaction(async (store) => {
+        // Task排序时间可变；游标校验、原生微秒seek与DTO加载必须看到同一快照。
+        if (cursor) {
+          const anchor = await store.findTaskCursor(cursor.id, userId);
+          if (!anchor || anchor.cursorTime !== cursor.updatedAt)
+            throw new ApiError(400, "INVALID_CURSOR", "分页游标无效或已变化");
+        }
+        const tasks = await store.listTasks(userId, take + 1, cursor);
+        return parseContract(TaskListResponseSchema, {
+          items: tasks.slice(0, take).map(({ task }) => listItem(task)),
+          nextCursor:
+            tasks.length > take
+              ? cursorFor(tasks[take - 1]!.task, tasks[take - 1]!.cursorTime)
+              : null,
+        });
       });
     },
     async create(userId: string, body: unknown) {

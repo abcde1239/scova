@@ -43,6 +43,7 @@ function page(status: EventPage["run"]["status"] = "queued", events = true): Eve
       cancelRequestedAt: null,
       deadlineAt: null,
       feedbackSnapshotJson: [],
+      followupConfigJson: null,
       checkpointRef: null,
     },
     events: events

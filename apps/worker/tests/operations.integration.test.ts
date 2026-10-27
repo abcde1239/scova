@@ -348,7 +348,7 @@ describe("真实维护数据库、保留与账号依赖", () => {
         userId: owned.user.id,
         runId: owned.run.id,
         reportId: owned.reportId,
-        kind: "summary",
+        kind: "run_issue",
       },
     });
     expect(await repo.deleteAccount(owned.user.id, false)).toMatchObject({

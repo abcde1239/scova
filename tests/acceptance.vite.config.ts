@@ -7,6 +7,8 @@ export default defineConfig({
   test: {
     include: ["apps/server/tests/acceptance-*.integration.test.ts"],
     fileParallelism: false,
+    reporters: ["default"],
+    silent: false,
     testTimeout: 180_000,
     hookTimeout: 120_000,
   },

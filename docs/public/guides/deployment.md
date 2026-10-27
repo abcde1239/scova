@@ -25,7 +25,7 @@ docker compose up -d --build
 
 `APP_ORIGIN` 必须是客户端实际使用的完整源。默认 HTTP localhost 用于本机访问；面向其他机器部署时，在代理前配置 TLS，并设置相同的 HTTPS `APP_ORIGIN`。生产 Cookie 保持 Secure/HttpOnly；不要通过取消 Secure 解决域名或 TLS 配置错误。
 
-代理关闭 SSE 缓冲、缓存和压缩，透传 Cookie、Origin、Last-Event-ID，75 秒上游读取超时大于 15 秒心跳；客户端断开会关闭上游。应用的持续 SSE 后端由对应功能版本提供，本部署配置不替代前端续传桥接。根路径可能返回 404，因为这里没有登录页面或前端构建。
+代理关闭 SSE 缓冲、缓存和压缩，透传 Cookie、Origin、Last-Event-ID，75 秒上游读取超时大于 15 秒心跳；客户端断开会关闭上游。`GET /api/v1/runs/:runId/events` 在同一认证会话下持续推送持久化事件；断连后传入上一事件的 `Last-Event-ID` 按顺序续传，终态事件读尽后关闭连接。不同账号访问返回 404。前端仍需自行桥接 Fetch transport 与重连游标。根路径可能返回 404，因为这里没有登录页面或前端构建。
 
 停止使用 `docker compose stop`：应用接收信号，停止领取与外部调用，等待在途领域写入，再关闭队列、数据库和 HTTP。应用预留 60 秒停止窗口；强杀后的 Run 由数据库租约恢复，不保证外部供应商只调用一次，但报告、Inbox 和通知不得重复。
 
@@ -90,4 +90,4 @@ docker compose up -d
 
 ## 验证
 
-`vp check`、`vp test`、`vp run -r build` 和 `vp run test:operations` 分别验证静态、纯逻辑、工作区构建和真实 PostgreSQL/Redis 维护。真实测试要求 PostgreSQL 17 的 `pg_dump`/`pg_restore` 在 PATH，并允许测试账号创建两个随机临时数据库；测试不清空共享 Redis。`vp run test:deployment` 为显式容器验收：构建镜像，在两个随机独立 Compose 项目中验证迁移、健康检查、代理会话、演示报告/证据、重启幂等和空库恢复，结束时移除自己创建的容器和卷。它不使用现有部署数据，不调用真实供应商；构建需要网络，运行需要 Docker。SSE 持续订阅与断连由对应接口测试另行验证。
+`vp check`、`vp test`、`vp run -r build` 和 `vp run test:operations` 分别验证静态、纯逻辑、工作区构建和真实 PostgreSQL/Redis 维护。真实测试要求 PostgreSQL 17 的 `pg_dump`/`pg_restore` 在 PATH，并允许测试账号创建两个随机临时数据库；测试不清空共享 Redis。`vp run test:deployment` 为显式容器验收：构建镜像，在两个随机独立 Compose 项目中验证迁移、健康检查、代理会话、演示报告/证据、重启幂等和空库恢复，结束时移除自己创建的容器和卷。它不使用现有部署数据，不调用真实供应商；构建需要网络，运行需要 Docker。脚本还暂停专用 Worker 创建排队 Run，要求代理首事件在 2 秒内可读，再启动真实消费者，验证同一连接收到新增事件、主动断开后的 Last-Event-ID 有序续传、终态后 3 秒内 EOF 及跨账号 404。业务成果始终显式使用 demo；另建 mode=live 的 Run 仅验证缺凭据时失败并关闭流、不调用供应商、不回落 demo，不计为真实 live 服务成功。
