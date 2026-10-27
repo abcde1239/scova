@@ -1,5 +1,6 @@
-import { Prisma, captureFeedbackSnapshot, type PrismaClient } from '@scova/models';
-import { TaskConfigSchema, parseContract } from '@scova/contracts';
+import { Prisma, type PrismaClient } from '@scova/db';
+import { captureFeedbackSnapshot } from '@scova/db/feedback';
+import { TaskConfigSchema, parseContract } from '@scova/models';
 import { dueSchedule, effectiveRunScopeHash } from '@scova/shared';
 import { SchedulerTaskError } from '@/utils/scheduler.ts';
 

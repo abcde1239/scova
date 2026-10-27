@@ -1,6 +1,6 @@
 # Scova 数据库
 
-PostgreSQL 业务模型与迁移统一维护在 [@scova/models](../packages/models/README.md)，供 Server 和 Worker 共用。使用 Prisma 6.19，兼容 Bun 与 Node.js。
+PostgreSQL 业务模型与迁移统一维护在 [@scova/db](../packages/db/README.md)，供 Server 和 Worker 共用。使用 Prisma 6.19，兼容 Bun 与 Node.js。
 
 ## 初始化
 
@@ -24,6 +24,6 @@ vp run test:database
 
 ## 维护
 
-模型定义在 `packages/models/prisma/schema.prisma`，SQL 变更保存在同目录的 `migrations/`。根命令已配置该路径；迁移包含的手写索引与 CHECK 应保留。
+模型定义在 `packages/db/prisma/schema.prisma`，SQL 变更保存在同目录的 `migrations/`。根命令已配置该路径；迁移包含的手写索引与 CHECK 应保留。
 
 详细约束见[数据库参考](../docs/public/reference/database.md)和[数据模型](../docs/public/reference/data-model.md)。

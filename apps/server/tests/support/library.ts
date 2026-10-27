@@ -1,5 +1,5 @@
 import { randomUUID, createHash } from 'node:crypto';
-import type { PrismaClient, Source } from '@scova/models';
+import type { PrismaClient, Source } from '@scova/db';
 import { draftConfig } from './task-drafts.ts';
 const sha = (value: string) => createHash('sha256').update(value).digest('hex');
 export async function libraryFixture(

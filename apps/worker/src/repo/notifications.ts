@@ -1,4 +1,4 @@
-import type { Prisma, Run } from '@scova/models';
+import type { Prisma, Run } from '@scova/db';
 import { terminalNotificationKind } from '@/utils/notifications.ts';
 
 /** Only the fixed version is read. Broken preferences suppress notifications without blocking failure persistence. */

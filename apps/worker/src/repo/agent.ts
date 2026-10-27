@@ -5,8 +5,8 @@ import {
     readFeedbackSnapshot,
     type Usage,
     type FeedbackSnapshot,
-} from '@scova/contracts';
-import type { Prisma, PrismaClient, Run, ToolCall } from '@scova/models';
+} from '@scova/models';
+import type { Prisma, PrismaClient, Run, ToolCall } from '@scova/db';
 import { appendEvent, withRunFence } from '@/repo/runs.ts';
 import type { RunLeaseToken } from '@/utils/runs.ts';
 import { loadBaseline } from '@/repo/comparison.ts';

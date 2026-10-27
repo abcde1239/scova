@@ -1,25 +1,35 @@
 # @scova/models
 
-Scova 服务端内部数据模型包。`prisma/schema.prisma` 与同目录 `migrations` 是业务数据库模型及迁移的唯一来源；LangGraph checkpoint 迁移独立管理。
+Scova 前后端与 Worker 共用的 TypeBox schema、TypeScript DTO 和执行事件定义，兼容浏览器、Bun 与 Node.js。数据库表、迁移和客户端由 `@scova/db` 管理，本包不依赖数据库驱动或 ORM。
 
 ## 使用
+
+在消费方工作区添加 `"@scova/models": "workspace:*"`，直接导入 schema 和类型：
+
+```ts
+import { LoginInputSchema, parseContract, type LoginInput } from '@scova/models';
+
+const input: LoginInput = parseContract(LoginInputSchema, {
+    email: 'reader@example.com',
+    password: 'example-password',
+});
+```
+
+Elysia 路由直接使用同一份 schema 声明请求与响应；中文字段说明用于生成 OpenAPI。
+
+## 接口约定
+
+- 成功响应为普通 JSON；列表使用 `{ items, nextCursor }`。
+- 错误使用 `{ code, message, requestId, fieldErrors? }`。
+- 任务编辑使用 `ETag` / `If-Match`，写命令使用 `Idempotency-Key`。
+- 执行事件带版本与递增序号，支持 SSE 回放契约。
+
+字段校验、事件结构和 SSE 控制帧详见[契约参考](../../docs/public/reference/contracts.md)。
+
+## 验证
 
 在仓库根目录运行：
 
 ```sh
-vp install
-vp run @scova/models#generate
-vp exec prisma migrate deploy
+vp test packages/models/tests/contracts.test.ts
 ```
-
-迁移前配置 `DATABASE_URL`；本地连接见[数据库说明](../../prisma/README.md)。
-
-Server 和 worker 通过 `@scova/models` 导入 `PrismaClient`、`Prisma`、生成实体类型及枚举；也可使用 `createDatabaseClient(options)` 创建客户端。调用方负责连接关闭和事务管理。
-
-`captureFeedbackSnapshot(tx, userId, taskId)` 在调用方已持有 Task 锁的创建事务中投影反馈，返回可写入 Run 的冻结 JSON；不自行连接数据库或外部服务。
-
-本包仅供服务端使用，不依赖 Elysia；反馈投影使用 `@scova/contracts` 的快照结构。HTTP DTO、运行时校验与 OpenAPI 仍由 contracts 管理；不要向前端返回内部实体或引入数据库客户端。
-
-## 验证
-
-`vp run @scova/models#build` 检查类型，`vp run test:database` 验证真实 PostgreSQL 上的迁移与约束。

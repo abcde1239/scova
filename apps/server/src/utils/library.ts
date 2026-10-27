@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { InstantSchema, UuidSchema, parseContract } from '@scova/contracts';
+import { InstantSchema, UuidSchema, parseContract } from '@scova/models';
 import { ApiError } from '@/utils/errors.ts';
 
 export interface LibraryCursor {

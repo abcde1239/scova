@@ -41,7 +41,7 @@ import {
     LibrarySnapshotListResponseSchema,
     LibrarySearchQuerySchema,
     LibrarySearchResponseSchema,
-} from '@scova/contracts';
+} from '@scova/models';
 /** 系统健康检查返回值；成功只代表进程存活 */
 
 export const HealthResponseSchema = t.Object(

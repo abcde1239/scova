@@ -1,13 +1,16 @@
-import { PrismaClient, type Prisma } from '@prisma/client';
+export * from './common.ts';
+export * from './auth.ts';
+export * from './tasks.ts';
+export * from './task-drafts.ts';
+export * from './library.ts';
+export * from './runs.ts';
+export * from './reports.ts';
+export * from './notifications.ts';
+export * from './events.ts';
+export * from './feedback.ts';
+export * from './validation.ts';
 
-/**
- * 服务端内部模型的统一入口。所有实体、枚举和 Prisma 类型均由本包 schema 生成，
- * 不另行声明平行模型；浏览器及公开 HTTP 接口应使用 @scova/contracts。
- */
-export * from '@prisma/client';
-export { captureFeedbackSnapshot } from './feedback.ts';
+/** API 与事件的结构版本，不等同于数据库 migration 版本。 */
+export const contractsVersion = '1.0.0';
 
-/** 创建独立数据库客户端；调用方负责连接配置、事务边界和最终断开连接。 */
-export function createDatabaseClient(options?: Prisma.PrismaClientOptions): PrismaClient {
-    return new PrismaClient(options);
-}
+export * from './report-questions.ts';

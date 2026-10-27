@@ -3,7 +3,7 @@ import {
     RegisterInputSchema,
     UpdatePreferencesInputSchema,
     parseContract,
-} from '@scova/contracts';
+} from '@scova/models';
 import type { ApiServices } from '@/app/context.ts';
 import { createAuthService } from '@/service/auth.ts';
 import {

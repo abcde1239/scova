@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { createHash, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { PrismaClient } from '@scova/models';
+import { PrismaClient } from '@scova/db';
 import { Redis as RedisClient } from 'ioredis';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vite-plus/test';
 import { createApiApp } from '../src/app/index.ts';
@@ -12,7 +12,7 @@ import {
     type ApiServiceOverrides,
     type ApiServices,
 } from '../src/app/context.ts';
-import type { TaskConfig } from '@scova/contracts';
+import type { TaskConfig } from '@scova/models';
 import { effectiveRunScopeHash } from '@scova/shared';
 import { createReportQuestionService } from '../src/service/report-questions.ts';
 import { comparisonScopeHash } from '../src/service/tasks.ts';
@@ -367,7 +367,7 @@ describe('报告证据问答与明确确认后续研究', () => {
                 'migrate',
                 'deploy',
                 '--schema',
-                'packages/models/prisma/schema.prisma',
+                'packages/db/prisma/schema.prisma',
             ],
             {
                 cwd: root,

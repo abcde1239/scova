@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { PrismaClient } from '@scova/models';
+import { PrismaClient } from '@scova/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vite-plus/test';
 import { createDefaultServices } from '../src/app/context.ts';
 import { createNotificationService } from '../src/service/notifications.ts';

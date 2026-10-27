@@ -4,7 +4,7 @@ import {
     TaskConfigSchema,
     parseContract,
     type TaskDraftInput,
-} from '@scova/contracts';
+} from '@scova/models';
 import {
     ConnectorError,
     createModelProvider,

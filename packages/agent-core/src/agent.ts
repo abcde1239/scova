@@ -11,7 +11,7 @@ import {
     manifestFromModel,
     validateComparisonManifest,
 } from './comparison.ts';
-import type { Coverage } from '@scova/contracts';
+import type { Coverage } from '@scova/models';
 import { AgentError } from './types.ts';
 import {
     feedbackDigest,

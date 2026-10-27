@@ -9,7 +9,7 @@ import {
     TaskSchema,
     TaskVersionSchema,
     UpdateTaskInputSchema,
-} from '@scova/contracts';
+} from '@scova/models';
 import type { ApiServices } from '@/app/context.ts';
 import { createTaskHandlers } from '@/handler/tasks.ts';
 

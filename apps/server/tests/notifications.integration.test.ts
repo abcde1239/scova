@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Redis } from 'ioredis';
-import { parseContract, TaskDetailResponseSchema } from '@scova/contracts';
+import { parseContract, TaskDetailResponseSchema } from '@scova/models';
 import { afterAll, beforeAll, describe, expect, it } from 'vite-plus/test';
 import { createApiApp } from '../src/app/index.ts';
 import { createDefaultServices } from '../src/app/context.ts';

@@ -1,4 +1,4 @@
-import type { FieldError } from '@scova/contracts';
+import type { FieldError } from '@scova/models';
 /** 可公开的错误，不把数据库消息、请求体或凭据拼接进响应。 */
 export class ApiError extends Error {
     readonly status: number;

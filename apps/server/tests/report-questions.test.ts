@@ -4,7 +4,7 @@ import {
     parseContract,
     ReportQuestionInputSchema,
     QuestionFollowupInputSchema,
-} from '@scova/contracts';
+} from '@scova/models';
 import { validateQuestionAnswer } from '../src/utils/report-questions.ts';
 const usage = { attempts: 1, inputTokens: 100, outputTokens: 50, estimated: false };
 describe('报告问答引用授权', () => {

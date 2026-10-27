@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { normalizeUrl } from '@scova/connectors';
-import type { FeedbackEffect, FeedbackSnapshotItem } from '@scova/contracts';
+import type { FeedbackEffect, FeedbackSnapshotItem } from '@scova/models';
 import type { AgentClaim, AgentContext, AgentPage, AgentChange } from './types.ts';
 import { baselineReady } from './comparison.ts';
 type Query = { query: string; questionIds: string[] };

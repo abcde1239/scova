@@ -1,5 +1,5 @@
 import type { Context } from 'elysia';
-import { parseRevisionEtag, revisionEtag } from '@scova/contracts';
+import { parseRevisionEtag, revisionEtag } from '@scova/models';
 import type { ApiServices } from '@/app/context.ts';
 import { requireSession, requireCsrf } from '@/handler/session.ts';
 import { createLibraryService } from '@/service/library.ts';

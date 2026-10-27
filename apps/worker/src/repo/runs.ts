@@ -9,8 +9,8 @@ import {
     type Budget,
     type TaskConfig,
     type Usage,
-} from '@scova/contracts';
-import type { Prisma, PrismaClient, Run } from '@scova/models';
+} from '@scova/models';
+import type { Prisma, PrismaClient, Run } from '@scova/db';
 import {
     RUN_ACTIVE_STATUSES,
     RUN_FAILURE_MESSAGES,

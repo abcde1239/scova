@@ -1,6 +1,6 @@
-import { Prisma } from '@scova/models';
+import { Prisma } from '@scova/db';
 import type { ApiServices } from '@/app/context.ts';
-import type { NotificationListQuery } from '@scova/contracts';
+import type { NotificationListQuery } from '@scova/models';
 
 const include = {
     run: { select: { id: true, taskId: true, mode: true, status: true, failureCode: true } },

@@ -5,7 +5,7 @@ import {
     RegisterInputSchema,
     SessionResponseSchema,
     UpdatePreferencesInputSchema,
-} from '@scova/contracts';
+} from '@scova/models';
 import type { ApiServices } from '@/app/context.ts';
 import { createAuthHandlers } from '@/handler/auth.ts';
 

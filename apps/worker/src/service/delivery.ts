@@ -1,6 +1,6 @@
 import type { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import type { AgentCandidate } from '@scova/agent-core';
-import type { PrismaClient } from '@scova/models';
+import type { PrismaClient } from '@scova/db';
 import { createDeliveryRepository } from '@/repo/delivery.ts';
 import { RunExecutionError, type RunLeaseToken } from '@/utils/runs.ts';
 

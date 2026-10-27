@@ -16,7 +16,7 @@ import {
     LibrarySearchQuerySchema,
     LibrarySearchResponseSchema,
     IdempotencyHeadersSchema,
-} from '@scova/contracts';
+} from '@scova/models';
 import type { ApiServices } from '@/app/context.ts';
 import { createLibraryHandlers } from '@/handler/library.ts';
 

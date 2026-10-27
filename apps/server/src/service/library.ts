@@ -20,9 +20,9 @@ import {
     IdempotencyHeadersSchema,
     parseContract,
     type LibraryTarget,
-} from '@scova/contracts';
+} from '@scova/models';
 import { validatePublication } from '@scova/connectors';
-import type { Note } from '@scova/models';
+import type { Note } from '@scova/db';
 import type { ApiServices } from '@/app/context.ts';
 import {
     createLibraryRepo,

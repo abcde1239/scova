@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import { createDatabaseClient, type PrismaClient } from '@scova/models';
+import { createDatabaseClient, type PrismaClient } from '@scova/db';
 import type { Redis } from 'ioredis';
 import type { ModelProvider } from '@scova/connectors';
 import {

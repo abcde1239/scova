@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Queue } from 'bullmq';
-import type { Report, Run, TaskConfig } from '@scova/contracts';
+import type { Report, Run, TaskConfig } from '@scova/models';
 import { afterAll, beforeAll, describe, expect, it } from 'vite-plus/test';
 import {
     scenarioData,

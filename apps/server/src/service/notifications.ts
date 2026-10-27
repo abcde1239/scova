@@ -4,7 +4,7 @@ import {
     NotificationPatchInputSchema,
     NotificationSchema,
     parseContract,
-} from '@scova/contracts';
+} from '@scova/models';
 import type { ApiServices } from '@/app/context.ts';
 import { createNotificationRepo, type StoredNotification } from '@/repo/notifications.ts';
 import { ApiError } from '@/utils/errors.ts';

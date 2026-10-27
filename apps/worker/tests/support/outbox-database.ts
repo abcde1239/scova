@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { PrismaClient } from '@scova/models';
+import { PrismaClient } from '@scova/db';
 
 const require = createRequire(import.meta.url);
 
@@ -41,7 +41,7 @@ export function outboxDatabase() {
                     'migrate',
                     'deploy',
                     '--schema',
-                    'packages/models/prisma/schema.prisma',
+                    'packages/db/prisma/schema.prisma',
                 ],
                 {
                     cwd: root,

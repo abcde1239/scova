@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { PrismaClient } from '@scova/models';
+import { PrismaClient } from '@scova/db';
 import {
     ConnectorError,
     type ModelProvider,
@@ -153,7 +153,7 @@ describe('HTTP任务草稿、真实Redis解析预算与手工回退', () => {
                 'migrate',
                 'deploy',
                 '--schema',
-                'packages/models/prisma/schema.prisma',
+                'packages/db/prisma/schema.prisma',
             ],
             {
                 cwd: root,

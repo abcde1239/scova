@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { effectiveRunScopeHash } from '@scova/shared';
-import type { Run as StoredRun, RunEvent as StoredRunEvent } from '@scova/models';
+import type { Run as StoredRun, RunEvent as StoredRunEvent } from '@scova/db';
 import {
     PageQuerySchema,
     RunListResponseSchema,
@@ -11,7 +11,7 @@ import {
     parseContract,
     type RunCommandInput,
     type TaskConfig,
-} from '@scova/contracts';
+} from '@scova/models';
 import type { ApiServices } from '@/app/context.ts';
 import { ApiError } from '@/utils/errors.ts';
 import { createRunRepo } from '@/repo/runs.ts';

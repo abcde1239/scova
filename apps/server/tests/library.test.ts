@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vite-plus/test';
-import { ContractValidationError } from '@scova/contracts';
+import { ContractValidationError } from '@scova/models';
 import {
     libraryScope,
     readLibraryCursor,

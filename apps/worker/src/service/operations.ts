@@ -77,7 +77,7 @@ export function createOperationService(pool: pg.Pool, config: OperationConfig) {
                         'migrate',
                         'deploy',
                         '--schema',
-                        'packages/models/prisma/schema.prisma',
+                        'packages/db/prisma/schema.prisma',
                     ],
                     {
                         cwd: root,

@@ -1,4 +1,4 @@
-import type { Outbox } from '@scova/models';
+import type { Outbox } from '@scova/db';
 
 /** 发布端只需要事件标识和负载，不接触数据库连接或租约写入。 */
 export type OutboxMessage = Pick<Outbox, 'id' | 'eventType' | 'payload'>;

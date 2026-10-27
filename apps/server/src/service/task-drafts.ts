@@ -5,7 +5,7 @@ import {
     TaskDraftResponseSchema,
     parseContract,
     type TaskDraftResponse,
-} from '@scova/contracts';
+} from '@scova/models';
 import {
     ConnectorError,
     estimateModelInputTokens,

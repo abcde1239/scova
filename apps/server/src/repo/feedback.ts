@@ -1,6 +1,6 @@
-import { Prisma } from '@scova/models';
+import { Prisma } from '@scova/db';
 import type { ApiServices } from '@/app/context.ts';
-import type { FeedbackInput } from '@scova/contracts';
+import type { FeedbackInput } from '@scova/models';
 
 function store(tx: Prisma.TransactionClient) {
     return {

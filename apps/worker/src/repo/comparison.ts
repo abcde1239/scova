@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { isComparisonManifest, type AgentBaseline } from '@scova/agent-core';
-import type { Prisma, Run } from '@scova/models';
+import type { Prisma, Run } from '@scova/db';
 
 const sha = (text: string) => createHash('sha256').update(text, 'utf8').digest('hex');
 

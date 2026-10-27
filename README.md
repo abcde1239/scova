@@ -13,8 +13,8 @@ Vite+ / TypeScript monorepo，Vue 3 前端，Bun + Elysia 后端（兼容 Node.j
 | `apps/web`            | 前端工作台               |
 | `apps/server`         | 后端接口与中文 Swagger   |
 | `apps/worker`         | 后台执行与队列           |
-| `packages/contracts`  | 共享接口与事件定义       |
-| `packages/models`     | 服务端业务数据模型与迁移 |
+| `packages/models`     | 共享接口与事件定义       |
+| `packages/db`         | 服务端业务数据模型与迁移 |
 | `packages/agent-core` | Agent 状态与执行逻辑     |
 | `packages/connectors` | 搜索及来源适配           |
 
@@ -28,7 +28,7 @@ docker compose -f compose.test.yaml -p scova-runtime-test up -d --wait
 vp exec prisma generate
 ```
 
-配置 `DATABASE_URL`、`REDIS_URL` 和 `APP_ORIGIN`，运行 `vp exec prisma migrate deploy` 初始化业务数据库。连接配置见[数据库说明](packages/models/README.md)；本地环境文件不提交。
+配置 `DATABASE_URL`、`REDIS_URL` 和 `APP_ORIGIN`，运行 `vp exec prisma migrate deploy` 初始化业务数据库。连接配置见[数据库说明](packages/db/README.md)；本地环境文件不提交。
 
 ```sh
 vp run dev                # 前端
@@ -55,7 +55,7 @@ vp run test:integration  # 需专用 PostgreSQL / Redis
 ## 文档
 
 - [系统架构](docs/public/reference/architecture.md) · [数据模型](docs/public/reference/data-model.md)
-- [接口文档](docs/public/reference/api.md) · [共享契约](packages/contracts/README.md)
+- [接口文档](docs/public/reference/api.md) · [共享契约](packages/models/README.md)
 - [本机 SearxNG 部署](docs/public/guides/search.md) · [搜索、模型与安全阅读](packages/connectors/README.md)
 - [Swagger / OpenAPI JSON](swagger.json)（`vp run api:openapi` 重新生成）
 - [交付计划](docs/public/guides/delivery-plan.md) · [两次执行验收](docs/public/examples/two-run-scenarios.md)

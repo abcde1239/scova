@@ -8,7 +8,7 @@ import type {
     Usage,
     FeedbackSnapshot,
     FeedbackEffect,
-} from '@scova/contracts';
+} from '@scova/models';
 import type { ModelResponse, ReadPage, SearchResponse, StructuredInput } from '@scova/connectors';
 
 export interface AgentTools {

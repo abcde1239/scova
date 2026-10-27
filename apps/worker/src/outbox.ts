@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@scova/models';
+import type { PrismaClient } from '@scova/db';
 import type { Queue } from 'bullmq';
 import type { Redis } from 'ioredis';
 import { createOutboxRepository } from '@/repo/outbox.ts';

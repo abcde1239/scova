@@ -1,4 +1,4 @@
-import { createDatabaseClient, type PrismaClient } from '@scova/models';
+import { createDatabaseClient, type PrismaClient } from '@scova/db';
 import { Redis } from 'ioredis';
 import type { WorkerConfig } from '@/app/config.ts';
 import { createOutboxHandler } from '@/handler/outbox.ts';

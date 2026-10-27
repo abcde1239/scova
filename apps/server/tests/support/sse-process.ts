@@ -1,4 +1,4 @@
-import { PrismaClient } from '@scova/models';
+import { PrismaClient } from '@scova/db';
 import { createDefaultServices } from '../../src/app/context.ts';
 import { createStreamRegistry } from '../../src/app/streams.ts';
 import { startServer } from '../../src/app/runtime.ts';

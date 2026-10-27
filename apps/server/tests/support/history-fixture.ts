@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
-import { PrismaClient } from '@scova/models';
+import { PrismaClient } from '@scova/db';
 import { Redis } from 'ioredis';
 import pg from 'pg';
 import { nodeScriptCommand } from '../../../../scripts/process-runtime.mjs';
@@ -77,7 +77,7 @@ export function historyFixture(options: { questionFixture?: boolean } = {}) {
                     'migrate',
                     'deploy',
                     '--schema',
-                    'packages/models/prisma/schema.prisma',
+                    'packages/db/prisma/schema.prisma',
                 ],
                 {
                     cwd: root,

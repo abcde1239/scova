@@ -6,7 +6,7 @@ import {
     type Report,
     type ReportQuestion,
     type Run,
-} from '@scova/contracts';
+} from '@scova/models';
 import { afterAll, beforeAll, describe, expect, it } from 'vite-plus/test';
 import { historyFixture, type HistoryOwner } from './support/history-fixture.ts';
 import { draftConfig } from './support/task-drafts.ts';

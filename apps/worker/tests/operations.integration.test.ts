@@ -7,7 +7,7 @@ import pg from 'pg';
 import { Queue } from 'bullmq';
 import { Redis } from 'ioredis';
 import { outboxJobId } from '../src/utils/outbox.ts';
-import { PrismaClient } from '@scova/models';
+import { PrismaClient } from '@scova/db';
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import {
     createConnectorBundle,

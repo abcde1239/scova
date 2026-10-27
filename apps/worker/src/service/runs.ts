@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Budget, TaskConfig, Usage } from '@scova/contracts';
+import type { Budget, TaskConfig, Usage } from '@scova/models';
 import type { RunRepository } from '@/repo/runs.ts';
 import {
     RunExecutionError,

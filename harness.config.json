@@ -27,15 +27,15 @@
             }
         },
         {
-            "root": "packages/contracts",
-            "id": "packages-contracts",
+            "root": "packages/models",
+            "id": "packages-models",
             "tests": {
                 "requireConfiguredTask": true
             }
         },
         {
-            "root": "packages/models",
-            "id": "packages-models"
+            "root": "packages/db",
+            "id": "packages-db"
         },
         {
             "root": "packages/agent-core",
@@ -159,7 +159,7 @@
                 "apps-server",
                 "apps-worker",
                 "packages-shared",
-                "packages-contracts",
+                "packages-models",
                 "packages-agent-core",
                 "packages-connectors"
             ],

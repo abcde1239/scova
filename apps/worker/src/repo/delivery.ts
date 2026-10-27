@@ -13,9 +13,9 @@ import {
     UsageSchema,
     parseContract,
     readFeedbackSnapshot,
-} from '@scova/contracts';
+} from '@scova/models';
 import { validatePublication, type ReadPage, type SearchResponse } from '@scova/connectors';
-import type { PrismaClient, Run, ToolCall } from '@scova/models';
+import type { PrismaClient, Run, ToolCall } from '@scova/db';
 import { appendEvent, withRunFence } from '@/repo/runs.ts';
 import { loadBaseline } from '@/repo/comparison.ts';
 import { createTerminalNotifications } from '@/repo/notifications.ts';

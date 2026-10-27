@@ -3,7 +3,7 @@ import {
     parseContract,
     type Evidence,
     type QuestionAnswer,
-} from '@scova/contracts';
+} from '@scova/models';
 export const questionModelSchema = {
     type: 'object',
     additionalProperties: false,

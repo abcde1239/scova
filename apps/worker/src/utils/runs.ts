@@ -1,4 +1,4 @@
-import type { RunEvent } from '@scova/contracts';
+import type { RunEvent } from '@scova/models';
 
 export interface RunLeaseToken {
     readonly runId: string;

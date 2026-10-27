@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { PrismaClient } from '@scova/models';
+import { PrismaClient } from '@scova/db';
 import { Redis as RedisClient } from 'ioredis';
 import { afterAll, beforeAll, describe, expect, it } from 'vite-plus/test';
 import { OutboxDispatcher } from '../src/outbox.ts';
@@ -41,7 +41,7 @@ describe('BullMQ 事务 Outbox 投递器', () => {
                     'migrate',
                     'deploy',
                     '--schema',
-                    'packages/models/prisma/schema.prisma',
+                    'packages/db/prisma/schema.prisma',
                 ],
                 {
                     cwd: root,

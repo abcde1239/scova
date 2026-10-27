@@ -17,7 +17,7 @@
         "@langchain/langgraph-checkpoint-postgres": "catalog:",
         "@scova/agent-core": "workspace:*",
         "@scova/connectors": "workspace:*",
-        "@scova/contracts": "workspace:*",
+        "@scova/db": "workspace:*",
         "@scova/models": "workspace:*",
         "@scova/shared": "workspace:*",
         "bullmq": "catalog:",

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { Prisma } from '@scova/models';
+import { Prisma } from '@scova/db';
 import type { ApiServices } from '@/app/context.ts';
-import type { LibrarySearchQuery, LibraryTarget, NoteListQuery, NoteInput } from '@scova/contracts';
+import type { LibrarySearchQuery, LibraryTarget, NoteListQuery, NoteInput } from '@scova/models';
 import type { LibraryCursor } from '@/utils/library.ts';
 
 const timeText = (column: Prisma.Sql) =>

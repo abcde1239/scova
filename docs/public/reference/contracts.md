@@ -1,4 +1,4 @@
-# @scova/contracts
+# @scova/models
 
 Scova 的纯 TypeScript/TypeBox 接口契约。Web、API、worker 从本包导入同一份 schema 与 `Static` DTO，不导出 Prisma 实体、密码哈希、会话凭据、租约或 checkpoint。Bun 为主运行时，Node.js 可导入同样的模块。
 
@@ -53,7 +53,7 @@ schema 只能验证单帧结构，不能证明跨帧顺序或权限；API/客户
 
 ## 验证
 
-`vp test packages/contracts/tests/contracts.test.ts` 验证非法输入、边界、错误字段位置、TypeBox Value/Compiler 一致性、状态和证据语义、全部持久化事件及 reset 控制帧。真实 API/数据库/队列行为由对应后续 Issue 验证。
+`vp test packages/models/tests/contracts.test.ts` 验证非法输入、边界、错误字段位置、TypeBox Value/Compiler 一致性、状态和证据语义、全部持久化事件及 reset 控制帧。真实 API/数据库/队列行为由对应后续 Issue 验证。
 
 `vp run test:sse` 验证真实 PostgreSQL 回放、续传、reset、会话失效，以及 Bun/Node 的 socket 背压、取消与带活跃连接的优雅停止。
 

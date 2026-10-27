@@ -9,7 +9,7 @@
         "preview": "vp preview"
     },
     "dependencies": {
-        "@scova/contracts": "workspace:*",
+        "@scova/models": "workspace:*",
         "vue": "catalog:"
     },
     "devDependencies": {

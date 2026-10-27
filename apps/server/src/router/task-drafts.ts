@@ -1,5 +1,5 @@
 import { Elysia } from 'elysia';
-import { ApiErrorSchema, TaskDraftInputSchema, TaskDraftResponseSchema } from '@scova/contracts';
+import { ApiErrorSchema, TaskDraftInputSchema, TaskDraftResponseSchema } from '@scova/models';
 import type { ApiServices } from '@/app/context.ts';
 import { createTaskDraftHandlers } from '@/handler/task-drafts.ts';
 
