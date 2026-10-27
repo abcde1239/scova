@@ -42,7 +42,7 @@ import {
     LibrarySearchQuerySchema,
     LibrarySearchResponseSchema,
 } from '@scova/contracts';
-/** 系统健康检查返回值；只代表进程存活，不宣称数据库、队列或 Agent 已就绪。 */
+/** 系统健康检查返回值；成功只代表进程存活 */
 export const HealthResponseSchema = t.Object(
     {
         status: t.Literal('ok', { description: 'API 进程正常响应' }),

@@ -20,5 +20,5 @@
     "editor.codeActionsOnSave": {
         "source.fixAll.oxc": "explicit"
     },
-    "conventionalCommits.scopes": ["packages/shared"]
+    "conventionalCommits.scopes": ["packages/shared", "server"]
 }

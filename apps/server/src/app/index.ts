@@ -17,7 +17,6 @@ import { createFeedbackPlugin } from '@/router/feedback.ts';
 
 export { contractModels, HealthResponseSchema } from '@/app/contracts.ts';
 
-/** 统一装配 Elysia 与 Node 适配器；依赖保持惰性，生成文档无需外部服务。 */
 export const createApiApp = (
     _runtime: 'bun' | 'node' = 'bun',
     services: ApiServices = createDefaultServices(),
@@ -36,10 +35,10 @@ export const createApiApp = (
             swagger({
                 documentation: {
                     info: {
-                        title: '知巡 Scova API',
+                        title: 'Scova API',
                         version: '1.0.0',
                         description:
-                            '知巡后端接口文档。成功返回领域 JSON；错误使用真实 HTTP 状态与 code/message/requestId/fieldErrors。',
+                            'Scova 后端接口文档。成功返回领域 JSON:错误使用 HTTP 状态与 code/message/requestId/fieldErrors。',
                     },
                     openapi: '3.1.0',
                     tags: [{ name: '系统', description: '服务运行状态接口' }],
@@ -57,5 +56,3 @@ export const createApiApp = (
         .use(createNotificationPlugin(services))
         .use(createReportQuestionPlugin(services))
         .onStop(() => services.streams.stop());
-
-export const apiApp = createApiApp();

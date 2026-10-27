@@ -2,7 +2,8 @@ import { createApiApp } from '@/app/index.ts';
 import { createDefaultServices, type ApiServices } from '@/app/context.ts';
 import { serve } from 'srvx/node';
 
-/** 显式选用 node:http，使 Bun/Node 均通过 write/drain 传播 socket 背压。 */
+/** 此处使用node:http，使 Bun/Node运行时均通过 write/drain 传播 socket 背压。后续应该会改 */
+
 export function startServer(runtime: 'bun' | 'node', options: { services?: ApiServices } = {}) {
     const services = options.services ?? createDefaultServices();
     const app = createApiApp(runtime, services).compile();

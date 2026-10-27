@@ -8801,8 +8801,8 @@
         }
     },
     "info": {
-        "description": "知巡后端接口文档。成功返回领域 JSON；错误使用真实 HTTP 状态与 code/message/requestId/fieldErrors。",
-        "title": "知巡 Scova API",
+        "description": "Scova 后端接口文档。成功返回领域 JSON:错误使用 HTTP 状态与 code/message/requestId/fieldErrors。",
+        "title": "Scova API",
         "version": "1.0.0"
     },
     "openapi": "3.1.0",

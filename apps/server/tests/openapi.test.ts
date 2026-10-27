@@ -54,7 +54,7 @@ describe('中文 OpenAPI 生成与校验', () => {
         const response = await app.handle(new Request('http://localhost/swagger/json'));
         expect(response.status).toBe(200);
         const document = (await response.json()) as Document;
-        expect(document.info.title).toBe('知巡 Scova API');
+        expect(document.info.title).toBe('Scova API');
         expect(document.paths['/health'].get).toMatchObject({
             summary: '健康检查',
             tags: ['系统'],
