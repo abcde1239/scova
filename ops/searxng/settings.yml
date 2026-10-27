@@ -1,34 +1,34 @@
 # A private, low-concurrency instance. Do not expose this profile to the Internet.
 use_default_settings:
-  engines:
-    keep_only:
-      - bing
-      - duckduckgo
-      - brave
+    engines:
+        keep_only:
+            - bing
+            - duckduckgo
+            - brave
 
 general:
-  instance_name: Scova Search
-  enable_metrics: false
+    instance_name: Scova Search
+    enable_metrics: false
 
 search:
-  autocomplete: ""
-  favicon_resolver: ""
-  default_lang: all
-  safe_search: 1
-  formats:
-    - html
-    - json
+    autocomplete: ''
+    favicon_resolver: ''
+    default_lang: all
+    safe_search: 1
+    formats:
+        - html
+        - json
 
 server:
-  limiter: false
-  public_instance: false
-  image_proxy: false
+    limiter: false
+    public_instance: false
+    image_proxy: false
 
 valkey:
-  url: false
+    url: false
 
 outgoing:
-  request_timeout: 5.0
-  max_request_timeout: 8.0
-  pool_connections: 10
-  pool_maxsize: 5
+    request_timeout: 5.0
+    max_request_timeout: 8.0
+    pool_connections: 10
+    pool_maxsize: 5

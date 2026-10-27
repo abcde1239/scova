@@ -1,3 +1,3 @@
-import { startServer } from "@/app/runtime.ts";
+import { startServer } from '@/app/runtime.ts';
 
-startServer("node");
+startServer('node');

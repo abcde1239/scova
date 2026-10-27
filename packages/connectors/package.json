@@ -1,24 +1,24 @@
 {
-  "name": "@scova/connectors",
-  "version": "0.0.0",
-  "private": true,
-  "type": "module",
-  "exports": {
-    ".": "./src/index.ts"
-  },
-  "scripts": {
-    "build": "tsc --noEmit",
-    "test": "vp test",
-    "check": "vp check"
-  },
-  "dependencies": {
-    "@mozilla/readability": "catalog:",
-    "ajv": "catalog:",
-    "jsdom": "catalog:"
-  },
-  "devDependencies": {
-    "@types/jsdom": "catalog:",
-    "@types/node": "catalog:",
-    "typescript": "catalog:"
-  }
+    "name": "@scova/connectors",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "exports": {
+        ".": "./src/index.ts"
+    },
+    "scripts": {
+        "build": "tsc --noEmit",
+        "test": "vp test",
+        "check": "vp check"
+    },
+    "dependencies": {
+        "@mozilla/readability": "catalog:",
+        "ajv": "catalog:",
+        "jsdom": "catalog:"
+    },
+    "devDependencies": {
+        "@types/jsdom": "catalog:",
+        "@types/node": "catalog:",
+        "typescript": "catalog:"
+    }
 }

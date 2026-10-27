@@ -1,21 +1,21 @@
 {
-  "name": "@scova/utils",
-  "version": "0.0.0",
-  "private": true,
-  "type": "module",
-  "exports": {
-    ".": "./src/index.ts"
-  },
-  "scripts": {
-    "build": "tsc --noEmit",
-    "test": "vp test",
-    "check": "vp check"
-  },
-  "dependencies": {
-    "@js-temporal/polyfill": "catalog:"
-  },
-  "devDependencies": {
-    "@types/node": "catalog:",
-    "typescript": "catalog:"
-  }
+    "name": "@scova/utils",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "exports": {
+        ".": "./src/index.ts"
+    },
+    "scripts": {
+        "build": "tsc --noEmit",
+        "test": "vp test",
+        "check": "vp check"
+    },
+    "dependencies": {
+        "@js-temporal/polyfill": "catalog:"
+    },
+    "devDependencies": {
+        "@types/node": "catalog:",
+        "typescript": "catalog:"
+    }
 }

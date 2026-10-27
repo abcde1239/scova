@@ -1,3 +1,3 @@
-import { startWorker } from "@/app/runtime.ts";
+import { startWorker } from '@/app/runtime.ts';
 
 await startWorker();
