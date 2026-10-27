@@ -21,12 +21,14 @@ function harness(
   overrides: {
     connect?: () => Promise<void>;
     dispatch?: (signal: AbortSignal) => Promise<number>;
+    schedule?: (signal: AbortSignal) => Promise<number>;
     close?: () => Promise<void>;
   } = {},
 ) {
   const resources = {
     connect: vi.fn(overrides.connect ?? (async () => {})),
     dispatch: vi.fn(overrides.dispatch ?? (async (_signal: AbortSignal) => 0)),
+    ...(overrides.schedule ? { schedule: vi.fn(overrides.schedule) } : {}),
     close: vi.fn(overrides.close ?? (async () => {})),
   };
   const logger = { info: vi.fn(), error: vi.fn() };
@@ -37,6 +39,60 @@ function harness(
 describe("Worker 启动、串行轮询与停止", () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
+
+  it("调度独立于 Outbox，默认每30秒运行且长事务不重入", async () => {
+    const barrier = deferred();
+    const { app, resources } = harness({
+      schedule: async () => {
+        await barrier.promise;
+        return 1;
+      },
+    });
+    try {
+      await app.start();
+      expect(resources.schedule).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(config.schedulerIntervalMs * 2);
+      expect(resources.schedule).toHaveBeenCalledTimes(1);
+      expect(resources.dispatch.mock.calls.length).toBeGreaterThan(1);
+      barrier.resolve();
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(config.schedulerIntervalMs - 1);
+      expect(resources.schedule).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(resources.schedule).toHaveBeenCalledTimes(2);
+    } finally {
+      barrier.resolve();
+      await app.stop();
+    }
+  });
+
+  it("stop 等待在途调度完成再关闭，批次失败日志脱敏且等待有界退避", async () => {
+    const barrier = deferred();
+    let calls = 0;
+    let signal: AbortSignal | undefined;
+    const { app, resources, logger } = harness({
+      schedule: async (value) => {
+        if (++calls === 1) throw new Error("postgresql://secret@private-host");
+        signal = value;
+        await barrier.promise;
+        return 1;
+      },
+    });
+    await app.start();
+    await vi.advanceTimersByTimeAsync(config.schedulerIntervalMs - 1);
+    expect(resources.schedule).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(resources.schedule).toHaveBeenCalledTimes(2);
+    expect(logger.error.mock.calls).toEqual([["Worker 调度批次失败，将退避后重试"]]);
+    const stopping = app.stop();
+    expect(signal?.aborted).toBe(true);
+    expect(resources.close).not.toHaveBeenCalled();
+    barrier.resolve();
+    await stopping;
+    expect(resources.close).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(config.schedulerIntervalMs * 2);
+    expect(resources.schedule).toHaveBeenCalledTimes(2);
+  });
 
   it("构造不连接，重复 start 共用一次初始化，连接成功后才开始投递", async () => {
     const connecting = deferred();

@@ -63,6 +63,17 @@ export interface SearchResponse {
   coverage: SearchCoverage;
 }
 
+export interface ReadPublication {
+  parserVersion: "scova-publication-v1";
+  status: "known" | "unknown" | "conflict";
+  observations: {
+    field: "article:published_time" | "datePublished" | "time[datetime]";
+    rawValue: string;
+    locator: string;
+  }[];
+  instant: string | null;
+}
+
 export interface ReadPage {
   kind: "read_page";
   mode: "live" | "demo";
@@ -75,6 +86,8 @@ export interface ReadPage {
   extractionVersion: string;
   collectedAt: string;
   truncated: boolean;
+  /** Page-authored publication metadata, parsed independently of body extraction. */
+  publication?: ReadPublication;
   untrusted: true;
 }
 

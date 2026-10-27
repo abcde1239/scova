@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import pg from "pg";
 import Redis from "ioredis";
 import { Queue, QueueEvents, Worker } from "bullmq";
-import { Temporal } from "@js-temporal/polyfill";
+import { nextScheduledAt, resolveScheduledDate } from "@scova/utils";
 
 const require = createRequire(import.meta.url);
 const databaseUrl =
@@ -39,26 +39,28 @@ function runProcess(script, args, env = {}) {
 
 export function testDst() {
   const zone = "America/New_York";
-  const gap = Temporal.ZonedDateTime.from(
-    { timeZone: zone, year: 2026, month: 3, day: 8, hour: 2, minute: 30 },
-    { disambiguation: "compatible" },
+  const gapPlan = { timezone: zone, schedule: { frequency: "daily", localTime: "02:30" } };
+  const foldPlan = { timezone: zone, schedule: { frequency: "daily", localTime: "01:30" } };
+  const gap = resolveScheduledDate(gapPlan, "2026-03-08");
+  const fold = resolveScheduledDate(foldPlan, "2026-11-01");
+  assert.equal(gap.toISOString(), "2026-03-08T07:00:00.000Z", "缺失时刻取首个有效时刻03:00");
+  assert.equal(fold.toISOString(), "2026-11-01T05:30:00.000Z", "重复时刻取较早一次");
+  assert.equal(
+    nextScheduledAt(gapPlan, gap).toISOString(),
+    "2026-03-09T06:30:00.000Z",
+    "次日恢复配置时分",
   );
-  const fold = Temporal.ZonedDateTime.from(
-    { timeZone: zone, year: 2026, month: 11, day: 1, hour: 1, minute: 30 },
-    { disambiguation: "earlier" },
+  assert.equal(nextScheduledAt(foldPlan, fold).toISOString(), "2026-11-02T06:30:00.000Z");
+  assert.equal(
+    nextScheduledAt(foldPlan, new Date("2026-11-01T06:00:00Z")).toISOString(),
+    "2026-11-02T06:30:00.000Z",
+    "回拨两次之间不再次执行当天时点",
   );
-  assert.equal(gap.toInstant().toString(), "2026-03-08T07:30:00Z");
-  assert.equal(gap.hour, 3, "缺失当地时刻向前顺延一个 DST 缺口");
-  assert.equal(fold.toInstant().toString(), "2026-11-01T05:30:00Z");
-  assert.equal(fold.offset, "-04:00", "重复当地时刻选择较早一次");
-  const nextDay = fold.add({ days: 1 });
-  assert.equal(nextDay.toInstant().toString(), "2026-11-02T06:30:00Z");
-  assert.equal(nextDay.hour, 1, "周期按当地时间推进，不能固定增加 24 小时");
   console.log(
     JSON.stringify({
       test: "dst",
-      gapUtc: gap.toInstant().toString(),
-      foldUtc: fold.toInstant().toString(),
+      gapUtc: gap.toISOString(),
+      foldUtc: fold.toISOString(),
       passed: true,
     }),
   );

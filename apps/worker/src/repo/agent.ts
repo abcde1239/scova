@@ -1,7 +1,16 @@
-import { BudgetSchema, UsageSchema, parseContract, type Usage } from "@scova/contracts";
+import {
+  BudgetSchema,
+  UsageSchema,
+  parseContract,
+  readFeedbackSnapshot,
+  type Usage,
+  type FeedbackSnapshot,
+} from "@scova/contracts";
 import type { Prisma, PrismaClient, Run, ToolCall } from "@scova/models";
 import { appendEvent, withRunFence } from "@/repo/runs.ts";
 import type { RunLeaseToken } from "@/utils/runs.ts";
+import { loadBaseline } from "@/repo/comparison.ts";
+import type { AgentBaseline } from "@scova/agent-core";
 
 export type AgentTool = "search" | "read" | "model";
 export type AgentJson =
@@ -31,6 +40,12 @@ export type AgentReservation = {
 } & ({ kind: "reserved" } | { kind: "reused"; output: AgentJson });
 
 export interface AgentRepository {
+  comparison(options?: { allowDeadline?: boolean }): Promise<{
+    comparisonScopeHash: string;
+    baselineRunId: string | null;
+    baseline: AgentBaseline | null;
+    feedback: FeedbackSnapshot;
+  }>;
   reserve(input: AgentReservationInput): Promise<AgentReservation>;
   settle(input: {
     toolCallId: string;
@@ -195,6 +210,18 @@ export function createAgentRepository(db: PrismaClient, token: RunLeaseToken): A
     return call;
   };
   return {
+    comparison: (options = {}) =>
+      withRunFence(
+        db,
+        token,
+        options.allowDeadline ? "deadline_delivery" : "work",
+        async (tx, run) => ({
+          comparisonScopeHash: run.comparisonScopeHash,
+          baselineRunId: run.baselineRunId,
+          baseline: await loadBaseline(tx, run),
+          feedback: readFeedbackSnapshot(run.feedbackSnapshotJson, run.userId, run.taskId),
+        }),
+      ),
     async reserve(input) {
       const reserved = reservation(input);
       return fence(async (tx, run, now) => {
@@ -371,7 +398,13 @@ export function createAgentRepository(db: PrismaClient, token: RunLeaseToken): A
         options.allowDeadline ? "deadline_delivery" : "work",
         async (tx, run) => {
           const calls = await tx.toolCall.findMany({
-            where: { userId: run.userId, runId: run.id, tool: "read", status: "succeeded" },
+            where: {
+              userId: run.userId,
+              runId: run.id,
+              tool: "read",
+              status: "succeeded",
+              finishedAt: { lte: run.deadlineAt! },
+            },
             orderBy: [{ operationKey: "asc" }, { attemptNo: "asc" }],
           });
           return calls.map(completedOutput);

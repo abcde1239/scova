@@ -19,6 +19,7 @@ export interface RunExecutionContext {
   readonly budget: Budget;
   readonly usage: Usage;
   readonly deadlineAt: Date;
+  readonly startedAt?: Date;
   readonly signal: AbortSignal;
   assertActive(): Promise<void>;
   emit(event: RunProgressEvent): Promise<void>;
@@ -179,6 +180,7 @@ export class RunService {
         budget: claimed.budget,
         usage: claimed.usage,
         deadlineAt: run.deadlineAt!,
+        startedAt: run.startedAt!,
         signal: controller.signal,
         assertActive,
         emit: async (event) => {

@@ -12,6 +12,8 @@ Outbox 首版只保存 Run 命令，其 aggregateId 由 owner 复合外键绑定
 
 部分唯一索引和 CHECK 位于 migration 尾部，包括活动 Run 互斥、反馈条件唯一键、目标恰一、事件类型/版本/序号、修订和计数边界。后续 migration diff 不得丢弃这些手写约束。Prisma 无法通过 CHECK 跨表判断基线完整、引用来源于当前/基线执行等条件，这些由领域交付事务校验；数据库仍独立保证 owner 与关联身份。
 
+周期扫描使用 `tasks_due_active(next_run_at,id)` 部分索引，仅覆盖 active 且有下一时点的任务。Occurrence 以 `(taskId,scheduleRevision,scheduledAt)` 唯一；计划修改与暂停、恢复、归档增加计划修订，普通配置编辑不覆盖扫描器推进的时点。
+
 LangGraph checkpoint 使用独立 schema 与迁移，不由 Prisma 管理。`Run.checkpointRef` 仅保存经过 fencing 提升的显式引用，不能将客户端输入作为 checkpoint 地址。
 
 Worker 显式启动 PostgreSQL saver，使用 `AGENT_CHECKPOINT_SCHEMA`（默认 `scova_agent`）和独立连接池；启动迁移跨进程串行执行。工具结果保存在当前 owner/Run 的 ToolCall 输出中，预留、结果与累计用量均受 Run 行锁和 epoch fencing 保护。接管只加载合法引用的 channel values，不继承旧线程后续 pending writes。业务表清理与 checkpoint 备份/清理须共同规划，不能仅删除 Prisma 数据就认为研究正文已清除；账号删除和保留期的完整入口仍须后续功能接入。

@@ -1,3 +1,4 @@
+import { writeFile, unlink } from "node:fs/promises";
 import { readWorkerConfig, type WorkerConfig } from "@/app/config.ts";
 import { createWorkerResources, type WorkerResources } from "@/app/resources.ts";
 import { waitForPoll } from "@/utils/wait.ts";
@@ -27,18 +28,37 @@ export function createWorkerApp(options: WorkerAppOptions = {}) {
   let starting: Promise<void> | undefined;
   let loop: Promise<void> | undefined;
   let polling: Promise<void> | undefined;
+  let scheduling: Promise<void> | undefined;
   let stopping: Promise<void> | undefined;
   let closing: Promise<void> | undefined;
   const close = () => (closing ??= resources.close());
 
+  const heartbeatPath = process.env.WORKER_HEARTBEAT_PATH;
+  const heartbeat = () =>
+    heartbeatPath ? writeFile(heartbeatPath, "ready\n", { mode: 0o600 }) : Promise.resolve();
   async function poll() {
     while (!controller.signal.aborted) {
       let delay = config.pollIntervalMs;
       try {
         await resources.dispatch(controller.signal);
+        if (!controller.signal.aborted) await heartbeat();
       } catch {
         delay = config.failureDelayMs;
         logger.error("Worker Outbox 批次失败，将退避后重试");
+      }
+      if (!controller.signal.aborted) await wait(delay, controller.signal);
+    }
+  }
+
+  async function schedule() {
+    if (!resources.schedule) return;
+    while (!controller.signal.aborted) {
+      let delay = config.schedulerIntervalMs;
+      try {
+        await resources.schedule(controller.signal);
+      } catch {
+        delay = Math.max(config.schedulerIntervalMs, config.failureDelayMs);
+        logger.error("Worker 调度批次失败，将退避后重试");
       }
       if (!controller.signal.aborted) await wait(delay, controller.signal);
     }
@@ -50,9 +70,11 @@ export function createWorkerApp(options: WorkerAppOptions = {}) {
       try {
         await resources.connect();
         if (controller.signal.aborted) return;
+        await heartbeat();
         logger.info("Scova worker ready; Outbox dispatcher running; Run consumer running");
         polling = poll();
-        loop = Promise.all([polling, resources.finished?.()]).then(() => undefined);
+        scheduling = schedule();
+        loop = Promise.all([polling, scheduling, resources.finished?.()]).then(() => undefined);
         // 捕获后台循环自身故障；正常单批错误已由 poll 退避处理。
         void loop.catch(() => controller.abort());
       } catch (error) {
@@ -73,7 +95,7 @@ export function createWorkerApp(options: WorkerAppOptions = {}) {
       // 启动失败已经报告给 start 调用方；仍完成所有已创建资源的清理。
       await starting?.catch(() => undefined);
       try {
-        const settled = await Promise.allSettled([resources.stop?.(), polling, loop]);
+        const settled = await Promise.allSettled([resources.stop?.(), polling, scheduling, loop]);
         const failures = settled.filter((result) => result.status === "rejected");
         if (failures.length)
           throw new AggregateError(
@@ -81,6 +103,7 @@ export function createWorkerApp(options: WorkerAppOptions = {}) {
             "Worker 在途操作停止失败",
           );
       } finally {
+        if (heartbeatPath) await unlink(heartbeatPath).catch(() => undefined);
         await close();
       }
     })());

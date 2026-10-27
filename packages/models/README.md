@@ -16,7 +16,9 @@ vp exec prisma migrate deploy
 
 Server 和 worker 通过 `@scova/models` 导入 `PrismaClient`、`Prisma`、生成实体类型及枚举；也可使用 `createDatabaseClient(options)` 创建客户端。调用方负责连接关闭和事务管理。
 
-本包仅供服务端使用，不依赖 Elysia 或 contracts。HTTP DTO、运行时校验与 OpenAPI 使用 `@scova/contracts`；不要向前端返回内部实体或引入数据库客户端。
+`captureFeedbackSnapshot(tx, userId, taskId)` 在调用方已持有 Task 锁的创建事务中投影反馈，返回可写入 Run 的冻结 JSON；不自行连接数据库或外部服务。
+
+本包仅供服务端使用，不依赖 Elysia；反馈投影使用 `@scova/contracts` 的快照结构。HTTP DTO、运行时校验与 OpenAPI 仍由 contracts 管理；不要向前端返回内部实体或引入数据库客户端。
 
 ## 验证
 

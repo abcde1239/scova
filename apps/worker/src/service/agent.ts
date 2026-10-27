@@ -1,3 +1,4 @@
+import { installedCheckpointVersion } from "@/utils/checkpoint-version.ts";
 import { createHash } from "node:crypto";
 import type { RunnableConfig } from "@langchain/core/runnables";
 import { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
@@ -33,6 +34,7 @@ import {
 import type { PrismaClient } from "@scova/models";
 import type { RunExecutionContext, RunExecutor } from "@/service/runs.ts";
 import { RunExecutionError, type RunLeaseToken, type RunProgressEvent } from "@/utils/runs.ts";
+import { createDeliveryService } from "@/service/delivery.ts";
 
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
 const emptyUsage = (): Usage => ({
@@ -109,7 +111,7 @@ export function createAgentSession({
       return (...args: unknown[]) =>
         trackDomain(
           async () => Reflect.apply(method, target, args),
-          property === "readPages" &&
+          ["readPages", "comparison"].includes(String(property)) &&
             (args[0] as { allowDeadline?: boolean } | undefined)?.allowDeadline === true,
         );
     },
@@ -331,6 +333,7 @@ export function createAgentSession({
     budget: context.budget,
     usage: currentUsage,
     deadlineAt: context.deadlineAt,
+    startedAt: context.startedAt,
     signal: context.signal,
     assertActive: () => context.assertActive(),
     demoReason: bundle.reason,
@@ -338,11 +341,13 @@ export function createAgentSession({
   return {
     tools,
     openCheckpoint,
+    persist: trackDomain,
     drain: async () => {
       await Promise.allSettled(pending);
     },
     async execute(): Promise<AgentCandidate> {
       if (bundle.mode !== context.mode) throw new RunExecutionError("AGENT_CONFIGURATION_INVALID");
+      Object.assign(agentContext, await repository.comparison());
       const opened = await openCheckpoint();
       const startedSteps = new Map<string, number>();
       const candidate = await runResearchAgent(agentContext, {
@@ -379,6 +384,9 @@ export function createAgentSession({
     async partial(): Promise<AgentCandidate | null> {
       if (context.signal.aborted && context.signal.reason !== "deadline")
         throw new ConnectorError("aborted", "执行已停止");
+      // A fresh post-deadline session never executes the graph. Load the same frozen context
+      // used by delivery while retaining owner, lease and cancellation checks; no external calls.
+      Object.assign(agentContext, await repository.comparison({ allowDeadline: true }));
       // This bound domain read still validates lease and cancellation. No network/model operation.
       const pages = (await repository.readPages({ allowDeadline: true })).map((value) =>
         readPage(value, context.mode),
@@ -405,6 +413,8 @@ export interface AgentRuntimeOptions {
   env?: NodeJS.ProcessEnv;
   checkpointSchema?: string;
   bundle?: ConnectorBundle;
+  /** Production application wires atomic domain delivery; standalone graph tests may omit it. */
+  enableDelivery?: boolean;
   /** #16 supplies a fenced domain delivery service; absent means explicit failure. */
   deliver?: (
     context: RunExecutionContext,
@@ -416,6 +426,11 @@ export interface AgentRuntimeOptions {
 /** Construction is offline. App lifecycle explicitly owns setup and pool shutdown. */
 export function createAgentRuntime(options: AgentRuntimeOptions) {
   const env = options.env ?? process.env;
+  if (
+    env.AGENT_CHECKPOINT_MIGRATION !== undefined &&
+    !["external", "startup"].includes(env.AGENT_CHECKPOINT_MIGRATION)
+  )
+    throw new Error("AGENT_CHECKPOINT_MIGRATION 无效");
   const schema = options.checkpointSchema ?? env.AGENT_CHECKPOINT_SCHEMA ?? "scova_agent";
   if (!/^[a-z][a-z0-9_]{0,62}$/.test(schema)) throw new Error("AGENT_CHECKPOINT_SCHEMA 无效");
   const connection = new URL(options.databaseUrl);
@@ -428,6 +443,9 @@ export function createAgentRuntime(options: AgentRuntimeOptions) {
     idleTimeoutMillis: 10_000,
   });
   const saver = new PostgresSaver(pool, undefined, { schema });
+  const delivery = options.enableDelivery
+    ? createDeliveryService(options.database, saver)
+    : undefined;
   let ready = false;
   let closing: Promise<void> | undefined;
   let liveBundle: ConnectorBundle | undefined;
@@ -459,7 +477,15 @@ export function createAgentRuntime(options: AgentRuntimeOptions) {
         await client.query("SELECT pg_advisory_lock(hashtext($1))", [
           `scova-agent-schema:${schema}`,
         ]);
-        await saver.setup();
+        if (env.AGENT_CHECKPOINT_MIGRATION === "external") {
+          const version = await client.query(
+            `SELECT version FROM "${schema}".scova_schema_version WHERE id=1`,
+          );
+          if (version.rows[0]?.version !== installedCheckpointVersion())
+            throw new Error("先执行独立图状态迁移");
+        } else {
+          await saver.setup();
+        }
         ready = true;
       } finally {
         await client
@@ -480,10 +506,26 @@ export function createAgentRuntime(options: AgentRuntimeOptions) {
             context,
             bundle: bundle(context.mode),
           });
-          const candidate = await session.execute();
-          if (!options.deliver) throw new RunExecutionError("AGENT_DELIVERY_NOT_CONFIGURED");
+          let candidate: AgentCandidate;
+          try {
+            candidate = await session.execute();
+          } catch (error) {
+            if (
+              error &&
+              typeof error === "object" &&
+              "code" in error &&
+              error.code === "NO_EVIDENCE"
+            )
+              throw new RunExecutionError("NO_EVIDENCE");
+            throw error;
+          }
+          if (!options.deliver && !delivery)
+            throw new RunExecutionError("AGENT_DELIVERY_NOT_CONFIGURED");
           await context.assertActive();
-          await options.deliver(context, candidate, false);
+          await session.persist(async () => {
+            if (options.deliver) await options.deliver(context, candidate, false);
+            else await delivery!.deliver(token, candidate);
+          });
         },
         async onDeadline(context) {
           if (!session) {
@@ -507,7 +549,11 @@ export function createAgentRuntime(options: AgentRuntimeOptions) {
             });
           }
           const candidate = await session?.partial();
-          if (candidate && options.deliver) await options.deliver(context, candidate, true);
+          if (candidate && (options.deliver || delivery))
+            await session.persist(async () => {
+              if (options.deliver) await options.deliver(context, candidate, true);
+              else await delivery!.deliver(token, candidate, true);
+            }, true);
         },
         drain: () => session?.drain() ?? Promise.resolve(),
       };

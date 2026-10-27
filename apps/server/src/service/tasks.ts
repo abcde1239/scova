@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { Temporal } from "@js-temporal/polyfill";
+import { nextScheduledAt } from "@scova/utils";
 import type { Task as StoredTask, TaskVersion as StoredTaskVersion } from "@scova/models";
 import {
   CreateTaskInputSchema,
@@ -14,6 +14,7 @@ import {
 } from "@scova/contracts";
 import type { ApiServices } from "@/app/context.ts";
 import { ApiError } from "@/utils/errors.ts";
+import { TASK_BUDGET_LIMITS } from "@/app/task-policy.ts";
 import { createTaskRepo, type TaskStore } from "@/repo/tasks.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -21,11 +22,10 @@ const hash = (value: string) => createHash("sha256").update(value).digest("hex")
 /** 检索与正文提取策略升级时递增，避免错误复用旧比较范围。 */
 const RETRIEVAL_STRATEGY_VERSION = 1;
 const EXTRACTION_STRATEGY_VERSION = "readability-v1";
-const DEFAULT_BUDGET_LIMITS = { maxSearches: 10, maxPages: 20, maxDurationSeconds: 300 } as const;
 
 function assertBudget(config: TaskConfig): void {
-  const fieldErrors = Object.entries(DEFAULT_BUDGET_LIMITS)
-    .filter(([key, maximum]) => config.budget[key as keyof typeof DEFAULT_BUDGET_LIMITS]! > maximum)
+  const fieldErrors = Object.entries(TASK_BUDGET_LIMITS)
+    .filter(([key, maximum]) => config.budget[key as keyof typeof TASK_BUDGET_LIMITS]! > maximum)
     .map(([key, maximum]) => ({
       path: `/config/budget/${key}`,
       message: `部署默认上限为 ${maximum}`,
@@ -65,27 +65,7 @@ export function comparisonScopeHash(config: TaskConfig): string {
 }
 
 export function nextRunAt(config: TaskConfig, now: Date): Date | null {
-  if (config.schedule.frequency === "manual") return null;
-  const current = Temporal.Instant.from(now.toISOString()).toZonedDateTimeISO(config.timezone);
-  const [hour, minute] = config.schedule.localTime.split(":").map(Number);
-  let candidate = current.with({
-    hour,
-    minute,
-    second: 0,
-    millisecond: 0,
-    microsecond: 0,
-    nanosecond: 0,
-  });
-  if (config.schedule.frequency === "daily") {
-    if (Temporal.ZonedDateTime.compare(candidate, current) <= 0)
-      candidate = candidate.add({ days: 1 });
-  } else {
-    const days = (config.schedule.weekday - current.dayOfWeek + 7) % 7;
-    candidate = candidate.add({ days });
-    if (Temporal.ZonedDateTime.compare(candidate, current) <= 0)
-      candidate = candidate.add({ days: 7 });
-  }
-  return new Date(Number(candidate.toInstant().epochMilliseconds));
+  return nextScheduledAt(config, now);
 }
 
 function listItem(task: StoredTask) {
@@ -133,23 +113,30 @@ export async function ownedTask(
   return task;
 }
 
-function cursorFor(task: StoredTask): string {
-  return Buffer.from(
-    JSON.stringify({ updatedAt: task.updatedAt.toISOString(), id: task.id }),
-    "utf8",
-  ).toString("base64url");
+function cursorFor(task: StoredTask, updatedAt: string): string {
+  return Buffer.from(JSON.stringify({ updatedAt, id: task.id }), "utf8").toString("base64url");
 }
-function decodeCursor(value: string | undefined): { updatedAt: Date; id: string } | undefined {
+function decodeCursor(value: string | undefined): { updatedAt: string; id: string } | undefined {
   if (!value) return undefined;
   try {
     const parsed = JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as {
       updatedAt?: string;
       id?: string;
     };
-    if (!parsed.updatedAt || !parsed.id || !UUID.test(parsed.id)) throw new Error();
+    if (
+      !parsed.updatedAt ||
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(parsed.updatedAt) ||
+      !parsed.id ||
+      !UUID.test(parsed.id)
+    )
+      throw new Error();
     const updatedAt = new Date(parsed.updatedAt);
-    if (!Number.isFinite(updatedAt.getTime())) throw new Error();
-    return { updatedAt, id: parsed.id };
+    if (
+      !Number.isFinite(updatedAt.getTime()) ||
+      updatedAt.toISOString() !== `${parsed.updatedAt.slice(0, 23)}Z`
+    )
+      throw new Error();
+    return { updatedAt: parsed.updatedAt, id: parsed.id };
   } catch {
     throw new ApiError(400, "INVALID_CURSOR", "分页游标无效");
   }
@@ -162,10 +149,22 @@ export function createTaskService(services: ApiServices) {
     async list(userId: string, query: unknown) {
       const page = parseContract(PageQuerySchema, query);
       const take = Math.min(page.limit ?? 50, 100);
-      const tasks = await repo.listTasks(userId, take + 1, decodeCursor(page.cursor));
-      return parseContract(TaskListResponseSchema, {
-        items: tasks.slice(0, take).map(listItem),
-        nextCursor: tasks.length > take ? cursorFor(tasks[take - 1]!) : null,
+      const cursor = decodeCursor(page.cursor);
+      return repo.readTransaction(async (store) => {
+        // Task排序时间可变；游标校验、原生微秒seek与DTO加载必须看到同一快照。
+        if (cursor) {
+          const anchor = await store.findTaskCursor(cursor.id, userId);
+          if (!anchor || anchor.cursorTime !== cursor.updatedAt)
+            throw new ApiError(400, "INVALID_CURSOR", "分页游标无效或已变化");
+        }
+        const tasks = await store.listTasks(userId, take + 1, cursor);
+        return parseContract(TaskListResponseSchema, {
+          items: tasks.slice(0, take).map(({ task }) => listItem(task)),
+          nextCursor:
+            tasks.length > take
+              ? cursorFor(tasks[take - 1]!.task, tasks[take - 1]!.cursorTime)
+              : null,
+        });
       });
     },
     async create(userId: string, body: unknown) {
@@ -200,7 +199,11 @@ export function createTaskService(services: ApiServices) {
       assertBudget(input.config);
       const result = await repo
         .transaction(async (store) => {
+          if (!UUID.test(taskId) || !(await store.lockTask(taskId, userId)).length)
+            throw new ApiError(404, "NOT_FOUND", "资源不存在");
           const task = await ownedTask(taskId, userId, store);
+          if (task.status === "archived")
+            throw new ApiError(409, "TASK_ARCHIVED", "已归档任务不能再编辑");
           if (task.revision !== expectedRevision)
             throw new ApiError(409, "REVISION_CONFLICT", "任务已被其他请求修改，请刷新后重试");
           const previous = await store.requireVersion(task.currentVersionId!, userId, task.id);
@@ -214,7 +217,11 @@ export function createTaskService(services: ApiServices) {
           const claimed = await store.claimRevision(task.id, userId, expectedRevision, {
             title: input.config.title,
             revision: { increment: 1 },
-            nextRunAt: nextRunAt(input.config, services.clock()),
+            ...(task.status !== "active"
+              ? { nextRunAt: null }
+              : scheduleChanged
+                ? { nextRunAt: nextRunAt(input.config, await store.now()) }
+                : {}),
             ...(scheduleChanged ? { scheduleRevision: { increment: 1 } } : {}),
           });
           if (claimed.count !== 1)
@@ -241,6 +248,44 @@ export function createTaskService(services: ApiServices) {
           throw error;
         });
       return taskResponse(result.task, result.version, result.baselineResetRequired);
+    },
+    async transition(
+      userId: string,
+      taskId: string,
+      action: "pause" | "resume" | "archive",
+      expectedRevision: number,
+    ) {
+      return repo.transaction(async (store) => {
+        if (!UUID.test(taskId) || !(await store.lockTask(taskId, userId)).length)
+          throw new ApiError(404, "NOT_FOUND", "资源不存在");
+        const task = await ownedTask(taskId, userId, store);
+        if (task.revision !== expectedRevision)
+          throw new ApiError(409, "REVISION_CONFLICT", "任务已被其他请求修改，请刷新后重试");
+        if (task.status === "archived" && action !== "archive")
+          throw new ApiError(409, "TASK_ARCHIVED", "已归档任务不能恢复或暂停");
+        const version = await store.requireVersion(task.currentVersionId!, userId, task.id);
+        const target = action === "pause" ? "paused" : action === "resume" ? "active" : "archived";
+        if (task.status === target) return taskResponse(task, version, false);
+        const now = await store.now();
+        const config = parseContract(TaskConfigSchema, version.configJson);
+        const claimed = await store.claimRevision(task.id, userId, expectedRevision, {
+          status: target,
+          revision: { increment: 1 },
+          scheduleRevision: { increment: 1 },
+          nextRunAt: target === "active" ? nextRunAt(config, now) : null,
+          ...(target === "archived" ? { archivedAt: now } : {}),
+        });
+        if (claimed.count !== 1)
+          throw new ApiError(409, "REVISION_CONFLICT", "任务已被其他请求修改，请刷新后重试");
+        if (target === "archived") {
+          const run = await store.lockActiveRun(task.id, userId);
+          if (run && run.status !== "cancel_requested") {
+            await store.requestCancel(run.id, await store.now());
+            await store.createCancelOutbox(userId, run.id);
+          }
+        }
+        return taskResponse(await ownedTask(task.id, userId, store), version, false);
+      });
     },
   };
 }

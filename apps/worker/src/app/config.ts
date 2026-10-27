@@ -8,6 +8,9 @@ export interface WorkerConfig {
   leaseSeconds: number;
   runLeaseSeconds: number;
   runConcurrency: number;
+  schedulerIntervalMs: number;
+  schedulerConcurrency: number;
+  scheduledRunMode: "demo" | "live";
 }
 
 function integerSetting(env: NodeJS.ProcessEnv, name: string, fallback: number, maximum: number) {
@@ -34,6 +37,9 @@ export function readWorkerConfig(env: NodeJS.ProcessEnv = process.env): WorkerCo
   const queueName = env.WORKER_QUEUE_NAME ?? "scova-runs";
   if (!/^[A-Za-z0-9_-]{1,100}$/.test(queueName))
     throw new Error("WORKER_QUEUE_NAME 仅允许 1 至 100 位字母、数字、下划线或连字符");
+  const scheduledRunMode = env.WORKER_SCHEDULED_RUN_MODE ?? "demo";
+  if (scheduledRunMode !== "demo" && scheduledRunMode !== "live")
+    throw new Error("WORKER_SCHEDULED_RUN_MODE 必须为 demo 或 live");
   return {
     databaseUrl: connectionUrl(env, "DATABASE_URL", ["postgresql:", "postgres:"]),
     redisUrl: connectionUrl(env, "REDIS_URL", ["redis:", "rediss:"]),
@@ -44,5 +50,8 @@ export function readWorkerConfig(env: NodeJS.ProcessEnv = process.env): WorkerCo
     leaseSeconds: integerSetting(env, "WORKER_LEASE_SECONDS", 30, 3600),
     runLeaseSeconds: integerSetting(env, "WORKER_RUN_LEASE_SECONDS", 30, 3600),
     runConcurrency: integerSetting(env, "WORKER_RUN_CONCURRENCY", 2, 32),
+    schedulerIntervalMs: integerSetting(env, "WORKER_SCHEDULER_INTERVAL_MS", 30_000, 300_000),
+    schedulerConcurrency: integerSetting(env, "WORKER_SCHEDULER_CONCURRENCY", 2, 8),
+    scheduledRunMode,
   };
 }

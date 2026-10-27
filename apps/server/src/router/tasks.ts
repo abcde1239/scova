@@ -99,5 +99,38 @@ export function createTaskPlugin(services: ApiServices) {
         description:
           "使用 If-Match 乐观锁保存不可变配置版本；标题、计划、展示格式和提醒修改不会重置比较范围，语义范围变化会明确提示新基线。",
       },
+    })
+    .post("/tasks/:taskId/pause", handlers.pause, {
+      headers: OptionalRevisionHeadersSchema,
+      response: { 200: TaskDetailResponseSchema, ...errors, 428: ApiErrorSchema },
+      detail: {
+        operationId: "pauseTask",
+        tags: ["任务"],
+        summary: "暂停周期计划",
+        description:
+          "需要会话、CSRF 和 If-Match。停止后续周期触发，当前执行继续；用户仍可显式手动运行。",
+      },
+    })
+    .post("/tasks/:taskId/resume", handlers.resume, {
+      headers: OptionalRevisionHeadersSchema,
+      response: { 200: TaskDetailResponseSchema, ...errors, 428: ApiErrorSchema },
+      detail: {
+        operationId: "resumeTask",
+        tags: ["任务"],
+        summary: "恢复周期计划",
+        description:
+          "需要会话、CSRF 和 If-Match。使用加锁后的数据库时间计算严格未来的计划，不补跑暂停期间的历史时点。",
+      },
+    })
+    .post("/tasks/:taskId/archive", handlers.archive, {
+      headers: OptionalRevisionHeadersSchema,
+      response: { 200: TaskDetailResponseSchema, ...errors, 428: ApiErrorSchema },
+      detail: {
+        operationId: "archiveTask",
+        tags: ["任务"],
+        summary: "归档查阅任务",
+        description:
+          "需要会话、CSRF 和 If-Match。在同一事务停止周期计划并对活动执行请求取消，保留配置版本、报告和历史；归档后拒绝新执行。",
+      },
     });
 }

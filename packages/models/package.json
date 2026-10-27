@@ -12,7 +12,8 @@
     "check": "vp check"
   },
   "dependencies": {
-    "@prisma/client": "catalog:"
+    "@prisma/client": "catalog:",
+    "@scova/contracts": "workspace:*"
   },
   "devDependencies": {
     "prisma": "catalog:",

@@ -1,6 +1,14 @@
 import { createRequire } from "node:module";
 import { createDatabaseClient, type PrismaClient } from "@scova/models";
 import type { Redis } from "ioredis";
+import type { ModelProvider } from "@scova/connectors";
+import {
+  createTaskDraftModel,
+  createTaskDraftPolicy,
+  type TaskDraftPolicy,
+} from "@/app/task-drafts.ts";
+import { createStreamRegistry, type ApiStreamRegistry } from "@/app/streams.ts";
+import { DEFAULT_SSE_POLICY, type SsePolicy } from "@/utils/sse.ts";
 
 const require = createRequire(import.meta.url);
 
@@ -21,12 +29,23 @@ export interface ApiServices {
   registrationEnabled: boolean;
   sessionTtlSeconds: number;
   rateLimit: AuthRateLimitConfig;
+  taskDraftPolicy: TaskDraftPolicy;
+  reportQuestionPolicy: TaskDraftPolicy;
+  reportQuestionModel(): ModelProvider | null;
+  taskDraftModel(): ModelProvider | null;
+  streams: ApiStreamRegistry;
+  sse: SsePolicy;
   clock(): Date;
   close(): Promise<void>;
 }
 
-export type ApiServiceOverrides = Partial<Omit<ApiServices, "rateLimit">> & {
+export type ApiServiceOverrides = Partial<
+  Omit<ApiServices, "rateLimit" | "sse" | "taskDraftPolicy" | "reportQuestionPolicy">
+> & {
   rateLimit?: Partial<AuthRateLimitConfig>;
+  sse?: Partial<SsePolicy>;
+  taskDraftPolicy?: Partial<TaskDraftPolicy>;
+  reportQuestionPolicy?: Partial<TaskDraftPolicy>;
 };
 
 function positiveSetting(name: string, fallback: number): number {
@@ -38,6 +57,10 @@ function positiveSetting(name: string, fallback: number): number {
 export function createDefaultServices(overrides: ApiServiceOverrides = {}): ApiServices {
   let database: PrismaClient | undefined;
   let cache: Redis | undefined;
+  let draftModel: ModelProvider | null | undefined;
+  let questionModel: ModelProvider | null | undefined;
+  const streams = overrides.streams ?? createStreamRegistry();
+  let closing: Promise<void> | undefined;
   const origin = new URL(overrides.origin ?? process.env.APP_ORIGIN ?? "http://localhost:5173")
     .origin;
   const rateLimit: AuthRateLimitConfig = {
@@ -60,6 +83,25 @@ export function createDefaultServices(overrides: ApiServiceOverrides = {}): ApiS
     sessionTtlSeconds:
       overrides.sessionTtlSeconds ?? positiveSetting("SESSION_TTL_SECONDS", 7 * 24 * 60 * 60),
     rateLimit,
+    taskDraftPolicy: createTaskDraftPolicy(overrides.taskDraftPolicy),
+    reportQuestionPolicy: createTaskDraftPolicy({
+      keyPrefix: "scova:report-questions:",
+      ...overrides.reportQuestionPolicy,
+    }),
+    reportQuestionModel:
+      overrides.reportQuestionModel ??
+      (() => {
+        if (questionModel === undefined) questionModel = createTaskDraftModel();
+        return questionModel;
+      }),
+    taskDraftModel:
+      overrides.taskDraftModel ??
+      (() => {
+        if (draftModel === undefined) draftModel = createTaskDraftModel();
+        return draftModel;
+      }),
+    streams,
+    sse: { ...DEFAULT_SSE_POLICY, ...overrides.sse },
     clock: overrides.clock ?? (() => new Date()),
     db:
       overrides.db ??
@@ -80,6 +122,7 @@ export function createDefaultServices(overrides: ApiServiceOverrides = {}): ApiS
             lazyConnect: true,
             maxRetriesPerRequest: 1,
             connectTimeout: 5000,
+            commandTimeout: 5000,
             enableOfflineQueue: false,
           });
           // 错误由发起请求的认证服务转为脱敏 503；避免默认日志输出连接凭据。
@@ -87,9 +130,13 @@ export function createDefaultServices(overrides: ApiServiceOverrides = {}): ApiS
         }
         return cache;
       }),
-    close:
-      overrides.close ??
-      (async () => {
+    close: () =>
+      (closing ??= (async () => {
+        await streams.stop();
+        if (overrides.close) {
+          await overrides.close();
+          return;
+        }
         const tasks: Promise<unknown>[] = [];
         if (database) tasks.push(database.$disconnect());
         if (cache) {
@@ -97,6 +144,6 @@ export function createDefaultServices(overrides: ApiServiceOverrides = {}): ApiS
           else tasks.push(cache.quit());
         }
         await Promise.all(tasks);
-      }),
+      })()),
   };
 }

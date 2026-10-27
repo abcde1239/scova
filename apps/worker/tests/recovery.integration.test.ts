@@ -50,6 +50,17 @@ async function takeover(runId: string) {
   const current = await claim(runId, "recovery-B");
   return { current, repo: createAgentRepository(fixture.db, current.token) };
 }
+/** Preserve the real ordering: a successful ToolCall commits before the fixed deadline elapses. */
+async function expireAfterEvidence(runId: string, expireLease = false): Promise<Date> {
+  const [row] = await fixture.db.$queryRaw<{ deadlineAt: Date }[]>`
+    UPDATE runs
+    SET deadline_at = clock_timestamp(),
+        lease_expires_at = CASE WHEN ${expireLease} THEN clock_timestamp() - interval '1 second' ELSE lease_expires_at END
+    WHERE id = ${runId}::uuid
+    RETURNING deadline_at AS "deadlineAt"
+  `;
+  return row!.deadlineAt;
+}
 function sessionFixture(
   seed: Awaited<ReturnType<typeof setup>>,
   bundle: ConnectorBundle,
@@ -271,6 +282,9 @@ describe("Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）",
     });
     await expect(forged.reserve(search("forged"))).rejects.toMatchObject({ code: "LEASE_LOST" });
     await expect(forged.readAuthorizedCheckpoint()).rejects.toMatchObject({ code: "LEASE_LOST" });
+    await expect(forged.comparison({ allowDeadline: true })).rejects.toMatchObject({
+      code: "LEASE_LOST",
+    });
     await expect(forged.readPages({ allowDeadline: true })).rejects.toMatchObject({
       code: "LEASE_LOST",
     });
@@ -442,19 +456,27 @@ describe("Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）",
       const storedPage = { kind: "read_page", text: "saved evidence" };
       await seed.repo.settle({ toolCallId: page.toolCallId, output: storedPage });
       const pending = await seed.repo.reserve(search("pending"));
-      await fixture.db.run.update({
-        where: { id: seed.run.id },
-        data:
-          reason === "cancel"
-            ? { cancelRequestedAt: new Date(), status: "cancel_requested" }
-            : { deadlineAt: new Date(0) },
-      });
+      if (reason === "cancel")
+        await fixture.db.run.update({
+          where: { id: seed.run.id },
+          data: { cancelRequestedAt: new Date(), status: "cancel_requested" },
+        });
+      else await expireAfterEvidence(seed.run.id);
       const code = reason === "cancel" ? "RUN_CANCELED" : "DEADLINE_EXCEEDED";
       await expect(seed.repo.reserve(search("forbidden"))).rejects.toMatchObject({ code });
       await expect(
         seed.repo.settle({ toolCallId: pending.toolCallId, output: { late: true } }),
       ).rejects.toMatchObject({ code });
       await expect(seed.repo.readPages()).rejects.toMatchObject({ code });
+      await expect(seed.repo.comparison()).rejects.toMatchObject({ code });
+      if (reason === "deadline") {
+        expect(await seed.repo.comparison({ allowDeadline: true })).toMatchObject({
+          comparisonScopeHash: seed.run.comparisonScopeHash,
+          feedback: { userId: seed.user.id, taskId: seed.task.id, items: [] },
+        });
+      } else {
+        await expect(seed.repo.comparison({ allowDeadline: true })).rejects.toMatchObject({ code });
+      }
       if (reason === "deadline")
         expect(await seed.repo.readPages({ allowDeadline: true })).toEqual([storedPage]);
       else
@@ -493,13 +515,12 @@ describe("Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）",
       });
       try {
         await session.tools.read("saved", DEMO_URL);
-        await fixture.db.run.update({
-          where: { id: seed.run.id },
-          data:
-            reason === "cancel"
-              ? { cancelRequestedAt: new Date(), status: "cancel_requested" }
-              : { deadlineAt: new Date(0) },
-        });
+        if (reason === "cancel")
+          await fixture.db.run.update({
+            where: { id: seed.run.id },
+            data: { cancelRequestedAt: new Date(), status: "cancel_requested" },
+          });
+        else await expireAfterEvidence(seed.run.id);
         const code = reason === "cancel" ? "RUN_CANCELED" : "DEADLINE_EXCEEDED";
         await expect(session.tools.search("forbidden-search", "query")).rejects.toMatchObject({
           code,
@@ -882,10 +903,7 @@ describe("Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）",
         url: "https://example.com/reference",
       };
       await seed.repo.settle({ toolCallId: saved.toolCallId, output: page });
-      await fixture.db.run.update({
-        where: { id: seed.run.id },
-        data: { leaseExpiresAt: new Date(0), deadlineAt: new Date(0) },
-      });
+      const deadlineAt = await expireAfterEvidence(seed.run.id, true);
       let executeCalls = 0;
       let deadlineCalls = 0;
       let delivered: AgentCandidate | undefined;
@@ -941,7 +959,7 @@ describe("Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）",
         ).toMatchObject({
           leaseEpoch: seed.current.token.leaseEpoch + 1,
           recoveryCount: 1,
-          deadlineAt: new Date(0),
+          deadlineAt,
           status: cancel ? "canceled" : "failed",
           failureCode: cancel ? null : "DEADLINE_EXCEEDED",
           usageJson: { pages: 1 },

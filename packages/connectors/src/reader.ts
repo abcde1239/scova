@@ -5,6 +5,7 @@ import { createSafeHttpClient, normalizeUrl, positiveLimit, withDeadline } from 
 import type { SafeHttpClient } from "./http.ts";
 import { ConnectorError } from "./types.ts";
 import type { PageReader } from "./types.ts";
+import { extractPublication } from "./dates.ts";
 
 export const EXTRACTION_VERSION = "readability-0.6.0/scova-text-v1";
 
@@ -68,6 +69,7 @@ export function createPageReader(
               contentMeta?.getAttribute("content")?.match(/charset\s*=\s*["']?([^;\s"']+)/i)?.[1];
             if (declared && !/^utf-?8$/i.test(declared))
               throw new ConnectorError("invalid_response", "网页声明的字符编码不支持");
+            const publication = extractPublication(document);
             document
               .querySelectorAll("script,style,iframe,object,embed,form,noscript")
               .forEach((node) => node.remove());
@@ -90,6 +92,7 @@ export function createPageReader(
               extractionVersion: EXTRACTION_VERSION,
               collectedAt: new Date().toISOString(),
               truncated: fullText.length > maxText,
+              publication,
               untrusted: true as const,
             };
           } finally {

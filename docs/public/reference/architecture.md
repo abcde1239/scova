@@ -1,6 +1,6 @@
 # Scova 系统架构
 
-状态：持续演进的首版设计。已实现账号/任务/执行基础 API、Run 租约恢复、搜索阅读适配器与有预算的持久化 Agent。研究候选可恢复；报告交付、连续运行差异和完整界面仍按计划实现。下文也包含待验收的目标行为。
+状态：持续演进的首版设计。已实现账号/任务/执行基础 API、Run 租约恢复、搜索阅读适配器、有预算的持久化 Agent、证据报告交付与报告/收件箱 API、冻结基线的连续比较、时区调度和任务生命周期。后端继续完善，前端暂缓。下文也包含待验收的目标行为。
 
 ## 1. 产品闭环与边界
 
@@ -44,7 +44,7 @@ API 不负责执行长任务，worker 不提供账号管理入口；Agent 没有
 
 Server 源码分层为 `main → app → router → handler → service → repo`：app 装配 Elysia、Node 适配与生命周期，router 声明路由和中文 OpenAPI，handler 处理 HTTP/会话/响应，service 编排业务规则及事务，repo 完成数据库与 Redis 访问。utils 放纯工具。Task CAS 与 Run/事件/Outbox 仍在同一事务中完成。
 
-Worker 使用 `main/node → app → handler → service → repo + queue`：app 管配置、资源和串行轮询，handler 接收后台批次和 Run 消息，service 编排 Outbox、Run 和 Agent，repo 执行 PostgreSQL 条件写，queue 适配 BullMQ。已实现 Run 消费、续期、有限接管、取消及持久化研究候选；报告交付未接入时明确失败。停止先阻止新领取、中断执行并等待在途领域写/checkpoint，再关闭 consumer、队列、Redis、saver 和数据库。
+Worker 使用 `main/node → app → handler → service → repo + queue`：app 管配置、资源和串行轮询，handler 接收后台批次和 Run 消息，service 编排 Outbox、Run、Agent 与交付，repo 执行 PostgreSQL 条件写，queue 适配 BullMQ。已实现 Run 消费、续期、有限接管、取消及持久化研究候选；交付服务复核已提升 checkpoint、成功工具正文与逐字引用后，原子保存报告、收件箱和终态。停止先阻止新领取、中断执行并等待在途领域写/checkpoint/交付，再关闭 consumer、队列、Redis、saver 和数据库。
 
 Outbox 每次领取的 `attempts + leaseExpiresAt` 作为本次持有凭据，领取和确认/退避均使用 CAS。过期持有者不能覆盖接管后的状态；发送成功但确认失败保留租约，到期后用同一 jobId 重投。这一边界保证至少一次传递，后续业务执行仍须幂等。
 
@@ -52,7 +52,7 @@ Run 另有独立租约与递增 epoch。统一 `withRunFence` 门在 Run 行锁�
 
 所有 app/package 均以 `src` 保存源码，并配置 `@/* → ./src/*`。应用内使用别名，跨包引用包名；直接导出源码的共享包内部保留相对引用，避免消费方 TypeScript/Bun 对同名别名的解析冲突。Vite/Vitest 使用原生 tsconfig paths 解析，Node.js 启动入口由 `vpx` 处理。
 
-M1 已将前端迁至 `apps/web`，建立 API/worker 与三个共享包的最小入口，保留 utils 有效模板测试。业务模块仍按各自 Issue 实现；新增真实测试时同步 Vitest 与 harness 覆盖声明，不将类型/常量占位验证计为业务覆盖。Bun 为主运行时，Node.js 入口通过 Elysia 官方适配器保持兼容。
+M1 已将前端迁至 `apps/web`，建立 API/worker 与三个共享包的最小入口，保留 utils 有效模板测试。业务模块仍按各自 Issue 实现；新增真实测试时同步 Vitest 与 harness 覆盖声明，不将类型/常量占位验证计为业务覆盖。Bun 为主运行时；Bun/Node.js 的 API 均使用 Elysia 官方 Node Web 适配器与显式 `srvx/node` HTTP 服务，通过 `node:http` 的 write/drain 传播 SSE socket 背压。
 
 依赖由 Vite+ 1.4.0 支持的 `pnpm-workspace.yaml` 管理；使用 `workspace:*` 声明包关系。`vp run <script>` 执行包脚本，`vp check` / `vp test` 使用内置工具；Bun 运行 API/worker，不能用另一份 Bun lockfile 分裂依赖来源。
 
@@ -60,7 +60,7 @@ M1 已将前端迁至 `apps/web`，建立 API/worker 与三个共享包的最小
 
 ### 创建任务与固定配置
 
-1. 自然语言通过模型适配器解析为结构化草稿；未配置模型时进入清晰标识的演示/手工流程。
+1. 自然语言通过模型适配器解析为未保存的结构化草稿；未配置模型或解析失败时返回明确的手工草稿并保留原文。解析独立限流与计量，最多一次结构修复，不占用 Run 的预算；草稿接口不会创建任务或周期触发。
 2. 用户编辑并确认，API 在事务中创建 Task 与 TaskVersion，校验频率、IANA 时区、预算和 URL。
 3. 编辑使用 `If-Match`/revision 乐观锁；保存新版本，不覆盖旧版本。入队和运行执行固定 `taskVersionId`。
 4. 计算 `comparisonScopeHash`：目标、关注/排除项、来源范围、时间窗口规则、搜索/提取算法版本和真实/演示模式参与；标题、展示形式、调度、提醒不参与。相同滚动窗口规则不因日期移动而每天重置。反馈保留独立快照，不自动清空基线。
@@ -92,13 +92,13 @@ sequenceDiagram
 
 Outbox 防止“数据库已有执行但队列丢失”。发送后宕机可能重复入队，数据库仍是事实源：已终结执行直接 ACK；同一任务的活动执行受部分唯一索引保护。BullMQ jobId 使用 UUID 前缀，不含冒号；队列去重只作优化，不替代数据库幂等。
 
-worker 每 30 秒扫描到期任务，以 `FOR UPDATE SKIP LOCKED` 领取到期项；更新 `nextRunAt`、创建执行/跳过记录和 outbox 在同一事务内完成。默认先保持低并发，worker 全局并发 2，可通过配置调整；账号级任务数、运行次数和排队量有上限。
+worker 默认每 30 秒扫描到期任务，以 `FOR NO KEY UPDATE SKIP LOCKED` 领取到期项；更新 `nextRunAt`、创建 Occurrence、执行/跳过记录、首事件和 outbox 在同一事务内完成。Task 非键行锁兼容交付写入 Baseline 时的外键检查，避免归档 Task→Run 与交付 Run→Task 锁环。调度和 Run 消费默认并发各为 2，可分别配置；周期模式默认 `demo`，部署者需显式选择 `live`。
 
-频率为手动/每日/每周，持久化当地时间、IANA timezone 和 UTC `nextRunAt`。采用支持显式 DST 消歧的时间库（M1 验证后锁版本），不存在的当地时刻顺延到下一有效时刻，重复时刻只选择较早一次。停机后最多补最近一次时点，更早记录为错过；活动执行时到期记为跳过，避免积压。修改计划在锁内重算 nextRunAt 并增加 scheduleRevision。
+频率为手动/每日/每周，持久化当地时间、IANA timezone 和 UTC `nextRunAt`。共享 Temporal 日历计算将不存在的当地时刻顺延到首个有效时刻，重复时刻只选择较早一次；下一次从原始当地时分重建。停机后最多补最近一次时点，更早记录为 `missedCount`；活动执行时记 `skipped_overlap`。修改计划或时区在锁内重算 nextRunAt 并增加 scheduleRevision，普通标题等编辑保留原到期时点。暂停清空下一时点，恢复只安排未来时点，归档请求取消已有活动执行。
 
 ### 交付与后续对比
 
-首次完整执行创建基线；后续执行只读取同一 task、比较范围和服务模式下最近一次完整交付。抓取证据、引用和变化先作为本次执行数据保存，最终以一个事务提交不可变报告、差异、收件箱、提醒、结束事件和执行终态；完整执行同时更新基线指针。
+首次完整执行创建基线；后续执行首次领取时固定同一 task、比较范围和服务模式下最近一次完整交付，包括没有基线时的 null。恢复不重新选择。抓取证据、引用和变化先作为本次执行数据保存，最终以一个事务提交不可变报告、差异、收件箱、站内通知、结束事件和执行终态；完整执行同时更新基线指针。通知按固定版本偏好生成，partial/failed 独立为运行问题，失败无报告时仍与终态同事务。
 
 部分执行可以交付 `partial` 报告，但不更新基线。无可用证据/结构校验失败为 `failed`，不创建伪成果。取消与交付竞争时均锁 Run 行：先提交的决定终态，取消已成功执行返回“已经完成”。运行中的取消先写 cancel_requested，并在每次工具调用前、返回后和交付前检查。
 
@@ -169,6 +169,10 @@ URL 规范化移除 fragment、默认端口和明确跟踪参数，保留语义�
 
 同 URL 的事实变化优先于跨 URL 指纹去重，避免新页面恰好和其他页面内容相同时漏掉截止日期变化。`ChangeRecord` 保存分类和 old/new snapshot，不删除旧证据。
 
+比较节点通过同一预算账本调用模型提取稳定 subject/predicate/value、目标相关性与重要性。value 必须是已采集 quote 的逐字子串；系统验证原文支撑、冻结基线授权和分类规则，相关性与重要性仍是模型语义判断。版本化事实清单随报告保存，不复制全文。空清单、无法对齐事实键、未知重要性和比较输入截取都保留缺口；正文指纹改变本身不产生重要变化。独立来源共享某个值不构成转载，跨 URL 匹配需要完整采集正文匹配或原文明确来源关联。
+
+滚动窗口用于发现新资料；已冻结基线的来源会优先重读作持续监测，其首次发布时间不因移出新窗口而阻止比较。新来源仍核验声明日期，旧来源抓取失败或正文截断仍保留缺口。报告区分发布时间与本次观测，不推测精确修改时间。旧报告没有可用事实清单时不能推导无变化；比较策略版本参与有效范围，新策略使用独立基线。
+
 完整性记录目标子问题覆盖、已执行查询、必查来源、搜索/读取失败、预算/时间耗尽和冲突未核验。模型可建议补查，最终 `complete` 判定由系统校验覆盖条件；complete 仅表示完成本次计划，不保证互联网穷尽。`no_important_change` 必须同时满足完整查阅和零已确认重要变化；`partial`/`failed` 使用独立状态，不能沿用该文案。
 
 演示模式由执行开始时固化：缺少搜索或模型配置时使用全演示管线，并在任务、执行、报告中显示原因。mode 参与比较范围，演示基线不会与真实资料合并。已配置供应商运行中报错直接走错误/不完整流程，禁止静默回退。
@@ -192,6 +196,8 @@ REST 采用 `/api/v1`，标准错误包含 `code/message/requestId/fieldErrors`�
 
 RunEvent 按 `(runId, seq)` 严格递增，包含 `schemaVersion/eventId/type/occurredAt/payload`。API 首先重放数据库事件，再持续拉取更大 seq，避免切换实时流的缺口；首版直接短周期查询 PostgreSQL，Redis pub/sub 日后可作唤醒优化。SSE 每 15 秒心跳，重连按事件 ID 去重；慢客户端断开后可重连。游标越过保留范围时返回 reset 信号并加载 Run 快照，而不是永久等待。
 
+SSE 每页最多 100 条，按 HTTP 流的读取需求逐帧输出，并限制单帧 64 KiB；没有继续读取的连接在 30 秒后断开。每页在短 Repeatable Read 事务内复核会话、owner、终态和事件上界，事务不会跨网络等待。服务停止先中止流并等待在途数据库查询结束，再关闭 HTTP 与数据库。当前实现检测已保留事件的序列边界；维护清理需保留每个 Run 的最新事件，避免现有 `MAX(seq)+1` 分配器重用历史序号。
+
 事件类型包括 run.queued/started/recovering、step.started/completed、tool.started/completed/failed、budget.updated、coverage.updated、report.published、run.completed/failed/canceled。持久化业务事件，不把逐 token 流写入事件表；不得暴露密钥、完整网页或敏感提示词。
 
 Vue Query 管理服务器数据与缓存；Pinia 只管理登录态摘要、布局与未保存草稿等客户端状态；避免同一任务列表同时存两份事实源。HTTP 请求统一经 requestlane 的 Fetch transport、defineEndpoint 和运行时校验，默认关闭其缓存，由 Vue Query 单独拥有服务器缓存。保留原生 HTTP 状态和标准错误体，不默认启用 sendsCodec。会话采用同源 Cookie，不能迁移成参考项目的 localStorage JWT。
@@ -213,3 +219,5 @@ Compose 最终包括 web 反向代理、api、worker、postgres、redis；健康
 验证顺序：纯逻辑 Vitest → PostgreSQL/Redis 集成与故障注入 → Playwright 主流程 → opt-in 真实供应商烟测。确定性演示数据验证重复/新增/变化；真实烟测单独报告凭据、服务和费用条件。首版优先 PostgreSQL 全文检索（中文效果先实测），再根据结果决定分词或 pgvector。
 
 相关文档：[数据模型](data-model.md)、[分期计划](../guides/delivery-plan.md)、[两次执行场景](../examples/two-run-scenarios.md)、[工程验证入口](harness.md)。
+
+资料库由 Server 四层提供 owner 隔离的收藏、笔记、历史与检索，不调用搜索供应商。PostgreSQL `simple` GIN 与有界字面检索服务中英文；过期正文在查询时隐藏，物理清理入口仅供内部维护。完整正文的工具结果与图 checkpoint 副本由部署保留策略另行处理。

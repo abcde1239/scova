@@ -115,16 +115,19 @@ describe("Worker Bun/Node 真实进程", () => {
       await waitUntil(
         async () =>
           (await fixture.db.run.findUniqueOrThrow({ where: { id: item.aggregateId } })).status ===
-          "failed",
+          "partial",
         process,
       );
       expect(
         await fixture.db.run.findUniqueOrThrow({ where: { id: item.aggregateId } }),
       ).toMatchObject({
-        status: "failed",
-        failureCode: "AGENT_DELIVERY_NOT_CONFIGURED",
+        status: "partial",
+        failureCode: null,
       });
-      expect(await fixture.db.report.count({ where: { runId: item.aggregateId } })).toBe(0);
+      expect(await fixture.db.report.count({ where: { runId: item.aggregateId } })).toBe(1);
+      expect(
+        await fixture.db.inboxItem.count({ where: { report: { runId: item.aggregateId } } }),
+      ).toBe(1);
       process.child.send("scova:shutdown");
       await ended(process);
       expect(process.exit?.code).toBe(0);

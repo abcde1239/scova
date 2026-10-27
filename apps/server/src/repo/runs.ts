@@ -1,4 +1,4 @@
-import { Prisma } from "@scova/models";
+import { Prisma, captureFeedbackSnapshot } from "@scova/models";
 import type { ApiServices } from "@/app/context.ts";
 import { createTaskStore } from "@/repo/tasks.ts";
 
@@ -6,15 +6,41 @@ import { createTaskStore } from "@/repo/tasks.ts";
 function createRunStore(database: Prisma.TransactionClient) {
   const tasks = createTaskStore(database);
   return {
+    feedbackSnapshot(userId: string, taskId: string) {
+      return captureFeedbackSnapshot(database, userId, taskId);
+    },
     lockTask(taskId: string, userId: string) {
       return database.$queryRaw<{ id: string }[]>`
-        SELECT id FROM tasks WHERE id = ${taskId}::uuid AND user_id = ${userId}::uuid FOR UPDATE
+        SELECT id FROM tasks WHERE id = ${taskId}::uuid AND user_id = ${userId}::uuid FOR NO KEY UPDATE
       `;
     },
     lockRun(runId: string, userId: string) {
       return database.$queryRaw<{ id: string }[]>`
         SELECT id FROM runs WHERE id = ${runId}::uuid AND user_id = ${userId}::uuid FOR UPDATE
       `;
+    },
+    async listRuns(userId: string, taskId: string, take: number, cursorId?: string) {
+      const boundary = cursorId
+        ? Prisma.sql`AND (queued_at,id)<(SELECT queued_at,id FROM runs WHERE user_id=${userId}::uuid AND task_id=${taskId}::uuid AND id=${cursorId}::uuid)`
+        : Prisma.empty;
+      const ids = await database.$queryRaw<
+        { id: string }[]
+      >`SELECT id FROM runs WHERE user_id=${userId}::uuid AND task_id=${taskId}::uuid ${boundary} ORDER BY queued_at DESC,id DESC LIMIT ${take}`;
+      return database.run.findMany({
+        where: { userId, taskId, id: { in: ids.map((row) => row.id) } },
+        orderBy: [{ queuedAt: "desc" }, { id: "desc" }],
+      });
+    },
+    findQuestion(id: string, userId: string, reportRunId: string) {
+      return database.reportQuestion.findFirst({
+        where: { id, userId, report: { runId: reportRunId, userId } },
+      });
+    },
+    linkQuestion(id: string, userId: string, runId: string) {
+      return database.reportQuestion.updateMany({
+        where: { id, userId, followupRunId: null },
+        data: { followupRunId: runId },
+      });
     },
     findActiveRun(taskId: string, userId: string) {
       return database.run.findFirst({
@@ -62,15 +88,6 @@ function createRunStore(database: Prisma.TransactionClient) {
         data: { status: "cancel_requested", cancelRequestedAt: requestedAt },
       });
     },
-    findEvent(eventId: string, runId: string, userId: string) {
-      return database.runEvent.findFirst({ where: { id: eventId, runId, userId } });
-    },
-    listEvents(runId: string, userId: string, after: number) {
-      return database.runEvent.findMany({
-        where: { runId, userId, seq: { gt: after } },
-        orderBy: { seq: "asc" },
-      });
-    },
   };
 }
 
@@ -78,16 +95,16 @@ export type RunStore = ReturnType<typeof createRunStore>;
 
 export function createRunRepo(services: Pick<ApiServices, "db">) {
   return {
+    findTask: (...args: Parameters<RunStore["findTask"]>) =>
+      createRunStore(services.db()).findTask(...args),
+    listRuns: (...args: Parameters<RunStore["listRuns"]>) =>
+      createRunStore(services.db()).listRuns(...args),
     findRun: (...args: Parameters<RunStore["findRun"]>) =>
       createRunStore(services.db()).findRun(...args),
     requireRun: (...args: Parameters<RunStore["requireRun"]>) =>
       createRunStore(services.db()).requireRun(...args),
     findIdempotency: (...args: Parameters<RunStore["findIdempotency"]>) =>
       createRunStore(services.db()).findIdempotency(...args),
-    findEvent: (...args: Parameters<RunStore["findEvent"]>) =>
-      createRunStore(services.db()).findEvent(...args),
-    listEvents: (...args: Parameters<RunStore["listEvents"]>) =>
-      createRunStore(services.db()).listEvents(...args),
     transaction<T>(work: (store: RunStore) => Promise<T>): Promise<T> {
       return services.db().$transaction((database) => work(createRunStore(database)));
     },

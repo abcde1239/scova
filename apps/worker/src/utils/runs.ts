@@ -40,4 +40,6 @@ export const RUN_FAILURE_MESSAGES: Readonly<Record<string, string>> = {
   INVALID_RUN_CONFIGURATION: "执行配置快照无效，未启动外部调用",
   AGENT_CONFIGURATION_INVALID: "真实研究服务配置不完整或模式不符，未切换演示服务",
   AGENT_DELIVERY_NOT_CONFIGURED: "研究候选已保存，但报告交付服务尚未接入",
+  NO_EVIDENCE: "没有可验证的已采集正文，未生成报告",
+  INVALID_DELIVERY_EVIDENCE: "来源、引用或候选授权校验失败，未生成报告",
 };

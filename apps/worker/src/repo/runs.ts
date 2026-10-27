@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { createTerminalNotifications } from "@/repo/notifications.ts";
 import {
   BudgetSchema,
   RunEventSchema,
@@ -138,6 +139,7 @@ async function finishLocked(tx: Prisma.TransactionClient, run: Run, now: Date, c
   const canceled = !!run.cancelRequestedAt || run.status === "cancel_requested";
   const safeCode = Object.hasOwn(RUN_FAILURE_MESSAGES, code) ? code : "EXECUTOR_FAILED";
   const status = canceled ? "canceled" : "failed";
+  if (!canceled) await createTerminalNotifications(tx, run, { status: "failed" });
   // A terminal Run cannot later settle an in-flight supplier call; preserve its reservation as unknown.
   await tx.toolCall.updateMany({
     where: { userId: run.userId, runId: run.id, status: { in: ["reserved", "running"] } },
@@ -199,7 +201,7 @@ export function createRunRepository(db: PrismaClient): RunRepository {
           const version = await tx.taskVersion.findUnique({ where: { id: run.taskVersionId } });
           if (!version || version.userId !== run.userId || version.taskId !== run.taskId)
             throw new Error("执行版本不存在");
-          config = parseContract(TaskConfigSchema, version.configJson);
+          config = parseContract(TaskConfigSchema, run.followupConfigJson ?? version.configJson);
           budget = parseContract(BudgetSchema, run.budgetJson);
           usage = parseContract(UsageSchema, run.usageJson);
         } catch {
@@ -207,6 +209,33 @@ export function createRunRepository(db: PrismaClient): RunRepository {
           return { kind: "ignored" };
         }
         const startedAt = run.startedAt ?? now;
+        // Freeze once, including null. Recovery must never silently choose a newer baseline.
+        let baselineRunId = run.baselineRunId;
+        if (run.startedAt === null) {
+          const baseline = await tx.baseline.findUnique({
+            where: {
+              userId_taskId_comparisonScopeHash: {
+                userId: run.userId,
+                taskId: run.taskId,
+                comparisonScopeHash: run.comparisonScopeHash,
+              },
+            },
+            include: { completeRun: { include: { reports: true } } },
+          });
+          const prior = baseline?.completeRun;
+          baselineRunId =
+            prior &&
+            prior.id !== run.id &&
+            prior.userId === run.userId &&
+            prior.taskId === run.taskId &&
+            prior.comparisonScopeHash === run.comparisonScopeHash &&
+            prior.mode === run.mode &&
+            prior.status === "succeeded" &&
+            (prior.coverageJson as { completeness?: string } | null)?.completeness === "complete" &&
+            prior.reports.some((report) => report.completeness === "complete")
+              ? prior.id
+              : null;
+        }
         const deadlineAt =
           run.deadlineAt ?? new Date(startedAt.getTime() + budget.maxDurationSeconds * 1000);
         if (
@@ -222,6 +251,7 @@ export function createRunRepository(db: PrismaClient): RunRepository {
             status: "running",
             startedAt,
             deadlineAt,
+            baselineRunId,
             leaseOwner,
             leaseEpoch: { increment: 1 },
             leaseExpiresAt: leaseExpiry(now, leaseMs),

@@ -5,12 +5,53 @@ import {
   ModeSchema,
   NonEmptyTextSchema,
   OutputFormatSchema,
+  PageQuerySchema,
   RunOutcomeSchema,
   UuidSchema,
   refineSchema,
   describeProperties,
+  pageSchema,
 } from "./common.ts";
 import { CoverageSchema } from "./runs.ts";
+import { FeedbackEffectsSchema } from "./feedback.ts";
+
+export const EvidenceSelectorSchema = refineSchema(
+  Type.Object(
+    {
+      type: Type.Literal("text_offset"),
+      start: Type.Integer({
+        minimum: 0,
+        maximum: Number.MAX_SAFE_INTEGER,
+        description: "正文起始字符偏移，含该字符",
+      }),
+      end: Type.Integer({
+        minimum: 1,
+        maximum: Number.MAX_SAFE_INTEGER,
+        description: "正文结束字符偏移，不含该字符",
+      }),
+      extractorVersion: NonEmptyTextSchema,
+    },
+    { additionalProperties: false, description: "引用在采集正文中的字符范围" },
+  ),
+  "ScovaEvidenceSelector",
+  (value) => value.end > value.start,
+);
+
+export const EvidenceSnapshotSchema = Type.Object(
+  {
+    originalUrl: HttpUrlSchema,
+    fetchedUrl: HttpUrlSchema,
+    canonicalUrl: HttpUrlSchema,
+    contentHash: Type.String({ pattern: "^[a-f0-9]{64}$", description: "采集正文的 SHA-256 指纹" }),
+    extractorVersion: NonEmptyTextSchema,
+    publishedAt: Type.Union([InstantSchema, Type.Null()], {
+      description: "来源发布时间，未确认时为空",
+    }),
+    truncated: Type.Boolean({ description: "采集正文是否发生截断" }),
+    selector: EvidenceSelectorSchema,
+  },
+  { additionalProperties: false, description: "引用可追溯的来源快照元数据，不包含完整正文" },
+);
 
 export const EvidenceSchema = Type.Object(
   {
@@ -25,6 +66,7 @@ export const EvidenceSchema = Type.Object(
       description: "原文段落或字符位置的可解释定位，不执行页面选择器代码",
     }),
     observedAt: InstantSchema,
+    snapshot: Type.Optional(EvidenceSnapshotSchema),
   },
   { additionalProperties: false, description: "原始证据片段，来源权限和执行归属仍由领域服务校验" },
 );
@@ -125,6 +167,7 @@ const ReportObject = Type.Object(
       description: "至少一条可查证证据；没有证据时不能发布报告",
     }),
     changes: Type.Array(ChangeRecordSchema),
+    feedbackEffects: Type.Optional(FeedbackEffectsSchema),
     publishedAt: InstantSchema,
   },
   { additionalProperties: false, description: "四种展示形式共用的不可变报告 DTO" },
@@ -151,9 +194,74 @@ export const ReportSchema = refineSchema(ReportObject, "ScovaReport", (value) =>
     )
   );
 });
-for (const schema of [EvidenceSchema, ClaimSchema, ChangeRecordSchema, ReportSchema])
+
+export const ReportSummarySchema = Type.Object(
+  {
+    id: UuidSchema,
+    runId: UuidSchema,
+    taskId: UuidSchema,
+    taskVersionId: UuidSchema,
+    title: NonEmptyTextSchema,
+    summary: NonEmptyTextSchema,
+    format: OutputFormatSchema,
+    mode: ModeSchema,
+    outcome: RunOutcomeSchema,
+    coverage: CoverageSchema,
+    publishedAt: InstantSchema,
+  },
+  { additionalProperties: false, description: "报告历史摘要，保留模式和覆盖缺口" },
+);
+export const ReportListQuerySchema = Type.Object(
+  { ...PageQuerySchema.properties, taskId: Type.Optional(UuidSchema) },
+  { additionalProperties: false, description: "按任务筛选的报告历史分页参数" },
+);
+export const ReportListResponseSchema = pageSchema(ReportSummarySchema);
+
+export const InboxItemSchema = Type.Object(
+  {
+    id: UuidSchema,
+    reportId: UuidSchema,
+    readAt: Type.Union([InstantSchema, Type.Null()], {
+      description: "首次标为已读的时间，未读为空",
+    }),
+    createdAt: InstantSchema,
+    report: ReportSummarySchema,
+  },
+  { additionalProperties: false, description: "一次报告交付对应的站内收件箱条目" },
+);
+export const InboxListQuerySchema = Type.Object(
+  {
+    ...PageQuerySchema.properties,
+    unread: Type.Optional(
+      Type.Boolean({ description: "为真时只返回未读，为假时只返回已读；省略返回全部" }),
+    ),
+  },
+  { additionalProperties: false, description: "收件箱分页和已读状态筛选" },
+);
+export const InboxListResponseSchema = pageSchema(InboxItemSchema);
+export const InboxPatchInputSchema = Type.Object(
+  { read: Type.Boolean({ description: "标为已读或恢复未读" }) },
+  { additionalProperties: false, description: "修改当前账号收件箱条目的已读状态" },
+);
+
+for (const schema of [
+  EvidenceSelectorSchema,
+  EvidenceSnapshotSchema,
+  EvidenceSchema,
+  ClaimSchema,
+  ChangeRecordSchema,
+  ReportSchema,
+  ReportSummarySchema,
+  ReportListQuerySchema,
+  InboxItemSchema,
+  InboxListQuerySchema,
+  InboxPatchInputSchema,
+])
   describeProperties(schema);
 export type Evidence = Static<typeof EvidenceSchema>;
 export type Claim = Static<typeof ClaimSchema>;
 export type ChangeRecord = Static<typeof ChangeRecordSchema>;
 export type Report = Static<typeof ReportSchema>;
+export type ReportListQuery = Static<typeof ReportListQuerySchema>;
+export type InboxListQuery = Static<typeof InboxListQuerySchema>;
+export type InboxPatchInput = Static<typeof InboxPatchInputSchema>;

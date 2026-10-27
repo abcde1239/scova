@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
+import { readdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@scova/models";
@@ -199,9 +200,22 @@ describe("真实 PostgreSQL 业务模型与一致性约束", () => {
     const result = await sql.query(
       "SELECT migration_name, rolled_back_at, finished_at FROM _prisma_migrations",
     );
-    expect(result.rows).toHaveLength(1);
-    expect(result.rows[0]?.finished_at).toBeInstanceOf(Date);
-    expect(result.rows[0]?.rolled_back_at).toBeNull();
+    const migrations = readdirSync(
+      new URL("../../../packages/models/prisma/migrations/", import.meta.url),
+      { withFileTypes: true },
+    )
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort();
+    expect(
+      result.rows
+        .map((row) => row.migration_name)
+        .sort((left: string, right: string) => left.localeCompare(right)),
+    ).toEqual(migrations);
+    for (const row of result.rows) {
+      expect(row.finished_at).toBeInstanceOf(Date);
+      expect(row.rolled_back_at).toBeNull();
+    }
     const task = await prisma.task.findUniqueOrThrow({
       where: { id: first.task.id },
       include: { currentVersion: true },

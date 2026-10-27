@@ -15,3 +15,27 @@ vp run api:openapi:check
 根目录的 [swagger.json](../../../swagger.json) 是生成的 OpenAPI 3.1 文档，不手工编辑。请求和响应引用 `packages/contracts` 的运行时 schema；路由使用中文 summary、description、tags 和唯一 operationId，DTO 字段均有中文说明。新增接口必须同时声明请求、成功/失败响应及必要的 Cookie、CSRF、幂等和修订版本头。
 
 生成器校验中文说明、模型与 contracts 等价、引用可解析和 operationId 唯一。GitHub Actions 运行生成漂移检查、文档测试和 Bun/Node HTTP 启停测试；它不代替真实数据库与队列的业务集成测试。
+
+`POST /api/v1/task-drafts` 接收 `{ "inputText": "需求描述", "timezone": "Asia/Tokyo" }`，其中时区可省略。接口使用会话与 CSRF，返回原始描述、完整可编辑配置、`mode`、`requiresConfirmation: true`、警告和独立解析用量；不会保存任务或启用计划。无模型、解析失败或超时会明确返回手工草稿，限流和基础设施错误仍使用真实 HTTP 状态。确认并编辑后通过 `POST /api/v1/tasks` 保存配置。
+
+`POST /api/v1/tasks/:id/pause`、`resume`、`archive` 使用会话、CSRF 和 `If-Match` 修订控制，返回任务详情和新 `ETag`。暂停保留当前 Run，恢复仅安排未来周期时点；归档阻止新手动、重试和周期执行，并对当前 Run 请求取消。已完成幂等命令仍可重放原结果。
+
+报告接口使用当前会话的账号权限：`GET /api/v1/reports` 支持任务筛选与游标分页，`GET /api/v1/reports/:id` 返回结构化结论、来源快照元数据和原文引用。`GET /api/v1/inbox` 分页读取收件箱，`PATCH /api/v1/inbox/:id` 以 `{ "read": true }` 标记已读，传 `false` 恢复未读；写请求仍需 CSRF。报告读取保留演示模式、覆盖缺口和引用定位，完整网页正文及内部工具、checkpoint 不进入响应。
+
+报告的 `changes` 使用同一组可访问证据：`oldEvidenceIds` 来自本次执行首次领取时固定的完整基线，`newEvidenceIds` 来自当前执行；两侧还须分别匹配变化记录的来源与快照。非法关联使整个详情返回 `409 INVALID_REPORT_EVIDENCE`。正文过期清理后仍可读取保存的引用片段和定位。
+
+资料库提供 `/bookmarks` 收藏列表/创建/取消、`/notes` 纯文本笔记创建/查询/编辑/删除、`/library/sources/:sourceId/snapshots` 历史及详情，以及 `/library/search` 隔离检索。所有写接口使用会话与 CSRF；创建笔记要求稳定 `Idempotency-Key`，编辑和删除要求 `If-Match`。同键异参或旧修订返回 409，缺少命令头返回 428。取消收藏不删除来源、报告或引用。
+
+历史正文只在保留期内返回，过期立即不读不搜；保存的原文片段、hash、定位和比较清单继续保留。历史快照按成功观测时间选择；列表游标保留 PostgreSQL 微秒精度并绑定账号与筛选范围。搜索使用 PostgreSQL `simple` 全文索引，中文及字面词辅以受超时限制的子串召回，返回 `matchedBy` 和有界摘录，不抓取新 URL。
+
+`GET /api/v1/notifications` 按游标读取当前账号通知，可按 `kind`、`unread` 筛选；失败通知的 `reportId` 可为空，使用 `runId` 查看执行原因。`PATCH /api/v1/notifications/:id` 使用会话和 CSRF，以 `{ "read": true }` 标为已读，`false` 恢复未读；重复已读保留首次时间。通知和收件箱的已读状态相互独立。
+
+报告证据问答：`POST /reports/:reportId/questions` 提交问题，`GET /reports/:reportId/questions/:questionId` 读取已保存回答。创建要求会话、CSRF 与稳定 `Idempotency-Key`，同键异问题返回 409；处理中重放返回 409 且不重复付费调用。问答仅使用此报告内已授权引用，事实回答采用逐字原文摘录，每条带 `evidenceId/quote`；缺模型、缺资料或无效输出明确标记不足。它使用独立 Redis 用户/全局请求与 token 额度，最多一次模型尝试，不调用搜索或网页阅读。
+
+只有另行 `POST /reports/:reportId/questions/:questionId/followup` 并提交 `{ "confirm": true }` 才启动新研究。该接口要求 CSRF 与幂等键，固定原报告的模式、配置与预算，以问题为目标生成独立 Run；Task 锁内原子写入执行、事件、Outbox 和问题关联。已有活动执行时返回 409，重复确认返回原关联执行。后续研究及其重试有独立比较范围，不覆盖原报告、任务配置或普通监控基线。取消及已撤销会话的晚返回不保存事实回答。问答仅支持报告内引用；额外资料应先进入受授权报告。
+
+`GET /api/v1/tasks/:taskId/runs` 返回当前账号指定任务的执行历史，按排队时间倒序游标分页，`limit` 最大 100。公开字段包含固定任务版本、模式、预算、状态和覆盖情况，不返回租约、checkpoint、工具正文或反馈内部快照。历史游标绑定账号、任务与数据库原始时间；Task、Report、Inbox 列表同样使用数据库微秒精度边界。
+
+后端完整门禁、固定供应商场景与并发基准见[后端验证](../guides/backend-verification.md)；容器运行、迁移及恢复见[部署维护](../guides/deployment.md)。
+
+反馈接口：`POST /api/v1/feedback` 为指定任务的来源或结论设置 `irrelevant`、`known`、`deeper`；`DELETE /api/v1/feedback/:feedbackId` 撤销，`GET /api/v1/tasks/:taskId/feedback` 读取当前生效项。目标必须属于当前账号和任务，写请求需 CSRF。新执行在 Task 锁内冻结反馈快照；恢复沿用快照，重试及明确确认的后续研究作为新执行捕获当时反馈。反馈不改写历史报告、版本或普通比较范围，`Report.feedbackEffects` 解释实际生效情况；已了解不会遮蔽新值和重要变化。
