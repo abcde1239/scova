@@ -19,7 +19,7 @@
         "@scova/connectors": "workspace:*",
         "@scova/contracts": "workspace:*",
         "@scova/models": "workspace:*",
-        "@scova/utils": "workspace:*",
+        "@scova/shared": "workspace:*",
         "elysia": "^1.4.7",
         "ioredis": "catalog:",
         "srvx": "0.11.22"

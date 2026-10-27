@@ -9,7 +9,7 @@ import { createApiApp } from '../src/app/index.ts';
 import { createDefaultServices, type ApiServices } from '../src/app/context.ts';
 import { comparisonScopeHash } from '../src/service/tasks.ts';
 import type { TaskConfig } from '@scova/contracts';
-import { nextScheduledAt } from '@scova/utils';
+import { nextScheduledAt } from '@scova/shared';
 
 const require = createRequire(import.meta.url);
 const root = fileURLToPath(new URL('../../../', import.meta.url));

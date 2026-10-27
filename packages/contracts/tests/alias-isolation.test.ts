@@ -14,7 +14,7 @@ describe('monorepo importer 的 @ 别名隔离', () => {
         });
         try {
             const resolved = [];
-            for (const workspace of ['contracts', 'utils', 'agent-core', 'connectors']) {
+            for (const workspace of ['contracts', 'shared', 'agent-core', 'connectors']) {
                 const importer = fileURLToPath(
                     new URL(`../../${workspace}/src/index.ts`, import.meta.url),
                 );

@@ -36,6 +36,7 @@ API、worker 分别作为两个进程，PostgreSQL 和 Redis 是唯一首版基�
 | apps/server         | 认证、资源授权、任务版本、执行命令、报告/资料管理、事件读取                 | contracts、models                                           |
 | apps/worker         | 调度器、outbox dispatcher、BullMQ worker、租约、交付事务                    | contracts、models、agent-core、connectors                   |
 | packages/contracts  | 可运行时校验的请求/响应、事件版本、枚举与错误码；不暴露 ORM 实体            | 不依赖应用                                                  |
+| packages/shared     | Server/Worker 共用的纯调度计算与执行范围指纹                                | 不依赖应用                                                  |
 | packages/models     | 业务数据模型、Prisma schema、迁移与服务端客户端                             | 不依赖应用或 contracts                                      |
 | packages/agent-core | LangGraph 状态图、有限研究策略、候选和原文引用校验                          | contracts、connectors 类型、LangGraph；不使用 Elysia/BullMQ |
 | packages/connectors | 默认 SearxNG、可选 Tavily、HTTP 抓取、Readability 和演示数据适配器          | 向 agent-core 提供工具接口                                  |
@@ -52,7 +53,7 @@ Run 另有独立租约与递增 epoch。统一 `withRunFence` 门在 Run 行锁�
 
 所有 app/package 均以 `src` 保存源码，并配置 `@/* → ./src/*`。应用内使用别名，跨包引用包名；直接导出源码的共享包内部保留相对引用，避免消费方 TypeScript/Bun 对同名别名的解析冲突。Vite/Vitest 使用原生 tsconfig paths 解析，Node.js 启动入口由 `vpx` 处理。
 
-M1 已将前端迁至 `apps/web`，建立 API/worker 与三个共享包的最小入口，保留 utils 有效模板测试。业务模块仍按各自 Issue 实现；新增真实测试时同步 Vitest 与 harness 覆盖声明，不将类型/常量占位验证计为业务覆盖。Bun 为主运行时；Bun/Node.js 的 API 均使用 Elysia 官方 Node Web 适配器与显式 `srvx/node` HTTP 服务，通过 `node:http` 的 write/drain 传播 SSE socket 背压。
+M1 已将前端迁至 `apps/web`，建立 API/worker 与三个共享包的最小入口，共享纯调度与执行范围计算由 `packages/shared` 提供。业务模块仍按各自 Issue 实现；新增真实测试时同步 Vitest 与 harness 覆盖声明，不将类型/常量占位验证计为业务覆盖。Bun 为主运行时；Bun/Node.js 的 API 均使用 Elysia 官方 Node Web 适配器与显式 `srvx/node` HTTP 服务，通过 `node:http` 的 write/drain 传播 SSE socket 背压。
 
 依赖由 Vite+ 1.4.0 支持的 `pnpm-workspace.yaml` 管理；使用 `workspace:*` 声明包关系。`vp run <script>` 执行包脚本，`vp check` / `vp test` 使用内置工具；Bun 运行 API/worker，不能用另一份 Bun lockfile 分裂依赖来源。
 

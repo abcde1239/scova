@@ -46,7 +46,7 @@
         "@langchain/langgraph": "catalog:",
         "@langchain/langgraph-checkpoint-postgres": "catalog:",
         "@prisma/client": "catalog:",
-        "@scova/utils": "workspace:*",
+        "@scova/shared": "workspace:*",
         "bullmq": "catalog:",
         "ioredis": "catalog:",
         "pg": "catalog:"

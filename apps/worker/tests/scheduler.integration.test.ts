@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { PrismaClient } from '@scova/models';
-import { dueSchedule, effectiveRunScopeHash, resolveScheduledDate } from '@scova/utils';
+import { dueSchedule, effectiveRunScopeHash, resolveScheduledDate } from '@scova/shared';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vite-plus/test';
 import { createSchedulerRepository } from '../src/repo/scheduler.ts';
 import { SchedulerService } from '../src/service/scheduler.ts';

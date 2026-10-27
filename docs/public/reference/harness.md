@@ -14,11 +14,11 @@ vp run harness-verify
 
 `harness-lint` 检查工作区测试布局、任务依赖和验收文档链接，不运行测试；repository.visibility=public 时还检查 Git index 文件边界。仓库当前先采用 private，内部文档仍按约定仅保留本地；未来公开前需切换治理配置并重新验证边界。`harness-verify` 先执行同一治理检查，再逐项运行以下任务；`vp run ready` 是它的别名。
 
-| 任务            | 命令              | 当前覆盖范围                                        |
-| --------------- | ----------------- | --------------------------------------------------- |
-| static-check    | `vp check`        | 格式、lint、TypeScript 静态检查                     |
-| unit-tests      | `vp test`         | contracts、别名隔离、API 健康检查、OpenAPI 与 utils |
-| workspace-build | `vp run -r build` | 所有已登记工作区构建/类型检查                       |
+| 任务            | 命令              | 当前覆盖范围                                         |
+| --------------- | ----------------- | ---------------------------------------------------- |
+| static-check    | `vp check`        | 格式、lint、TypeScript 静态检查                      |
+| unit-tests      | `vp test`         | contracts、别名隔离、API 健康检查、OpenAPI 与 shared |
+| workspace-build | `vp run -r build` | 所有已登记工作区构建/类型检查                        |
 
 根聚合测试只声明实际覆盖的工作区，没有额外配置相同的子任务，避免重复执行。暂无测试的工作区保持 `not-configured`；这不代表业务验收通过。新建工作区或接入真实业务测试后须同时更新 `harness.config.json`、框架扫描配置和真实测试任务；`covers` 只记录覆盖关系，不创建测试。
 

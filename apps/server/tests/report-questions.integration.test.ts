@@ -13,7 +13,7 @@ import {
     type ApiServices,
 } from '../src/app/context.ts';
 import type { TaskConfig } from '@scova/contracts';
-import { effectiveRunScopeHash } from '@scova/utils';
+import { effectiveRunScopeHash } from '@scova/shared';
 import { createReportQuestionService } from '../src/service/report-questions.ts';
 import { comparisonScopeHash } from '../src/service/tasks.ts';
 import { nodeScriptCommand } from '../../../scripts/process-runtime.mjs';

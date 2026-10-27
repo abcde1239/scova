@@ -2,7 +2,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import pg from 'pg';
 import { beforeAll, afterAll, describe, it, expect } from 'vite-plus/test';
-import { effectiveRunScopeHash } from '@scova/utils';
+import { effectiveRunScopeHash } from '@scova/shared';
 import { readFeedbackSnapshot, type Feedback, type FeedbackEffect } from '@scova/contracts';
 import type { ConnectorBundle, ReadPage, StructuredInput, CallContext } from '@scova/connectors';
 import type { Run } from '@scova/models';

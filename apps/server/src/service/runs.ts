@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { effectiveRunScopeHash } from '@scova/utils';
+import { effectiveRunScopeHash } from '@scova/shared';
 import type { Run as StoredRun, RunEvent as StoredRunEvent } from '@scova/models';
 import {
     PageQuerySchema,

@@ -19,7 +19,7 @@
         "@scova/connectors": "workspace:*",
         "@scova/contracts": "workspace:*",
         "@scova/models": "workspace:*",
-        "@scova/utils": "workspace:*",
+        "@scova/shared": "workspace:*",
         "bullmq": "catalog:",
         "ioredis": "catalog:",
         "pg": "catalog:"

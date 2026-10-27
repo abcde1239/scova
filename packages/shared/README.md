@@ -1,4 +1,4 @@
-# @scova/utils
+# @scova/shared
 
 Server 与 Worker 共用的纯调度计算和有效执行范围指纹。源码导出，不连接数据库或队列。
 
@@ -11,6 +11,6 @@ Server 与 Worker 共用的纯调度计算和有效执行范围指纹。源码�
 在仓库根目录运行：
 
 ```sh
-vp test packages/utils/tests
-vp run @scova/utils#build
+vp test packages/shared/tests
+vp run @scova/shared#build
 ```

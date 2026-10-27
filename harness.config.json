@@ -52,11 +52,11 @@
             }
         },
         {
-            "root": "packages/utils",
+            "root": "packages/shared",
             "tests": {
                 "requireConfiguredTask": true
             },
-            "id": "packages-utils"
+            "id": "packages-shared"
         }
     ],
     "documents": {
@@ -158,7 +158,7 @@
             "covers": [
                 "apps-server",
                 "apps-worker",
-                "packages-utils",
+                "packages-shared",
                 "packages-contracts",
                 "packages-agent-core",
                 "packages-connectors"

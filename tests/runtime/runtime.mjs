@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import Redis from 'ioredis';
 import { Queue, QueueEvents, Worker } from 'bullmq';
-import { nextScheduledAt, resolveScheduledDate } from '@scova/utils';
+import { nextScheduledAt, resolveScheduledDate } from '@scova/shared';
 
 const require = createRequire(import.meta.url);
 const databaseUrl =

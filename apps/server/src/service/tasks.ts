@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { nextScheduledAt } from '@scova/utils';
+import { nextScheduledAt } from '@scova/shared';
 import type { Task as StoredTask, TaskVersion as StoredTaskVersion } from '@scova/models';
 import {
     CreateTaskInputSchema,

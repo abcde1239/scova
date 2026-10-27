@@ -15,7 +15,7 @@ COPY packages/agent-core/package.json packages/agent-core/package.json
 COPY packages/connectors/package.json packages/connectors/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 COPY packages/models/package.json packages/models/package.json
-COPY packages/utils/package.json packages/utils/package.json
+COPY packages/shared/package.json packages/shared/package.json
 COPY packages/models/prisma packages/models/prisma
 RUN VP_GIT_HOOKS=0 vp install --frozen-lockfile
 COPY . .
