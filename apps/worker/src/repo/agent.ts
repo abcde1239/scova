@@ -40,7 +40,7 @@ export type AgentReservation = {
 } & ({ kind: "reserved" } | { kind: "reused"; output: AgentJson });
 
 export interface AgentRepository {
-  comparison(): Promise<{
+  comparison(options?: { allowDeadline?: boolean }): Promise<{
     comparisonScopeHash: string;
     baselineRunId: string | null;
     baseline: AgentBaseline | null;
@@ -210,13 +210,18 @@ export function createAgentRepository(db: PrismaClient, token: RunLeaseToken): A
     return call;
   };
   return {
-    comparison: () =>
-      fence(async (tx, run) => ({
-        comparisonScopeHash: run.comparisonScopeHash,
-        baselineRunId: run.baselineRunId,
-        baseline: await loadBaseline(tx, run),
-        feedback: readFeedbackSnapshot(run.feedbackSnapshotJson, run.userId, run.taskId),
-      })),
+    comparison: (options = {}) =>
+      withRunFence(
+        db,
+        token,
+        options.allowDeadline ? "deadline_delivery" : "work",
+        async (tx, run) => ({
+          comparisonScopeHash: run.comparisonScopeHash,
+          baselineRunId: run.baselineRunId,
+          baseline: await loadBaseline(tx, run),
+          feedback: readFeedbackSnapshot(run.feedbackSnapshotJson, run.userId, run.taskId),
+        }),
+      ),
     async reserve(input) {
       const reserved = reservation(input);
       return fence(async (tx, run, now) => {

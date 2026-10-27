@@ -13,7 +13,8 @@ import { csrfForSession, tokenHash } from "../../server/src/utils/security.ts";
 import { createRunRepository } from "../src/repo/runs.ts";
 import { createAgentRepository } from "../src/repo/agent.ts";
 import { createSchedulerRepository } from "../src/repo/scheduler.ts";
-import { createAgentSession } from "../src/service/agent.ts";
+import { createAgentSession, createAgentRuntime } from "../src/service/agent.ts";
+import { RunService } from "../src/service/runs.ts";
 import { createDeliveryService } from "../src/service/delivery.ts";
 import { outboxDatabase } from "./support/outbox-database.ts";
 import { seedRun, emptyUsage } from "./support/run-database.ts";
@@ -360,6 +361,88 @@ describe("可撤销资料反馈与实际后续执行（真实PG/checkpoint）", 
       (await db.run.findUniqueOrThrow({ where: { id: retry.id } })).feedbackSnapshotJson,
     ).toEqual(retry.feedbackSnapshotJson);
   });
+  it.each(["known", "irrelevant", "deeper"] as const)(
+    "带%s反馈的Run截止后接管：固定反馈与已存正文交付partial，不调用供应商或推进基线",
+    async (kind) => {
+      const seed = await initial();
+      const feedback = await mark(seed, seed.source.id, kind);
+      const run = await queued(seed);
+      const frozen = structuredClone(run.feedbackSnapshotJson);
+      const first = await execute(run);
+      await first.session.drain();
+      const savedCalls = await db.toolCall.findMany({
+        where: { runId: run.id },
+        orderBy: { id: "asc" },
+      });
+      expect(savedCalls.some((call) => call.tool === "read" && call.status === "succeeded")).toBe(
+        true,
+      );
+      // 模拟成功正文已提交后进程退出，待原截止时间已过再由新runtime接管。
+      await db.$executeRaw`
+        UPDATE runs SET deadline_at=clock_timestamp(),
+          lease_expires_at=clock_timestamp()-interval '1 second'
+        WHERE id=${run.id}::uuid
+      `;
+      expect(
+        (await request(`/feedback/${feedback.id}`, await auth(seed.user.id), "DELETE")).status,
+      ).toBe(200);
+      const runtime = createAgentRuntime({
+        database: db,
+        databaseUrl: fixture.databaseUrl,
+        checkpointSchema: fixture.checkpointSchema,
+        env: {},
+        enableDelivery: true,
+      });
+      let executeCalls = 0;
+      try {
+        await runtime.connect();
+        const service = new RunService({
+          repository: runs,
+          executorFactory: (token) => {
+            const executor = runtime.executorFactory(token);
+            return {
+              ...executor,
+              async execute(context) {
+                executeCalls++;
+                return executor.execute(context);
+              },
+            };
+          },
+        });
+        expect(await service.execute(run.id)).toBe("processed");
+        expect(executeCalls).toBe(0);
+        const recovered = await db.run.findUniqueOrThrow({ where: { id: run.id } });
+        expect(recovered).toMatchObject({
+          status: "partial",
+          outcome: "inconclusive",
+          failureCode: null,
+          leaseEpoch: first.claimed.token.leaseEpoch + 1,
+          recoveryCount: 1,
+          feedbackSnapshotJson: frozen,
+        });
+        const report = await db.report.findFirstOrThrow({ where: { runId: run.id } });
+        expect(report.feedbackEffectsJson).toContainEqual(
+          expect.objectContaining({ feedbackId: feedback.id, kind }),
+        );
+        expect(
+          await db.toolCall.findMany({ where: { runId: run.id }, orderBy: { id: "asc" } }),
+        ).toEqual(savedCalls);
+        expect(await db.inboxItem.count({ where: { reportId: report.id } })).toBe(1);
+        expect(
+          await db.runEvent.count({ where: { runId: run.id, type: "report.published" } }),
+        ).toBe(1);
+        expect(
+          await db.baseline.findFirstOrThrow({ where: { taskId: seed.task.id } }),
+        ).toMatchObject({
+          completeRunId: seed.run.id,
+        });
+        expect(await service.execute(run.id)).toBe("ignored");
+        expect(await db.report.count({ where: { runId: run.id } })).toBe(1);
+      } finally {
+        await runtime.close();
+      }
+    },
+  );
   it("200条生效上限允许切换，撤销释放名额，重新激活仍受同一上限约束", async () => {
     const seed = await initial(),
       headers = await auth(seed.user.id),

@@ -282,6 +282,9 @@ describe("Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）",
     });
     await expect(forged.reserve(search("forged"))).rejects.toMatchObject({ code: "LEASE_LOST" });
     await expect(forged.readAuthorizedCheckpoint()).rejects.toMatchObject({ code: "LEASE_LOST" });
+    await expect(forged.comparison({ allowDeadline: true })).rejects.toMatchObject({
+      code: "LEASE_LOST",
+    });
     await expect(forged.readPages({ allowDeadline: true })).rejects.toMatchObject({
       code: "LEASE_LOST",
     });
@@ -465,6 +468,15 @@ describe("Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）",
         seed.repo.settle({ toolCallId: pending.toolCallId, output: { late: true } }),
       ).rejects.toMatchObject({ code });
       await expect(seed.repo.readPages()).rejects.toMatchObject({ code });
+      await expect(seed.repo.comparison()).rejects.toMatchObject({ code });
+      if (reason === "deadline") {
+        expect(await seed.repo.comparison({ allowDeadline: true })).toMatchObject({
+          comparisonScopeHash: seed.run.comparisonScopeHash,
+          feedback: { userId: seed.user.id, taskId: seed.task.id, items: [] },
+        });
+      } else {
+        await expect(seed.repo.comparison({ allowDeadline: true })).rejects.toMatchObject({ code });
+      }
       if (reason === "deadline")
         expect(await seed.repo.readPages({ allowDeadline: true })).toEqual([storedPage]);
       else

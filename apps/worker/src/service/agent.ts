@@ -111,7 +111,7 @@ export function createAgentSession({
       return (...args: unknown[]) =>
         trackDomain(
           async () => Reflect.apply(method, target, args),
-          property === "readPages" &&
+          ["readPages", "comparison"].includes(String(property)) &&
             (args[0] as { allowDeadline?: boolean } | undefined)?.allowDeadline === true,
         );
     },
@@ -384,6 +384,9 @@ export function createAgentSession({
     async partial(): Promise<AgentCandidate | null> {
       if (context.signal.aborted && context.signal.reason !== "deadline")
         throw new ConnectorError("aborted", "执行已停止");
+      // A fresh post-deadline session never executes the graph. Load the same frozen context
+      // used by delivery while retaining owner, lease and cancellation checks; no external calls.
+      Object.assign(agentContext, await repository.comparison({ allowDeadline: true }));
       // This bound domain read still validates lease and cancellation. No network/model operation.
       const pages = (await repository.readPages({ allowDeadline: true })).map((value) =>
         readPage(value, context.mode),
