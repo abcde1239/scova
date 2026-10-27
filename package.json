@@ -67,6 +67,6 @@
         "node": ">=22.18.0"
     },
     "prisma": {
-        "schema": "packages/models/prisma/schema.prisma"
+        "schema": "packages/db/prisma/schema.prisma"
     }
 }

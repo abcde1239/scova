@@ -12,7 +12,7 @@ apps/web/src/
   layout/        # 工作台、登录及编辑布局
   composables/   # useXxx：交互、查询、订阅与生命周期
   store/         # Pinia 客户端状态，沿用 community 的单数目录
-  models/        # contracts DTO 的类型导出与前端专用视图模型
+  models/        # 共享 DTO 的类型导出与前端专用视图模型
   router/        # 路由、meta、布局与守卫
   utils/         # 无框架依赖的通用纯逻辑
 ```
@@ -25,7 +25,7 @@ apps/web/src/
 
 ## 2. 数据与状态责任
 
-Vue Query 负责服务端数据、缓存、失效与请求状态；Pinia 只存用户摘要、会话 epoch、布局与未保存草稿等客户端状态。DTO 和运行时 schema 来自 packages/contracts，不能在 models 中另建一套字段相近的接口。
+Vue Query 负责服务端数据、缓存、失效与请求状态；Pinia 只存用户摘要、会话 epoch、布局与未保存草稿等客户端状态。DTO 和运行时 schema 来自 packages/models，应用内部 models 仅保存前端视图模型，不重复定义共享 DTO。
 
 community 中存在 Service/store 组合和 JWT 持久化；Scova 借用分层风格，保留自己的 Cookie 会话设计。不要把服务端列表复制进 Pinia，不向 localStorage 写登录 token 或模型密钥。
 
@@ -33,7 +33,7 @@ community 中存在 Service/store 组合和 JWT 持久化；Scova 借用分层�
 
 核实的源码基线：[requestlane commit e9f5147](https://github.com/abcde1239/requestlane/tree/e9f5147a73b6b8dee6b672dac6b6b23356f92183)，package.json 版本 0.1.3。实现时通过 Vite+ 安装并锁定已验证发行版，确认浏览器构建和 API 行为；若发行版与所读源码不符，先核实兼容性，不退回另一套请求封装。
 
-- 在模块作用域创建共享 Client 与 Fetch transport，baseURL=/api/v1，credentials=same-origin；端点在模块作用域用 defineEndpoint 定义，输入/输出通过 contracts schema 验证。
+- 在模块作用域创建共享 Client 与 Fetch transport，baseURL=/api/v1，credentials=same-origin；端点在模块作用域用 defineEndpoint 定义，输入/输出通过共享 models schema 验证。
 - 使用普通 JSON 数据和真实 HTTP 状态。requestlane 默认 identity codec，sendsCodec 是可选且不属于 Scova API 协议。错误经 classifyError 和 Scova 错误体映射，保留 status、code、requestId、fieldErrors。
 - 通过请求选项/统一 beforeRequest 注入 CSRF、Idempotency-Key 和 If-Match。请求 key 对同一用户动作重发保持稳定，不能每次网络重试生成新 key；写请求不自动重试。
 - Vue Query 的 signal 传入 requestlane；取消不显示失败 toast。每个用户会话持有独立客户端生命周期/epoch，退出或换号时 dispose、清空 Query 缓存并停止 SSE；旧会话迟到的 401 不能清掉新登录会话。

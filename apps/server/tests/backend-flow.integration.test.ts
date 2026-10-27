@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { Queue } from 'bullmq';
 import { Redis } from 'ioredis';
 import { afterAll, beforeAll, describe, expect, it } from 'vite-plus/test';
-import { parseContract, ReportSchema } from '@scova/contracts';
+import { parseContract, ReportSchema } from '@scova/models';
 import { nodeScriptCommand } from '../../../scripts/process-runtime.mjs';
 import { outboxDatabase } from '../../worker/tests/support/outbox-database.ts';
 

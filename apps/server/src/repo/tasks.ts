@@ -1,4 +1,4 @@
-import { Prisma } from '@scova/models';
+import { Prisma } from '@scova/db';
 import type { ApiServices } from '@/app/context.ts';
 
 /** 绑定当前事务的任务持久化操作；不包含 HTTP、认证或产品决策。 */

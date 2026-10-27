@@ -8,7 +8,7 @@ import {
     ReportListQuerySchema,
     ReportListResponseSchema,
     ReportSchema,
-} from '@scova/contracts';
+} from '@scova/models';
 import type { ApiServices } from '@/app/context.ts';
 import { createReportHandlers } from '@/handler/reports.ts';
 

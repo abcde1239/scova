@@ -15,7 +15,7 @@
         "@langchain/core": "catalog:",
         "@langchain/langgraph": "catalog:",
         "@scova/connectors": "workspace:*",
-        "@scova/contracts": "workspace:*"
+        "@scova/models": "workspace:*"
     },
     "devDependencies": {
         "@types/node": "catalog:",

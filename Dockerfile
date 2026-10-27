@@ -13,13 +13,13 @@ COPY apps/worker/package.json apps/worker/package.json
 COPY apps/web/package.json apps/web/package.json
 COPY packages/agent-core/package.json packages/agent-core/package.json
 COPY packages/connectors/package.json packages/connectors/package.json
-COPY packages/contracts/package.json packages/contracts/package.json
 COPY packages/models/package.json packages/models/package.json
+COPY packages/db/package.json packages/db/package.json
 COPY packages/shared/package.json packages/shared/package.json
-COPY packages/models/prisma packages/models/prisma
+COPY packages/db/prisma packages/db/prisma
 RUN VP_GIT_HOOKS=0 vp install --frozen-lockfile
 COPY . .
-RUN vp run @scova/models#generate && vp run -r build
+RUN vp run @scova/db#generate && vp run -r build
 
 FROM oven/bun:1.3.4-debian@sha256:9d9504d425a8b85c5cf162c1c354f9403e15583e0f3e1de3750ce3723d3e89ac AS runtime
 COPY --from=node /usr/local/bin/node /usr/local/bin/node

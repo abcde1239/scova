@@ -22,7 +22,7 @@ import {
     type ModelResponse,
     type SearchResponse,
 } from '@scova/connectors';
-import type { Usage } from '@scova/contracts';
+import type { Usage } from '@scova/models';
 import {
     createAgentRepository,
     AgentPersistenceError,
@@ -31,7 +31,7 @@ import {
     type AgentTool,
     type AgentCheckpointRef,
 } from '@/repo/agent.ts';
-import type { PrismaClient } from '@scova/models';
+import type { PrismaClient } from '@scova/db';
 import type { RunExecutionContext, RunExecutor } from '@/service/runs.ts';
 import { RunExecutionError, type RunLeaseToken, type RunProgressEvent } from '@/utils/runs.ts';
 import { createDeliveryService } from '@/service/delivery.ts';

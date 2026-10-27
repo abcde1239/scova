@@ -9,7 +9,7 @@ import {
     RunCommandInputSchema,
     RunCommandResponseSchema,
     RunSchema,
-} from '@scova/contracts';
+} from '@scova/models';
 import type { ApiServices } from '@/app/context.ts';
 import { createRunHandlers } from '@/handler/runs.ts';
 

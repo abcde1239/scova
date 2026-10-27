@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import type { PrismaClient } from '@scova/models';
-import type { TaskConfig } from '@scova/contracts';
+import type { PrismaClient } from '@scova/db';
+import type { TaskConfig } from '@scova/models';
 
 export const runConfig = (): TaskConfig => ({
     title: '生命周期测试',

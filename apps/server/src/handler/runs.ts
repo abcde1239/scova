@@ -1,5 +1,5 @@
 import type { Context } from 'elysia';
-import type { RunCommandInput } from '@scova/contracts';
+import type { RunCommandInput } from '@scova/models';
 import type { ApiServices } from '@/app/context.ts';
 import { requireCsrf, requireSession } from '@/handler/session.ts';
 import { createRunService } from '@/service/runs.ts';

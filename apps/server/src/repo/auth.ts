@@ -1,4 +1,4 @@
-import type { Prisma, User } from '@scova/models';
+import type { Prisma, User } from '@scova/db';
 import type { ApiServices } from '@/app/context.ts';
 
 function sessionStore(database: Prisma.TransactionClient) {

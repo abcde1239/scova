@@ -48,6 +48,6 @@ release. Add a tool name to select part of the graph. For example, run
 
 每个 `apps/*`、`packages/*` 工作区均以 `src` 保存源码，配置本工作区的 `@/* → ./src/*` 别名。应用内部使用 `@/`，跨包通过包名和 exports 引用；直接导出源码的共享包内部保留相对引用，避免消费方 TypeScript 将 `@/` 解析到错误工作区。Vite/Vitest 开启按导入文件解析 tsconfig paths；Node.js 入口通过 `vpx` 执行。
 
-Server 按 `main → app → router → handler → service → repo` 调用：`app` 装配 Elysia、Node 兼容层和生命周期；`router` 声明接口契约与中文文档；`handler` 处理 HTTP、会话与响应；`service` 组织业务规则与事务；`repo` 执行数据库和 Redis 访问；`utils` 仅放小工具。业务数据模型、Prisma schema 和迁移统一放在 `packages/models`，Server/Worker 通过 `@scova/models` 引用；公开 DTO 与事件 schema 仍由 `@scova/contracts` 管理。
+Server 按 `main → app → router → handler → service → repo` 调用：`app` 装配 Elysia、Node 兼容层和生命周期；`router` 声明接口契约与中文文档；`handler` 处理 HTTP、会话与响应；`service` 组织业务规则与事务；`repo` 执行数据库和 Redis 访问；`utils` 仅放小工具。业务数据模型、Prisma schema 和迁移统一放在 `packages/db`，Server/Worker 通过 `@scova/db` 引用；公开 DTO 与事件 schema 仍由 `@scova/models` 管理。
 
 Worker 按 `main/node → app → handler → service → repo + queue` 调用：app 管配置、依赖及串行循环，handler 是后台批次入口，service 编排租约与投递规则，repo 执行数据库 CAS，queue 适配 BullMQ。停止时先阻止新领取、等待在途批次，再关闭队列、Redis 和数据库；不在 service 或导入模块时连接外部服务。Worker 调用 agent-core，不能把队列投递或技术实验当作 Agent 已完成执行。

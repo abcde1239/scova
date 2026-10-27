@@ -1,4 +1,4 @@
-import { Prisma, type PrismaClient, type Run, type RunEvent } from '@scova/models';
+import { Prisma, type PrismaClient, type Run, type RunEvent } from '@scova/db';
 import { ApiError } from '@/utils/errors.ts';
 
 export interface EventSession {

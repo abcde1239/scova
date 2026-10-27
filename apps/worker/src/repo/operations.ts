@@ -47,7 +47,7 @@ export function createOperationRepository(pool: pg.Pool, config: OperationConfig
                 if (migrations.rowCount) throw new Error('业务迁移尚未完成');
                 const expected = (
                     await readdir(
-                        new URL('../../../../packages/models/prisma/migrations/', import.meta.url),
+                        new URL('../../../../packages/db/prisma/migrations/', import.meta.url),
                         { withFileTypes: true },
                     )
                 )

@@ -5,7 +5,7 @@ import {
     ReportQuestionSchema,
     QuestionFollowupInputSchema,
     RunCommandResponseSchema,
-} from '@scova/contracts';
+} from '@scova/models';
 import type { ApiServices } from '@/app/context.ts';
 import { createReportQuestionHandlers } from '@/handler/report-questions.ts';
 export function createReportQuestionPlugin(services: ApiServices) {

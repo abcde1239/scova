@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { Algorithm, hash, verify } from '@node-rs/argon2';
-import type { User as StoredUser } from '@scova/models';
-import type { LoginInput, RegisterInput, UpdatePreferencesInput } from '@scova/contracts';
+import type { User as StoredUser } from '@scova/db';
+import type { LoginInput, RegisterInput, UpdatePreferencesInput } from '@scova/models';
 import type { ApiServices } from '@/app/context.ts';
 import { createAuthRepository, type AuthTransaction } from '@/repo/auth.ts';
 import { ApiError } from '@/utils/errors.ts';

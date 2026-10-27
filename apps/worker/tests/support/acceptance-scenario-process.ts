@@ -1,4 +1,4 @@
-import { createDatabaseClient } from '@scova/models';
+import { createDatabaseClient } from '@scova/db';
 import { Redis } from 'ioredis';
 import { createWorkerApp } from '../../src/app/index.ts';
 import { readWorkerConfig } from '../../src/app/config.ts';

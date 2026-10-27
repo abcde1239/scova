@@ -25,9 +25,9 @@
 
 - **Requirement**：Issue #4；PRD US-01
 - **Priority**：High
-- **Preconditions**：`packages/contracts` 已定义 Task/TaskVersion/Run 的输入和输出 schema；apps/server、apps/worker、apps/web 引用同一包。
+- **Preconditions**：`packages/models` 已定义 Task/TaskVersion/Run 的输入和输出 schema；apps/server、apps/worker、apps/web 引用同一包。
 - **Test Steps**：
-    1. 使用 `vp test packages/contracts/tests/contracts.test.ts` 编译并执行契约测试。
+    1. 使用 `vp test packages/models/tests/contracts.test.ts` 编译并执行契约测试。
     2. 分别从 API、worker、web 的 TypeScript 入口导入同一 DTO。
     3. 对合法任务配置运行运行时解析。
 - **Expected Results**：

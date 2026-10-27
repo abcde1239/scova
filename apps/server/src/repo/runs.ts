@@ -1,4 +1,5 @@
-import { Prisma, captureFeedbackSnapshot } from '@scova/models';
+import { Prisma } from '@scova/db';
+import { captureFeedbackSnapshot } from '@scova/db/feedback';
 import type { ApiServices } from '@/app/context.ts';
 import { createTaskStore } from '@/repo/tasks.ts';
 

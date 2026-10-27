@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Elysia } from 'elysia';
-import { ContractValidationError, type FieldError } from '@scova/contracts';
+import { ContractValidationError, type FieldError } from '@scova/models';
 
 import { ApiError } from '@/utils/errors.ts';
 function validationFields(error: unknown): FieldError[] {

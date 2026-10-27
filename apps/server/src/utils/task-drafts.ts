@@ -7,7 +7,7 @@ import {
     type NotificationPreference,
     type TaskConfig,
     type TaskDraftInput,
-} from '@scova/contracts';
+} from '@scova/models';
 import { TASK_DRAFT_DEFAULT_BUDGET } from '@/app/task-policy.ts';
 
 export interface DraftDefaults {

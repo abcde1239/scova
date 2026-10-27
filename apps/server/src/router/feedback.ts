@@ -4,7 +4,7 @@ import {
     FeedbackInputSchema,
     FeedbackSchema,
     FeedbackListSchema,
-} from '@scova/contracts';
+} from '@scova/models';
 import type { ApiServices } from '@/app/context.ts';
 import { createFeedbackHandlers } from '@/handler/feedback.ts';
 export function createFeedbackPlugin(services: ApiServices) {

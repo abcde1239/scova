@@ -30,18 +30,18 @@ API、worker 分别作为两个进程，PostgreSQL 和 Redis 是唯一首版基�
 
 ## 2. 工作区与职责
 
-| 目标目录            | 职责                                                                        | 依赖方向                                                    |
-| ------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| apps/web            | Vue 3、Router、Pinia、TanStack Vue Query、UnoCSS、naive-ui；页面与 SSE 订阅 | contracts                                                   |
-| apps/server         | 认证、资源授权、任务版本、执行命令、报告/资料管理、事件读取                 | contracts、models                                           |
-| apps/worker         | 调度器、outbox dispatcher、BullMQ worker、租约、交付事务                    | contracts、models、agent-core、connectors                   |
-| packages/contracts  | 可运行时校验的请求/响应、事件版本、枚举与错误码；不暴露 ORM 实体            | 不依赖应用                                                  |
-| packages/shared     | Server/Worker 共用的纯调度计算与执行范围指纹                                | 不依赖应用                                                  |
-| packages/models     | 业务数据模型、Prisma schema、迁移与服务端客户端                             | 不依赖应用或 contracts                                      |
-| packages/agent-core | LangGraph 状态图、有限研究策略、候选和原文引用校验                          | contracts、connectors 类型、LangGraph；不使用 Elysia/BullMQ |
-| packages/connectors | 默认 SearxNG、可选 Tavily、HTTP 抓取、Readability 和演示数据适配器          | 向 agent-core 提供工具接口                                  |
+| 目标目录            | 职责                                                                        | 依赖方向                                                 |
+| ------------------- | --------------------------------------------------------------------------- | -------------------------------------------------------- |
+| apps/web            | Vue 3、Router、Pinia、TanStack Vue Query、UnoCSS、naive-ui；页面与 SSE 订阅 | models                                                   |
+| apps/server         | 认证、资源授权、任务版本、执行命令、报告/资料管理、事件读取                 | models、db                                               |
+| apps/worker         | 调度器、outbox dispatcher、BullMQ worker、租约、交付事务                    | models、db、agent-core、connectors                       |
+| packages/models     | 可运行时校验的请求/响应、事件版本、枚举与错误码；不暴露 ORM 实体            | 不依赖应用                                               |
+| packages/shared     | Server/Worker 共用的纯调度计算与执行范围指纹                                | 不依赖应用                                               |
+| packages/db         | 业务数据模型、Prisma schema、迁移与服务端客户端；反馈持久化子入口           | 不依赖应用；反馈投影使用 models                          |
+| packages/agent-core | LangGraph 状态图、有限研究策略、候选和原文引用校验                          | models、connectors 类型、LangGraph；不使用 Elysia/BullMQ |
+| packages/connectors | 默认 SearxNG、可选 Tavily、HTTP 抓取、Readability 和演示数据适配器          | 向 agent-core 提供工具接口                               |
 
-API 不负责执行长任务，worker 不提供账号管理入口；Agent 没有通用 SQL、文件系统或任意脚本工具。`packages/models/prisma` 维护唯一业务 schema 和迁移；Server/Worker 从 `@scova/models` 引用生成模型，公开接口仍使用 `@scova/contracts`。
+API 不负责执行长任务，worker 不提供账号管理入口；Agent 没有通用 SQL、文件系统或任意脚本工具。`packages/db/prisma` 维护唯一业务 schema 和迁移；Server/Worker 从 `@scova/db` 引用生成模型，公开接口仍使用 `@scova/models`。
 
 Server 源码分层为 `main → app → router → handler → service → repo`：app 装配 Elysia、Node 适配与生命周期，router 声明路由和中文 OpenAPI，handler 处理 HTTP/会话/响应，service 编排业务规则及事务，repo 完成数据库与 Redis 访问。utils 放纯工具。Task CAS 与 Run/事件/Outbox 仍在同一事务中完成。
 
@@ -180,7 +180,7 @@ URL 规范化移除 fragment、默认端口和明确跟踪参数，保留语义�
 
 ## 7. API、事件与页面数据
 
-REST 采用 `/api/v1`，标准错误包含 `code/message/requestId/fieldErrors`，列表使用游标分页；任务配置和输出结构定义在 contracts，通过运行时校验拒绝非法状态。owner 由会话推导，禁止请求体传入 userId 来选择租户。
+REST 采用 `/api/v1`，标准错误包含 `code/message/requestId/fieldErrors`，列表使用游标分页；任务配置和输出结构定义在 models，通过运行时校验拒绝非法状态。owner 由会话推导，禁止请求体传入 userId 来选择租户。
 
 | 资源     | 首版接口约定                                                                    |
 | -------- | ------------------------------------------------------------------------------- |

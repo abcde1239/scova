@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { nextScheduledAt } from '@scova/shared';
-import type { Task as StoredTask, TaskVersion as StoredTaskVersion } from '@scova/models';
+import type { Task as StoredTask, TaskVersion as StoredTaskVersion } from '@scova/db';
 import {
     CreateTaskInputSchema,
     PageQuerySchema,
@@ -11,7 +11,7 @@ import {
     UpdateTaskInputSchema,
     parseContract,
     type TaskConfig,
-} from '@scova/contracts';
+} from '@scova/models';
 import type { ApiServices } from '@/app/context.ts';
 import { ApiError } from '@/utils/errors.ts';
 import { TASK_BUDGET_LIMITS } from '@/app/task-policy.ts';

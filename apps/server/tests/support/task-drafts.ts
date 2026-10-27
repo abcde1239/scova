@@ -1,4 +1,4 @@
-import type { TaskConfig, TaskDraftInput } from '@scova/contracts';
+import type { TaskConfig, TaskDraftInput } from '@scova/models';
 
 export function draftConfig(overrides: Partial<TaskConfig> = {}): TaskConfig {
     return {

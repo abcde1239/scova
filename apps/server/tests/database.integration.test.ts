@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { readdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { PrismaClient } from '@scova/models';
+import { PrismaClient } from '@scova/db';
 import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vite-plus/test';
 
@@ -166,7 +166,7 @@ describe('真实 PostgreSQL 业务模型与一致性约束', () => {
                     'migrate',
                     'deploy',
                     '--schema',
-                    'packages/models/prisma/schema.prisma',
+                    'packages/db/prisma/schema.prisma',
                 ],
                 {
                     cwd: root,
@@ -201,7 +201,7 @@ describe('真实 PostgreSQL 业务模型与一致性约束', () => {
             'SELECT migration_name, rolled_back_at, finished_at FROM _prisma_migrations',
         );
         const migrations = readdirSync(
-            new URL('../../../packages/models/prisma/migrations/', import.meta.url),
+            new URL('../../../packages/db/prisma/migrations/', import.meta.url),
             { withFileTypes: true },
         )
             .filter((entry) => entry.isDirectory())

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { PrismaClient } from '@scova/models';
+import { PrismaClient } from '@scova/db';
 import { createDefaultServices } from '../../src/app/context.ts';
 import { createRunService } from '../../src/service/runs.ts';
 

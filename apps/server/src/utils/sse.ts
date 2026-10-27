@@ -1,4 +1,4 @@
-import type { SseMessage } from '@scova/contracts';
+import type { SseMessage } from '@scova/models';
 
 export interface SsePolicy {
     pollIntervalMs: number;

@@ -1,4 +1,4 @@
-import { Prisma } from '@scova/models';
+import { Prisma } from '@scova/db';
 import type { ApiServices } from '@/app/context.ts';
 
 const summaryInclude = { run: true } satisfies Prisma.ReportInclude;

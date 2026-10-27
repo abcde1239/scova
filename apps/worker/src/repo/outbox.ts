@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@scova/models';
+import type { PrismaClient } from '@scova/db';
 import type { ClaimedOutbox } from '@/utils/outbox.ts';
 
 export interface OutboxRepository {

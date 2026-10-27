@@ -1,4 +1,4 @@
-import { NotificationPreferenceSchema, parseContract } from '@scova/contracts';
+import { NotificationPreferenceSchema, parseContract } from '@scova/models';
 
 export function terminalNotificationKind(
     preference: unknown,

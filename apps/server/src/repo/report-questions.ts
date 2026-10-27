@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import { Prisma, type ReportQuestion } from '@scova/models';
-import type { QuestionAnswer } from '@scova/contracts';
+import { Prisma, type ReportQuestion } from '@scova/db';
+import type { QuestionAnswer } from '@scova/models';
 import type { ApiServices } from '@/app/context.ts';
 import { ApiError } from '@/utils/errors.ts';
 import { createTaskDraftRepo } from '@/repo/task-drafts.ts';

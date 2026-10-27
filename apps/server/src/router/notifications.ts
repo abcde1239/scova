@@ -5,7 +5,7 @@ import {
     NotificationListQuerySchema,
     NotificationListResponseSchema,
     NotificationPatchInputSchema,
-} from '@scova/contracts';
+} from '@scova/models';
 import type { ApiServices } from '@/app/context.ts';
 import { createNotificationHandlers } from '@/handler/notifications.ts';
 

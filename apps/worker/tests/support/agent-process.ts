@@ -1,4 +1,4 @@
-import { PrismaClient } from '@scova/models';
+import { PrismaClient } from '@scova/db';
 import {
     createConnectorBundle,
     type ConnectorBundle,

@@ -1,4 +1,4 @@
-import { PrismaClient } from '@scova/models';
+import { PrismaClient } from '@scova/db';
 import { afterAll, beforeAll, expect, it } from 'vite-plus/test';
 import { createDefaultServices } from '../src/app/context.ts';
 import { createTaskService } from '../src/service/tasks.ts';

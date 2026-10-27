@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
-import { PrismaClient } from '@scova/models';
-import { parseContract, ReportSchema, NotificationListResponseSchema } from '@scova/contracts';
+import { PrismaClient } from '@scova/db';
+import { parseContract, ReportSchema, NotificationListResponseSchema } from '@scova/models';
 import { createApiApp } from '../../src/app/index.ts';
 import { createDefaultServices } from '../../src/app/context.ts';
 import { csrfForSession, tokenHash } from '../../src/utils/security.ts';

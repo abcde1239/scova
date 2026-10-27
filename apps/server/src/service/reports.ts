@@ -13,7 +13,7 @@ import {
     parseContract,
     type Evidence,
     type Report,
-} from '@scova/contracts';
+} from '@scova/models';
 import type { ApiServices } from '@/app/context.ts';
 import {
     createReportRepo,

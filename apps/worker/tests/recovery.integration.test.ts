@@ -1,4 +1,4 @@
-import type { Usage } from '@scova/contracts';
+import type { Usage } from '@scova/models';
 import type { AgentCandidate } from '@scova/agent-core';
 import {
     createConnectorBundle,

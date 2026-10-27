@@ -18,5 +18,5 @@ jobs:
                   bun-version: '1.3.4'
             - run: vp exec prisma generate
             - run: vp run api:openapi:check
-            - run: vp test packages/contracts/tests/contracts.test.ts apps/server/tests/openapi.test.ts
+            - run: vp test packages/models/tests/contracts.test.ts apps/server/tests/openapi.test.ts
             - run: vp run test:processes

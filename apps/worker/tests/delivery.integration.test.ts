@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { nodeScriptCommand } from '../../../scripts/process-runtime.mjs';
-import type { NotificationPreference, Report } from '@scova/contracts';
+import type { NotificationPreference, Report } from '@scova/models';
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vite-plus/test';
