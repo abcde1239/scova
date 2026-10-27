@@ -1,28 +1,28 @@
 services:
-  postgres:
-    image: postgres:17-alpine
-    environment:
-      POSTGRES_USER: scova_test
-      POSTGRES_PASSWORD: scova_test
-      POSTGRES_DB: scova_test
-    ports:
-      - "127.0.0.1:${SCOVA_TEST_PG_PORT:-55432}:5432"
-    tmpfs:
-      - /var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U scova_test -d scova_test"]
-      interval: 2s
-      timeout: 3s
-      retries: 30
-  redis:
-    image: redis:7-alpine
-    command: ["redis-server", "--appendonly", "no", "--save", ""]
-    tmpfs:
-      - /data
-    ports:
-      - "127.0.0.1:${SCOVA_TEST_REDIS_PORT:-56379}:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 2s
-      timeout: 3s
-      retries: 30
+    postgres:
+        image: postgres:17-alpine
+        environment:
+            POSTGRES_USER: scova_test
+            POSTGRES_PASSWORD: scova_test
+            POSTGRES_DB: scova_test
+        ports:
+            - '127.0.0.1:${SCOVA_TEST_PG_PORT:-55432}:5432'
+        tmpfs:
+            - /var/lib/postgresql/data
+        healthcheck:
+            test: ['CMD-SHELL', 'pg_isready -U scova_test -d scova_test']
+            interval: 2s
+            timeout: 3s
+            retries: 30
+    redis:
+        image: redis:7-alpine
+        command: ['redis-server', '--appendonly', 'no', '--save', '']
+        tmpfs:
+            - /data
+        ports:
+            - '127.0.0.1:${SCOVA_TEST_REDIS_PORT:-56379}:6379'
+        healthcheck:
+            test: ['CMD', 'redis-cli', 'ping']
+            interval: 2s
+            timeout: 3s
+            retries: 30

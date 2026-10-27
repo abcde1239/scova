@@ -1,8 +1,8 @@
-import { defineConfig } from "vite-plus";
-import { fileURLToPath } from "node:url";
+import { defineConfig } from 'vite-plus';
+import { fileURLToPath } from 'node:url';
 
 export default defineConfig({
-  resolve: { tsconfigPaths: true },
-  root: fileURLToPath(new URL("../", import.meta.url)),
-  test: { include: ["apps/server/tests/runs.integration.test.ts"], testTimeout: 30_000 },
+    resolve: { tsconfigPaths: true },
+    root: fileURLToPath(new URL('../', import.meta.url)),
+    test: { include: ['apps/server/tests/runs.integration.test.ts'], testTimeout: 30_000 },
 });

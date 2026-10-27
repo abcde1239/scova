@@ -1,154 +1,154 @@
 name: scova
 x-app: &app
-  image: scova-backend:local
-  build: .
-  init: true
-  restart: unless-stopped
-  stop_grace_period: 60s
-  read_only: true
-  tmpfs: [/tmp]
-  security_opt: [no-new-privileges:true]
-  cap_drop: [ALL]
-  environment: &environment
-    DATABASE_URL: postgresql://scova:${POSTGRES_PASSWORD:?Copy .env.example and replace the database password}@postgres:5432/scova
-    REDIS_URL: redis://redis:6379
-    APP_ORIGIN: ${APP_ORIGIN:-http://localhost:8080}
-    REGISTRATION_ENABLED: ${REGISTRATION_ENABLED:-true}
-    AGENT_CHECKPOINT_SCHEMA: scova_agent
-    AGENT_CHECKPOINT_MIGRATION: external
-    SEARCH_PROVIDER: ${SEARCH_PROVIDER:-searxng}
-    SEARXNG_BASE_URL: http://searxng:8080
-    MODEL_API_KEY: ${MODEL_API_KEY:-}
-    MODEL_NAME: ${MODEL_NAME:-}
-    MODEL_BASE_URL: ${MODEL_BASE_URL:-}
-    TAVILY_API_KEY: ${TAVILY_API_KEY:-}
-    WORKER_SCHEDULED_RUN_MODE: ${WORKER_SCHEDULED_RUN_MODE:-demo}
-  logging: &logging
-    driver: json-file
-    options: { max-size: 5m, max-file: "2" }
+    image: scova-backend:local
+    build: .
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 60s
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    environment: &environment
+        DATABASE_URL: postgresql://scova:${POSTGRES_PASSWORD:?Copy .env.example and replace the database password}@postgres:5432/scova
+        REDIS_URL: redis://redis:6379
+        APP_ORIGIN: ${APP_ORIGIN:-http://localhost:8080}
+        REGISTRATION_ENABLED: ${REGISTRATION_ENABLED:-true}
+        AGENT_CHECKPOINT_SCHEMA: scova_agent
+        AGENT_CHECKPOINT_MIGRATION: external
+        SEARCH_PROVIDER: ${SEARCH_PROVIDER:-searxng}
+        SEARXNG_BASE_URL: http://searxng:8080
+        MODEL_API_KEY: ${MODEL_API_KEY:-}
+        MODEL_NAME: ${MODEL_NAME:-}
+        MODEL_BASE_URL: ${MODEL_BASE_URL:-}
+        TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+        WORKER_SCHEDULED_RUN_MODE: ${WORKER_SCHEDULED_RUN_MODE:-demo}
+    logging: &logging
+        driver: json-file
+        options: { max-size: 5m, max-file: '2' }
 services:
-  postgres:
-    image: postgres:17-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: scova
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Copy .env.example and replace the database password}
-      POSTGRES_DB: scova
-    volumes: [postgres-data:/var/lib/postgresql/data]
-    healthcheck:
-      test: [CMD-SHELL, "pg_isready -U scova -d scova"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-    logging: *logging
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    command: [redis-server, --appendonly, "yes", --appendfsync, everysec]
-    volumes: [redis-data:/data]
-    healthcheck:
-      test: [CMD, redis-cli, ping]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-    logging: *logging
-  migrate:
-    <<: *app
-    restart: "no"
-    working_dir: /app/apps/worker
-    environment:
-      <<: *environment
-      SCOVA_MAINTENANCE: "1"
-    command: [bun, run, src/operations.ts, migrate]
-    depends_on:
-      postgres: { condition: service_healthy }
-  api:
-    <<: *app
-    environment:
-      <<: *environment
-      DATABASE_URL: postgresql://scova:${POSTGRES_PASSWORD}@postgres:5432/scova?application_name=scova-api
-    depends_on:
-      migrate: { condition: service_completed_successfully }
-      redis: { condition: service_healthy }
-    healthcheck:
-      test: [CMD-SHELL, "cd /app/apps/worker && bun run src/health.ts api"]
-      interval: 15s
-      timeout: 12s
-      retries: 5
-      start_period: 20s
-  worker:
-    <<: *app
-    working_dir: /app/apps/worker
-    environment:
-      <<: *environment
-      DATABASE_URL: postgresql://scova:${POSTGRES_PASSWORD}@postgres:5432/scova?application_name=scova-worker
-      WORKER_HEARTBEAT_PATH: /tmp/scova-worker-ready
-    command: [bun, run, src/main.ts]
-    depends_on:
-      migrate: { condition: service_completed_successfully }
-      redis: { condition: service_healthy }
-    healthcheck:
-      test: [CMD, bun, run, src/health.ts, worker]
-      interval: 15s
-      timeout: 12s
-      retries: 5
-      start_period: 20s
-  proxy:
-    image: nginxinc/nginx-unprivileged:1.28-alpine
-    restart: unless-stopped
-    ports: ["${SCOVA_BIND:-127.0.0.1}:${SCOVA_PORT:-8080}:8080"]
-    volumes: [./ops/proxy/default.conf:/etc/nginx/conf.d/default.conf:ro]
-    depends_on:
-      api: { condition: service_healthy }
-    logging: *logging
-  searxng:
-    image: ghcr.io/searxng/searxng@sha256:7c7cbe509429e82755104b2a95f52085a98633c95d53f44e4e905fa3a59f08c8
-    profiles: [live-search]
-    restart: unless-stopped
-    user: "977:977"
-    environment:
-      SEARXNG_SECRET: ${SEARXNG_SECRET:-}
-      SEARXNG_BIND_ADDRESS: 0.0.0.0
-      SEARXNG_PORT: "8080"
-      FORCE_OWNERSHIP: "false"
-      GRANIAN_WORKERS: "1"
-      GRANIAN_BLOCKING_THREADS: "2"
-    volumes:
-      - ./ops/searxng/settings.yml:/etc/searxng/settings.yml:ro
-      - searxng-cache:/var/cache/searxng
-    mem_limit: 512m
-    cpus: 1.0
-    pids_limit: 128
-    healthcheck:
-      test:
-        [
-          CMD,
-          /usr/local/searxng/.venv/bin/python,
-          -c,
-          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=3).read()",
-        ]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 20s
-    logging: *logging
-  operations:
-    <<: *app
-    profiles: [maintenance]
-    restart: "no"
-    working_dir: /app/apps/worker
-    environment:
-      <<: *environment
-      SCOVA_MAINTENANCE: "1"
-      SCOVA_BACKUP_DIRECTORY: /backups
-    volumes: [backups:/backups]
-    entrypoint: [bun, run, src/operations.ts]
-    command: [ready]
-    depends_on:
-      postgres: { condition: service_healthy }
-      redis: { condition: service_healthy }
+    postgres:
+        image: postgres:17-alpine
+        restart: unless-stopped
+        environment:
+            POSTGRES_USER: scova
+            POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Copy .env.example and replace the database password}
+            POSTGRES_DB: scova
+        volumes: [postgres-data:/var/lib/postgresql/data]
+        healthcheck:
+            test: [CMD-SHELL, 'pg_isready -U scova -d scova']
+            interval: 5s
+            timeout: 3s
+            retries: 20
+        logging: *logging
+    redis:
+        image: redis:7-alpine
+        restart: unless-stopped
+        command: [redis-server, --appendonly, 'yes', --appendfsync, everysec]
+        volumes: [redis-data:/data]
+        healthcheck:
+            test: [CMD, redis-cli, ping]
+            interval: 5s
+            timeout: 3s
+            retries: 20
+        logging: *logging
+    migrate:
+        <<: *app
+        restart: 'no'
+        working_dir: /app/apps/worker
+        environment:
+            <<: *environment
+            SCOVA_MAINTENANCE: '1'
+        command: [bun, run, src/operations.ts, migrate]
+        depends_on:
+            postgres: { condition: service_healthy }
+    api:
+        <<: *app
+        environment:
+            <<: *environment
+            DATABASE_URL: postgresql://scova:${POSTGRES_PASSWORD}@postgres:5432/scova?application_name=scova-api
+        depends_on:
+            migrate: { condition: service_completed_successfully }
+            redis: { condition: service_healthy }
+        healthcheck:
+            test: [CMD-SHELL, 'cd /app/apps/worker && bun run src/health.ts api']
+            interval: 15s
+            timeout: 12s
+            retries: 5
+            start_period: 20s
+    worker:
+        <<: *app
+        working_dir: /app/apps/worker
+        environment:
+            <<: *environment
+            DATABASE_URL: postgresql://scova:${POSTGRES_PASSWORD}@postgres:5432/scova?application_name=scova-worker
+            WORKER_HEARTBEAT_PATH: /tmp/scova-worker-ready
+        command: [bun, run, src/main.ts]
+        depends_on:
+            migrate: { condition: service_completed_successfully }
+            redis: { condition: service_healthy }
+        healthcheck:
+            test: [CMD, bun, run, src/health.ts, worker]
+            interval: 15s
+            timeout: 12s
+            retries: 5
+            start_period: 20s
+    proxy:
+        image: nginxinc/nginx-unprivileged:1.28-alpine
+        restart: unless-stopped
+        ports: ['${SCOVA_BIND:-127.0.0.1}:${SCOVA_PORT:-8080}:8080']
+        volumes: [./ops/proxy/default.conf:/etc/nginx/conf.d/default.conf:ro]
+        depends_on:
+            api: { condition: service_healthy }
+        logging: *logging
+    searxng:
+        image: ghcr.io/searxng/searxng@sha256:7c7cbe509429e82755104b2a95f52085a98633c95d53f44e4e905fa3a59f08c8
+        profiles: [live-search]
+        restart: unless-stopped
+        user: '977:977'
+        environment:
+            SEARXNG_SECRET: ${SEARXNG_SECRET:-}
+            SEARXNG_BIND_ADDRESS: 0.0.0.0
+            SEARXNG_PORT: '8080'
+            FORCE_OWNERSHIP: 'false'
+            GRANIAN_WORKERS: '1'
+            GRANIAN_BLOCKING_THREADS: '2'
+        volumes:
+            - ./ops/searxng/settings.yml:/etc/searxng/settings.yml:ro
+            - searxng-cache:/var/cache/searxng
+        mem_limit: 512m
+        cpus: 1.0
+        pids_limit: 128
+        healthcheck:
+            test:
+                [
+                    CMD,
+                    /usr/local/searxng/.venv/bin/python,
+                    -c,
+                    "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=3).read()",
+                ]
+            interval: 10s
+            timeout: 5s
+            retries: 12
+            start_period: 20s
+        logging: *logging
+    operations:
+        <<: *app
+        profiles: [maintenance]
+        restart: 'no'
+        working_dir: /app/apps/worker
+        environment:
+            <<: *environment
+            SCOVA_MAINTENANCE: '1'
+            SCOVA_BACKUP_DIRECTORY: /backups
+        volumes: [backups:/backups]
+        entrypoint: [bun, run, src/operations.ts]
+        command: [ready]
+        depends_on:
+            postgres: { condition: service_healthy }
+            redis: { condition: service_healthy }
 volumes:
-  postgres-data:
-  redis-data:
-  searxng-cache:
-  backups:
+    postgres-data:
+    redis-data:
+    searxng-cache:
+    backups:

@@ -27,12 +27,12 @@
 - **Priority**：High
 - **Preconditions**：`packages/contracts` 已定义 Task/TaskVersion/Run 的输入和输出 schema；apps/server、apps/worker、apps/web 引用同一包。
 - **Test Steps**：
-  1. 使用 `vp test packages/contracts/tests/contracts.test.ts` 编译并执行契约测试。
-  2. 分别从 API、worker、web 的 TypeScript 入口导入同一 DTO。
-  3. 对合法任务配置运行运行时解析。
+    1. 使用 `vp test packages/contracts/tests/contracts.test.ts` 编译并执行契约测试。
+    2. 分别从 API、worker、web 的 TypeScript 入口导入同一 DTO。
+    3. 对合法任务配置运行运行时解析。
 - **Expected Results**：
-  - 三个工作区使用同一字段名、枚举和值域，不存在重复接口定义。
-  - 合法配置解析成功，输出不包含 Prisma 实体内部字段。
+    - 三个工作区使用同一字段名、枚举和值域，不存在重复接口定义。
+    - 合法配置解析成功，输出不包含 Prisma 实体内部字段。
 - **Postconditions**：无持久化数据。
 
 #### TC-F-002：错误响应协议和字段定位
@@ -41,9 +41,9 @@
 - **Priority**：High
 - **Preconditions**：Elysia API 已注册统一错误处理器。
 - **Test Steps**：
-  1. POST 一个缺少 `target` 的任务配置。
-  2. POST 一个 `budget.searches=0` 的配置。
-  3. 读取错误响应 JSON 中的 `requestId`；若实现额外提供追踪响应头，核对其与响应体一致。
+    1. POST 一个缺少 `target` 的任务配置。
+    2. POST 一个 `budget.searches=0` 的配置。
+    3. 读取错误响应 JSON 中的 `requestId`；若实现额外提供追踪响应头，核对其与响应体一致。
 - **Expected Results**：返回 contracts/OpenAPI 约定的校验错误 HTTP 状态（本用例按 400 验收）；`code` 稳定可枚举；`fieldErrors` 指向实际 schema 的目标或预算字段；`message` 为中文；每次错误响应有非空 `requestId`。不得用 HTTP 200 包装错误。
 - **Postconditions**：请求不创建 Task 或 TaskVersion。
 
@@ -53,14 +53,14 @@
 - **Priority**：High
 - **Preconditions**：Elysia Swagger 插件已启用，API 在测试端口启动。
 - **Test Steps**：
-  1. GET `/swagger/json`（或项目约定的 OpenAPI JSON 地址）。
-  2. 检查已交付路由均存在；在 #8、#10、#12 完成后分别核对认证、任务、执行路由。尚未实现的领域不应伪造为可用端点。
-  3. 对每个 operation 检查 `summary`/`description`、参数、请求体、2xx/4xx/409 响应 schema。
-  4. 将 OpenAPI schema 与 contracts 的 schema 快照比较。
+    1. GET `/swagger/json`（或项目约定的 OpenAPI JSON 地址）。
+    2. 检查已交付路由均存在；在 #8、#10、#12 完成后分别核对认证、任务、执行路由。尚未实现的领域不应伪造为可用端点。
+    3. 对每个 operation 检查 `summary`/`description`、参数、请求体、2xx/4xx/409 响应 schema。
+    4. 将 OpenAPI schema 与 contracts 的 schema 快照比较。
 - **Expected Results**：
-  - 文档可解析，路由无重复 operationId。
-  - 面向用户的说明和字段描述包含中文，且不泄漏密码、token、内部 checkpoint 字段。
-  - 文档声明的响应状态码和 schema 与 Elysia 实际响应一致。
+    - 文档可解析，路由无重复 operationId。
+    - 面向用户的说明和字段描述包含中文，且不泄漏密码、token、内部 checkpoint 字段。
+    - 文档声明的响应状态码和 schema 与 Elysia 实际响应一致。
 - **Postconditions**：只读。
 
 #### TC-F-004：注册、登录、当前用户和注销
@@ -69,10 +69,10 @@
 - **Priority**：High
 - **Preconditions**：PostgreSQL 已迁移；注册功能开启；Elysia auth 路由可用。
 - **Test Steps**：
-  1. POST `/api/v1/auth/register` 创建 `userA`。
-  2. POST `/api/v1/auth/login`，保存 HttpOnly Cookie。
-  3. GET `/api/v1/me`。
-  4. POST `/api/v1/auth/logout`，再次 GET `/api/v1/me`。
+    1. POST `/api/v1/auth/register` 创建 `userA`。
+    2. POST `/api/v1/auth/login`，保存 HttpOnly Cookie。
+    3. GET `/api/v1/me`。
+    4. POST `/api/v1/auth/logout`，再次 GET `/api/v1/me`。
 - **Expected Results**：注册和登录返回文档约定的 201/200 及普通 JSON；会话 Cookie 只携带不透明随机 token，不携带密码或用户敏感资料，数据库仅保存 token hash；Cookie 为 HttpOnly、SameSite=Lax，生产为 Secure；`/me` 返回用户 ID、邮箱、默认时区和提醒偏好；注销后返回 401。
 - **Postconditions**：测试会话撤销。
 
@@ -82,10 +82,10 @@
 - **Priority**：High
 - **Preconditions**：`userA` 已登录。
 - **Test Steps**：
-  1. PATCH `/api/v1/me/preferences` 设置 `Asia/Shanghai` 和提醒偏好。
-  2. POST `/api/v1/tasks` 创建任务。
-  3. 读取任务当前版本。
-  4. 修改用户默认时区，再读取任务版本。
+    1. PATCH `/api/v1/me/preferences` 设置 `Asia/Shanghai` 和提醒偏好。
+    2. POST `/api/v1/tasks` 创建任务。
+    3. 读取任务当前版本。
+    4. 修改用户默认时区，再读取任务版本。
 - **Expected Results**：偏好更新成功；创建的 TaskVersion 固化保存时的配置和时区；修改用户默认值不追溯修改已保存版本。
 - **Postconditions**：任务可归档。
 
@@ -95,10 +95,10 @@
 - **Priority**：High
 - **Preconditions**：`userA` 已登录；配置通过 contracts 校验。
 - **Test Steps**：
-  1. POST `/api/v1/tasks` 创建主题、来源偏好、预算和 weekly schedule。
-  2. GET `/api/v1/tasks/{id}`，记录 `revision=1` 和 `currentVersionId`。
-  3. 使用当前 revision 的 `If-Match` PATCH 仅修改标题。
-  4. GET 旧版本和当前版本。
+    1. POST `/api/v1/tasks` 创建主题、来源偏好、预算和 weekly schedule。
+    2. GET `/api/v1/tasks/{id}`，记录 `revision=1` 和 `currentVersionId`。
+    3. 使用当前 revision 的 `If-Match` PATCH 仅修改标题。
+    4. GET 旧版本和当前版本。
 - **Expected Results**：创建产生 Task + TaskVersion；旧版本内容不变；新版本递增；Task 指向新版本；仅改标题不改变语义比较范围。已有 Run 的版本冻结由 TC-ST-006 验证。
 - **Postconditions**：保留两个版本供后续测试。
 
@@ -108,9 +108,9 @@
 - **Priority**：High
 - **Preconditions**：任务 revision 为 2。
 - **Test Steps**：
-  1. 两个客户端读取 revision=2。
-  2. 客户端 A 带 `If-Match: 2` 更新任务。
-  3. 客户端 B 仍带 `If-Match: 2` 更新任务。
+    1. 两个客户端读取 revision=2。
+    2. 客户端 A 带 `If-Match: 2` 更新任务。
+    3. 客户端 B 仍带 `If-Match: 2` 更新任务。
 - **Expected Results**：A 成功并生成 revision=3；B 返回 409 `edit_conflict`，包含当前 revision/资源摘要；B 的字段不覆盖 A。
 - **Postconditions**：任务内容等于 A 的更新。
 
@@ -120,9 +120,9 @@
 - **Priority**：High
 - **Preconditions**：`userA` 有 active Task，Redis/BullMQ 可用。
 - **Test Steps**：
-  1. POST `/api/v1/tasks/{id}/runs`，携带稳定 `Idempotency-Key`。
-  2. 查询 Run、IdempotencyRecord、Outbox 和 BullMQ job。
-  3. 使用相同 key 重发完全相同请求。
+    1. POST `/api/v1/tasks/{id}/runs`，携带稳定 `Idempotency-Key`。
+    2. 查询 Run、IdempotencyRecord、Outbox 和 BullMQ job。
+    3. 使用相同 key 重发完全相同请求。
 - **Expected Results**：第一次原子创建一个 Run 和一个 Outbox 事件，dispatcher 最终至少一次投递 `run-{uuid}` job；第二次返回相同 Run，不新增业务记录。队列重复投递不重复执行业务交付，不要求投递过程 exactly-once。
 - **Postconditions**：清理队列 job。
 
@@ -132,9 +132,9 @@
 - **Priority**：High
 - **Preconditions**：`userA` 有 Task A、Task B。
 - **Test Steps**：
-  1. 并发触发 Task A 两次。
-  2. 并发触发 Task B 一次。
-  3. 查询活动 Run 和数据库索引结果。
+    1. 并发触发 Task A 两次。
+    2. 并发触发 Task B 一次。
+    3. 查询活动 Run 和数据库索引结果。
 - **Expected Results**：Task A 只有一个活动 Run，第二次立即执行返回同一 Run；Task B 可创建独立 Run；数据库唯一索引直接拒绝第二个活动 Run，服务层将竞态转换为既有 Run 的幂等结果。
 - **Postconditions**：所有 Run 进入可清理终态。
 
@@ -144,10 +144,10 @@
 - **Priority**：High
 - **Preconditions**：Run 处于 queued/running；BullMQ 可模拟重复投递。
 - **Test Steps**：
-  1. POST `/runs/{id}/cancel`。
-  2. 重复投递相同 job。
-  3. 对终结失败 Run POST `/runs/{id}/retry`。
-  4. 查询父子 Run、报告和提醒。
+    1. POST `/runs/{id}/cancel`。
+    2. 重复投递相同 job。
+    3. 对终结失败 Run POST `/runs/{id}/retry`。
+    4. 查询父子 Run、报告和提醒。
 - **Expected Results**：取消在 Run 行锁下先提交取消请求并产生事件后，该 Run 不再交付报告；若交付先提交则返回已完成的事实，不追溯删除报告；重复 job 不重复执行业务交付；retry 创建带 `parentRunId` 的新 Run，原 Run 历史不变。
 - **Postconditions**：父子 Run 均可审计。
 

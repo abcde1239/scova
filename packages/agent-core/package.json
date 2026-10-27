@@ -1,24 +1,24 @@
 {
-  "name": "@scova/agent-core",
-  "version": "0.0.0",
-  "private": true,
-  "type": "module",
-  "exports": {
-    ".": "./src/index.ts"
-  },
-  "scripts": {
-    "build": "tsc --noEmit",
-    "test": "vp test",
-    "check": "vp check"
-  },
-  "dependencies": {
-    "@langchain/core": "catalog:",
-    "@langchain/langgraph": "catalog:",
-    "@scova/connectors": "workspace:*",
-    "@scova/contracts": "workspace:*"
-  },
-  "devDependencies": {
-    "@types/node": "catalog:",
-    "typescript": "catalog:"
-  }
+    "name": "@scova/agent-core",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "exports": {
+        ".": "./src/index.ts"
+    },
+    "scripts": {
+        "build": "tsc --noEmit",
+        "test": "vp test",
+        "check": "vp check"
+    },
+    "dependencies": {
+        "@langchain/core": "catalog:",
+        "@langchain/langgraph": "catalog:",
+        "@scova/connectors": "workspace:*",
+        "@scova/contracts": "workspace:*"
+    },
+    "devDependencies": {
+        "@types/node": "catalog:",
+        "typescript": "catalog:"
+    }
 }
