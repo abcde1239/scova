@@ -1,3 +1,4 @@
+import { type DatabaseClient } from '@scova/db';
 import { installedCheckpointVersion } from '@/utils/checkpoint-version.ts';
 import { createHash } from 'node:crypto';
 import type { RunnableConfig } from '@langchain/core/runnables';
@@ -31,7 +32,7 @@ import {
     type AgentTool,
     type AgentCheckpointRef,
 } from '@/repo/agent.ts';
-import type { PrismaClient } from '@scova/db';
+
 import type { RunExecutionContext, RunExecutor } from '@/service/runs.ts';
 import { RunExecutionError, type RunLeaseToken, type RunProgressEvent } from '@/utils/runs.ts';
 import { createDeliveryService } from '@/service/delivery.ts';
@@ -427,7 +428,7 @@ export function createAgentSession({
 
 export interface AgentRuntimeOptions {
     databaseUrl: string;
-    database: PrismaClient;
+    database: DatabaseClient;
     env?: NodeJS.ProcessEnv;
     checkpointSchema?: string;
     bundle?: ConnectorBundle;

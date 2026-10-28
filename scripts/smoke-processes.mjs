@@ -66,7 +66,7 @@ for (const { runtime, executable, args } of [
         assert(health?.ok, `${runtime} 未按期就绪：${output}`);
         assert.deepEqual(await health.json(), { status: 'ok', runtime });
         const spec = await (await fetch(`http://127.0.0.1:${port}/swagger/json`)).json();
-        assert.equal(spec.info.title, '知巡 Scova API');
+        assert.equal(spec.info.title, 'Scova API');
         assert.equal(spec.paths['/health'].get.summary, '健康检查');
         child.send('scova:shutdown');
         const result = await Promise.race([

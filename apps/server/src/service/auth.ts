@@ -1,6 +1,6 @@
+import { type User as StoredUser } from '@scova/db';
 import { randomBytes } from 'node:crypto';
 import { Algorithm, hash, verify } from '@node-rs/argon2';
-import type { User as StoredUser } from '@scova/db';
 import type { LoginInput, RegisterInput, UpdatePreferencesInput } from '@scova/models';
 import type { ApiServices } from '@/app/context.ts';
 import { createAuthRepository, type AuthTransaction } from '@/repo/auth.ts';
@@ -107,12 +107,7 @@ export function createAuthService(services: ApiServices) {
                     return newSession(store, user, previousToken);
                 });
             } catch (error) {
-                if (
-                    typeof error === 'object' &&
-                    error !== null &&
-                    'code' in error &&
-                    error.code === 'P2002'
-                )
+                if (repository.isUniqueConflict(error))
                     throw new ApiError(409, 'EMAIL_ALREADY_REGISTERED', '该邮箱已注册');
                 throw error;
             }

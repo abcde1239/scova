@@ -1,12 +1,19 @@
+import {
+    type Run,
+    runs as dbRuns,
+    eq,
+    and,
+    reports as dbReports,
+    type DatabaseTransaction,
+} from '@scova/db';
 import { createHash } from 'node:crypto';
 import { isComparisonManifest, type AgentBaseline } from '@scova/agent-core';
-import type { Prisma, Run } from '@scova/db';
 
 const sha = (text: string) => createHash('sha256').update(text, 'utf8').digest('hex');
 
 /** Read only the once-frozen baseline. Missing legacy manifests fail closed, never pick latest. */
 export async function loadBaseline(
-    tx: Prisma.TransactionClient,
+    tx: DatabaseTransaction,
     run: Run,
 ): Promise<AgentBaseline | null> {
     if (!run.baselineRunId) return null;
@@ -19,24 +26,24 @@ export async function loadBaseline(
         manifest: null,
         evidence: [],
     };
-    const baseline = await tx.run.findFirst({
-        where: {
-            id: run.baselineRunId,
-            userId: run.userId,
-            taskId: run.taskId,
-            comparisonScopeHash: run.comparisonScopeHash,
-            mode: run.mode,
-            status: 'succeeded',
-        },
-        include: {
+    const baseline = await tx.query.runs.findFirst({
+        where: and(
+            eq(dbRuns.id, run.baselineRunId),
+            eq(dbRuns.userId, run.userId),
+            eq(dbRuns.taskId, run.taskId),
+            eq(dbRuns.comparisonScopeHash, run.comparisonScopeHash),
+            eq(dbRuns.mode, run.mode),
+            eq(dbRuns.status, 'succeeded'),
+        ),
+        with: {
             reports: {
-                where: { completeness: 'complete' },
-                include: {
-                    changes: { include: { citations: true } },
-                    claims: { include: { citations: true } },
+                where: eq(dbReports.completeness, 'complete'),
+                with: {
+                    changes: { with: { citations: true } },
+                    claims: { with: { citations: true } },
                 },
             },
-            sources: { include: { source: true, snapshot: true, evidence: true } },
+            sources: { with: { source: true, snapshot: true, evidence: true } },
         },
     });
     const report = baseline?.reports[0];

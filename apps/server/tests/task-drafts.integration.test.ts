@@ -1,8 +1,8 @@
-import { execFileSync } from 'node:child_process';
-import { createRequire } from 'node:module';
+import { migrateDatabase } from '@scova/db/migrate';
+import { createDatabaseClient, connectDatabase, closeDatabase, and, eq, count } from '@scova/db';
+import * as tables from '@scova/db';
 import { randomUUID } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
-import { PrismaClient } from '@scova/db';
+
 import {
     ConnectorError,
     type ModelProvider,
@@ -18,9 +18,8 @@ import {
     type ApiServiceOverrides,
 } from '../src/app/context.ts';
 import { draftConfig, draftExamples } from './support/task-drafts.ts';
+import { firstRow, requireRow } from '../src/utils/database.ts';
 
-const require = createRequire(import.meta.url);
-const root = fileURLToPath(new URL('../../../', import.meta.url));
 const baseUrl =
     process.env.SCOVA_TEST_DATABASE_URL ??
     process.env.RUNTIME_DATABASE_URL ??
@@ -30,7 +29,7 @@ const redisUrl =
 const schema = 'scova_drafts_' + randomUUID().replaceAll('-', '');
 const scopedUrl = new URL(baseUrl);
 scopedUrl.searchParams.set('schema', schema);
-const prisma = new PrismaClient({ datasources: { db: { url: scopedUrl.toString() } } });
+const db = createDatabaseClient({ connectionString: scopedUrl.toString() });
 const admin = new (require('pg').Client)({ connectionString: baseUrl });
 const redis = new RedisClient(redisUrl, {
     lazyConnect: true,
@@ -49,7 +48,7 @@ function configure(overrides: ApiServiceOverrides = {}) {
     services = createDefaultServices({
         origin,
         production: false,
-        db: () => prisma,
+        db: () => db,
         redis: () => redis,
         clock: () => now,
         taskDraftModel: () => model,
@@ -87,10 +86,12 @@ async function register(timezone = 'Asia/Tokyo') {
     });
     expect(response.status).toBe(201);
     const body = await json(response);
-    await prisma.user.update({
-        where: { id: body.user.id },
-        data: { notificationPreference: { mode: 'off', runIssues: false } },
-    });
+    await db
+        .update(tables.users)
+        .set({ notificationPreference: { mode: 'off', runIssues: false } })
+        .where(and(eq(tables.users.id, body.user.id)))
+        .returning()
+        .then(firstRow);
     return {
         id: body.user.id as string,
         cookie: response.headers.get('set-cookie')!.split(';')[0]!,
@@ -127,11 +128,26 @@ function fixture(
 }
 async function businessCounts() {
     const [tasks, versions, runs, occurrences, outbox] = await Promise.all([
-        prisma.task.count(),
-        prisma.taskVersion.count(),
-        prisma.run.count(),
-        prisma.scheduleOccurrence.count(),
-        prisma.outbox.count(),
+        db
+            .select({ count: count() })
+            .from(tables.tasks)
+            .then(([row]) => row!.count),
+        db
+            .select({ count: count() })
+            .from(tables.taskVersions)
+            .then(([row]) => row!.count),
+        db
+            .select({ count: count() })
+            .from(tables.runs)
+            .then(([row]) => row!.count),
+        db
+            .select({ count: count() })
+            .from(tables.scheduleOccurrences)
+            .then(([row]) => row!.count),
+        db
+            .select({ count: count() })
+            .from(tables.outbox)
+            .then(([row]) => row!.count),
     ]);
     return { tasks, versions, runs, occurrences, outbox };
 }
@@ -146,24 +162,8 @@ describe('HTTP任务草稿、真实Redis解析预算与手工回退', () => {
         await admin.connect();
         await admin.query('CREATE SCHEMA "' + schema + '"');
         schemaCreated = true;
-        execFileSync(
-            process.execPath,
-            [
-                require.resolve('prisma/build/index.js'),
-                'migrate',
-                'deploy',
-                '--schema',
-                'packages/db/prisma/schema.prisma',
-            ],
-            {
-                cwd: root,
-                env: { ...process.env, DATABASE_URL: scopedUrl.toString() },
-                encoding: 'utf8',
-                windowsHide: true,
-                timeout: 60_000,
-            },
-        );
-        await prisma.$connect();
+        await migrateDatabase({ connectionString: scopedUrl.toString() });
+        await connectDatabase(db);
         await redis.connect();
     }, 120_000);
     beforeEach(() => {
@@ -172,7 +172,7 @@ describe('HTTP任务草稿、真实Redis解析预算与手工回退', () => {
         configure();
     });
     afterAll(async () => {
-        await prisma.$disconnect();
+        await closeDatabase(db);
         if (redis.status === 'wait' || redis.status === 'end') redis.disconnect();
         else await redis.quit();
         if (schemaCreated && /^scova_drafts_[0-9a-f]{32}$/.test(schema))
@@ -353,9 +353,9 @@ describe('HTTP任务草稿、真实Redis解析预算与手工回退', () => {
         expect(saved.status).toBe(201);
         const task = await json(saved);
         expect(task.task.nextRunAt).toBeNull();
-        const version = await prisma.taskVersion.findUniqueOrThrow({
-            where: { id: task.version.id },
-        });
+        const version = await db.query.taskVersions
+            .findFirst({ where: and(eq(tables.taskVersions.id, task.version.id)) })
+            .then(requireRow);
         expect(version.inputText).toBe(inputText);
         expect((await businessCounts()).runs).toBe(before.runs);
         expect((await businessCounts()).outbox).toBe(before.outbox);

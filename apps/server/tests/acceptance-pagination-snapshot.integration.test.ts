@@ -1,5 +1,8 @@
+import * as tables from '@scova/db';
+import { and, eq, inArray } from '@scova/db';
 import { randomUUID } from 'node:crypto';
-import { PrismaClient } from '@scova/db';
+import { createDatabaseClient, connectDatabase, closeDatabase } from '@scova/db';
+import { createObservedDatabase } from './support/query-observer.ts';
 import { afterAll, beforeAll, describe, expect, it } from 'vite-plus/test';
 import { createDefaultServices } from '../src/app/context.ts';
 import { createNotificationService } from '../src/service/notifications.ts';
@@ -7,14 +10,14 @@ import { createReportService } from '../src/service/reports.ts';
 import { historyFixture, seedHistoryRows } from './support/history-fixture.ts';
 
 const fixture = historyFixture();
-// A separate Prisma pool commits the concurrent read-status change.
-const writer = new PrismaClient({ datasources: { db: { url: fixture.databaseUrl } } });
+// A separate native pool commits the concurrent read-status change.
+const writer = createDatabaseClient({ connectionString: fixture.databaseUrl });
 beforeAll(async () => {
     await fixture.setup();
-    await writer.$connect();
+    await connectDatabase(writer);
 }, 120_000);
 afterAll(async () => {
-    await writer.$disconnect();
+    await closeDatabase(writer);
     await fixture.cleanup();
 });
 function deferred() {
@@ -45,31 +48,33 @@ describe('列表ID选择与DTO加载使用同一个PG快照', () => {
             const owner = await fixture.register();
             const data = await seedHistoryRows(fixture.db, owner, 1, 5);
             const notificationIds = data.reports.map(() => randomUUID());
-            await fixture.db.notification.createMany({
-                data: data.reports.map((report, index) => ({
-                    id: notificationIds[index]!,
-                    userId: owner.id,
-                    runId: report.runId,
-                    reportId: report.id,
-                    kind: index === 4 ? 'summary' : 'run_issue',
-                })),
-            });
+            await fixture.db
+                .insert(tables.notifications)
+                .values(
+                    data.reports.map((report, index) => ({
+                        id: notificationIds[index]!,
+                        userId: owner.id,
+                        runId: report.runId,
+                        reportId: report.id,
+                        kind: index === 4 ? ('summary' as const) : ('run_issue' as const),
+                    })),
+                )
+                .returning({ id: tables.notifications.id })
+                .then((rows) => ({ count: rows.length }));
             const allIds =
                 target === 'notifications' ? notificationIds : data.inbox.map((row) => row.id);
             // Preserve submillisecond differences to exercise the database anchor as well.
             for (const [index, id] of allIds.entries()) {
                 const timestamp = '2026-02-01T00:00:00.12345' + (6 - index) + 'Z';
                 if (target === 'notifications')
-                    await fixture.db.$executeRawUnsafe(
+                    await fixture.db.$client.query(
                         'UPDATE notifications SET created_at=$1::timestamptz WHERE id=$2::uuid',
-                        timestamp,
-                        id,
+                        [timestamp, id],
                     );
                 else
-                    await fixture.db.$executeRawUnsafe(
+                    await fixture.db.$client.query(
                         'UPDATE inbox_items SET created_at=$1::timestamptz WHERE id=$2::uuid',
-                        timestamp,
-                        id,
+                        [timestamp, id],
                     );
             }
             const expectedIds = target === 'notifications' ? allIds.slice(0, 4) : allIds;
@@ -82,26 +87,18 @@ describe('列表ID选择与DTO加载使用同一个PG快照', () => {
                 entered.resolve();
                 await release.promise;
             }
-            // This extension only gates a real Prisma query. It returns the original
-            // database result, preserving the production transaction and its snapshot.
-            const reader = fixture.db.$extends({
-                query: {
-                    notification: {
-                        async findMany({ args, query }) {
-                            await beforeHydration('notifications');
-                            return query(args);
-                        },
-                    },
-                    inboxItem: {
-                        async findMany({ args, query }) {
-                            await beforeHydration('inbox');
-                            return query(args);
-                        },
-                    },
+            // Gate the real hydration SQL after ID selection established its snapshot.
+            const reader = createObservedDatabase(fixture.databaseUrl, {
+                async before(query) {
+                    if (!query.text.includes('"read_at"')) return;
+                    if (/\bfrom\s+"notifications"/i.test(query.text))
+                        await beforeHydration('notifications');
+                    else if (/\bfrom\s+"inbox_items"/i.test(query.text))
+                        await beforeHydration('inbox');
                 },
             });
             const services = createDefaultServices({
-                db: () => reader as unknown as PrismaClient,
+                db: () => reader,
                 close: async () => {},
             });
             const notifications = createNotificationService(services);
@@ -122,16 +119,30 @@ describe('列表ID选择与DTO加载使用同一个PG快照', () => {
                 await within(entered.promise, 'List did not reach the real hydration query');
                 const marked = expectedIds.slice(0, 2);
                 if (target === 'notifications') {
-                    const changed = await writer.notification.updateMany({
-                        where: { userId: owner.id, id: { in: marked } },
-                        data: { readAt: new Date() },
-                    });
+                    const changed = await writer
+                        .update(tables.notifications)
+                        .set({ readAt: new Date() })
+                        .where(
+                            and(
+                                eq(tables.notifications.userId, owner.id),
+                                inArray(tables.notifications.id, marked),
+                            ),
+                        )
+                        .returning()
+                        .then((rows) => ({ count: rows.length }));
                     expect(changed.count).toBe(2);
                 } else {
-                    const changed = await writer.inboxItem.updateMany({
-                        where: { userId: owner.id, id: { in: marked } },
-                        data: { readAt: new Date() },
-                    });
+                    const changed = await writer
+                        .update(tables.inboxItems)
+                        .set({ readAt: new Date() })
+                        .where(
+                            and(
+                                eq(tables.inboxItems.userId, owner.id),
+                                inArray(tables.inboxItems.id, marked),
+                            ),
+                        )
+                        .returning()
+                        .then((rows) => ({ count: rows.length }));
                     expect(changed.count).toBe(2);
                 }
                 // The write is committed before hydration resumes. RepeatableRead must
@@ -169,6 +180,7 @@ describe('列表ID选择与DTO加载使用同一个PG快照', () => {
                 release.resolve();
                 await pending.catch(() => undefined);
                 await services.close();
+                await closeDatabase(reader);
             }
         },
         20_000,

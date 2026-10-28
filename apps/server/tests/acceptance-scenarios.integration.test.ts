@@ -1,3 +1,5 @@
+import { and, eq, inArray, isNotNull, count } from '@scova/db';
+import * as tables from '@scova/db';
 import { randomUUID } from 'node:crypto';
 import { Queue } from 'bullmq';
 import type { Report, Run, TaskConfig } from '@scova/models';
@@ -11,6 +13,7 @@ import {
 import { historyFixture, type HistoryOwner } from './support/history-fixture.ts';
 import { draftConfig } from './support/task-drafts.ts';
 import { startAcceptanceWorker } from './support/acceptance-worker.ts';
+import { requireRow } from '../src/utils/database.ts';
 
 const fixture = historyFixture();
 const redisUrl =
@@ -92,13 +95,32 @@ async function createRun(taskId: string, owner: HistoryOwner, key: string) {
     return (await response.json()) as { run: Run; reused: boolean };
 }
 async function counts(ownerId: string, taskId: string) {
-    const where = { userId: ownerId, taskId };
     return {
-        runs: await fixture.db.run.count({ where }),
-        reports: await fixture.db.report.count({ where }),
-        inbox: await fixture.db.inboxItem.count({ where: { userId: ownerId } }),
-        notifications: await fixture.db.notification.count({ where: { userId: ownerId } }),
-        baseline: await fixture.db.baseline.count({ where }),
+        runs: await fixture.db
+            .select({ count: count() })
+            .from(tables.runs)
+            .where(and(eq(tables.runs.userId, ownerId), eq(tables.runs.taskId, taskId)))
+            .then(([row]) => row!.count),
+        reports: await fixture.db
+            .select({ count: count() })
+            .from(tables.reports)
+            .where(and(eq(tables.reports.userId, ownerId), eq(tables.reports.taskId, taskId)))
+            .then(([row]) => row!.count),
+        inbox: await fixture.db
+            .select({ count: count() })
+            .from(tables.inboxItems)
+            .where(and(eq(tables.inboxItems.userId, ownerId)))
+            .then(([row]) => row!.count),
+        notifications: await fixture.db
+            .select({ count: count() })
+            .from(tables.notifications)
+            .where(and(eq(tables.notifications.userId, ownerId)))
+            .then(([row]) => row!.count),
+        baseline: await fixture.db
+            .select({ count: count() })
+            .from(tables.baselines)
+            .where(and(eq(tables.baselines.userId, ownerId), eq(tables.baselines.taskId, taskId)))
+            .then(([row]) => row!.count),
     };
 }
 
@@ -132,9 +154,9 @@ describe('三类公开示例：真实认证HTTP→Outbox/BullMQ→独立生产Wo
                         runIds.push(runId);
                         await waitUntil(
                             async () => {
-                                const run = await fixture.db.run.findUniqueOrThrow({
-                                    where: { id: runId },
-                                });
+                                const run = await fixture.db.query.runs
+                                    .findFirst({ where: and(eq(tables.runs.id, runId)) })
+                                    .then(requireRow);
                                 if (run.status === 'failed' || run.status === 'canceled')
                                     throw new Error(
                                         'Production Run failed: ' +
@@ -148,9 +170,16 @@ describe('三类公开示例：真实认证HTTP→Outbox/BullMQ→独立生产Wo
                         );
                         await waitUntil(
                             async () =>
-                                (await fixture.db.outbox.count({
-                                    where: { aggregateId: runId, sentAt: { not: null } },
-                                })) === 1,
+                                (await fixture.db
+                                    .select({ count: count() })
+                                    .from(tables.outbox)
+                                    .where(
+                                        and(
+                                            eq(tables.outbox.aggregateId, runId),
+                                            isNotNull(tables.outbox.sentAt),
+                                        ),
+                                    )
+                                    .then(([row]) => row!.count)) === 1,
                             () => name + '/' + phase + ' production outbox ACK',
                         );
                         const run = await json<Run>('/runs/' + runId, owner);
@@ -164,23 +193,41 @@ describe('三类公开示例：真实认证HTTP→Outbox/BullMQ→独立生产Wo
                         });
                         expect(run).not.toHaveProperty('checkpointRef');
                         expect(run).not.toHaveProperty('leaseOwner');
-                        const stored = await fixture.db.run.findUniqueOrThrow({
-                            where: { id: runId },
-                        });
+                        const stored = await fixture.db.query.runs
+                            .findFirst({ where: and(eq(tables.runs.id, runId)) })
+                            .then(requireRow);
                         expect(stored.leaseEpoch).toBeGreaterThan(0);
                         expect(stored.checkpointRef).not.toBeNull();
                         expect(
-                            await fixture.db.toolCall.count({
-                                where: { runId, status: 'succeeded', tool: 'model' },
-                            }),
+                            await fixture.db
+                                .select({ count: count() })
+                                .from(tables.toolCalls)
+                                .where(
+                                    and(
+                                        eq(tables.toolCalls.runId, runId),
+                                        eq(tables.toolCalls.status, 'succeeded'),
+                                        eq(tables.toolCalls.tool, 'model'),
+                                    ),
+                                )
+                                .then(([row]) => row!.count),
                         ).toBeGreaterThan(0);
                         expect(
-                            await fixture.db.toolCall.count({
-                                where: { runId, status: 'succeeded', tool: 'read' },
-                            }),
+                            await fixture.db
+                                .select({ count: count() })
+                                .from(tables.toolCalls)
+                                .where(
+                                    and(
+                                        eq(tables.toolCalls.runId, runId),
+                                        eq(tables.toolCalls.status, 'succeeded'),
+                                        eq(tables.toolCalls.tool, 'read'),
+                                    ),
+                                )
+                                .then(([row]) => row!.count),
                         ).toBeGreaterThan(0);
 
-                        const row = await fixture.db.report.findFirstOrThrow({ where: { runId } });
+                        const row = await fixture.db.query.reports
+                            .findFirst({ where: and(eq(tables.reports.runId, runId)) })
+                            .then(requireRow);
                         const report = await json<Report>('/reports/' + row.id, owner);
                         reports.push(report);
                         expect(report.format).toBe(scenarioConfig(name).outputFormat);
@@ -221,11 +268,11 @@ describe('三类公开示例：真实认证HTTP→Outbox/BullMQ→独立生产Wo
                                 expect(change.oldEvidenceIds.length).toBeGreaterThan(0);
                                 expect(change.newEvidenceIds.length).toBeGreaterThan(0);
                                 expect(change.oldValue).not.toBe(change.newValue);
-                                const oldEvidence = await fixture.db.evidence.findMany({
-                                    where: { id: { in: change.oldEvidenceIds } },
+                                const oldEvidence = await fixture.db.query.evidence.findMany({
+                                    where: and(inArray(tables.evidence.id, change.oldEvidenceIds)),
                                 });
-                                const newEvidence = await fixture.db.evidence.findMany({
-                                    where: { id: { in: change.newEvidenceIds } },
+                                const newEvidence = await fixture.db.query.evidence.findMany({
+                                    where: and(inArray(tables.evidence.id, change.newEvidenceIds)),
                                 });
                                 expect(
                                     oldEvidence.every(
@@ -248,15 +295,27 @@ describe('三类公开示例：真实认证HTTP→Outbox/BullMQ→独立生产Wo
                             expect(report.limitations.length).toBeGreaterThan(0);
                             expect(report.outcome).not.toBe('no_important_change');
                             expect(
-                                await fixture.db.toolCall.count({
-                                    // Failed supplier attempts retain reservations and are conservatively recorded as unknown.
-                                    where: { runId, tool: 'read', status: 'unknown' },
-                                }),
+                                await fixture.db
+                                    .select({ count: count() })
+                                    .from(tables.toolCalls)
+                                    .where(
+                                        and(
+                                            eq(tables.toolCalls.runId, runId),
+                                            eq(tables.toolCalls.tool, 'read'),
+                                            eq(tables.toolCalls.status, 'unknown'),
+                                        ),
+                                    )
+                                    .then(([row]) => row!.count),
                             ).toBe(1);
                         }
-                        const baseline = await fixture.db.baseline.findFirstOrThrow({
-                            where: { userId: owner.id, taskId: task.id },
-                        });
+                        const baseline = await fixture.db.query.baselines
+                            .findFirst({
+                                where: and(
+                                    eq(tables.baselines.userId, owner.id),
+                                    eq(tables.baselines.taskId, task.id),
+                                ),
+                            })
+                            .then(requireRow);
                         expect(baseline.completeRunId).toBe(phase === 'C' ? runIds[1] : runId);
                         expect(await counts(owner.id, task.id)).toEqual({
                             runs: index + 1,
@@ -286,11 +345,27 @@ describe('三类公开示例：真实认证HTTP→Outbox/BullMQ→独立生产Wo
                             kind: phase === 'C' ? 'run_issue' : 'summary',
                             readAt: null,
                         });
-                        expect(await fixture.db.report.count({ where: { runId } })).toBe(1);
                         expect(
-                            await fixture.db.inboxItem.count({ where: { reportId: report.id } }),
+                            await fixture.db
+                                .select({ count: count() })
+                                .from(tables.reports)
+                                .where(and(eq(tables.reports.runId, runId)))
+                                .then(([row]) => row!.count),
                         ).toBe(1);
-                        expect(await fixture.db.notification.count({ where: { runId } })).toBe(1);
+                        expect(
+                            await fixture.db
+                                .select({ count: count() })
+                                .from(tables.inboxItems)
+                                .where(and(eq(tables.inboxItems.reportId, report.id)))
+                                .then(([row]) => row!.count),
+                        ).toBe(1);
+                        expect(
+                            await fixture.db
+                                .select({ count: count() })
+                                .from(tables.notifications)
+                                .where(and(eq(tables.notifications.runId, runId)))
+                                .then(([row]) => row!.count),
+                        ).toBe(1);
 
                         for (const path of [
                             '/runs/' + runId,
@@ -338,9 +413,11 @@ describe('三类公开示例：真实认证HTTP→Outbox/BullMQ→独立生产Wo
                             expect(await counts(owner.id, task.id)).toEqual(before);
                             expect(
                                 (
-                                    await fixture.db.baseline.findUniqueOrThrow({
-                                        where: { id: baseline.id },
-                                    })
+                                    await fixture.db.query.baselines
+                                        .findFirst({
+                                            where: and(eq(tables.baselines.id, baseline.id)),
+                                        })
+                                        .then(requireRow)
                                 ).completeRunId,
                             ).toBe(runId);
                         }

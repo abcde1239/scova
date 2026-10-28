@@ -1,3 +1,27 @@
+import { requiredDatabaseValue } from '@/utils/database.ts';
+import {
+    type DatabaseClient,
+    reports as dbReports,
+    eq,
+    baselines as dbBaselines,
+    evidence as dbEvidence,
+    runSources as dbRunSources,
+    runs as dbRuns,
+    sourceSnapshots as dbSourceSnapshots,
+    toolCalls as dbToolCalls,
+    inboxItems as dbInboxItems,
+    count as dbCount,
+    sources as dbSources,
+    bookmarks as dbBookmarks,
+    notes as dbNotes,
+    reportQuestions as dbReportQuestions,
+    questionEvidence as dbQuestionEvidence,
+    notifications as dbNotifications,
+    outbox as dbOutbox,
+    users as dbUsers,
+    createDatabaseClient,
+    closeDatabase,
+} from '@scova/db';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -7,7 +31,7 @@ import pg from 'pg';
 import { Queue } from 'bullmq';
 import { Redis } from 'ioredis';
 import { outboxJobId } from '../src/utils/outbox.ts';
-import { PrismaClient } from '@scova/db';
+
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import {
     createConnectorBundle,
@@ -132,7 +156,7 @@ function completeBundle(): ConnectorBundle {
         },
     };
 }
-async function prepare(db: PrismaClient, checkpointer: PostgresSaver, complete = false) {
+async function prepare(db: DatabaseClient, checkpointer: PostgresSaver, complete = false) {
     const seed = await seedRun(db, { mode: complete ? 'live' : 'demo' });
     const runs = createRunRepository(db);
     const claimed = await runs.claim(seed.run.id, 'operations-test', 60_000);
@@ -162,7 +186,7 @@ async function prepare(db: PrismaClient, checkpointer: PostgresSaver, complete =
     await session.drain();
     return { ...seed, claimed, candidate, session };
 }
-async function deliver(db: PrismaClient, checkpointer: PostgresSaver, complete = false) {
+async function deliver(db: DatabaseClient, checkpointer: PostgresSaver, complete = false) {
     const prepared = await prepare(db, checkpointer, complete);
     const result = await createDeliveryService(db, checkpointer).deliver(
         prepared.claimed.token,
@@ -221,16 +245,21 @@ describe('真实维护数据库、保留与账号依赖', () => {
     });
     it('30天清理含全部epoch原始正文，保报告/引用/基线与活跃观测；重复批次不占位', async () => {
         const old = await deliver(fixture.db, saver, true);
-        const report = await fixture.db.report.findUniqueOrThrow({ where: { id: old.reportId } });
-        const baseline = await fixture.db.baseline.findFirstOrThrow({
-            where: { taskId: old.task.id },
+        const report = await fixture.db.query.reports
+            .findFirst({ where: eq(dbReports.id, old.reportId) })
+            .then((row) => requiredDatabaseValue(row));
+        const baseline = await fixture.db.query.baselines
+            .findFirst({ where: eq(dbBaselines.taskId, old.task.id) })
+            .then((row) => requiredDatabaseValue(row));
+        const evidence = await fixture.db.query.evidence.findMany({
+            where: eq(dbEvidence.runId, old.run.id),
         });
-        const evidence = await fixture.db.evidence.findMany({ where: { runId: old.run.id } });
-        const observation = await fixture.db.runSource.findFirstOrThrow({
-            where: { runId: old.run.id },
-        });
-        const active = await fixture.db.run.create({
-            data: {
+        const observation = await fixture.db.query.runSources
+            .findFirst({ where: eq(dbRunSources.runId, old.run.id) })
+            .then((row) => requiredDatabaseValue(row));
+        const active = await fixture.db
+            .insert(dbRuns)
+            .values({
                 userId: old.user.id,
                 taskId: old.task.id,
                 taskVersionId: old.version.id,
@@ -239,26 +268,33 @@ describe('真实维护数据库、保留与账号依赖', () => {
                 trigger: 'manual',
                 budgetJson: old.config.budget,
                 usageJson: {},
-            },
-        });
-        await fixture.db.runSource.create({
-            data: {
+            })
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
+        await fixture.db
+            .insert(dbRunSources)
+            .values({
                 userId: old.user.id,
                 runId: active.id,
                 sourceId: observation.sourceId,
                 snapshotId: observation.snapshotId,
                 requestedUrl: observation.requestedUrl,
                 fetchStatus: 'succeeded',
-            },
-        });
-        await fixture.db.run.update({
-            where: { id: old.run.id },
-            data: { finishedAt: new Date(Date.now() - 31 * 86400_000) },
-        });
-        await fixture.db.sourceSnapshot.update({
-            where: { id: observation.snapshotId! },
-            data: { textExpiresAt: new Date(0) },
-        });
+            })
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
+        await fixture.db
+            .update(dbRuns)
+            .set({ finishedAt: new Date(Date.now() - 31 * 86400_000) })
+            .where(eq(dbRuns.id, old.run.id))
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
+        await fixture.db
+            .update(dbSourceSnapshots)
+            .set({ textExpiresAt: new Date(0) })
+            .where(eq(dbSourceSnapshots.id, observation.snapshotId!))
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
         await pool.query(
             `INSERT INTO "${fixture.checkpointSchema}".checkpoint_blobs (thread_id,checkpoint_ns,channel,version,type,blob) VALUES ($1,'','research','1','json',$2)`,
             [`run-${old.run.id}-epoch-99`, Buffer.from('"unpromoted-body"')],
@@ -266,62 +302,86 @@ describe('真实维护数据库、保留与账号依赖', () => {
         expect(await threadCount(old.run.id)).toBeGreaterThan(1);
         expect((await repo.retention(false)).runs).toBeGreaterThan(0);
         expect(
-            (await fixture.db.run.findUniqueOrThrow({ where: { id: old.run.id } })).checkpointRef,
+            (
+                await fixture.db.query.runs
+                    .findFirst({ where: eq(dbRuns.id, old.run.id) })
+                    .then((row) => requiredDatabaseValue(row))
+            ).checkpointRef,
         ).not.toBeNull();
         await repo.retention(true);
         expect(await threadCount(old.run.id)).toBe(0);
         expect(
-            (await fixture.db.run.findUniqueOrThrow({ where: { id: old.run.id } })).checkpointRef,
+            (
+                await fixture.db.query.runs
+                    .findFirst({ where: eq(dbRuns.id, old.run.id) })
+                    .then((row) => requiredDatabaseValue(row))
+            ).checkpointRef,
         ).toBeNull();
-        const retainedCalls = await fixture.db.toolCall.findMany({ where: { runId: old.run.id } });
+        const retainedCalls = await fixture.db.query.toolCalls.findMany({
+            where: eq(dbToolCalls.runId, old.run.id),
+        });
         expect(retainedCalls.length).toBeGreaterThan(0);
         expect(retainedCalls.every((call) => call.outputRef === null)).toBe(true);
         expect(
             (
-                await fixture.db.sourceSnapshot.findUniqueOrThrow({
-                    where: { id: observation.snapshotId! },
-                })
+                await fixture.db.query.sourceSnapshots
+                    .findFirst({ where: eq(dbSourceSnapshots.id, observation.snapshotId!) })
+                    .then((row) => requiredDatabaseValue(row))
             ).textBody,
         ).not.toBeNull();
         expect(
-            (await fixture.db.report.findUniqueOrThrow({ where: { id: old.reportId } }))
-                .comparisonJson,
+            (
+                await fixture.db.query.reports
+                    .findFirst({ where: eq(dbReports.id, old.reportId) })
+                    .then((row) => requiredDatabaseValue(row))
+            ).comparisonJson,
         ).toEqual(report.comparisonJson);
-        expect(await fixture.db.evidence.findMany({ where: { runId: old.run.id } })).toEqual(
-            evidence,
-        );
-        expect(await fixture.db.baseline.findUniqueOrThrow({ where: { id: baseline.id } })).toEqual(
-            baseline,
-        );
-        await fixture.db.run.update({
-            where: { id: active.id },
-            data: { status: 'canceled', finishedAt: new Date() },
-        });
+        expect(
+            await fixture.db.query.evidence.findMany({ where: eq(dbEvidence.runId, old.run.id) }),
+        ).toEqual(evidence);
+        expect(
+            await fixture.db.query.baselines
+                .findFirst({ where: eq(dbBaselines.id, baseline.id) })
+                .then((row) => requiredDatabaseValue(row)),
+        ).toEqual(baseline);
+        await fixture.db
+            .update(dbRuns)
+            .set({ status: 'canceled', finishedAt: new Date() })
+            .where(eq(dbRuns.id, active.id))
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
         await repo.retention(true);
         expect(
             (
-                await fixture.db.sourceSnapshot.findUniqueOrThrow({
-                    where: { id: observation.snapshotId! },
-                })
+                await fixture.db.query.sourceSnapshots
+                    .findFirst({ where: eq(dbSourceSnapshots.id, observation.snapshotId!) })
+                    .then((row) => requiredDatabaseValue(row))
             ).textBody,
         ).toBeNull();
         expect((await repo.retention(false)).runs).toBe(0);
-        expect(await fixture.db.inboxItem.count({ where: { reportId: old.reportId } })).toBe(1);
+        expect(
+            await fixture.db
+                .select({ count: dbCount() })
+                .from(dbInboxItems)
+                .where(eq(dbInboxItems.reportId, old.reportId))
+                .then((rows) => rows[0]!.count),
+        ).toBe(1);
     });
     it('29天终态和活跃checkpoint/工具正文保持可恢复', async () => {
         const recent = await deliver(fixture.db, saver);
-        await fixture.db.run.update({
-            where: { id: recent.run.id },
-            data: { finishedAt: new Date(Date.now() - 29 * 86400_000) },
-        });
+        await fixture.db
+            .update(dbRuns)
+            .set({ finishedAt: new Date(Date.now() - 29 * 86400_000) })
+            .where(eq(dbRuns.id, recent.run.id))
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
         const active = await seedRun(fixture.db);
-        await fixture.db.run.update({
-            where: { id: active.run.id },
-            data: {
-                status: 'recovering',
-                startedAt: new Date(Date.now() - 31 * 86400_000),
-            },
-        });
+        await fixture.db
+            .update(dbRuns)
+            .set({ status: 'recovering', startedAt: new Date(Date.now() - 31 * 86400_000) })
+            .where(eq(dbRuns.id, active.run.id))
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
         await pool.query(
             `INSERT INTO "${fixture.checkpointSchema}".checkpoint_blobs (thread_id,checkpoint_ns,channel,version,type,blob) VALUES ($1,'','research','1','json',$2)`,
             [`run-${active.run.id}-epoch-1`, Buffer.from('"active-body"')],
@@ -331,42 +391,57 @@ describe('真实维护数据库、保留与账号依赖', () => {
         expect(await threadCount(active.run.id)).toBe(1);
         expect(await threadCount(recent.run.id)).toBe(count);
         expect(
-            (await fixture.db.run.findUniqueOrThrow({ where: { id: recent.run.id } }))
-                .checkpointRef,
+            (
+                await fixture.db.query.runs
+                    .findFirst({ where: eq(dbRuns.id, recent.run.id) })
+                    .then((row) => requiredDatabaseValue(row))
+            ).checkpointRef,
         ).not.toBeNull();
     });
     it('账号级联包括真实报告/引用/基线/收藏/笔记/问答和raw epoch，其他owner不受影响', async () => {
         const owned = await deliver(fixture.db, saver, true),
             other = await deliver(fixture.db, saver, true);
-        const source = await fixture.db.source.findFirstOrThrow({
-            where: { userId: owned.user.id },
-        });
-        const evidence = await fixture.db.evidence.findFirstOrThrow({
-            where: { userId: owned.user.id },
-        });
-        await fixture.db.bookmark.create({ data: { userId: owned.user.id, sourceId: source.id } });
-        await fixture.db.note.create({
-            data: { userId: owned.user.id, reportId: owned.reportId, body: 'private note' },
-        });
-        const question = await fixture.db.reportQuestion.create({
-            data: {
+        const source = await fixture.db.query.sources
+            .findFirst({ where: eq(dbSources.userId, owned.user.id) })
+            .then((row) => requiredDatabaseValue(row));
+        const evidence = await fixture.db.query.evidence
+            .findFirst({ where: eq(dbEvidence.userId, owned.user.id) })
+            .then((row) => requiredDatabaseValue(row));
+        await fixture.db
+            .insert(dbBookmarks)
+            .values({ userId: owned.user.id, sourceId: source.id })
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
+        await fixture.db
+            .insert(dbNotes)
+            .values({ userId: owned.user.id, reportId: owned.reportId, body: 'private note' })
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
+        const question = await fixture.db
+            .insert(dbReportQuestions)
+            .values({
                 userId: owned.user.id,
                 reportId: owned.reportId,
                 question: 'private question',
                 followupRunId: owned.run.id,
-            },
-        });
-        await fixture.db.questionEvidence.create({
-            data: { userId: owned.user.id, questionId: question.id, evidenceId: evidence.id },
-        });
-        await fixture.db.notification.create({
-            data: {
+            })
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
+        await fixture.db
+            .insert(dbQuestionEvidence)
+            .values({ userId: owned.user.id, questionId: question.id, evidenceId: evidence.id })
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
+        await fixture.db
+            .insert(dbNotifications)
+            .values({
                 userId: owned.user.id,
                 runId: owned.run.id,
                 reportId: owned.reportId,
                 kind: 'run_issue',
-            },
-        });
+            })
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
         expect(await repo.deleteAccount(owned.user.id, false)).toMatchObject({
             found: true,
             applied: false,
@@ -395,15 +470,17 @@ describe('真实维护数据库、保留与账号依赖', () => {
         queue.on('error', () => undefined);
         const cancellations = [];
         for (const account of [owned, other]) {
-            const item = await fixture.db.outbox.create({
-                data: {
+            const item = await fixture.db
+                .insert(dbOutbox)
+                .values({
                     userId: account.user.id,
                     aggregateId: account.run.id,
                     eventType: 'run.cancel_requested',
                     dedupeKey: `cancel-${randomUUID()}`,
                     payload: { runId: account.run.id },
-                },
-            });
+                })
+                .returning()
+                .then((rows) => requiredDatabaseValue(rows[0]));
             cancellations.push(item);
             await queue.add(item.eventType, item.payload, { jobId: outboxJobId(item) });
         }
@@ -427,13 +504,42 @@ describe('真实维护数据库、保留与账号依赖', () => {
             redis.disconnect();
         }
         expect(await threadCount(owned.run.id)).toBe(0);
-        expect(await fixture.db.user.findUnique({ where: { id: owned.user.id } })).toBeNull();
-        expect(await fixture.db.report.count({ where: { userId: owned.user.id } })).toBe(0);
-        expect(await fixture.db.note.count({ where: { userId: owned.user.id } })).toBe(0);
-        expect(await fixture.db.baseline.count({ where: { userId: owned.user.id } })).toBe(0);
-        expect(await fixture.db.baseline.count({ where: { userId: other.user.id } })).toBe(1);
         expect(
-            await fixture.db.report.findUnique({ where: { id: other.reportId } }),
+            (await fixture.db.query.users.findFirst({ where: eq(dbUsers.id, owned.user.id) })) ??
+                null,
+        ).toBeNull();
+        expect(
+            await fixture.db
+                .select({ count: dbCount() })
+                .from(dbReports)
+                .where(eq(dbReports.userId, owned.user.id))
+                .then((rows) => rows[0]!.count),
+        ).toBe(0);
+        expect(
+            await fixture.db
+                .select({ count: dbCount() })
+                .from(dbNotes)
+                .where(eq(dbNotes.userId, owned.user.id))
+                .then((rows) => rows[0]!.count),
+        ).toBe(0);
+        expect(
+            await fixture.db
+                .select({ count: dbCount() })
+                .from(dbBaselines)
+                .where(eq(dbBaselines.userId, owned.user.id))
+                .then((rows) => rows[0]!.count),
+        ).toBe(0);
+        expect(
+            await fixture.db
+                .select({ count: dbCount() })
+                .from(dbBaselines)
+                .where(eq(dbBaselines.userId, other.user.id))
+                .then((rows) => rows[0]!.count),
+        ).toBe(1);
+        expect(
+            (await fixture.db.query.reports.findFirst({
+                where: eq(dbReports.id, other.reportId),
+            })) ?? null,
         ).not.toBeNull();
         expect(await threadCount(other.run.id)).toBeGreaterThan(0);
     });
@@ -461,7 +567,7 @@ it('真实pg_dump/pg_restore恢复报告和checkpoint，并从备份恢复未交
         `scova_restore_${randomUUID().replaceAll('-', '')}`,
     ];
     const directory = await mkdtemp(join(tmpdir(), 'scova-backup-'));
-    const databases: PrismaClient[] = [],
+    const databases: DatabaseClient[] = [],
         pools: pg.Pool[] = [];
     try {
         for (const name of names) await admin.query(`CREATE DATABASE "${name}"`);
@@ -480,30 +586,56 @@ it('真实pg_dump/pg_restore恢复报告和checkpoint，并从备份恢复未交
             return createOperationService(pool, value);
         });
         await services[0]!.execute(parseOperation(['migrate']));
-        const source = new PrismaClient({ datasources: { db: { url: configs[0]!.databaseUrl } } });
+        const source = createDatabaseClient({ connectionString: configs[0]!.databaseUrl });
         databases.push(source);
         const sourceSaver = new PostgresSaver(pools[0]!, undefined, { schema: 'scova_agent' });
         const owned = await deliver(source, sourceSaver);
         const unfinished = await prepare(source, sourceSaver);
-        await source.run.update({
-            where: { id: unfinished.run.id },
-            data: { leaseExpiresAt: new Date(0) },
-        });
-        const beforeCalls = await source.toolCall.count({ where: { runId: unfinished.run.id } });
+        await source
+            .update(dbRuns)
+            .set({ leaseExpiresAt: new Date(0) })
+            .where(eq(dbRuns.id, unfinished.run.id))
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
+        const beforeCalls = await source
+            .select({ count: dbCount() })
+            .from(dbToolCalls)
+            .where(eq(dbToolCalls.runId, unfinished.run.id))
+            .then((rows) => rows[0]!.count);
         const beforeUsage = (
-            await source.run.findUniqueOrThrow({ where: { id: unfinished.run.id } })
+            await source.query.runs
+                .findFirst({ where: eq(dbRuns.id, unfinished.run.id) })
+                .then((row) => requiredDatabaseValue(row))
         ).usageJson;
-        expect(await source.report.count({ where: { runId: unfinished.run.id } })).toBe(0);
-        const run = await source.run.findUniqueOrThrow({ where: { id: owned.run.id } });
+        expect(
+            await source
+                .select({ count: dbCount() })
+                .from(dbReports)
+                .where(eq(dbReports.runId, unfinished.run.id))
+                .then((rows) => rows[0]!.count),
+        ).toBe(0);
+        const run = await source.query.runs
+            .findFirst({ where: eq(dbRuns.id, owned.run.id) })
+            .then((row) => requiredDatabaseValue(row));
         await services[0]!.execute(parseOperation(['backup', '--name=roundtrip.dump']));
         await services[1]!.execute(parseOperation(['restore', '--name=roundtrip.dump', '--apply']));
-        const target = new PrismaClient({ datasources: { db: { url: configs[1]!.databaseUrl } } });
+        const target = createDatabaseClient({ connectionString: configs[1]!.databaseUrl });
         databases.push(target);
-        expect(await target.report.findUniqueOrThrow({ where: { id: owned.reportId } })).toEqual(
-            await source.report.findUniqueOrThrow({ where: { id: owned.reportId } }),
+        expect(
+            await target.query.reports
+                .findFirst({ where: eq(dbReports.id, owned.reportId) })
+                .then((row) => requiredDatabaseValue(row)),
+        ).toEqual(
+            await source.query.reports
+                .findFirst({ where: eq(dbReports.id, owned.reportId) })
+                .then((row) => requiredDatabaseValue(row)),
         );
         expect(
-            (await target.run.findUniqueOrThrow({ where: { id: owned.run.id } })).checkpointRef,
+            (
+                await target.query.runs
+                    .findFirst({ where: eq(dbRuns.id, owned.run.id) })
+                    .then((row) => requiredDatabaseValue(row))
+            ).checkpointRef,
         ).toEqual(run.checkpointRef);
         const ref = run.checkpointRef as {
             threadId: string;
@@ -548,15 +680,25 @@ it('真实pg_dump/pg_restore恢复报告和checkpoint，并从备份恢复未交
                 executorFactory: (token) => runtime.executorFactory(token),
             });
             expect(await restoredRun.execute(unfinished.run.id)).toBe('processed');
-            expect(await target.report.count({ where: { runId: unfinished.run.id } })).toBe(1);
-            const delivered = await target.run.findUniqueOrThrow({
-                where: { id: unfinished.run.id },
-            });
+            expect(
+                await target
+                    .select({ count: dbCount() })
+                    .from(dbReports)
+                    .where(eq(dbReports.runId, unfinished.run.id))
+                    .then((rows) => rows[0]!.count),
+            ).toBe(1);
+            const delivered = await target.query.runs
+                .findFirst({ where: eq(dbRuns.id, unfinished.run.id) })
+                .then((row) => requiredDatabaseValue(row));
             expect(delivered.status).toBe('partial');
             expect(delivered.usageJson).toEqual(beforeUsage);
-            expect(await target.toolCall.count({ where: { runId: unfinished.run.id } })).toBe(
-                beforeCalls,
-            );
+            expect(
+                await target
+                    .select({ count: dbCount() })
+                    .from(dbToolCalls)
+                    .where(eq(dbToolCalls.runId, unfinished.run.id))
+                    .then((rows) => rows[0]!.count),
+            ).toBe(beforeCalls);
             expect(await restoredRun.execute(unfinished.run.id)).toBe('ignored');
         } finally {
             await runtime.close();
@@ -566,7 +708,7 @@ it('真实pg_dump/pg_restore恢复报告和checkpoint，并从备份恢复未交
         ).rejects.toThrow('空数据库');
     } finally {
         try {
-            await Promise.all(databases.map((db) => db.$disconnect()));
+            await Promise.all(databases.map((db) => closeDatabase(db)));
             await Promise.all(pools.map((pool) => pool.end()));
             await dropDisconnectedDatabases(admin, names);
         } finally {

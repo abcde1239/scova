@@ -1,3 +1,21 @@
+import { requiredDatabaseValue } from '@/utils/database.ts';
+import {
+    type DatabaseClient,
+    type Run,
+    sql,
+    queryRows,
+    runs as dbRuns,
+    eq,
+    runEvents as dbRunEvents,
+    max,
+    toolCalls as dbToolCalls,
+    inArray,
+    and,
+    taskVersions as dbTaskVersions,
+    baselines as dbBaselines,
+    type DatabaseTransaction,
+    type JsonValue,
+} from '@scova/db';
 import { randomUUID } from 'node:crypto';
 import { createTerminalNotifications } from '@/repo/notifications.ts';
 import {
@@ -10,7 +28,7 @@ import {
     type TaskConfig,
     type Usage,
 } from '@scova/models';
-import type { Prisma, PrismaClient, Run } from '@scova/db';
+
 import {
     RUN_ACTIVE_STATUSES,
     RUN_FAILURE_MESSAGES,
@@ -48,13 +66,16 @@ export interface RunRepository {
     listRecoverable(limit: number): Promise<{ id: string; leaseEpoch: number }[]>;
 }
 
-async function lockRun(tx: Prisma.TransactionClient, runId: string) {
-    await tx.$queryRaw`SELECT id FROM runs WHERE id = ${runId}::uuid FOR UPDATE`;
-    return tx.run.findUnique({ where: { id: runId } });
+async function lockRun(tx: DatabaseTransaction, runId: string) {
+    await queryRows<Record<string, unknown>>(
+        tx,
+        sql`SELECT id FROM runs WHERE id = ${runId}::uuid FOR UPDATE`,
+    );
+    return tx.query.runs.findFirst({ where: eq(dbRuns.id, runId) });
 }
 
-async function databaseNow(tx: Prisma.TransactionClient): Promise<Date> {
-    const [row] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`;
+async function databaseNow(tx: DatabaseTransaction): Promise<Date> {
+    const [row] = await queryRows<{ now: Date }>(tx, sql`SELECT clock_timestamp() AS now`);
     return row!.now;
 }
 
@@ -62,7 +83,7 @@ function active(run: Run) {
     return RUN_ACTIVE_STATUSES.includes(run.status as (typeof RUN_ACTIVE_STATUSES)[number]);
 }
 
-function validLease(run: Run | null, token: RunLeaseToken, now: Date): run is Run {
+function validLease(run: Run | null | undefined, token: RunLeaseToken, now: Date): run is Run {
     return !!(
         run &&
         run.userId === token.userId &&
@@ -80,12 +101,12 @@ function validLease(run: Run | null, token: RunLeaseToken, now: Date): run is Ru
  * control 仅供失败/取消终结；deadline_delivery 留给已存证据的确定性部分交付。
  */
 export function withRunFence<T>(
-    db: PrismaClient,
+    db: DatabaseClient,
     token: RunLeaseToken,
     purpose: RunFencePurpose,
-    operation: (tx: Prisma.TransactionClient, run: Run, now: Date) => Promise<T>,
+    operation: (tx: DatabaseTransaction, run: Run, now: Date) => Promise<T>,
 ): Promise<T> {
-    return db.$transaction(async (tx) => {
+    return db.transaction(async (tx) => {
         const run = await lockRun(tx, token.runId);
         const now = await databaseNow(tx);
         if (!validLease(run, token, now)) throw new RunFenceError('LEASE_LOST');
@@ -106,12 +127,16 @@ export function withRunFence<T>(
 
 /** 调用者已持有 Run 行锁，序号分配与业务状态写入在同一事务内。 */
 export async function appendEvent(
-    tx: Prisma.TransactionClient,
+    tx: DatabaseTransaction,
     run: Run,
     now: Date,
     event: RunEventInput,
 ) {
-    const last = await tx.runEvent.aggregate({ where: { runId: run.id }, _max: { seq: true } });
+    const last = await tx
+        .select({ seq: max(dbRunEvents.seq) })
+        .from(dbRunEvents)
+        .where(eq(dbRunEvents.runId, run.id))
+        .then((rows) => ({ _max: rows[0]! }));
     const record = parseContract(RunEventSchema, {
         schemaVersion: 1,
         eventId: randomUUID(),
@@ -121,40 +146,52 @@ export async function appendEvent(
         type: event.type,
         payload: event.payload,
     });
-    await tx.runEvent.create({
-        data: {
+    await tx
+        .insert(dbRunEvents)
+        .values({
             id: record.eventId,
             userId: run.userId,
             runId: run.id,
             seq: record.seq,
             schemaVersion: record.schemaVersion,
             type: record.type,
-            payload: record.payload as Prisma.InputJsonValue,
+            payload: record.payload as JsonValue,
             occurredAt: now,
-        },
-    });
+        })
+        .returning()
+        .then((rows) => requiredDatabaseValue(rows[0]));
 }
 
-async function finishLocked(tx: Prisma.TransactionClient, run: Run, now: Date, code: string) {
+async function finishLocked(tx: DatabaseTransaction, run: Run, now: Date, code: string) {
     const canceled = !!run.cancelRequestedAt || run.status === 'cancel_requested';
     const safeCode = Object.hasOwn(RUN_FAILURE_MESSAGES, code) ? code : 'EXECUTOR_FAILED';
     const status = canceled ? 'canceled' : 'failed';
     if (!canceled) await createTerminalNotifications(tx, run, { status: 'failed' });
     // A terminal Run cannot later settle an in-flight supplier call; preserve its reservation as unknown.
-    await tx.toolCall.updateMany({
-        where: { userId: run.userId, runId: run.id, status: { in: ['reserved', 'running'] } },
-        data: { status: 'unknown', finishedAt: now },
-    });
-    await tx.run.update({
-        where: { id: run.id },
-        data: {
-            status,
+    await tx
+        .update(dbToolCalls)
+        .set({ status: 'unknown', finishedAt: now })
+        .where(
+            and(
+                eq(dbToolCalls.userId, run.userId),
+                eq(dbToolCalls.runId, run.id),
+                inArray(dbToolCalls.status, ['reserved', 'running']),
+            ),
+        )
+        .returning({ id: dbToolCalls.id })
+        .then((rows) => ({ count: rows.length }));
+    await tx
+        .update(dbRuns)
+        .set({
+            status: status,
             finishedAt: now,
             failureCode: canceled ? null : safeCode,
             leaseOwner: null,
             leaseExpiresAt: null,
-        },
-    });
+        })
+        .where(eq(dbRuns.id, run.id))
+        .returning()
+        .then((rows) => requiredDatabaseValue(rows[0]));
     await appendEvent(
         tx,
         run,
@@ -179,11 +216,11 @@ function leaseExpiry(now: Date, leaseMs: number) {
 }
 
 /** PostgreSQL 是执行事实源；BullMQ 的锁与 payload 不授予任何业务写权限。 */
-export function createRunRepository(db: PrismaClient): RunRepository {
+export function createRunRepository(db: DatabaseClient): RunRepository {
     return {
         claim(runId, leaseOwner, leaseMs = 30_000, options = {}) {
             if (!leaseOwner || leaseOwner.length > 200) throw new Error('Run worker 标识无效');
-            return db.$transaction(async (tx): Promise<RunClaim> => {
+            return db.transaction(async (tx): Promise<RunClaim> => {
                 const run = await lockRun(tx, runId);
                 const now = await databaseNow(tx);
                 if (!run || !active(run)) return { kind: 'ignored' };
@@ -202,8 +239,8 @@ export function createRunRepository(db: PrismaClient): RunRepository {
                 let budget: Budget;
                 let usage: Usage;
                 try {
-                    const version = await tx.taskVersion.findUnique({
-                        where: { id: run.taskVersionId },
+                    const version = await tx.query.taskVersions.findFirst({
+                        where: eq(dbTaskVersions.id, run.taskVersionId),
                     });
                     if (!version || version.userId !== run.userId || version.taskId !== run.taskId)
                         throw new Error('执行版本不存在');
@@ -221,15 +258,13 @@ export function createRunRepository(db: PrismaClient): RunRepository {
                 // Freeze once, including null. Recovery must never silently choose a newer baseline.
                 let baselineRunId = run.baselineRunId;
                 if (run.startedAt === null) {
-                    const baseline = await tx.baseline.findUnique({
-                        where: {
-                            userId_taskId_comparisonScopeHash: {
-                                userId: run.userId,
-                                taskId: run.taskId,
-                                comparisonScopeHash: run.comparisonScopeHash,
-                            },
-                        },
-                        include: { completeRun: { include: { reports: true } } },
+                    const baseline = await tx.query.baselines.findFirst({
+                        where: and(
+                            eq(dbBaselines.userId, run.userId),
+                            eq(dbBaselines.taskId, run.taskId),
+                            eq(dbBaselines.comparisonScopeHash, run.comparisonScopeHash),
+                        ),
+                        with: { completeRun: { with: { reports: true } } },
                     });
                     const prior = baseline?.completeRun;
                     baselineRunId =
@@ -256,19 +291,21 @@ export function createRunRepository(db: PrismaClient): RunRepository {
                     await finishLocked(tx, run, now, 'DEADLINE_EXCEEDED');
                     return { kind: 'ignored' };
                 }
-                const updated = await tx.run.update({
-                    where: { id: run.id },
-                    data: {
+                const updated = await tx
+                    .update(dbRuns)
+                    .set({
                         status: 'running',
-                        startedAt,
-                        deadlineAt,
-                        baselineRunId,
-                        leaseOwner,
-                        leaseEpoch: { increment: 1 },
+                        startedAt: startedAt,
+                        deadlineAt: deadlineAt,
+                        baselineRunId: baselineRunId,
+                        leaseOwner: leaseOwner,
+                        leaseEpoch: sql`${dbRuns.leaseEpoch} + ${1}`,
                         leaseExpiresAt: leaseExpiry(now, leaseMs),
-                        recoveryCount,
-                    },
-                });
+                        recoveryCount: recoveryCount,
+                    })
+                    .where(eq(dbRuns.id, run.id))
+                    .returning()
+                    .then((rows) => requiredDatabaseValue(rows[0]));
                 if (recovering)
                     await appendEvent(tx, updated, now, {
                         type: 'run.recovering',
@@ -300,10 +337,12 @@ export function createRunRepository(db: PrismaClient): RunRepository {
                     if (run.cancelRequestedAt || run.status === 'cancel_requested')
                         return 'canceled' as const;
                     if (!run.deadlineAt || run.deadlineAt <= now) return 'deadline' as const;
-                    await tx.run.update({
-                        where: { id: run.id },
-                        data: { leaseExpiresAt: leaseExpiry(now, leaseMs) },
-                    });
+                    await tx
+                        .update(dbRuns)
+                        .set({ leaseExpiresAt: leaseExpiry(now, leaseMs) })
+                        .where(eq(dbRuns.id, run.id))
+                        .returning()
+                        .then((rows) => requiredDatabaseValue(rows[0]));
                     return 'renewed' as const;
                 });
             } catch (error) {
@@ -336,12 +375,15 @@ export function createRunRepository(db: PrismaClient): RunRepository {
         async listRecoverable(limit) {
             if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1000)
                 throw new Error('Run 恢复扫描上限必须为 1 至 1000 的整数');
-            const rows = await db.$queryRaw<{ id: string; lease_epoch: number }[]>`
+            const rows = await queryRows<{ id: string; lease_epoch: number }>(
+                db,
+                sql`
         SELECT id, lease_epoch FROM runs
         WHERE status IN ('queued', 'running', 'recovering', 'cancel_requested')
           AND (lease_expires_at IS NULL OR lease_expires_at <= clock_timestamp())
         ORDER BY queued_at, id LIMIT ${limit}
-      `;
+      `,
+            );
             return rows.map((row) => ({ id: row.id, leaseEpoch: row.lease_epoch }));
         },
     };

@@ -5,22 +5,24 @@
     "type": "module",
     "exports": {
         ".": "./src/index.ts",
-        "./feedback": "./src/feedback.ts"
+        "./feedback": "./src/feedback.ts",
+        "./migrate": "./src/migrate.ts"
     },
     "scripts": {
         "build": "tsc --noEmit",
-        "generate": "prisma generate --schema prisma/schema.prisma",
+        "generate": "drizzle-kit generate --config drizzle.config.ts",
+        "baseline": "vpx scripts/update-baseline.ts",
+        "test": "vp test --config vite.config.ts",
         "check": "vp check"
     },
     "dependencies": {
-        "@prisma/client": "catalog:",
-        "@scova/models": "workspace:*"
+        "@scova/models": "workspace:*",
+        "drizzle-orm": "catalog:",
+        "pg": "catalog:"
     },
     "devDependencies": {
-        "prisma": "catalog:",
+        "@types/pg": "catalog:",
+        "drizzle-kit": "catalog:",
         "typescript": "catalog:"
-    },
-    "prisma": {
-        "schema": "./prisma/schema.prisma"
     }
 }

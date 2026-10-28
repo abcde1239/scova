@@ -1,6 +1,6 @@
 # Scova 数据模型与一致性约束
 
-状态：待实现的逻辑模型，2026-10-24。主键使用 UUID，时间以 PostgreSQL `timestamptz` 保存；IANA timezone 单独保存。业务 schema 由 Prisma 管理，Prisma 无法表达的部分唯一索引、CHECK 与复合外键通过受版本管理的 SQL migration 补充。本文没有创建数据库或迁移文件。
+状态：已实现的后端逻辑模型，2026-10-28。主键使用 UUID，时间以 PostgreSQL `timestamptz` 保存；IANA timezone 单独保存。业务 schema 由 Drizzle 定义，部分唯一索引、CHECK 与复合外键均保留在受版本管理的 SQL migration 中。本文用于解释逻辑关系，实际结构以 db 包与迁移为准。
 
 ## 1. 概念关系
 
@@ -64,7 +64,7 @@ Run.status 是执行控制状态，outcome 是业务结论：`baseline/important
 
 预算预留与 ToolCall 插入在受租约保护的事务中提交；累计搜索次数、读取次数和 token 使用不可因 worker 恢复回滚。调用结果不确定时保留预算预留。已完成调用结果按 outputRef 重用，不能再执行一次却只计算一次费用。
 
-LangGraph 自己的 checkpoint 表使用独立命名空间/迁移，不由 Prisma 重建。业务只保存 `checkpointRef={threadId,namespace,checkpointId,leaseEpoch}`；引用的提升必须验证当前租约。checkpoint 原始状态和线程 ID 不允许作为公共 API 参数。详见架构的 epoch 恢复协议。
+LangGraph 自己的 checkpoint 表使用独立命名空间/迁移，不由业务 ORM 重建。业务只保存 `checkpointRef={threadId,namespace,checkpointId,leaseEpoch}`；引用的提升必须验证当前租约。checkpoint 原始状态和线程 ID 不允许作为公共 API 参数。详见架构的 epoch 恢复协议。
 
 ## 4. 来源、快照、引用与差异
 
@@ -106,7 +106,7 @@ Feedback 的条件唯一索引分别覆盖 sourceId 与 claimId，避免 NULL �
 
 ## 6. 必须落实的数据库约束
 
-以下 SQL 为迁移设计示意，物理表名按 Prisma `@@map` 固定为 snake_case。字段命名以最终 migration 为准，不能把本文当作已执行迁移。
+以下 SQL 为迁移设计示意，物理表名保留既有 snake_case。字段命名以最终 migration 为准，不能把本文当作已执行迁移。
 
 ```sql
 -- 同一任务最多一个未终结执行，包括排队与等待取消。

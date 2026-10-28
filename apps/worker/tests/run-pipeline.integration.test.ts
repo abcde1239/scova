@@ -1,3 +1,18 @@
+import { requiredDatabaseValue } from '@/utils/database.ts';
+import {
+    runs as dbRuns,
+    eq,
+    runEvents as dbRunEvents,
+    asc,
+    outbox as dbOutbox,
+    inArray,
+    sql,
+    reports as dbReports,
+    count as dbCount,
+    queryRows,
+    and,
+    tasks as dbTasks,
+} from '@scova/db';
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -54,11 +69,22 @@ async function claimed(runId: string, owner = 'worker-A', leaseMs = 10_000): Pro
     if (result.kind !== 'claimed') throw new Error(`expected claimed, received ${result.kind}`);
     return result;
 }
-const stored = (runId: string) => fixture.db.run.findUniqueOrThrow({ where: { id: runId } });
+const stored = (runId: string) =>
+    fixture.db.query.runs
+        .findFirst({ where: eq(dbRuns.id, runId) })
+        .then((row) => requiredDatabaseValue(row));
 const events = (runId: string) =>
-    fixture.db.runEvent.findMany({ where: { runId }, orderBy: { seq: 'asc' } });
+    fixture.db.query.runEvents.findMany({
+        where: eq(dbRunEvents.runId, runId),
+        orderBy: [asc(dbRunEvents.seq)],
+    });
 async function expire(runId: string) {
-    await fixture.db.run.update({ where: { id: runId }, data: { leaseExpiresAt: new Date(0) } });
+    await fixture.db
+        .update(dbRuns)
+        .set({ leaseExpiresAt: new Date(0) })
+        .where(eq(dbRuns.id, runId))
+        .returning()
+        .then((rows) => requiredDatabaseValue(rows[0]));
 }
 async function queueFixture(handler: Parameters<typeof createRunConsumer>[2]) {
     const queueName = `scova-pipeline-${randomUUID()}`;
@@ -86,18 +112,24 @@ afterAll(async () => {
 });
 beforeEach(async () => {
     // Only this suite's isolated schema is touched; shared Redis is never flushed.
-    await fixture.db.outbox.deleteMany();
-    await fixture.db.run.updateMany({
-        where: { status: { in: [...activeStatuses] } },
-        data: { status: 'failed', finishedAt: new Date(), leaseOwner: null, leaseExpiresAt: null },
-    });
+    await fixture.db
+        .delete(dbOutbox)
+        .returning({ id: dbOutbox.id })
+        .then((rows) => ({ count: rows.length }));
+    await fixture.db
+        .update(dbRuns)
+        .set({ status: 'failed', finishedAt: new Date(), leaseOwner: null, leaseExpiresAt: null })
+        .where(inArray(dbRuns.status, [...activeStatuses]))
+        .returning({ id: dbRuns.id })
+        .then((rows) => ({ count: rows.length }));
 });
 
 describe('生产 Run 租约、消费与恢复（真实 PG/Redis，串行）', () => {
     it('C12-08 active deadline独立中断，不等待慢续期SQL返回', async () => {
         const seed = await seedRun(fixture.db);
-        await fixture.db
-            .$executeRaw`UPDATE runs SET deadline_at = clock_timestamp() + interval '800 milliseconds' WHERE id = ${seed.run.id}::uuid`;
+        await fixture.db.execute(
+            sql`UPDATE runs SET deadline_at = clock_timestamp() + interval '800 milliseconds' WHERE id = ${seed.run.id}::uuid`,
+        );
         const entered = deferred();
         const renewing = deferred();
         const releaseRenew = deferred();
@@ -141,7 +173,13 @@ describe('生产 Run 租约、消费与恢复（真实 PG/Redis，串行）', ()
             status: 'failed',
             failureCode: 'DEADLINE_EXCEEDED',
         });
-        expect(await fixture.db.report.count({ where: { runId: seed.run.id } })).toBe(0);
+        expect(
+            await fixture.db
+                .select({ count: dbCount() })
+                .from(dbReports)
+                .where(eq(dbReports.runId, seed.run.id))
+                .then((rows) => rows[0]!.count),
+        ).toBe(0);
         expect(
             (await events(seed.run.id)).filter((event) => event.type === 'run.failed'),
         ).toHaveLength(1);
@@ -232,15 +270,21 @@ describe('生产 Run 租约、消费与恢复（真实 PG/Redis，串行）', ()
     it('C12-08 fenced事务跨deadline提交前拒绝并回滚，租约仍有效', async () => {
         const seed = await seedRun(fixture.db);
         const lease = await claimed(seed.run.id);
-        await fixture.db
-            .$executeRaw`UPDATE runs SET deadline_at = clock_timestamp() + interval '150 milliseconds' WHERE id = ${seed.run.id}::uuid`;
+        await fixture.db.execute(
+            sql`UPDATE runs SET deadline_at = clock_timestamp() + interval '150 milliseconds' WHERE id = ${seed.run.id}::uuid`,
+        );
         await expect(
             withRunFence(fixture.db, lease.token, 'work', async (tx) => {
-                await tx.run.update({
-                    where: { id: seed.run.id },
-                    data: { usageJson: { ...emptyUsage(), pages: 9 } },
-                });
-                await tx.$queryRaw`SELECT 1 AS waited FROM pg_sleep(0.2)`;
+                await tx
+                    .update(dbRuns)
+                    .set({ usageJson: { ...emptyUsage(), pages: 9 } })
+                    .where(eq(dbRuns.id, seed.run.id))
+                    .returning()
+                    .then((rows) => requiredDatabaseValue(rows[0]));
+                await queryRows<Record<string, unknown>>(
+                    tx,
+                    sql`SELECT 1 AS waited FROM pg_sleep(0.2)`,
+                );
             }),
         ).rejects.toMatchObject({ code: 'DEADLINE_EXCEEDED' });
         expect((await stored(seed.run.id)).usageJson).toEqual(emptyUsage());
@@ -250,8 +294,11 @@ describe('生产 Run 租约、消费与恢复（真实 PG/Redis，串行）', ()
         const lease = await claimed(seed.run.id, 'lock-wait-owner', 200);
         const locked = deferred();
         const release = deferred();
-        const blocker = fixture.db.$transaction(async (tx) => {
-            await tx.$queryRaw`SELECT id FROM runs WHERE id = ${seed.run.id}::uuid FOR UPDATE`;
+        const blocker = fixture.db.transaction(async (tx) => {
+            await queryRows<Record<string, unknown>>(
+                tx,
+                sql`SELECT id FROM runs WHERE id = ${seed.run.id}::uuid FOR UPDATE`,
+            );
             locked.resolve();
             await release.promise;
         });
@@ -261,9 +308,10 @@ describe('生产 Run 租约、消费与恢复（真实 PG/Redis，串行）', ()
         const assertion = expect(pending).rejects.toMatchObject({ code: 'LEASE_LOST' });
         try {
             await waitUntil(async () => {
-                const [now] = await fixture.db.$queryRaw<
-                    { now: Date }[]
-                >`SELECT clock_timestamp() AS now`;
+                const [now] = await queryRows<{ now: Date }>(
+                    fixture.db,
+                    sql`SELECT clock_timestamp() AS now`,
+                );
                 return now.now > lease.run.leaseExpiresAt!;
             }, '持锁跨租约期限');
         } finally {
@@ -297,8 +345,11 @@ describe('生产 Run 租约、消费与恢复（真实 PG/Redis，串行）', ()
             },
         }).execute(seed.run.id, controller.signal);
         await entered.promise;
-        const blocker = fixture.db.$transaction(async (tx) => {
-            await tx.$queryRaw`SELECT id FROM runs WHERE id = ${seed.run.id}::uuid FOR UPDATE`;
+        const blocker = fixture.db.transaction(async (tx) => {
+            await queryRows<Record<string, unknown>>(
+                tx,
+                sql`SELECT id FROM runs WHERE id = ${seed.run.id}::uuid FOR UPDATE`,
+            );
             locked.resolve();
             await release.promise;
         });
@@ -336,21 +387,28 @@ describe('生产 Run 租约、消费与恢复（真实 PG/Redis，串行）', ()
         const lease = await claimed(seed.run.id, 'short-lease', 150);
         await expect(
             withRunFence(fixture.db, lease.token, 'work', async (tx) => {
-                await tx.run.update({
-                    where: { id: seed.run.id },
-                    data: { usageJson: { ...emptyUsage(), searches: 9 } },
-                });
-                await tx.$queryRaw`SELECT 1 AS waited FROM pg_sleep(0.2)`;
+                await tx
+                    .update(dbRuns)
+                    .set({ usageJson: { ...emptyUsage(), searches: 9 } })
+                    .where(eq(dbRuns.id, seed.run.id))
+                    .returning()
+                    .then((rows) => requiredDatabaseValue(rows[0]));
+                await queryRows<Record<string, unknown>>(
+                    tx,
+                    sql`SELECT 1 AS waited FROM pg_sleep(0.2)`,
+                );
             }),
         ).rejects.toMatchObject({ code: 'LEASE_LOST' });
         expect((await stored(seed.run.id)).usageJson).toEqual(emptyUsage());
     });
     it('C12-01 并发命令只建一活动 Run/事件/Outbox，owner隔离且终态幂等重放', async () => {
         const seed = await seedRun(fixture.db);
-        await fixture.db.run.update({
-            where: { id: seed.run.id },
-            data: { status: 'failed', finishedAt: new Date() },
-        });
+        await fixture.db
+            .update(dbRuns)
+            .set({ status: 'failed', finishedAt: new Date() })
+            .where(eq(dbRuns.id, seed.run.id))
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
         const key = randomUUID();
         const requests = await Promise.all(
             Array.from({ length: 6 }, (_, index) =>
@@ -360,13 +418,24 @@ describe('生产 Run 租约、消费与恢复（真实 PG/Redis，串行）', ()
         const id = requests[0].run.id;
         expect(new Set(requests.map((result) => result.run.id)).size).toBe(1);
         expect(
-            await fixture.db.run.count({
-                where: { taskId: seed.task.id, status: { in: [...activeStatuses] } },
-            }),
+            await fixture.db
+                .select({ count: dbCount() })
+                .from(dbRuns)
+                .where(
+                    and(
+                        eq(dbRuns.taskId, seed.task.id),
+                        inArray(dbRuns.status, [...activeStatuses]),
+                    ),
+                )
+                .then((rows) => rows[0]!.count),
         ).toBe(1);
         expect(await events(id)).toHaveLength(1);
         expect(
-            await fixture.db.outbox.count({ where: { aggregateId: id, eventType: 'run.enqueue' } }),
+            await fixture.db
+                .select({ count: dbCount() })
+                .from(dbOutbox)
+                .where(and(eq(dbOutbox.aggregateId, id), eq(dbOutbox.eventType, 'run.enqueue')))
+                .then((rows) => rows[0]!.count),
         ).toBe(1);
         const other = await seedRun(fixture.db);
         await expect(commands.get(other.user.id, id)).rejects.toMatchObject({ status: 404 });
@@ -376,12 +445,23 @@ describe('生产 Run 租约、消费与恢复（真实 PG/Redis，串行）', ()
         const lease = await claimed(id);
         await repository.finish(lease.token, { code: 'EXECUTOR_NOT_CONFIGURED' });
         expect((await commands.create(seed.user.id, seed.task.id, {}, key)).run.id).toBe(id);
-        expect(await fixture.db.run.count({ where: { taskId: seed.task.id } })).toBe(2);
+        expect(
+            await fixture.db
+                .select({ count: dbCount() })
+                .from(dbRuns)
+                .where(eq(dbRuns.taskId, seed.task.id))
+                .then((rows) => rows[0]!.count),
+        ).toBe(2);
     });
 
     it('C12-03 两领取者仅一胜，首次deadline固定，暂停Task不取消已有Run', async () => {
         const seed = await seedRun(fixture.db);
-        await fixture.db.task.update({ where: { id: seed.task.id }, data: { status: 'paused' } });
+        await fixture.db
+            .update(dbTasks)
+            .set({ status: 'paused' })
+            .where(eq(dbTasks.id, seed.task.id))
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
         const attempts = await Promise.all([
             repository.claim(seed.run.id, 'A'),
             repository.claim(seed.run.id, 'B'),
@@ -429,10 +509,12 @@ describe('生产 Run 租约、消费与恢复（真实 PG/Redis，串行）', ()
         expect(next.run.budgetJson).toEqual(first.run.budgetJson);
         await expect(
             withRunFence(fixture.db, first.token, 'control', async (tx) =>
-                tx.run.update({
-                    where: { id: seed.run.id },
-                    data: { usageJson: { ...emptyUsage(), searches: 999 } },
-                }),
+                tx
+                    .update(dbRuns)
+                    .set({ usageJson: { ...emptyUsage(), searches: 999 } })
+                    .where(eq(dbRuns.id, seed.run.id))
+                    .returning()
+                    .then((rows) => requiredDatabaseValue(rows[0])),
             ),
         ).rejects.toMatchObject({ code: 'LEASE_LOST' });
         expect((await stored(seed.run.id)).usageJson).toEqual(emptyUsage());
@@ -460,9 +542,10 @@ describe('生产 Run 租约、消费与恢复（真实 PG/Redis，串行）', ()
             await entered.promise;
             const initial = await stored(seed.run.id);
             await waitUntil(async () => {
-                const [now] = await fixture.db.$queryRaw<
-                    { now: Date }[]
-                >`SELECT clock_timestamp() AS now`;
+                const [now] = await queryRows<{ now: Date }>(
+                    fixture.db,
+                    sql`SELECT clock_timestamp() AS now`,
+                );
                 return now.now > initial.leaseExpiresAt!;
             }, '超过初始Run租约');
             const renewed = await stored(seed.run.id);
@@ -514,16 +597,18 @@ describe('生产 Run 租约、消费与恢复（真实 PG/Redis，串行）', ()
         for (const phase of ['queued', 'running', 'recovering'] as const) {
             const seed = await seedRun(fixture.db);
             if (phase === 'recovering') {
-                await fixture.db.run.update({
-                    where: { id: seed.run.id },
-                    data: {
+                await fixture.db
+                    .update(dbRuns)
+                    .set({
                         status: 'recovering',
                         leaseEpoch: 1,
                         recoveryCount: 1,
                         startedAt: new Date(),
                         deadlineAt: new Date(Date.now() + 120_000),
-                    },
-                });
+                    })
+                    .where(eq(dbRuns.id, seed.run.id))
+                    .returning()
+                    .then((rows) => requiredDatabaseValue(rows[0]));
             }
             if (phase !== 'running') {
                 await commands.cancel(seed.user.id, seed.run.id);
@@ -552,7 +637,13 @@ describe('生产 Run 租约、消费与恢复（真实 PG/Redis，串行）', ()
             const result = await stored(seed.run.id);
             expect(result.status).toBe('canceled');
             expect(result.finishedAt).not.toBeNull();
-            expect(await fixture.db.report.count({ where: { runId: seed.run.id } })).toBe(0);
+            expect(
+                await fixture.db
+                    .select({ count: dbCount() })
+                    .from(dbReports)
+                    .where(eq(dbReports.runId, seed.run.id))
+                    .then((rows) => rows[0]!.count),
+            ).toBe(0);
             expect(
                 (await events(seed.run.id)).filter((event) => event.type === 'run.canceled'),
             ).toHaveLength(1);
@@ -584,17 +675,19 @@ describe('生产 Run 租约、消费与恢复（真实 PG/Redis，串行）', ()
     it('C12-08 到期恢复/超过恢复上限不执行，公共原因可读且不暴露内部字段', async () => {
         for (const reason of ['deadline', 'recoveries'] as const) {
             const seed = await seedRun(fixture.db);
-            await fixture.db.run.update({
-                where: { id: seed.run.id },
-                data: {
+            await fixture.db
+                .update(dbRuns)
+                .set({
                     status: 'recovering',
                     leaseEpoch: 1,
                     recoveryCount: reason === 'recoveries' ? 3 : 1,
                     startedAt: new Date(Date.now() - 600_000),
                     deadlineAt: new Date(Date.now() + (reason === 'deadline' ? -1_000 : 120_000)),
                     checkpointRef: { private: 'must-not-leak' },
-                },
-            });
+                })
+                .where(eq(dbRuns.id, seed.run.id))
+                .returning()
+                .then((rows) => requiredDatabaseValue(rows[0]));
             const execute = vi.fn(async () => undefined);
             await new RunService({ repository, executor: { execute } }).execute(seed.run.id);
             expect(execute).not.toHaveBeenCalled();
@@ -615,10 +708,12 @@ describe('生产 Run 租约、消费与恢复（真实 PG/Redis，串行）', ()
     it('C12-08 超期禁止普通写，但有效租约可做受限失败终结', async () => {
         const seed = await seedRun(fixture.db);
         const lease = await claimed(seed.run.id);
-        await fixture.db.run.update({
-            where: { id: seed.run.id },
-            data: { deadlineAt: new Date(0) },
-        });
+        await fixture.db
+            .update(dbRuns)
+            .set({ deadlineAt: new Date(0) })
+            .where(eq(dbRuns.id, seed.run.id))
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
         await expect(
             withRunFence(fixture.db, lease.token, 'work', async () => undefined),
         ).rejects.toMatchObject({ code: 'DEADLINE_EXCEEDED' });
@@ -657,7 +752,13 @@ describe('生产 Run 租约、消费与恢复（真实 PG/Redis，串行）', ()
             expect(JSON.stringify(await events(seed.run.id))).not.toContain(
                 'secret-error-never-persisted',
             );
-            expect(await fixture.db.report.count({ where: { runId: seed.run.id } })).toBe(0);
+            expect(
+                await fixture.db
+                    .select({ count: dbCount() })
+                    .from(dbReports)
+                    .where(eq(dbReports.runId, seed.run.id))
+                    .then((rows) => rows[0]!.count),
+            ).toBe(0);
         }
     });
 
@@ -715,15 +816,20 @@ describe('生产 Run 租约、消费与恢复（真实 PG/Redis，串行）', ()
             connection.disconnect();
             await expect(dispatcher.dispatchOnce()).rejects.toThrow();
             expect(
-                (await fixture.db.outbox.findUniqueOrThrow({ where: { id: seed.outbox.id } }))
-                    .sentAt,
+                (
+                    await fixture.db.query.outbox
+                        .findFirst({ where: eq(dbOutbox.id, seed.outbox.id) })
+                        .then((row) => requiredDatabaseValue(row))
+                ).sentAt,
             ).toBeNull();
             expect((await stored(seed.run.id)).status).toBe('queued');
             await connection.connect();
-            await fixture.db.outbox.update({
-                where: { id: seed.outbox.id },
-                data: { availableAt: new Date(0) },
-            });
+            await fixture.db
+                .update(dbOutbox)
+                .set({ availableAt: new Date(0) })
+                .where(eq(dbOutbox.id, seed.outbox.id))
+                .returning()
+                .then((rows) => requiredDatabaseValue(rows[0]));
             await consumer.start();
             expect(await dispatcher.dispatchOnce()).toBe(1);
             await waitUntil(
@@ -802,10 +908,12 @@ describe('生产 Run 租约、消费与恢复（真实 PG/Redis，串行）', ()
 
     it('C12-11 固化mode决定有效比较范围，队列伪造owner/mode/version不会改数据库事实', async () => {
         const seed = await seedRun(fixture.db);
-        await fixture.db.run.update({
-            where: { id: seed.run.id },
-            data: { status: 'failed', finishedAt: new Date() },
-        });
+        await fixture.db
+            .update(dbRuns)
+            .set({ status: 'failed', finishedAt: new Date() })
+            .where(eq(dbRuns.id, seed.run.id))
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
         const demo = await commands.create(
             seed.user.id,
             seed.task.id,
@@ -978,7 +1086,13 @@ describe('真实进程崩溃与IPC停止', () => {
                 expect(
                     (await events(seed.run.id)).some((event) => event.type === 'run.canceled'),
                 ).toBe(false);
-                expect(await fixture.db.report.count({ where: { runId: seed.run.id } })).toBe(0);
+                expect(
+                    await fixture.db
+                        .select({ count: dbCount() })
+                        .from(dbReports)
+                        .where(eq(dbReports.runId, seed.run.id))
+                        .then((rows) => rows[0]!.count),
+                ).toBe(0);
             } finally {
                 if (!first.exit) await endProcess(first, false);
                 if (second && !second.exit) await endProcess(second, false);

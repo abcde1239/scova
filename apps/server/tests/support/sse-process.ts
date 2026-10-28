@@ -1,27 +1,22 @@
-import { PrismaClient } from '@scova/db';
+import { closeDatabase } from '@scova/db';
+import { createObservedDatabase } from './query-observer.ts';
 import { createDefaultServices } from '../../src/app/context.ts';
 import { createStreamRegistry } from '../../src/app/streams.ts';
 import { startServer } from '../../src/app/runtime.ts';
 
 // Only this test entry injects short timing and telemetry; production uses fixed default policy.
-const database = new PrismaClient();
 let reads = 0,
     opened = 0,
     closed = 0;
-const observed = database.$extends({
-    query: {
-        session: {
-            async findFirst({ args, query }) {
-                reads += 1;
-                return query(args);
-            },
-        },
+const database = createObservedDatabase(process.env.DATABASE_URL!, {
+    before(query) {
+        if (/\bfrom\s+"sessions"/i.test(query.text)) reads += 1;
     },
 });
 const registry = createStreamRegistry();
 const services = createDefaultServices({
-    db: () => observed as unknown as PrismaClient,
-    close: () => database.$disconnect(),
+    db: () => database,
+    close: () => closeDatabase(database),
     streams: {
         register(abort, done) {
             opened += 1;

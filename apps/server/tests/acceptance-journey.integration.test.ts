@@ -1,3 +1,5 @@
+import { and, eq, isNotNull, count } from '@scova/db';
+import * as tables from '@scova/db';
 import { randomUUID } from 'node:crypto';
 import { Queue } from 'bullmq';
 import {
@@ -12,6 +14,7 @@ import { historyFixture, type HistoryOwner } from './support/history-fixture.ts'
 import { draftConfig } from './support/task-drafts.ts';
 import { startAcceptanceWorker } from './support/acceptance-worker.ts';
 import type { ScenarioPhase } from '../../worker/tests/support/acceptance-scenario-fixtures.ts';
+import { requireRow } from '../src/utils/database.ts';
 
 const fixture = historyFixture({ questionFixture: true });
 const redisUrl =
@@ -52,7 +55,9 @@ async function deliver(
     try {
         await waitUntil(
             async () => {
-                const row = await fixture.db.run.findUniqueOrThrow({ where: { id: runId } });
+                const row = await fixture.db.query.runs
+                    .findFirst({ where: and(eq(tables.runs.id, runId)) })
+                    .then(requireRow);
                 if (
                     row.status === 'failed' ||
                     row.status === 'canceled' ||
@@ -72,12 +77,18 @@ async function deliver(
         );
         await waitUntil(
             async () =>
-                (await fixture.db.outbox.count({
-                    where: { aggregateId: runId, sentAt: { not: null } },
-                })) === 1,
+                (await fixture.db
+                    .select({ count: count() })
+                    .from(tables.outbox)
+                    .where(
+                        and(eq(tables.outbox.aggregateId, runId), isNotNull(tables.outbox.sentAt)),
+                    )
+                    .then(([row]) => row!.count)) === 1,
             () => 'outbox acknowledgement ' + runId,
         );
-        const stored = await fixture.db.report.findFirstOrThrow({ where: { runId } });
+        const stored = await fixture.db.query.reports
+            .findFirst({ where: and(eq(tables.reports.runId, runId)) })
+            .then(requireRow);
         return await json<Report>('/reports/' + stored.id, owner);
     } finally {
         await worker.stop();
@@ -127,15 +138,20 @@ describe('后端跨能力旅程：生产报告→资料库→证据问答→明�
             });
             const evidence = original.evidence[0]!;
             const sourceId = evidence.sourceId;
-            const originalRun = await fixture.db.run.findUniqueOrThrow({
-                where: { id: original.runId },
-            });
-            const originalRow = await fixture.db.report.findUniqueOrThrow({
-                where: { id: original.id },
-            });
-            const initialBaseline = await fixture.db.baseline.findFirstOrThrow({
-                where: { userId: owner.id, taskId: task.id },
-            });
+            const originalRun = await fixture.db.query.runs
+                .findFirst({ where: and(eq(tables.runs.id, original.runId)) })
+                .then(requireRow);
+            const originalRow = await fixture.db.query.reports
+                .findFirst({ where: and(eq(tables.reports.id, original.id)) })
+                .then(requireRow);
+            const initialBaseline = await fixture.db.query.baselines
+                .findFirst({
+                    where: and(
+                        eq(tables.baselines.userId, owner.id),
+                        eq(tables.baselines.taskId, task.id),
+                    ),
+                })
+                .then(requireRow);
             expect(initialBaseline.completeRunId).toBe(original.runId);
 
             const bookmark = await json<{
@@ -203,7 +219,11 @@ describe('后端跨能力旅程：生产报告→资料库→证据问答→明�
             for (const path of ['/bookmarks', '/notes', '/library/search?q=' + query])
                 expect((await json<List<{ id: string }>>(path, foreign)).items).toEqual([]);
 
-            const toolCount = await fixture.db.toolCall.count({ where: { userId: owner.id } });
+            const toolCount = await fixture.db
+                .select({ count: count() })
+                .from(tables.toolCalls)
+                .where(and(eq(tables.toolCalls.userId, owner.id)))
+                .then(([row]) => row!.count);
             const questionText = '请引述报告的一条原文，并深入核查后续条件。';
             const questionPath = '/reports/' + original.id + '/questions';
             const question = await json<ReportQuestion>(
@@ -230,18 +250,39 @@ describe('后端跨能力旅程：生产报告→资料库→证据问答→明�
                 ),
             ).toBe(true);
             expect(
-                await fixture.db.questionEvidence.count({ where: { questionId: question.id } }),
+                await fixture.db
+                    .select({ count: count() })
+                    .from(tables.questionEvidence)
+                    .where(and(eq(tables.questionEvidence.questionId, question.id)))
+                    .then(([row]) => row!.count),
             ).toBeGreaterThan(0);
             expect(
-                await fixture.db.run.count({ where: { userId: owner.id, taskId: task.id } }),
+                await fixture.db
+                    .select({ count: count() })
+                    .from(tables.runs)
+                    .where(and(eq(tables.runs.userId, owner.id), eq(tables.runs.taskId, task.id)))
+                    .then(([row]) => row!.count),
             ).toBe(1);
-            expect(await fixture.db.outbox.count({ where: { userId: owner.id } })).toBe(1);
-            expect(await fixture.db.toolCall.count({ where: { userId: owner.id } })).toBe(
-                toolCount,
-            );
             expect(
-                (await fixture.db.run.findUniqueOrThrow({ where: { id: original.runId } }))
-                    .usageJson,
+                await fixture.db
+                    .select({ count: count() })
+                    .from(tables.outbox)
+                    .where(and(eq(tables.outbox.userId, owner.id)))
+                    .then(([row]) => row!.count),
+            ).toBe(1);
+            expect(
+                await fixture.db
+                    .select({ count: count() })
+                    .from(tables.toolCalls)
+                    .where(and(eq(tables.toolCalls.userId, owner.id)))
+                    .then(([row]) => row!.count),
+            ).toBe(toolCount);
+            expect(
+                (
+                    await fixture.db.query.runs
+                        .findFirst({ where: and(eq(tables.runs.id, original.runId)) })
+                        .then(requireRow)
+                ).usageJson,
             ).toEqual(originalRun.usageJson);
             const savedQuestionPath = questionPath + '/' + question.id;
             expect(await json<ReportQuestion>(savedQuestionPath, owner)).toEqual(question);
@@ -301,7 +342,13 @@ describe('后端跨能力旅程：生产报告→资料库→证据问答→明�
                     )
                 ).status,
             ).toBe(422);
-            expect(await fixture.db.run.count({ where: { userId: owner.id } })).toBe(1);
+            expect(
+                await fixture.db
+                    .select({ count: count() })
+                    .from(tables.runs)
+                    .where(and(eq(tables.runs.userId, owner.id)))
+                    .then(([row]) => row!.count),
+            ).toBe(1);
             const followup = await json<{ run: Run; reused: boolean }>(
                 savedQuestionPath + '/followup',
                 owner,
@@ -309,9 +356,9 @@ describe('后端跨能力旅程：生产报告→资料库→证据问答→明�
                 202,
             );
             expect(followup.reused).toBe(false);
-            const followupRow = await fixture.db.run.findUniqueOrThrow({
-                where: { id: followup.run.id },
-            });
+            const followupRow = await fixture.db.query.runs
+                .findFirst({ where: and(eq(tables.runs.id, followup.run.id)) })
+                .then(requireRow);
             expect(followupRow).toMatchObject({
                 trigger: 'followup',
                 taskVersionId: task.currentVersionId,
@@ -338,8 +385,12 @@ describe('后端跨能力旅程：生产报告→资料库→证据问答→明�
                 format: 'research_report',
                 mode: 'live',
             });
-            const searches = await fixture.db.toolCall.findMany({
-                where: { runId: followup.run.id, tool: 'search', status: 'succeeded' },
+            const searches = await fixture.db.query.toolCalls.findMany({
+                where: and(
+                    eq(tables.toolCalls.runId, followup.run.id),
+                    eq(tables.toolCalls.tool, 'search'),
+                    eq(tables.toolCalls.status, 'succeeded'),
+                ),
             });
             const executedQueries = searches
                 .map(
@@ -361,21 +412,40 @@ describe('后端跨能力旅程：生产报告→资料库→证据问答→明�
             // The user-facing explanation must name an actually executed search,
             // rather than only asserting that a feedback item reached the plan.
             for (const effect of expanded) expect(executedQueries).toContain(effect.query);
-            const researchedRow = await fixture.db.report.findUniqueOrThrow({
-                where: { id: researched.id },
-            });
+            const researchedRow = await fixture.db.query.reports
+                .findFirst({ where: and(eq(tables.reports.id, researched.id)) })
+                .then(requireRow);
             expect((await json<ReportQuestion>(savedQuestionPath, owner)).followupRunId).toBe(
                 followup.run.id,
             );
             expect(
-                await fixture.db.baseline.findUniqueOrThrow({ where: { id: initialBaseline.id } }),
+                await fixture.db.query.baselines
+                    .findFirst({ where: and(eq(tables.baselines.id, initialBaseline.id)) })
+                    .then(requireRow),
             ).toEqual(initialBaseline);
             expect(
-                await fixture.db.baseline.count({ where: { userId: owner.id, taskId: task.id } }),
+                await fixture.db
+                    .select({ count: count() })
+                    .from(tables.baselines)
+                    .where(
+                        and(
+                            eq(tables.baselines.userId, owner.id),
+                            eq(tables.baselines.taskId, task.id),
+                        ),
+                    )
+                    .then(([row]) => row!.count),
             ).toBe(2);
-            expect(await fixture.db.taskVersion.count({ where: { taskId: task.id } })).toBe(1);
             expect(
-                await fixture.db.report.findUniqueOrThrow({ where: { id: original.id } }),
+                await fixture.db
+                    .select({ count: count() })
+                    .from(tables.taskVersions)
+                    .where(and(eq(tables.taskVersions.taskId, task.id)))
+                    .then(([row]) => row!.count),
+            ).toBe(1);
+            expect(
+                await fixture.db.query.reports
+                    .findFirst({ where: and(eq(tables.reports.id, original.id)) })
+                    .then(requireRow),
             ).toEqual(originalRow);
             expect(await json<Report>('/reports/' + original.id, owner)).toEqual(original);
             for (const path of ['/reports/' + researched.id, '/runs/' + followup.run.id])
@@ -391,9 +461,9 @@ describe('后端跨能力旅程：生产报告→资料库→证据问答→明�
                 owner,
             );
             expect(activeFeedback.items).toEqual([]);
-            const persistedFollowup = await fixture.db.run.findUniqueOrThrow({
-                where: { id: followup.run.id },
-            });
+            const persistedFollowup = await fixture.db.query.runs
+                .findFirst({ where: and(eq(tables.runs.id, followup.run.id)) })
+                .then(requireRow);
             expect(
                 readFeedbackSnapshot(persistedFollowup.feedbackSnapshotJson, owner.id, task.id),
             ).toEqual(frozenFeedback);
@@ -403,9 +473,9 @@ describe('后端跨能力旅程：生产报告→资料库→证据问答→明�
                 command({ mode: 'live' }),
                 202,
             );
-            const manualRow = await fixture.db.run.findUniqueOrThrow({
-                where: { id: manual.run.id },
-            });
+            const manualRow = await fixture.db.query.runs
+                .findFirst({ where: and(eq(tables.runs.id, manual.run.id)) })
+                .then(requireRow);
             expect(
                 readFeedbackSnapshot(manualRow.feedbackSnapshotJson, owner.id, task.id).items,
             ).toEqual([]);
@@ -417,8 +487,12 @@ describe('后端跨能力旅程：生产报告→资料库→证据问答→明�
                 baselineRunId: original.runId,
             });
             expect(afterRevoke.feedbackEffects ?? []).toEqual([]);
-            const manualSearches = await fixture.db.toolCall.findMany({
-                where: { runId: manual.run.id, tool: 'search', status: 'succeeded' },
+            const manualSearches = await fixture.db.query.toolCalls.findMany({
+                where: and(
+                    eq(tables.toolCalls.runId, manual.run.id),
+                    eq(tables.toolCalls.tool, 'search'),
+                    eq(tables.toolCalls.status, 'succeeded'),
+                ),
             });
             expect(manualSearches).toHaveLength(1);
             expect(
@@ -430,42 +504,93 @@ describe('后端跨能力旅程：生产报告→资料库→证据问答→明�
                 ),
             ).toBe(true);
             expect(
-                (await fixture.db.baseline.findUniqueOrThrow({ where: { id: initialBaseline.id } }))
-                    .completeRunId,
+                (
+                    await fixture.db.query.baselines
+                        .findFirst({ where: and(eq(tables.baselines.id, initialBaseline.id)) })
+                        .then(requireRow)
+                ).completeRunId,
             ).toBe(manual.run.id);
-            const followupBaseline = await fixture.db.baseline.findFirstOrThrow({
-                where: {
-                    userId: owner.id,
-                    taskId: task.id,
-                    comparisonScopeHash: followupRow.comparisonScopeHash,
-                },
-            });
+            const followupBaseline = await fixture.db.query.baselines
+                .findFirst({
+                    where: and(
+                        eq(tables.baselines.userId, owner.id),
+                        eq(tables.baselines.taskId, task.id),
+                        eq(tables.baselines.comparisonScopeHash, followupRow.comparisonScopeHash),
+                    ),
+                })
+                .then(requireRow);
             expect(followupBaseline.completeRunId).toBe(followup.run.id);
             expect(
-                await fixture.db.report.findUniqueOrThrow({ where: { id: researched.id } }),
+                await fixture.db.query.reports
+                    .findFirst({ where: and(eq(tables.reports.id, researched.id)) })
+                    .then(requireRow),
             ).toEqual(researchedRow);
             expect(await json<Report>('/reports/' + researched.id, owner)).toEqual(researched);
             expect(
-                await fixture.db.report.findUniqueOrThrow({ where: { id: original.id } }),
+                await fixture.db.query.reports
+                    .findFirst({ where: and(eq(tables.reports.id, original.id)) })
+                    .then(requireRow),
             ).toEqual(originalRow);
             expect(await json<Report>('/reports/' + original.id, owner)).toEqual(original);
-            expect(await fixture.db.taskVersion.count({ where: { taskId: task.id } })).toBe(1);
+            expect(
+                await fixture.db
+                    .select({ count: count() })
+                    .from(tables.taskVersions)
+                    .where(and(eq(tables.taskVersions.taskId, task.id)))
+                    .then(([row]) => row!.count),
+            ).toBe(1);
             expect(
                 (
-                    await fixture.db.taskVersion.findUniqueOrThrow({
-                        where: { id: task.currentVersionId },
-                    })
+                    await fixture.db.query.taskVersions
+                        .findFirst({
+                            where: and(eq(tables.taskVersions.id, task.currentVersionId)),
+                        })
+                        .then(requireRow)
                 ).configJson,
             ).toEqual(config);
             expect((await fixture.request('/reports/' + afterRevoke.id, foreign)).status).toBe(404);
-            expect(await fixture.db.report.count({ where: { userId: owner.id } })).toBe(3);
-            expect(await fixture.db.inboxItem.count({ where: { userId: owner.id } })).toBe(3);
-            expect(await fixture.db.notification.count({ where: { userId: owner.id } })).toBe(3);
-            expect(await fixture.db.note.count({ where: { userId: foreign.id } })).toBe(0);
-            expect(await fixture.db.bookmark.count({ where: { userId: foreign.id } })).toBe(0);
-            expect(await fixture.db.reportQuestion.count({ where: { userId: foreign.id } })).toBe(
-                0,
-            );
+            expect(
+                await fixture.db
+                    .select({ count: count() })
+                    .from(tables.reports)
+                    .where(and(eq(tables.reports.userId, owner.id)))
+                    .then(([row]) => row!.count),
+            ).toBe(3);
+            expect(
+                await fixture.db
+                    .select({ count: count() })
+                    .from(tables.inboxItems)
+                    .where(and(eq(tables.inboxItems.userId, owner.id)))
+                    .then(([row]) => row!.count),
+            ).toBe(3);
+            expect(
+                await fixture.db
+                    .select({ count: count() })
+                    .from(tables.notifications)
+                    .where(and(eq(tables.notifications.userId, owner.id)))
+                    .then(([row]) => row!.count),
+            ).toBe(3);
+            expect(
+                await fixture.db
+                    .select({ count: count() })
+                    .from(tables.notes)
+                    .where(and(eq(tables.notes.userId, foreign.id)))
+                    .then(([row]) => row!.count),
+            ).toBe(0);
+            expect(
+                await fixture.db
+                    .select({ count: count() })
+                    .from(tables.bookmarks)
+                    .where(and(eq(tables.bookmarks.userId, foreign.id)))
+                    .then(([row]) => row!.count),
+            ).toBe(0);
+            expect(
+                await fixture.db
+                    .select({ count: count() })
+                    .from(tables.reportQuestions)
+                    .where(and(eq(tables.reportQuestions.userId, foreign.id)))
+                    .then(([row]) => row!.count),
+            ).toBe(0);
             console.log(
                 JSON.stringify({
                     journey: 'report-library-question-feedback-followup-revocation',

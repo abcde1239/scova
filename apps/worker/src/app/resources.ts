@@ -1,4 +1,10 @@
-import { createDatabaseClient, type PrismaClient } from '@scova/db';
+import {
+    createDatabaseClient,
+    type DatabaseClient,
+    connectDatabase,
+    closeDatabase,
+} from '@scova/db';
+
 import { Redis } from 'ioredis';
 import type { WorkerConfig } from '@/app/config.ts';
 import { createOutboxHandler } from '@/handler/outbox.ts';
@@ -28,7 +34,7 @@ export function createWorkerResources(
     config: WorkerConfig,
     options: { executor?: RunExecutor } = {},
 ): WorkerResources {
-    let database: PrismaClient | undefined;
+    let database: DatabaseClient | undefined;
     let redis: Redis | undefined;
     let publisher: OutboxQueue | undefined;
     let handler: ReturnType<typeof createOutboxHandler> | undefined;
@@ -42,9 +48,10 @@ export function createWorkerResources(
         connect: () =>
             (connecting ??= (async () => {
                 database = createDatabaseClient({
-                    datasources: { db: { url: config.databaseUrl } },
+                    connectionString: config.databaseUrl,
+                    applicationName: 'scova-worker',
                 });
-                await database.$connect();
+                await connectDatabase(database);
                 scheduler = createSchedulerHandler(
                     new SchedulerService({
                         repository: createSchedulerRepository(database),
@@ -145,7 +152,7 @@ export function createWorkerResources(
                     errors.push(error);
                 }
                 try {
-                    await database?.$disconnect();
+                    if (database) await closeDatabase(database);
                 } catch (error) {
                     errors.push(error);
                 }

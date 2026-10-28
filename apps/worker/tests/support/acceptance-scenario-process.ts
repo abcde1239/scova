@@ -1,4 +1,5 @@
-import { createDatabaseClient } from '@scova/db';
+import { createDatabaseClient, connectDatabase, closeDatabase } from '@scova/db';
+
 import { Redis } from 'ioredis';
 import { createWorkerApp } from '../../src/app/index.ts';
 import { readWorkerConfig } from '../../src/app/config.ts';
@@ -27,7 +28,7 @@ if (!schema || !/^scova_acceptance_[a-f0-9]{32}$/.test(schema))
 if (!scenarioNames.includes(scenario) || !['A', 'B', 'C'].includes(phase))
     throw new Error('Invalid acceptance scenario or phase');
 
-const database = createDatabaseClient({ datasources: { db: { url: config.databaseUrl } } });
+const database = createDatabaseClient({ connectionString: config.databaseUrl });
 const redis = new Redis(config.redisUrl, {
     lazyConnect: true,
     enableOfflineQueue: false,
@@ -51,7 +52,7 @@ const app = createWorkerApp({
     config,
     resources: {
         async connect() {
-            await database.$connect();
+            await connectDatabase(database);
             await redis.connect();
             publisher = createOutboxQueue(redis, config.queueName);
             await publisher.queue.waitUntilReady();
@@ -92,7 +93,7 @@ const app = createWorkerApp({
                     try {
                         await agent.close();
                     } finally {
-                        await database.$disconnect();
+                        await closeDatabase(database);
                     }
                 }
             }

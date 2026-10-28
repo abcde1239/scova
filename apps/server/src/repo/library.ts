@@ -1,13 +1,24 @@
+import {
+    queryRows,
+    sql as querySql,
+    and,
+    eq,
+    lt,
+    asc,
+    type DatabaseExecutor,
+    type SQL,
+} from '@scova/db';
+import * as tables from '@scova/db';
 import { randomUUID } from 'node:crypto';
-import { Prisma } from '@scova/db';
 import type { ApiServices } from '@/app/context.ts';
 import type { LibrarySearchQuery, LibraryTarget, NoteListQuery, NoteInput } from '@scova/models';
 import type { LibraryCursor } from '@/utils/library.ts';
+import { firstRow, requireRow } from '@/utils/database.ts';
 
-const timeText = (column: Prisma.Sql) =>
-    Prisma.sql`to_char(${column} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
-const activeBody = Prisma.sql`(ss.text_body IS NOT NULL AND (ss.text_expires_at IS NULL OR ss.text_expires_at > statement_timestamp()))`;
-const latestObservation = Prisma.sql`
+const timeText = (column: SQL) =>
+    querySql`to_char(${column} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
+const activeBody = querySql`(ss.text_body IS NOT NULL AND (ss.text_expires_at IS NULL OR ss.text_expires_at > statement_timestamp()))`;
+const latestObservation = querySql`
   JOIN LATERAL (
     SELECT rs.id, rs.run_id, rs.observed_at, rs.requested_url, rs.fetched_url, rs.metadata_json, r.mode
     FROM run_sources rs JOIN runs r ON r.user_id=rs.user_id AND r.id=rs.run_id
@@ -15,7 +26,7 @@ const latestObservation = Prisma.sql`
       AND rs.fetch_status='succeeded' AND rs.fetched_url IS NOT NULL
     ORDER BY rs.observed_at DESC, rs.id DESC LIMIT 1
   ) observation ON true`;
-const snapshotProjection = (includeBody: boolean) => Prisma.sql`
+const snapshotProjection = (includeBody: boolean) => querySql`
  ss.id, ss.user_id AS "userId", ss.source_id AS "sourceId", ss.title, ss.content_hash AS "contentHash",
  ss.extractor_version AS "extractorVersion", ss.text_expires_at AS "textExpiresAt",
  CASE WHEN ${includeBody}::boolean AND ${activeBody} THEN ss.text_body ELSE NULL END AS "textBody",
@@ -23,12 +34,12 @@ const snapshotProjection = (includeBody: boolean) => Prisma.sql`
  s.canonical_url AS "canonicalUrl", observation.id AS "observationId", observation.run_id AS "runId",
  observation.requested_url AS "originalUrl", observation.fetched_url AS "fetchedUrl",
  observation.observed_at AS "observedAt", observation.metadata_json AS metadata, observation.mode,
- ${timeText(Prisma.sql`observation.observed_at`)} AS "cursorTime"`;
-const bookmarkProjection = Prisma.sql`
+ ${timeText(querySql`observation.observed_at`)} AS "cursorTime"`;
+const bookmarkProjection = querySql`
  b.id, b.source_id AS "sourceId", b.created_at AS "createdAt",
  s.canonical_url AS "canonicalUrl", latest.title, latest.snapshot_id AS "latestSnapshotId",
- latest.observed_at AS "lastObservedAt", ${timeText(Prisma.sql`b.created_at`)} AS "cursorTime"`;
-const bookmarkJoins = Prisma.sql`
+ latest.observed_at AS "lastObservedAt", ${timeText(querySql`b.created_at`)} AS "cursorTime"`;
+const bookmarkJoins = querySql`
  JOIN sources s ON s.user_id=b.user_id AND s.id=b.source_id
  LEFT JOIN LATERAL (
    SELECT rs.snapshot_id, rs.observed_at, ss.title
@@ -37,9 +48,9 @@ const bookmarkJoins = Prisma.sql`
    WHERE rs.user_id=b.user_id AND rs.source_id=b.source_id AND rs.fetch_status='succeeded'
    ORDER BY rs.observed_at DESC,rs.id DESC LIMIT 1
  ) latest ON true`;
-const noteProjection = Prisma.sql`n.id,n.user_id AS "userId",n.source_id AS "sourceId",n.report_id AS "reportId",
+const noteProjection = querySql`n.id,n.user_id AS "userId",n.source_id AS "sourceId",n.report_id AS "reportId",
  n.body,n.revision,n.created_at AS "createdAt",n.updated_at AS "updatedAt",
- ${timeText(Prisma.sql`n.updated_at`)} AS "cursorTime"`;
+ ${timeText(querySql`n.updated_at`)} AS "cursorTime"`;
 export interface StoredLibraryBookmark {
     id: string;
     sourceId: string;
@@ -77,7 +88,7 @@ export interface StoredLibrarySnapshot {
     originalUrl: string;
     fetchedUrl: string;
     observedAt: Date;
-    metadata: Prisma.JsonValue;
+    metadata: tables.JsonValue;
     mode: 'demo' | 'live';
     cursorTime: string;
 }
@@ -94,37 +105,55 @@ export interface StoredLibraryHit {
     cursorTime: string;
 }
 function filterNote(query: Pick<NoteListQuery, 'sourceId' | 'reportId'>) {
-    return Prisma.sql`${query.sourceId ? Prisma.sql`AND n.source_id=${query.sourceId}::uuid` : Prisma.empty}
- ${query.reportId ? Prisma.sql`AND n.report_id=${query.reportId}::uuid` : Prisma.empty}`;
+    return querySql`${query.sourceId ? querySql`AND n.source_id=${query.sourceId}::uuid` : querySql.empty()}
+ ${query.reportId ? querySql`AND n.report_id=${query.reportId}::uuid` : querySql.empty()}`;
 }
-function noteStore(tx: Prisma.TransactionClient) {
+function noteStore(tx: DatabaseExecutor) {
     return {
         async claim(userId: string, keyHash: string, payloadHash: string, expiresAt: Date) {
-            const rows = await tx.$queryRaw<{ id: string }[]>`
+            const rows = await queryRows<{ id: string }>(
+                tx,
+                querySql`
        INSERT INTO idempotency_records(id,user_id,scope,key_hash,payload_hash,status,expires_at)
        VALUES(${randomUUID()}::uuid,${userId}::uuid,'notes:create',${keyHash},${payloadHash},'pending',${expiresAt})
-       ON CONFLICT(user_id,scope,key_hash) DO NOTHING RETURNING id`;
-            const record = await tx.idempotencyRecord.findUniqueOrThrow({
-                where: { userId_scope_keyHash: { userId, scope: 'notes:create', keyHash } },
-            });
+       ON CONFLICT(user_id,scope,key_hash) DO NOTHING RETURNING id`,
+            );
+            const record = await tx.query.idempotencyRecords
+                .findFirst({
+                    where: and(
+                        and(
+                            eq(tables.idempotencyRecords.userId, userId),
+                            eq(tables.idempotencyRecords.scope, 'notes:create'),
+                            eq(tables.idempotencyRecords.keyHash, keyHash),
+                        ),
+                    ),
+                })
+                .then(requireRow);
             return { record, created: rows.length === 1 };
         },
-        find: (userId: string, id: string) => tx.note.findFirst({ where: { userId, id } }),
+        find: (userId: string, id: string) =>
+            tx.query.notes
+                .findFirst({ where: and(eq(tables.notes.userId, userId), eq(tables.notes.id, id)) })
+                .then((row) => row ?? null),
         create: (userId: string, input: NoteInput) =>
-            tx.note.create({
-                data: {
+            tx
+                .insert(tables.notes)
+                .values({
                     userId,
                     body: input.body,
                     ...(input.target.kind === 'source'
                         ? { sourceId: input.target.id }
                         : { reportId: input.target.id }),
-                },
-            }),
+                })
+                .returning()
+                .then(firstRow),
         complete: (id: string, resourceId: string) =>
-            tx.idempotencyRecord.update({
-                where: { id },
-                data: { status: 'completed', resourceId, responseCode: 201 },
-            }),
+            tx
+                .update(tables.idempotencyRecords)
+                .set({ status: 'completed', resourceId: resourceId, responseCode: 201 })
+                .where(and(eq(tables.idempotencyRecords.id, id)))
+                .returning()
+                .then(firstRow),
     };
 }
 
@@ -135,132 +164,223 @@ export function createLibraryRepo(services: Pick<ApiServices, 'db'>) {
             return target.kind === 'source'
                 ? services
                       .db()
-                      .source.findFirst({ where: { id: target.id, userId }, select: { id: true } })
+                      .query.sources.findFirst({
+                          where: and(
+                              eq(tables.sources.id, target.id),
+                              eq(tables.sources.userId, userId),
+                          ),
+                          columns: { id: true },
+                      })
+                      .then((row) => row ?? null)
                 : services
                       .db()
-                      .report.findFirst({ where: { id: target.id, userId }, select: { id: true } });
+                      .query.reports.findFirst({
+                          where: and(
+                              eq(tables.reports.id, target.id),
+                              eq(tables.reports.userId, userId),
+                          ),
+                          columns: { id: true },
+                      })
+                      .then((row) => row ?? null);
         },
         async bookmark(userId: string, id: string) {
-            const [row] = await services.db().$queryRaw<StoredLibraryBookmark[]>`
+            const [row] = await queryRows<StoredLibraryBookmark>(
+                services.db(),
+                querySql`
        SELECT ${bookmarkProjection} FROM bookmarks b ${bookmarkJoins}
-       WHERE b.user_id=${userId}::uuid AND b.id=${id}::uuid`;
+       WHERE b.user_id=${userId}::uuid AND b.id=${id}::uuid`,
+            );
             return row;
         },
         async createBookmark(userId: string, sourceId: string) {
-            return services.db().$transaction(async (tx) => {
-                const rows = await tx.$queryRaw<{ id: string }[]>`
+            return services.db().transaction(async (tx) => {
+                const rows = await queryRows<{ id: string }>(
+                    tx,
+                    querySql`
          INSERT INTO bookmarks(id,user_id,source_id) VALUES(${randomUUID()}::uuid,${userId}::uuid,${sourceId}::uuid)
-         ON CONFLICT(user_id,source_id) DO NOTHING RETURNING id`;
-                const row = await tx.bookmark.findUniqueOrThrow({
-                    where: { userId_sourceId: { userId, sourceId } },
-                });
+         ON CONFLICT(user_id,source_id) DO NOTHING RETURNING id`,
+                );
+                const row = await tx.query.bookmarks
+                    .findFirst({
+                        where: and(
+                            and(
+                                eq(tables.bookmarks.userId, userId),
+                                eq(tables.bookmarks.sourceId, sourceId),
+                            ),
+                        ),
+                    })
+                    .then(requireRow);
                 return { id: row.id, reused: rows.length === 0 };
             });
         },
         async bookmarks(userId: string, take: number, cursor?: LibraryCursor) {
             const boundary = cursor
-                ? Prisma.sql`AND (b.created_at,b.id)<(${cursor.time}::timestamptz,${cursor.id}::uuid)`
-                : Prisma.empty;
-            return services.db().$queryRaw<StoredLibraryBookmark[]>`
+                ? querySql`AND (b.created_at,b.id)<(${cursor.time}::timestamptz,${cursor.id}::uuid)`
+                : querySql.empty();
+            return queryRows<StoredLibraryBookmark>(
+                services.db(),
+                querySql`
        SELECT ${bookmarkProjection} FROM bookmarks b ${bookmarkJoins}
-       WHERE b.user_id=${userId}::uuid ${boundary} ORDER BY b.created_at DESC,b.id DESC LIMIT ${take}`;
+       WHERE b.user_id=${userId}::uuid ${boundary} ORDER BY b.created_at DESC,b.id DESC LIMIT ${take}`,
+            );
         },
         async bookmarkAnchor(userId: string, cursor: LibraryCursor) {
             return (
                 (
-                    await services.db().$queryRaw<{ id: string }[]>`SELECT id FROM bookmarks
-       WHERE user_id=${userId}::uuid AND id=${cursor.id}::uuid AND created_at=${cursor.time}::timestamptz`
+                    await queryRows<{ id: string }>(
+                        services.db(),
+                        querySql`SELECT id FROM bookmarks
+       WHERE user_id=${userId}::uuid AND id=${cursor.id}::uuid AND created_at=${cursor.time}::timestamptz`,
+                    )
                 ).length === 1
             );
         },
         deleteBookmark: (userId: string, id: string) =>
-            services.db().bookmark.deleteMany({ where: { userId, id } }),
+            services
+                .db()
+                .delete(tables.bookmarks)
+                .where(and(eq(tables.bookmarks.userId, userId), eq(tables.bookmarks.id, id)))
+                .returning()
+                .then((rows) => ({ count: rows.length })),
         noteCommand: <T>(work: (store: ReturnType<typeof noteStore>) => Promise<T>) =>
-            services.db().$transaction((tx) => work(noteStore(tx))),
+            services.db().transaction((tx) => work(noteStore(tx))),
         async note(userId: string, id: string) {
-            const [row] = await services.db().$queryRaw<StoredLibraryNote[]>`
-       SELECT ${noteProjection} FROM notes n WHERE n.user_id=${userId}::uuid AND n.id=${id}::uuid`;
+            const [row] = await queryRows<StoredLibraryNote>(
+                services.db(),
+                querySql`
+       SELECT ${noteProjection} FROM notes n WHERE n.user_id=${userId}::uuid AND n.id=${id}::uuid`,
+            );
             return row;
         },
         async notes(userId: string, query: NoteListQuery, take: number, cursor?: LibraryCursor) {
             const boundary = cursor
-                ? Prisma.sql`AND (n.updated_at,n.id)<(${cursor.time}::timestamptz,${cursor.id}::uuid)`
-                : Prisma.empty;
-            return services.db().$queryRaw<
-                StoredLibraryNote[]
-            >`SELECT ${noteProjection} FROM notes n
-       WHERE n.user_id=${userId}::uuid ${filterNote(query)} ${boundary} ORDER BY n.updated_at DESC,n.id DESC LIMIT ${take}`;
+                ? querySql`AND (n.updated_at,n.id)<(${cursor.time}::timestamptz,${cursor.id}::uuid)`
+                : querySql.empty();
+            return queryRows<StoredLibraryNote>(
+                services.db(),
+                querySql`SELECT ${noteProjection} FROM notes n
+       WHERE n.user_id=${userId}::uuid ${filterNote(query)} ${boundary} ORDER BY n.updated_at DESC,n.id DESC LIMIT ${take}`,
+            );
         },
         async noteAnchor(userId: string, query: NoteListQuery, cursor: LibraryCursor) {
             return (
                 (
-                    await services.db().$queryRaw<
-                        { id: string }[]
-                    >`SELECT n.id FROM notes n WHERE n.user_id=${userId}::uuid
-       AND n.id=${cursor.id}::uuid AND n.updated_at=${cursor.time}::timestamptz ${filterNote(query)}`
+                    await queryRows<{ id: string }>(
+                        services.db(),
+                        querySql`SELECT n.id FROM notes n WHERE n.user_id=${userId}::uuid
+       AND n.id=${cursor.id}::uuid AND n.updated_at=${cursor.time}::timestamptz ${filterNote(query)}`,
+                    )
                 ).length === 1
             );
         },
         async changeNote(userId: string, id: string, revision: number, body?: string) {
-            return services.db().$transaction(async (tx) => {
+            return services.db().transaction(async (tx) => {
                 const changed =
                     body === undefined
-                        ? await tx.note.deleteMany({ where: { userId, id, revision } })
-                        : await tx.note.updateMany({
-                              where: {
-                                  userId,
-                                  id,
-                                  revision,
-                                  AND: { revision: { lt: 2147483647 } },
-                              },
-                              data: { body, revision: { increment: 1 } },
-                          });
+                        ? await tx
+                              .delete(tables.notes)
+                              .where(
+                                  and(
+                                      eq(tables.notes.userId, userId),
+                                      eq(tables.notes.id, id),
+                                      eq(tables.notes.revision, revision),
+                                  ),
+                              )
+                              .returning()
+                              .then((rows) => ({ count: rows.length }))
+                        : await tx
+                              .update(tables.notes)
+                              .set({
+                                  body: body,
+                                  revision: querySql`${tables.notes.revision} + ${1}`,
+                              })
+                              .where(
+                                  and(
+                                      eq(tables.notes.userId, userId),
+                                      eq(tables.notes.id, id),
+                                      eq(tables.notes.revision, revision),
+                                      and(and(lt(tables.notes.revision, 2147483647))),
+                                  ),
+                              )
+                              .returning()
+                              .then((rows) => ({ count: rows.length }));
                 return {
                     changed: changed.count === 1,
-                    current: await tx.note.findFirst({ where: { userId, id } }),
+                    current: await tx.query.notes
+                        .findFirst({
+                            where: and(eq(tables.notes.userId, userId), eq(tables.notes.id, id)),
+                        })
+                        .then((row) => row ?? null),
                 };
             });
         },
         async snapshots(userId: string, sourceId: string, take: number, cursor?: LibraryCursor) {
             const boundary = cursor
-                ? Prisma.sql`AND (observation.observed_at,ss.id)<(${cursor.time}::timestamptz,${cursor.id}::uuid)`
-                : Prisma.empty;
-            return services.db().$queryRaw<StoredLibrarySnapshot[]>`
+                ? querySql`AND (observation.observed_at,ss.id)<(${cursor.time}::timestamptz,${cursor.id}::uuid)`
+                : querySql.empty();
+            return queryRows<StoredLibrarySnapshot>(
+                services.db(),
+                querySql`
        SELECT ${snapshotProjection(false)} FROM source_snapshots ss
        JOIN sources s ON s.user_id=ss.user_id AND s.id=ss.source_id ${latestObservation}
        WHERE ss.user_id=${userId}::uuid AND ss.source_id=${sourceId}::uuid ${boundary}
-       ORDER BY observation.observed_at DESC,ss.id DESC LIMIT ${take}`;
+       ORDER BY observation.observed_at DESC,ss.id DESC LIMIT ${take}`,
+            );
         },
         async snapshot(userId: string, sourceId: string, id: string) {
-            const [row] = await services.db().$queryRaw<StoredLibrarySnapshot[]>`
+            const [row] = await queryRows<StoredLibrarySnapshot>(
+                services.db(),
+                querySql`
        SELECT ${snapshotProjection(true)} FROM source_snapshots ss
        JOIN sources s ON s.user_id=ss.user_id AND s.id=ss.source_id ${latestObservation}
-       WHERE ss.user_id=${userId}::uuid AND ss.source_id=${sourceId}::uuid AND ss.id=${id}::uuid`;
+       WHERE ss.user_id=${userId}::uuid AND ss.source_id=${sourceId}::uuid AND ss.id=${id}::uuid`,
+            );
             return row;
         },
         async snapshotAnchor(userId: string, sourceId: string, cursor: LibraryCursor) {
-            const rows = await services.db().$queryRaw<{ id: string }[]>`
+            const rows = await queryRows<{ id: string }>(
+                services.db(),
+                querySql`
        SELECT ss.id FROM source_snapshots ss ${latestObservation}
        WHERE ss.user_id=${userId}::uuid AND ss.source_id=${sourceId}::uuid AND ss.id=${cursor.id}::uuid
-       AND observation.observed_at=${cursor.time}::timestamptz`;
+       AND observation.observed_at=${cursor.time}::timestamptz`,
+            );
             return rows.length === 1;
         },
         quotes(userId: string, sourceId: string, snapshotId: string) {
-            return services.db().evidence.findMany({
-                where: {
-                    userId,
-                    snapshotId,
-                    observation: {
-                        userId,
-                        sourceId,
-                        snapshotId,
-                        fetchStatus: 'succeeded',
-                        run: { userId },
-                    },
-                },
-                orderBy: [{ capturedAt: 'asc' }, { id: 'asc' }],
-                take: 101,
-            });
+            return services
+                .db()
+                .select({ evidence: tables.evidence })
+                .from(tables.evidence)
+                .innerJoin(
+                    tables.runSources,
+                    and(
+                        eq(tables.evidence.userId, tables.runSources.userId),
+                        eq(tables.evidence.runId, tables.runSources.runId),
+                        eq(tables.evidence.snapshotId, tables.runSources.snapshotId),
+                    ),
+                )
+                .innerJoin(
+                    tables.runs,
+                    and(
+                        eq(tables.runSources.userId, tables.runs.userId),
+                        eq(tables.runSources.runId, tables.runs.id),
+                    ),
+                )
+                .where(
+                    and(
+                        eq(tables.evidence.userId, userId),
+                        eq(tables.evidence.snapshotId, snapshotId),
+                        eq(tables.runSources.userId, userId),
+                        eq(tables.runSources.sourceId, sourceId),
+                        eq(tables.runSources.snapshotId, snapshotId),
+                        eq(tables.runSources.fetchStatus, 'succeeded'),
+                        eq(tables.runs.userId, userId),
+                    ),
+                )
+                .orderBy(asc(tables.evidence.capturedAt), asc(tables.evidence.id))
+                .limit(101)
+                .then((rows) => rows.map((row) => row.evidence));
         },
         async search(
             userId: string,
@@ -269,35 +389,37 @@ export function createLibraryRepo(services: Pick<ApiServices, 'db'>) {
             take: number,
             cursor?: LibraryCursor,
         ) {
-            const tsquery = Prisma.sql`plainto_tsquery('simple'::regconfig,${query.q})`;
-            const titleFts = Prisma.sql`to_tsvector('simple'::regconfig,coalesce(ss.title,'')) @@ ${tsquery}`;
-            const fullFts = Prisma.sql`(${activeBody} AND to_tsvector('simple'::regconfig,coalesce(ss.title,'') || ' ' || coalesce(ss.text_body,'')) @@ ${tsquery})`;
-            const sourceFts = Prisma.sql`(${titleFts} OR ${fullFts})`;
-            const sourceText = Prisma.sql`(coalesce(ss.title,'') || ' ' || CASE WHEN ${activeBody} THEN ss.text_body ELSE '' END)`;
-            const sourceSub = Prisma.join(
-                terms.map((term) => Prisma.sql`strpos(lower(${sourceText}),lower(${term}))>0`),
-                ' AND ',
+            const tsquery = querySql`plainto_tsquery('simple'::regconfig,${query.q})`;
+            const titleFts = querySql`to_tsvector('simple'::regconfig,coalesce(ss.title,'')) @@ ${tsquery}`;
+            const fullFts = querySql`(${activeBody} AND to_tsvector('simple'::regconfig,coalesce(ss.title,'') || ' ' || coalesce(ss.text_body,'')) @@ ${tsquery})`;
+            const sourceFts = querySql`(${titleFts} OR ${fullFts})`;
+            const sourceText = querySql`(coalesce(ss.title,'') || ' ' || CASE WHEN ${activeBody} THEN ss.text_body ELSE '' END)`;
+            const sourceSub = querySql.join(
+                terms.map((term) => querySql`strpos(lower(${sourceText}),lower(${term}))>0`),
+                querySql.raw(' AND '),
             );
-            const noteFts = Prisma.sql`to_tsvector('simple'::regconfig,n.body) @@ ${tsquery}`;
-            const noteSub = Prisma.join(
-                terms.map((term) => Prisma.sql`strpos(lower(n.body),lower(${term}))>0`),
-                ' AND ',
+            const noteFts = querySql`to_tsvector('simple'::regconfig,n.body) @@ ${tsquery}`;
+            const noteSub = querySql.join(
+                terms.map((term) => querySql`strpos(lower(n.body),lower(${term}))>0`),
+                querySql.raw(' AND '),
             );
             const bookmarkFilter =
                 query.bookmarked === undefined
-                    ? Prisma.empty
-                    : Prisma.sql`AND ${query.bookmarked ? Prisma.empty : Prisma.sql`NOT`} EXISTS(SELECT 1 FROM bookmarks b WHERE b.user_id=ss.user_id AND b.source_id=ss.source_id)`;
+                    ? querySql.empty()
+                    : querySql`AND ${query.bookmarked ? querySql.empty() : querySql`NOT`} EXISTS(SELECT 1 FROM bookmarks b WHERE b.user_id=ss.user_id AND b.source_id=ss.source_id)`;
             const noteBookmark =
                 query.bookmarked === undefined
-                    ? Prisma.empty
-                    : Prisma.sql`AND ${query.bookmarked ? Prisma.empty : Prisma.sql`NOT`} EXISTS(SELECT 1 FROM bookmarks b WHERE b.user_id=n.user_id AND b.source_id=n.source_id)`;
-            const kind = query.kind ? Prisma.sql`AND kind=${query.kind}` : Prisma.empty;
+                    ? querySql.empty()
+                    : querySql`AND ${query.bookmarked ? querySql.empty() : querySql`NOT`} EXISTS(SELECT 1 FROM bookmarks b WHERE b.user_id=n.user_id AND b.source_id=n.source_id)`;
+            const kind = query.kind ? querySql`AND kind=${query.kind}` : querySql.empty();
             const boundary = cursor
-                ? Prisma.sql`AND (time,kind,id)<(${cursor.time}::timestamptz,${cursor.kind},${cursor.id}::uuid)`
-                : Prisma.empty;
-            return services.db().$transaction(async (tx) => {
-                await tx.$executeRaw`SELECT set_config('statement_timeout','3000',true)`;
-                return tx.$queryRaw<StoredLibraryHit[]>`
+                ? querySql`AND (time,kind,id)<(${cursor.time}::timestamptz,${cursor.kind},${cursor.id}::uuid)`
+                : querySql.empty();
+            return services.db().transaction(async (tx) => {
+                await tx.execute(querySql`SELECT set_config('statement_timeout','3000',true)`);
+                return queryRows<StoredLibraryHit>(
+                    tx,
+                    querySql`
        WITH hits AS (
          SELECT 'source'::text AS kind,ss.id,ss.source_id AS "sourceId",NULL::uuid AS "reportId",ss.id AS "snapshotId",
            ss.title,${sourceText} AS text,CASE WHEN ${sourceFts} THEN 'fts' ELSE 'substring' END AS "matchedBy",
@@ -314,27 +436,32 @@ export function createLibraryRepo(services: Pick<ApiServices, 'db'>) {
        SELECT kind,id,"sourceId","reportId","snapshotId",title,
          substring(text FROM greatest(1,strpos(lower(text),lower(${terms[0]}))-80) FOR 500) AS text,
          "matchedBy",time AS "updatedAt",
-         ${timeText(Prisma.sql`time`)} AS "cursorTime"
-       FROM hits WHERE true ${kind} ${boundary} ORDER BY time DESC,kind DESC,id DESC LIMIT ${take}`;
+         ${timeText(querySql`time`)} AS "cursorTime"
+       FROM hits WHERE true ${kind} ${boundary} ORDER BY time DESC,kind DESC,id DESC LIMIT ${take}`,
+                );
             });
         },
         async searchAnchor(userId: string, query: LibrarySearchQuery, cursor: LibraryCursor) {
             if (cursor.kind === 'note') return this.noteAnchor(userId, {}, cursor);
             if (cursor.kind !== 'source') return false;
-            const [row] = await services.db().$queryRaw<
-                { sourceId: string }[]
-            >`SELECT source_id AS "sourceId" FROM source_snapshots WHERE user_id=${userId}::uuid AND id=${cursor.id}::uuid`;
+            const [row] = await queryRows<{ sourceId: string }>(
+                services.db(),
+                querySql`SELECT source_id AS "sourceId" FROM source_snapshots WHERE user_id=${userId}::uuid AND id=${cursor.id}::uuid`,
+            );
             return row ? this.snapshotAnchor(userId, row.sourceId, cursor) : false;
         },
         async purgeExpiredBodies(limit: number, userId?: string) {
-            return services.db().$transaction(async (tx) => {
-                await tx.$executeRaw`SELECT set_config('statement_timeout','3000',true)`;
-                const rows = await tx.$queryRaw<{ id: string }[]>`
+            return services.db().transaction(async (tx) => {
+                await tx.execute(querySql`SELECT set_config('statement_timeout','3000',true)`);
+                const rows = await queryRows<{ id: string }>(
+                    tx,
+                    querySql`
          UPDATE source_snapshots ss SET text_body=NULL WHERE ss.id IN (
            SELECT id FROM source_snapshots WHERE text_body IS NOT NULL AND text_expires_at<=clock_timestamp()
-           ${userId ? Prisma.sql`AND user_id=${userId}::uuid` : Prisma.empty}
+           ${userId ? querySql`AND user_id=${userId}::uuid` : querySql.empty()}
            ORDER BY text_expires_at,id LIMIT ${limit} FOR UPDATE SKIP LOCKED
-         ) RETURNING ss.id`;
+         ) RETURNING ss.id`,
+                );
                 return { cleared: rows.length };
             });
         },

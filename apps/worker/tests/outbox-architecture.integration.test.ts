@@ -1,3 +1,5 @@
+import { requiredDatabaseValue } from '@/utils/database.ts';
+import { outbox as dbOutbox, eq } from '@scova/db';
 import { randomUUID } from 'node:crypto';
 import { Redis } from 'ioredis';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vite-plus/test';
@@ -15,7 +17,10 @@ describe('Outbox 分层的真实持久化和故障边界', () => {
     beforeAll(() => fixture.setup(), 120_000);
     afterAll(() => fixture.cleanup());
     beforeEach(async () => {
-        await fixture.db.outbox.deleteMany();
+        await fixture.db
+            .delete(dbOutbox)
+            .returning({ id: dbOutbox.id })
+            .then((rows) => ({ count: rows.length }));
         now = new Date();
     });
 
@@ -33,7 +38,9 @@ describe('Outbox 分层的真实持久化和故障边界', () => {
         expect(replacement?.attempts).toBe(2);
         expect(await repository.ack(old, now)).toBe(false);
         expect(await repository.retry(old, now, later(100))).toBe(false);
-        const untouched = await fixture.db.outbox.findUniqueOrThrow({ where: { id: item.id } });
+        const untouched = await fixture.db.query.outbox
+            .findFirst({ where: eq(dbOutbox.id, item.id) })
+            .then((row) => requiredDatabaseValue(row));
         expect(untouched.leaseExpiresAt).toEqual(replacement!.leaseExpiresAt);
         expect(untouched.availableAt).toEqual(item.availableAt);
         expect(untouched.sentAt).toBeNull();
@@ -57,12 +64,20 @@ describe('Outbox 分层的真实持久化和故障边界', () => {
         expect(await service.dispatchOnce(50, controller.signal)).toBe(1);
         expect(published).toBe(1);
         expect(
-            (await fixture.db.outbox.findUniqueOrThrow({ where: { id: item.id } })).sentAt,
+            (
+                await fixture.db.query.outbox
+                    .findFirst({ where: eq(dbOutbox.id, item.id) })
+                    .then((row) => requiredDatabaseValue(row))
+            ).sentAt,
         ).not.toBeNull();
         const next = await fixture.seed(now);
         expect(await service.dispatchOnce(50, controller.signal)).toBe(0);
         expect(
-            (await fixture.db.outbox.findUniqueOrThrow({ where: { id: next.id } })).attempts,
+            (
+                await fixture.db.query.outbox
+                    .findFirst({ where: eq(dbOutbox.id, next.id) })
+                    .then((row) => requiredDatabaseValue(row))
+            ).attempts,
         ).toBe(0);
     });
 
@@ -70,11 +85,18 @@ describe('Outbox 分层的真实持久化和故障边界', () => {
         const future = await fixture.seed(later(60));
         const leased = await fixture.seed(now);
         const sent = await fixture.seed(now);
-        await fixture.db.outbox.update({
-            where: { id: leased.id },
-            data: { leaseExpiresAt: later(60) },
-        });
-        await fixture.db.outbox.update({ where: { id: sent.id }, data: { sentAt: now } });
+        await fixture.db
+            .update(dbOutbox)
+            .set({ leaseExpiresAt: later(60) })
+            .where(eq(dbOutbox.id, leased.id))
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
+        await fixture.db
+            .update(dbOutbox)
+            .set({ sentAt: now })
+            .where(eq(dbOutbox.id, sent.id))
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
         let calls = 0;
         const service = new OutboxService({
             repository,
@@ -93,10 +115,18 @@ describe('Outbox 分层的真实持久化和故障边界', () => {
         await expect(service.dispatchOnce(0)).rejects.toThrow('投递上限');
         await expect(service.dispatchOnce(1.5)).rejects.toThrow('投递上限');
         expect(
-            (await fixture.db.outbox.findUniqueOrThrow({ where: { id: future.id } })).attempts,
+            (
+                await fixture.db.query.outbox
+                    .findFirst({ where: eq(dbOutbox.id, future.id) })
+                    .then((row) => requiredDatabaseValue(row))
+            ).attempts,
         ).toBe(0);
         expect(
-            (await fixture.db.outbox.findUniqueOrThrow({ where: { id: leased.id } })).attempts,
+            (
+                await fixture.db.query.outbox
+                    .findFirst({ where: eq(dbOutbox.id, leased.id) })
+                    .then((row) => requiredDatabaseValue(row))
+            ).attempts,
         ).toBe(0);
     });
 
@@ -118,7 +148,9 @@ describe('Outbox 分层的真实持久化和故障边界', () => {
             code: 'OUTBOX_LEASE_LOST',
             operation: 'ack',
         });
-        const stored = await fixture.db.outbox.findUniqueOrThrow({ where: { id: item.id } });
+        const stored = await fixture.db.query.outbox
+            .findFirst({ where: eq(dbOutbox.id, item.id) })
+            .then((row) => requiredDatabaseValue(row));
         expect(stored.sentAt).toBeNull();
         expect(stored.attempts).toBe(2);
         expect(stored.leaseExpiresAt).toEqual(replacement!.leaseExpiresAt);
@@ -142,7 +174,9 @@ describe('Outbox 分层的真实持久化和故障边界', () => {
             connection.disconnect();
             const service = new OutboxService({ repository, publisher, clock: () => now });
             await expect(service.dispatchOnce()).rejects.toBeInstanceOf(Error);
-            const failed = await fixture.db.outbox.findUniqueOrThrow({ where: { id: item.id } });
+            const failed = await fixture.db.query.outbox
+                .findFirst({ where: eq(dbOutbox.id, item.id) })
+                .then((row) => requiredDatabaseValue(row));
             expect(failed.sentAt).toBeNull();
             expect(failed.leaseExpiresAt).toBeNull();
             expect(failed.availableAt.getTime()).toBeGreaterThan(now.getTime());
@@ -182,7 +216,9 @@ describe('Outbox 分层的真实持久化和故障边界', () => {
                 leaseSeconds: 1,
             });
             await expect(faulty.dispatchOnce()).rejects.toThrow('模拟确认前宕机');
-            const pending = await fixture.db.outbox.findUniqueOrThrow({ where: { id: item.id } });
+            const pending = await fixture.db.query.outbox
+                .findFirst({ where: eq(dbOutbox.id, item.id) })
+                .then((row) => requiredDatabaseValue(row));
             expect(pending.sentAt).toBeNull();
             expect(pending.leaseExpiresAt).not.toBeNull();
             now = later(2);

@@ -1,3 +1,4 @@
+import { type ReportQuestion as StoredQuestion } from '@scova/db';
 import {
     ConnectorError,
     estimateModelInputTokens,
@@ -11,7 +12,6 @@ import {
     QuestionAnswerSchema,
     type QuestionAnswer,
 } from '@scova/models';
-import type { ReportQuestion as StoredQuestion } from '@scova/db';
 import type { ApiServices } from '@/app/context.ts';
 import { createReportService } from '@/service/reports.ts';
 import { createRunService } from '@/service/runs.ts';

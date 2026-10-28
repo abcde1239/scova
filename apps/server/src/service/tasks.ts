@@ -1,6 +1,6 @@
+import { type Task as StoredTask, type TaskVersion as StoredTaskVersion } from '@scova/db';
 import { createHash } from 'node:crypto';
 import { nextScheduledAt } from '@scova/shared';
-import type { Task as StoredTask, TaskVersion as StoredTaskVersion } from '@scova/db';
 import {
     CreateTaskInputSchema,
     PageQuerySchema,
@@ -230,13 +230,13 @@ export function createTaskService(services: ApiServices) {
                     // 先原子占位 revision，避免同一修订的并发编辑都创建新版本。
                     const claimed = await store.claimRevision(task.id, userId, expectedRevision, {
                         title: input.config.title,
-                        revision: { increment: 1 },
+                        revision: task.revision + 1,
                         ...(task.status !== 'active'
                             ? { nextRunAt: null }
                             : scheduleChanged
                               ? { nextRunAt: nextRunAt(input.config, await store.now()) }
                               : {}),
-                        ...(scheduleChanged ? { scheduleRevision: { increment: 1 } } : {}),
+                        ...(scheduleChanged ? { scheduleRevision: task.scheduleRevision + 1 } : {}),
                     });
                     if (claimed.count !== 1)
                         throw new ApiError(
@@ -297,8 +297,8 @@ export function createTaskService(services: ApiServices) {
                 const config = parseContract(TaskConfigSchema, version.configJson);
                 const claimed = await store.claimRevision(task.id, userId, expectedRevision, {
                     status: target,
-                    revision: { increment: 1 },
-                    scheduleRevision: { increment: 1 },
+                    revision: task.revision + 1,
+                    scheduleRevision: task.scheduleRevision + 1,
                     nextRunAt: target === 'active' ? nextRunAt(config, now) : null,
                     ...(target === 'archived' ? { archivedAt: now } : {}),
                 });

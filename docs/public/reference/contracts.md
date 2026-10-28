@@ -1,6 +1,6 @@
 # @scova/models
 
-Scova 的纯 TypeScript/TypeBox 接口契约。Web、API、worker 从本包导入同一份 schema 与 `Static` DTO，不导出 Prisma 实体、密码哈希、会话凭据、租约或 checkpoint。Bun 为主运行时，Node.js 可导入同样的模块。
+Scova 的纯 TypeScript/TypeBox 接口契约。Web、API、worker 从本包导入同一份 schema 与 `Static` DTO，不导出数据库行实体、密码哈希、会话凭据、租约或 checkpoint。Bun 为主运行时，Node.js 可导入同样的模块。
 
 ## 输入、响应与校验
 

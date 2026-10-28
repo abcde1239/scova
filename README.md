@@ -6,7 +6,7 @@
 
 ## 技术与目录
 
-Vite+ / TypeScript monorepo，Vue 3 前端，Bun + Elysia 后端（兼容 Node.js），PostgreSQL + Prisma，Redis + BullMQ。
+Vite+ / TypeScript monorepo，Vue 3 前端，Bun + Elysia 后端（兼容 Node.js），PostgreSQL + Drizzle，Redis + BullMQ。
 
 | 目录                  | 用途                     |
 | --------------------- | ------------------------ |
@@ -25,10 +25,9 @@ Vite+ / TypeScript monorepo，Vue 3 前端，Bun + Elysia 后端（兼容 Node.j
 ```sh
 vp install
 docker compose -f compose.test.yaml -p scova-runtime-test up -d --wait
-vp exec prisma generate
 ```
 
-配置 `DATABASE_URL`、`REDIS_URL` 和 `APP_ORIGIN`，运行 `vp exec prisma migrate deploy` 初始化业务数据库。连接配置见[数据库说明](packages/db/README.md)；本地环境文件不提交。
+配置 `DATABASE_URL`、`REDIS_URL` 和 `APP_ORIGIN`，运行 `vp run db:migrate` 初始化业务数据库。已有 Prisma 数据库先备份、停止应用；迁移工具校验完整历史与实际结构后无损接管。连接及迁移说明见[数据库说明](packages/db/README.md)；本地环境文件不提交。
 
 ```sh
 vp run dev                # 前端

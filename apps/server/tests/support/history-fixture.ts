@@ -1,17 +1,24 @@
-import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
-import { createRequire } from 'node:module';
+import { migrateDatabase } from '@scova/db/migrate';
+import {
+    createDatabaseClient,
+    connectDatabase,
+    closeDatabase,
+    and,
+    eq,
+    type DatabaseClient,
+} from '@scova/db';
+import * as tables from '@scova/db';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
-import { PrismaClient } from '@scova/db';
 import { Redis } from 'ioredis';
 import pg from 'pg';
 import { nodeScriptCommand } from '../../../../scripts/process-runtime.mjs';
 import { draftConfig } from './task-drafts.ts';
+import { firstRow } from '../../src/utils/database.ts';
 
-const require = createRequire(import.meta.url);
-const root = fileURLToPath(new URL('../../../../', import.meta.url));
 export type HistoryOwner = { id: string; cookie: string; csrf: string };
 export type HistoryPage = {
     items: { id: string; [key: string]: any }[];
@@ -29,7 +36,7 @@ export function historyFixture(options: { questionFixture?: boolean } = {}) {
     const schema = 'scova_acceptance_' + randomUUID().replaceAll('-', '');
     const databaseUrl = new URL(baseUrl);
     databaseUrl.searchParams.set('schema', schema);
-    const db = new PrismaClient({ datasources: { db: { url: databaseUrl.toString() } } });
+    const db = createDatabaseClient({ connectionString: databaseUrl.toString() });
     const admin = new pg.Client({ connectionString: baseUrl });
     const redis = new Redis(redisUrl, {
         lazyConnect: true,
@@ -70,24 +77,8 @@ export function historyFixture(options: { questionFixture?: boolean } = {}) {
             adminConnected = true;
             await admin.query('CREATE SCHEMA "' + schema + '"');
             created = true;
-            execFileSync(
-                process.execPath,
-                [
-                    require.resolve('prisma/build/index.js'),
-                    'migrate',
-                    'deploy',
-                    '--schema',
-                    'packages/db/prisma/schema.prisma',
-                ],
-                {
-                    cwd: root,
-                    env: { ...process.env, DATABASE_URL: databaseUrl.toString() },
-                    encoding: 'utf8',
-                    windowsHide: true,
-                    timeout: 60000,
-                },
-            );
-            await db.$connect();
+            await migrateDatabase({ connectionString: databaseUrl.toString() });
+            await connectDatabase(db);
             await redis.connect();
             const socket = createServer().listen(0, '127.0.0.1');
             await once(socket, 'listening');
@@ -224,7 +215,7 @@ export function historyFixture(options: { questionFixture?: boolean } = {}) {
                     await release(() => waitForExit(5000));
                 }
             }
-            await release(() => db.$disconnect());
+            await release(() => closeDatabase(db));
             redis.disconnect();
             if (created && /^scova_acceptance_[a-f0-9]{32}$/.test(schema))
                 await release(() => admin.query('DROP SCHEMA "' + schema + '" CASCADE'));
@@ -235,7 +226,7 @@ export function historyFixture(options: { questionFixture?: boolean } = {}) {
     };
 }
 export async function seedHistoryRows(
-    db: PrismaClient,
+    db: DatabaseClient,
     owner: HistoryOwner,
     taskCount = 3,
     runsPerTask = 3,
@@ -272,18 +263,23 @@ export async function seedHistoryRows(
         gaps: ['固定验收样例'],
         exhausted: [],
     };
-    await db.$transaction(
-        async (tx) => {
-            await tx.task.createMany({
-                data: tasks.map((task) => ({
+    await db.transaction(async (tx) => {
+        await tx
+            .insert(tables.tasks)
+            .values(
+                tasks.map((task) => ({
                     id: task.id,
                     userId: owner.id,
                     title: config.title,
                     updatedAt: task.time,
                 })),
-            });
-            await tx.taskVersion.createMany({
-                data: tasks.map((task) => ({
+            )
+            .returning({ id: tables.tasks.id })
+            .then((rows) => ({ count: rows.length }));
+        await tx
+            .insert(tables.taskVersions)
+            .values(
+                tasks.map((task) => ({
                     id: task.versionId,
                     userId: owner.id,
                     taskId: task.id,
@@ -291,23 +287,29 @@ export async function seedHistoryRows(
                     configJson: config,
                     comparisonScopeHash: 'a'.repeat(64),
                 })),
-            });
-            for (const task of tasks)
-                await tx.task.update({
-                    where: { id: task.id },
-                    data: { currentVersionId: task.versionId, updatedAt: task.time },
-                });
-            await tx.run.createMany({
-                data: runs.map((run) => ({
+            )
+            .returning({ id: tables.taskVersions.id })
+            .then((rows) => ({ count: rows.length }));
+        for (const task of tasks)
+            await tx
+                .update(tables.tasks)
+                .set({ currentVersionId: task.versionId, updatedAt: task.time })
+                .where(and(eq(tables.tasks.id, task.id)))
+                .returning()
+                .then(firstRow);
+        await tx
+            .insert(tables.runs)
+            .values(
+                runs.map((run) => ({
                     id: run.id,
                     userId: owner.id,
                     taskId: run.taskId,
                     taskVersionId: run.taskVersionId,
                     comparisonScopeHash: 'b'.repeat(64),
-                    mode: 'demo',
-                    trigger: 'manual',
-                    status: 'partial',
-                    outcome: 'inconclusive',
+                    mode: 'demo' as const,
+                    trigger: 'manual' as const,
+                    status: 'partial' as const,
+                    outcome: 'inconclusive' as const,
                     queuedAt: run.time,
                     startedAt: run.time,
                     finishedAt: run.time,
@@ -329,9 +331,13 @@ export async function seedHistoryRows(
                     },
                     leaseOwner: 'private-lease-do-not-expose',
                 })),
-            });
-            await tx.report.createMany({
-                data: reports.map((report) => ({
+            )
+            .returning({ id: tables.runs.id })
+            .then((rows) => ({ count: rows.length }));
+        await tx
+            .insert(tables.reports)
+            .values(
+                reports.map((report) => ({
                     id: report.id,
                     userId: owner.id,
                     runId: report.runId,
@@ -339,22 +345,26 @@ export async function seedHistoryRows(
                     taskVersionId: report.taskVersionId,
                     title: '验收样例报告',
                     summary: '仅用于列表与传输验证',
-                    format: 'brief',
-                    completeness: 'partial',
+                    format: 'brief' as const,
+                    completeness: 'partial' as const,
                     limitationsJson: coverage.gaps,
                     publishedAt: report.time,
                 })),
-            });
-            await tx.inboxItem.createMany({
-                data: inbox.map((item) => ({
+            )
+            .returning({ id: tables.reports.id })
+            .then((rows) => ({ count: rows.length }));
+        await tx
+            .insert(tables.inboxItems)
+            .values(
+                inbox.map((item) => ({
                     id: item.id,
                     userId: owner.id,
                     reportId: item.reportId,
                     createdAt: item.time,
                 })),
-            });
-        },
-        { timeout: 30000 },
-    );
+            )
+            .returning({ id: tables.inboxItems.id })
+            .then((rows) => ({ count: rows.length }));
+    });
     return { tasks, runs, reports, inbox };
 }

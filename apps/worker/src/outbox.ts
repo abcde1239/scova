@@ -1,4 +1,5 @@
-import type { PrismaClient } from '@scova/db';
+import { type DatabaseClient } from '@scova/db';
+
 import type { Queue } from 'bullmq';
 import type { Redis } from 'ioredis';
 import { createOutboxRepository } from '@/repo/outbox.ts';
@@ -6,7 +7,7 @@ import { createOutboxQueue, type OutboxQueue } from '@/queue/outbox.ts';
 import { OutboxService } from '@/service/outbox.ts';
 
 export interface OutboxDispatcherOptions {
-    db: PrismaClient;
+    db: DatabaseClient;
     redis: Redis;
     queueName?: string;
     clock?: () => Date;

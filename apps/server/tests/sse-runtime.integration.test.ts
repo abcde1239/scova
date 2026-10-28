@@ -1,3 +1,4 @@
+import * as tables from '@scova/db';
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { createServer } from 'node:net';
@@ -12,6 +13,7 @@ import { nodeScriptCommand } from '../../../scripts/process-runtime.mjs';
 import { outboxDatabase } from '../../worker/tests/support/outbox-database.ts';
 import { seedRun } from '../../worker/tests/support/run-database.ts';
 import { csrfForSession, tokenHash } from '../src/utils/security.ts';
+import { firstRow } from '../src/utils/database.ts';
 
 const fixture = outboxDatabase();
 const db = fixture.db;
@@ -33,14 +35,16 @@ async function port() {
 async function seed() {
     const s = await seedRun(db);
     const token = randomBytes(32).toString('base64url');
-    await db.session.create({
-        data: {
+    await db
+        .insert(tables.sessions)
+        .values({
             userId: s.user.id,
             tokenHash: tokenHash(token),
             csrfTokenHash: tokenHash(csrfForSession(token)),
             expiresAt: new Date(Date.now() + 120_000),
-        },
-    });
+        })
+        .returning()
+        .then(firstRow);
     return { ...s, cookie: `scova_session=${token}` };
 }
 type Stats = { reads: number; opened: number; closed: number };
@@ -175,15 +179,17 @@ describe('Bun 与 Node 真实 SSE socket', () => {
                 reader = response.body!.getReader();
                 const frame = frames(reader);
                 expect(await frame()).toContain('"seq":1');
-                await db.runEvent.create({
-                    data: {
+                await db
+                    .insert(tables.runEvents)
+                    .values({
                         userId: s.user.id,
                         runId: s.run.id,
                         seq: 2,
                         type: 'step.started',
                         payload: { step: 'search' },
-                    },
-                });
+                    })
+                    .returning()
+                    .then(firstRow);
                 let next = await frame();
                 while (next.startsWith(':')) next = await frame();
                 expect(next).toContain('"seq":2');
@@ -212,15 +218,19 @@ describe('Bun 与 Node 真实 SSE socket', () => {
 
     it.each(['bun', 'node'] as const)('%s慢socket背压断开且不继续拉数据库页', async (runtime) => {
         const s = await seed();
-        await db.runEvent.createMany({
-            data: Array.from({ length: 300 }, (_, index) => ({
-                userId: s.user.id,
-                runId: s.run.id,
-                seq: index + 2,
-                type: 'tool.started',
-                payload: { toolCallId: s.run.id, tool: 'search', summary: 'x'.repeat(60_000) },
-            })),
-        });
+        await db
+            .insert(tables.runEvents)
+            .values(
+                Array.from({ length: 300 }, (_, index) => ({
+                    userId: s.user.id,
+                    runId: s.run.id,
+                    seq: index + 2,
+                    type: 'tool.started',
+                    payload: { toolCallId: s.run.id, tool: 'search', summary: 'x'.repeat(60_000) },
+                })),
+            )
+            .returning({ id: tables.runEvents.id })
+            .then((rows) => ({ count: rows.length }));
         const server = await launch(runtime);
         const request = httpRequest(`${server.base}/api/v1/runs/${s.run.id}/events`, {
             headers: { cookie: s.cookie },

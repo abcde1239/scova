@@ -1,7 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
+import { migrateDatabase } from '@scova/db/migrate';
 
 import { constants } from 'node:fs';
 import { open, stat, unlink, link } from 'node:fs/promises';
@@ -16,8 +15,6 @@ import { createOperationRepository } from '@/repo/operations.ts';
 import { backupPath, type parseOperation } from '@/utils/operations.ts';
 
 const exec = promisify(execFile);
-const require = createRequire(import.meta.url);
-const root = fileURLToPath(new URL('../../../../', import.meta.url));
 export function createOperationService(pool: pg.Pool, config: OperationConfig) {
     const repo = createOperationRepository(pool, config);
     const pgEnv = { ...process.env, ...config.pgEnv };
@@ -70,22 +67,7 @@ export function createOperationService(pool: pg.Pool, config: OperationConfig) {
             }
             await offline();
             if (input.command === 'migrate') {
-                await exec(
-                    'node',
-                    [
-                        require.resolve('prisma/build/index.js'),
-                        'migrate',
-                        'deploy',
-                        '--schema',
-                        'packages/db/prisma/schema.prisma',
-                    ],
-                    {
-                        cwd: root,
-                        env: { ...process.env, DATABASE_URL: config.databaseUrl },
-                        timeout: 120_000,
-                        windowsHide: true,
-                    },
-                );
+                await migrateDatabase({ connectionString: config.databaseUrl });
                 const client = await pool.connect();
                 try {
                     await client.query('SELECT pg_advisory_lock(hashtext($1))', [

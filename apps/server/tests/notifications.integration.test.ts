@@ -1,3 +1,5 @@
+import { sql as querySql, and, eq, count } from '@scova/db';
+import * as tables from '@scova/db';
 import { randomUUID } from 'node:crypto';
 import { Redis } from 'ioredis';
 import { parseContract, TaskDetailResponseSchema } from '@scova/models';
@@ -7,6 +9,7 @@ import { createDefaultServices } from '../src/app/context.ts';
 import { outboxDatabase } from '../../worker/tests/support/outbox-database.ts';
 import { runConfig } from '../../worker/tests/support/run-database.ts';
 import { createRunRepository } from '../../worker/src/repo/runs.ts';
+import { firstRow, requireRow } from '../src/utils/database.ts';
 
 const fixture = outboxDatabase();
 const db = fixture.db;
@@ -109,8 +112,20 @@ describe('站内通知真实API与失败终结', () => {
             failureCode: 'EXECUTOR_FAILED',
             readAt: null,
         });
-        expect(await db.report.count({ where: { runId: claim.run.id } })).toBe(0);
-        expect(await db.inboxItem.count({ where: { userId: auth.id } })).toBe(0);
+        expect(
+            await db
+                .select({ count: count() })
+                .from(tables.reports)
+                .where(and(eq(tables.reports.runId, claim.run.id)))
+                .then(([row]) => row!.count),
+        ).toBe(0);
+        expect(
+            await db
+                .select({ count: count() })
+                .from(tables.inboxItems)
+                .where(and(eq(tables.inboxItems.userId, auth.id)))
+                .then(([row]) => row!.count),
+        ).toBe(0);
         expect((await request('/notifications')).status).toBe(401);
         expect(
             (await json(await request('/notifications', { headers: headers(other) }))).items,
@@ -160,15 +175,20 @@ describe('站内通知真实API与失败终结', () => {
         ).toEqual([]);
         await request(path, { method: 'PATCH', headers: headers(auth), body: '{"read":false}' });
         expect(
-            (await db.notification.findUniqueOrThrow({ where: { id: item.id } })).readAt,
+            (
+                await db.query.notifications
+                    .findFirst({ where: and(eq(tables.notifications.id, item.id)) })
+                    .then(requireRow)
+            ).readAt,
         ).toBeNull();
     });
 
     it('关闭通知不改变已交付报告或Inbox，通知已读与Inbox独立', async () => {
         const auth = await register();
         const owned = await task(auth);
-        const run = await db.run.create({
-            data: {
+        const run = await db
+            .insert(tables.runs)
+            .values({
                 userId: auth.id,
                 taskId: owned.task.id,
                 taskVersionId: owned.task.currentVersionId,
@@ -186,10 +206,12 @@ describe('站内通知真实API与失败终结', () => {
                 },
                 budgetJson: owned.config.budget,
                 usageJson: {},
-            },
-        });
-        const report = await db.report.create({
-            data: {
+            })
+            .returning()
+            .then(firstRow);
+        const report = await db
+            .insert(tables.reports)
+            .values({
                 userId: auth.id,
                 runId: run.id,
                 taskId: owned.task.id,
@@ -198,35 +220,68 @@ describe('站内通知真实API与失败终结', () => {
                 summary: '摘要',
                 format: 'brief',
                 completeness: 'partial',
-            },
-        });
-        const inbox = await db.inboxItem.create({ data: { userId: auth.id, reportId: report.id } });
-        const notification = await db.notification.create({
-            data: { userId: auth.id, runId: run.id, reportId: report.id, kind: 'run_issue' },
-        });
+            })
+            .returning()
+            .then(firstRow);
+        const inbox = await db
+            .insert(tables.inboxItems)
+            .values({ userId: auth.id, reportId: report.id })
+            .returning()
+            .then(firstRow);
+        const notification = await db
+            .insert(tables.notifications)
+            .values({ userId: auth.id, runId: run.id, reportId: report.id, kind: 'run_issue' })
+            .returning()
+            .then(firstRow);
         await request(`/notifications/${notification.id}`, {
             method: 'PATCH',
             headers: headers(auth),
             body: '{"read":true}',
         });
         expect(
-            (await db.inboxItem.findUniqueOrThrow({ where: { id: inbox.id } })).readAt,
+            (
+                await db.query.inboxItems
+                    .findFirst({ where: and(eq(tables.inboxItems.id, inbox.id)) })
+                    .then(requireRow)
+            ).readAt,
         ).toBeNull();
         const off = await failed(auth, { mode: 'off', runIssues: false });
-        expect(await db.notification.count({ where: { runId: off.claim.run.id } })).toBe(0);
-        expect(await db.report.count({ where: { id: report.id } })).toBe(1);
-        expect(await db.inboxItem.count({ where: { id: inbox.id } })).toBe(1);
+        expect(
+            await db
+                .select({ count: count() })
+                .from(tables.notifications)
+                .where(and(eq(tables.notifications.runId, off.claim.run.id)))
+                .then(([row]) => row!.count),
+        ).toBe(0);
+        expect(
+            await db
+                .select({ count: count() })
+                .from(tables.reports)
+                .where(and(eq(tables.reports.id, report.id)))
+                .then(([row]) => row!.count),
+        ).toBe(1);
+        expect(
+            await db
+                .select({ count: count() })
+                .from(tables.inboxItems)
+                .where(and(eq(tables.inboxItems.id, inbox.id)))
+                .then(([row]) => row!.count),
+        ).toBe(1);
     });
 
     it('分页同毫秒的不同微秒及相同时点无漏重、游标绑定owner和过滤范围', async () => {
         const auth = await register(),
             other = await register();
         for (let i = 0; i < 3; i++) await failed(auth);
-        const notifications = await db.notification.findMany({ where: { userId: auth.id } });
+        const notifications = await db.query.notifications.findMany({
+            where: and(eq(tables.notifications.userId, auth.id)),
+        });
         for (const [index, item] of notifications.entries()) {
             const time =
                 index === 0 ? '2026-01-01T00:00:00.123900Z' : '2026-01-01T00:00:00.123800Z';
-            await db.$executeRaw`UPDATE notifications SET created_at = ${time}::timestamptz WHERE id = ${item.id}::uuid`;
+            await db.execute(
+                querySql`UPDATE notifications SET created_at = ${time}::timestamptz WHERE id = ${item.id}::uuid`,
+            );
         }
         const unread = await json(
             await request('/notifications?unread=true&limit=1', { headers: headers(auth) }),
@@ -310,10 +365,22 @@ describe('站内通知真实API与失败终结', () => {
         expect(changed.status).toBe(200);
         expect((await json(changed)).baselineResetRequired).toBe(false);
         await runs.finish(first.token, { code: 'EXECUTOR_FAILED' });
-        expect(await db.notification.count({ where: { runId: first.run.id } })).toBe(1);
+        expect(
+            await db
+                .select({ count: count() })
+                .from(tables.notifications)
+                .where(and(eq(tables.notifications.runId, first.run.id)))
+                .then(([row]) => row!.count),
+        ).toBe(1);
         const next = await start(auth, owned.task.id);
         await runs.finish(next.token, { code: 'EXECUTOR_FAILED' });
-        expect(await db.notification.count({ where: { runId: next.run.id } })).toBe(0);
+        expect(
+            await db
+                .select({ count: count() })
+                .from(tables.notifications)
+                .where(and(eq(tables.notifications.runId, next.run.id)))
+                .then(([row]) => row!.count),
+        ).toBe(0);
         const retried = await request(`/runs/${first.run.id}/retry`, {
             method: 'POST',
             headers: headers(auth, { 'idempotency-key': randomUUID() }),
@@ -325,30 +392,53 @@ describe('站内通知真实API与失败终结', () => {
         const claim = await runs.claim(run.id, 'retry-notification', 60_000);
         if (claim.kind !== 'claimed') throw new Error('Expected retry claim');
         await runs.finish(claim.token, { code: 'EXECUTOR_FAILED' });
-        expect(await db.notification.count({ where: { runId: run.id } })).toBe(1);
+        expect(
+            await db
+                .select({ count: count() })
+                .from(tables.notifications)
+                .where(and(eq(tables.notifications.runId, run.id)))
+                .then(([row]) => row!.count),
+        ).toBe(1);
     });
 
     it('失败通知SQL错误使终结和事件回滚，可重试；用户取消不发问题通知', async () => {
         const auth = await register();
         const owned = await task(auth);
         const claim = await start(auth, owned.task.id);
-        await db.$executeRawUnsafe(
-            "CREATE FUNCTION fail_notice() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected notification failure'; END $$",
+        await db.execute(
+            querySql.raw(
+                "CREATE FUNCTION fail_notice() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected notification failure'; END $$",
+            ),
         );
-        await db.$executeRawUnsafe(
-            'CREATE TRIGGER fail_notice BEFORE INSERT ON notifications FOR EACH ROW EXECUTE FUNCTION fail_notice()',
+        await db.execute(
+            querySql.raw(
+                'CREATE TRIGGER fail_notice BEFORE INSERT ON notifications FOR EACH ROW EXECUTE FUNCTION fail_notice()',
+            ),
         );
         try {
             await expect(runs.finish(claim.token, { code: 'EXECUTOR_FAILED' })).rejects.toThrow();
-            expect((await db.run.findUniqueOrThrow({ where: { id: claim.run.id } })).status).toBe(
-                'running',
-            );
             expect(
-                await db.runEvent.count({ where: { runId: claim.run.id, type: 'run.failed' } }),
+                (
+                    await db.query.runs
+                        .findFirst({ where: and(eq(tables.runs.id, claim.run.id)) })
+                        .then(requireRow)
+                ).status,
+            ).toBe('running');
+            expect(
+                await db
+                    .select({ count: count() })
+                    .from(tables.runEvents)
+                    .where(
+                        and(
+                            eq(tables.runEvents.runId, claim.run.id),
+                            eq(tables.runEvents.type, 'run.failed'),
+                        ),
+                    )
+                    .then(([row]) => row!.count),
             ).toBe(0);
         } finally {
-            await db.$executeRawUnsafe('DROP TRIGGER fail_notice ON notifications');
-            await db.$executeRawUnsafe('DROP FUNCTION fail_notice()');
+            await db.execute(querySql.raw('DROP TRIGGER fail_notice ON notifications'));
+            await db.execute(querySql.raw('DROP FUNCTION fail_notice()'));
         }
         expect(await runs.finish(claim.token, { code: 'EXECUTOR_FAILED' })).toBe(true);
         const canceled = await start(auth, owned.task.id);
@@ -357,9 +447,19 @@ describe('站内通知真实API与失败终结', () => {
             headers: headers(auth),
         });
         await runs.finish(canceled.token, { code: 'EXECUTOR_FAILED' });
-        expect((await db.run.findUniqueOrThrow({ where: { id: canceled.run.id } })).status).toBe(
-            'canceled',
-        );
-        expect(await db.notification.count({ where: { runId: canceled.run.id } })).toBe(0);
+        expect(
+            (
+                await db.query.runs
+                    .findFirst({ where: and(eq(tables.runs.id, canceled.run.id)) })
+                    .then(requireRow)
+            ).status,
+        ).toBe('canceled');
+        expect(
+            await db
+                .select({ count: count() })
+                .from(tables.notifications)
+                .where(and(eq(tables.notifications.runId, canceled.run.id)))
+                .then(([row]) => row!.count),
+        ).toBe(0);
     });
 });

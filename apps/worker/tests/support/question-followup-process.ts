@@ -1,4 +1,13 @@
-import { PrismaClient } from '@scova/db';
+import { requiredDatabaseValue } from '@/utils/database.ts';
+import {
+    createDatabaseClient,
+    connectDatabase,
+    runs as dbRuns,
+    eq,
+    reports as dbReports,
+    closeDatabase,
+} from '@scova/db';
+
 import {
     createConnectorBundle,
     createPageReader,
@@ -18,7 +27,7 @@ const databaseUrl = process.env.DATABASE_URL!;
 const schema = new URL(databaseUrl).searchParams.get('schema');
 if (!schema || !/^scova_questions_[a-f0-9]{32}$/.test(schema))
     throw new Error('Invalid question probe schema');
-const db = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
+const db = createDatabaseClient({ connectionString: databaseUrl });
 const base = createConnectorBundle();
 const queries: string[] = [],
     prompts: string[] = [];
@@ -119,7 +128,7 @@ const runtime = createAgentRuntime({
     enableDelivery: true,
 });
 try {
-    await db.$connect();
+    await connectDatabase(db);
     await runtime.connect();
     const repository = createRunRepository(db);
     const service = new RunService({
@@ -142,8 +151,10 @@ try {
         },
     });
     const result = await service.execute(runId!);
-    const run = await db.run.findUniqueOrThrow({ where: { id: runId } });
-    const report = await db.report.findFirst({ where: { runId } });
+    const run = await db.query.runs
+        .findFirst({ where: eq(dbRuns.id, runId) })
+        .then((row) => requiredDatabaseValue(row));
+    const report = await db.query.reports.findFirst({ where: eq(dbReports.runId, runId) });
     console.log(
         JSON.stringify({
             result,
@@ -163,5 +174,5 @@ try {
     );
 } finally {
     await runtime.close();
-    await db.$disconnect();
+    await closeDatabase(db);
 }

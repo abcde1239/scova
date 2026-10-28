@@ -1,5 +1,9 @@
+import * as tables from '@scova/db';
+import { and, eq, lt } from '@scova/db';
+import { firstRow, requireRow } from '../src/utils/database.ts';
 import { randomBytes, randomUUID } from 'node:crypto';
-import type { PrismaClient } from '@scova/db';
+import { closeDatabase, type DatabaseClient } from '@scova/db';
+import { createObservedDatabase } from './support/query-observer.ts';
 import { afterAll, beforeAll, describe, expect, it } from 'vite-plus/test';
 import { createApiApp } from '../src/app/index.ts';
 import { createDefaultServices } from '../src/app/context.ts';
@@ -11,54 +15,66 @@ const fixture = outboxDatabase();
 const db = fixture.db;
 const origin = 'https://scova.test';
 const resources: ReturnType<typeof createDefaultServices>[] = [];
+const observedClients: DatabaseClient[] = [];
 beforeAll(() => fixture.setup(), 120_000);
 afterAll(async () => {
     await Promise.all(resources.map((services) => services.close()));
+    await Promise.all(observedClients.map(closeDatabase));
     await fixture.cleanup();
 });
 
 async function seed(count = 1, terminal = false) {
     const s = await seedRun(db);
     const token = randomBytes(32).toString('base64url');
-    const session = await db.session.create({
-        data: {
+    const session = await db
+        .insert(tables.sessions)
+        .values({
             userId: s.user.id,
             tokenHash: tokenHash(token),
             csrfTokenHash: tokenHash(csrfForSession(token)),
             expiresAt: new Date(Date.now() + 60_000),
-        },
-    });
+        })
+        .returning()
+        .then(firstRow);
     if (count > 1)
-        await db.runEvent.createMany({
-            data: Array.from({ length: count - 1 }, (_, index) => ({
-                userId: s.user.id,
-                runId: s.run.id,
-                seq: index + 2,
-                type: 'step.started',
-                payload: { step: 'search' },
-            })),
-        });
+        await db
+            .insert(tables.runEvents)
+            .values(
+                Array.from({ length: count - 1 }, (_, index) => ({
+                    userId: s.user.id,
+                    runId: s.run.id,
+                    seq: index + 2,
+                    type: 'step.started',
+                    payload: { step: 'search' },
+                })),
+            )
+            .returning({ id: tables.runEvents.id })
+            .then((rows) => ({ count: rows.length }));
     if (terminal) await finish(s, count + 1);
     return { ...s, session, cookie: `scova_session=${token}` };
 }
 async function finish(s: Awaited<ReturnType<typeof seedRun>>, seq: number) {
-    await db.$transaction(async (tx) => {
-        await tx.run.update({
-            where: { id: s.run.id },
-            data: { status: 'failed', failureCode: 'TEST_DONE', finishedAt: new Date() },
-        });
-        await tx.runEvent.create({
-            data: {
+    await db.transaction(async (tx) => {
+        await tx
+            .update(tables.runs)
+            .set({ status: 'failed', failureCode: 'TEST_DONE', finishedAt: new Date() })
+            .where(and(eq(tables.runs.id, s.run.id)))
+            .returning()
+            .then(firstRow);
+        await tx
+            .insert(tables.runEvents)
+            .values({
                 userId: s.user.id,
                 runId: s.run.id,
-                seq,
+                seq: seq,
                 type: 'run.failed',
                 payload: { status: 'failed', code: 'TEST_DONE', message: '测试执行已结束' },
-            },
-        });
+            })
+            .returning()
+            .then(firstRow);
     });
 }
-function app(database: PrismaClient = db, options: { expiryMs?: number } = {}) {
+function app(database: DatabaseClient = db, options: { expiryMs?: number } = {}) {
     const services = createDefaultServices({
         origin,
         db: () => database,
@@ -130,7 +146,11 @@ describe('SSE 真实 PostgreSQL 回放与连接清理', () => {
     it('Last-Event-ID定位当前Run；双游标必须一致，after严格校验', async () => {
         const s = await seed(3, true);
         const { api } = app();
-        const previous = await db.runEvent.findFirstOrThrow({ where: { runId: s.run.id, seq: 2 } });
+        const previous = await db.query.runEvents
+            .findFirst({
+                where: and(eq(tables.runEvents.runId, s.run.id), eq(tables.runEvents.seq, 2)),
+            })
+            .then(requireRow);
         for (const suffix of [
             '?after=',
             '?after=1.2',
@@ -152,8 +172,16 @@ describe('SSE 真实 PostgreSQL 回放与连接清理', () => {
 
     it('物理删除历史前缀后reset无id且关闭，按resumeAfter可续传新事件', async () => {
         const s = await seed(5);
-        const removed = await db.runEvent.findFirstOrThrow({ where: { runId: s.run.id, seq: 2 } });
-        await db.runEvent.deleteMany({ where: { runId: s.run.id, seq: { lt: 4 } } });
+        const removed = await db.query.runEvents
+            .findFirst({
+                where: and(eq(tables.runEvents.runId, s.run.id), eq(tables.runEvents.seq, 2)),
+            })
+            .then(requireRow);
+        await db
+            .delete(tables.runEvents)
+            .where(and(eq(tables.runEvents.runId, s.run.id), lt(tables.runEvents.seq, 4)))
+            .returning()
+            .then((rows) => ({ count: rows.length }));
         const { api } = app();
         for (const [suffix, headers] of [
             ['?after=1', {}],
@@ -180,7 +208,9 @@ describe('SSE 真实 PostgreSQL 回放与连接清理', () => {
     it('其他Run事件ID与不存在ID仅reset当前owner快照，不泄漏其他事件', async () => {
         const s = await seed();
         const other = await seed();
-        const foreign = await db.runEvent.findFirstOrThrow({ where: { runId: other.run.id } });
+        const foreign = await db.query.runEvents
+            .findFirst({ where: and(eq(tables.runEvents.runId, other.run.id)) })
+            .then(requireRow);
         const { api } = app();
         for (const id of [foreign.id, randomUUID()]) {
             const response = await open(api, s, '', { 'last-event-id': id });
@@ -194,8 +224,16 @@ describe('SSE 真实 PostgreSQL 回放与连接清理', () => {
 
     it('序列内部缺口reset；已定位的双游标不一致不会被reset掩盖', async () => {
         const s = await seed(4);
-        const first = await db.runEvent.findFirstOrThrow({ where: { runId: s.run.id, seq: 1 } });
-        await db.runEvent.deleteMany({ where: { runId: s.run.id, seq: 3 } });
+        const first = await db.query.runEvents
+            .findFirst({
+                where: and(eq(tables.runEvents.runId, s.run.id), eq(tables.runEvents.seq, 1)),
+            })
+            .then(requireRow);
+        await db
+            .delete(tables.runEvents)
+            .where(and(eq(tables.runEvents.runId, s.run.id), eq(tables.runEvents.seq, 3)))
+            .returning()
+            .then((rows) => ({ count: rows.length }));
         const { api } = app();
         expect((await open(api, s, '?after=2', { 'last-event-id': first.id })).status).toBe(400);
         const reset = await open(api, s, '?after=1');
@@ -216,20 +254,15 @@ describe('SSE 真实 PostgreSQL 回放与连接清理', () => {
     it('空页快照与终态并发提交，下一快照仍发送最后事件', async () => {
         const s = await seed();
         let armed = false;
-        const database = db.$extends({
-            query: {
-                runEvent: {
-                    async aggregate({ args, query }) {
-                        const result = await query(args);
-                        if (armed) {
-                            armed = false;
-                            await finish(s, 2);
-                        }
-                        return result;
-                    },
-                },
+        const database = createObservedDatabase(fixture.databaseUrl, {
+            async after(query) {
+                if (armed && /\bmax\(/i.test(query.text) && query.text.includes('"run_events"')) {
+                    armed = false;
+                    await finish(s, 2);
+                }
             },
-        }) as unknown as PrismaClient;
+        });
+        observedClients.push(database);
         const { api } = app(database);
         const reader = (await open(api, s)).body!.getReader();
         await reader.read();
@@ -243,21 +276,22 @@ describe('SSE 真实 PostgreSQL 回放与连接清理', () => {
     it('revoke在下页停止；取消reader后不再发起查询，registry等待在途清理', async () => {
         const s = await seed();
         let reads = 0;
-        const database = db.$extends({
-            query: {
-                session: {
-                    async findFirst({ args, query }) {
-                        reads += 1;
-                        return query(args);
-                    },
-                },
+        const database = createObservedDatabase(fixture.databaseUrl, {
+            before(query) {
+                if (/\bfrom\s+"sessions"/i.test(query.text)) reads += 1;
             },
-        }) as unknown as PrismaClient;
+        });
+        observedClients.push(database);
         const { api, services } = app(database);
         const reader = (await open(api, s)).body!.getReader();
         await reader.read();
         const reading = reader.read();
-        await db.session.update({ where: { id: s.session.id }, data: { revokedAt: new Date() } });
+        await db
+            .update(tables.sessions)
+            .set({ revokedAt: new Date() })
+            .where(and(eq(tables.sessions.id, s.session.id)))
+            .returning()
+            .then(firstRow);
         await expect(reading).rejects.toThrow('事件连接已结束');
         await services.streams.stop();
         const count = reads;
@@ -276,10 +310,12 @@ describe('SSE 真实 PostgreSQL 回放与连接清理', () => {
 
     it('连接中会话到期独立结束，后续请求返回401', async () => {
         const s = await seed();
-        await db.session.update({
-            where: { id: s.session.id },
-            data: { expiresAt: new Date(Date.now() + 500) },
-        });
+        await db
+            .update(tables.sessions)
+            .set({ expiresAt: new Date(Date.now() + 500) })
+            .where(and(eq(tables.sessions.id, s.session.id)))
+            .returning()
+            .then(firstRow);
         const { api, services } = app();
         const reader = (await open(api, s)).body!.getReader();
         await reader.read();

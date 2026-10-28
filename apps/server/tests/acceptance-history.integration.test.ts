@@ -1,3 +1,4 @@
+import { sql as querySql } from '@scova/db';
 import { performance } from 'node:perf_hooks';
 import { afterAll, beforeAll, describe, expect, it } from 'vite-plus/test';
 import {
@@ -95,14 +96,18 @@ describe('真实socket执行历史、微秒分页及会话隔离', () => {
         );
         for (let i = 0; i < 3; i++) {
             const time = `2026-02-01T00:00:00.12345${6 - i}Z`;
-            await fixture.db
-                .$executeRaw`UPDATE tasks SET updated_at=${time}::timestamptz WHERE id=${data.tasks[i]!.id}::uuid`;
-            await fixture.db
-                .$executeRaw`UPDATE runs SET queued_at=${time}::timestamptz WHERE id=${runs[i]!.id}::uuid`;
-            await fixture.db
-                .$executeRaw`UPDATE reports SET published_at=${time}::timestamptz WHERE id=${reports[i]!.id}::uuid`;
-            await fixture.db
-                .$executeRaw`UPDATE inbox_items SET created_at=${time}::timestamptz WHERE id=${inbox[i]!.id}::uuid`;
+            await fixture.db.execute(
+                querySql`UPDATE tasks SET updated_at=${time}::timestamptz WHERE id=${data.tasks[i]!.id}::uuid`,
+            );
+            await fixture.db.execute(
+                querySql`UPDATE runs SET queued_at=${time}::timestamptz WHERE id=${runs[i]!.id}::uuid`,
+            );
+            await fixture.db.execute(
+                querySql`UPDATE reports SET published_at=${time}::timestamptz WHERE id=${reports[i]!.id}::uuid`,
+            );
+            await fixture.db.execute(
+                querySql`UPDATE inbox_items SET created_at=${time}::timestamptz WHERE id=${inbox[i]!.id}::uuid`,
+            );
         }
         expect(await fixture.pages('/tasks', owner)).toEqual(data.tasks.map((task) => task.id));
         expect(await fixture.pages(`/tasks/${data.tasks[0]!.id}/runs`, owner)).toEqual(

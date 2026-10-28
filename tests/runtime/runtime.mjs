@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import Redis from 'ioredis';
 import { Queue, QueueEvents, Worker } from 'bullmq';
 import { nextScheduledAt, resolveScheduledDate } from '@scova/shared';
+import { createDatabaseClient, closeDatabase, sql, eq } from '@scova/db';
+import { pgTable, text, integer } from 'drizzle-orm/pg-core';
 
-const require = createRequire(import.meta.url);
 const databaseUrl =
     process.env.RUNTIME_DATABASE_URL ??
     'postgresql://scova_test:scova_test@127.0.0.1:55432/scova_test';
@@ -66,43 +66,38 @@ export function testDst() {
     );
 }
 
-async function testPrisma(schema) {
-    // 实验客户端独立生成，不依赖尚未实现的生产数据库模型。
-    const prismaCli = require.resolve('prisma/build/index.js');
-    const fixturePath = fileURLToPath(new URL('fixtures/schema.prisma', import.meta.url));
-    await runProcess(prismaCli, ['generate', '--schema', fixturePath]);
-    const clientModule = require(fileURLToPath(new URL('.generated/client', import.meta.url)));
+async function testDrizzle(schema) {
+    const probe = pgTable('drizzle_probe', {
+        id: text('id').primaryKey(),
+        value: integer('value').notNull(),
+    });
     const scopedUrl = new URL(databaseUrl);
     scopedUrl.searchParams.set('schema', schema);
-    const prisma = new clientModule.PrismaClient({
-        datasources: { db: { url: scopedUrl.toString() } },
-    });
+    const db = createDatabaseClient({ connectionString: scopedUrl.toString(), max: 2 });
     try {
-        await prisma.$executeRawUnsafe(
-            `CREATE TABLE "${schema}".prisma_probe (id text PRIMARY KEY, value integer NOT NULL)`,
+        await db.execute(
+            sql`CREATE TABLE drizzle_probe (id text PRIMARY KEY, value integer NOT NULL)`,
         );
-        await prisma.$transaction(async (tx) => {
-            await tx.runtimeProbe.create({ data: { id: 'committed', value: 1 } });
-            await tx.runtimeProbe.update({ where: { id: 'committed' }, data: { value: 2 } });
+        await db.transaction(async (tx) => {
+            await tx.insert(probe).values({ id: 'committed', value: 1 });
+            await tx.update(probe).set({ value: 2 }).where(eq(probe.id, 'committed'));
         });
         await assert.rejects(
-            prisma.$transaction(async (tx) => {
-                await tx.runtimeProbe.create({ data: { id: 'rolled-back', value: 9 } });
+            db.transaction(async (tx) => {
+                await tx.insert(probe).values({ id: 'rolled-back', value: 9 });
                 throw new Error('expected rollback');
             }),
             /expected rollback/,
         );
-        assert.equal(await prisma.runtimeProbe.count(), 1);
-        assert.equal(
-            (await prisma.runtimeProbe.findUniqueOrThrow({ where: { id: 'committed' } })).value,
-            2,
-        );
+        const rows = await db.select().from(probe);
+        assert.equal(rows.length, 1);
+        assert.deepEqual(rows[0], { id: 'committed', value: 2 });
     } finally {
-        await prisma.$disconnect();
+        await closeDatabase(db);
     }
     console.log(
         JSON.stringify({
-            test: 'prisma-transaction',
+            test: 'drizzle-transaction',
             committed: 1,
             rolledBack: true,
             passed: true,
@@ -272,7 +267,7 @@ export async function runRuntimeTests({ onlyDst = false } = {}) {
         assert.match(schema, /^runtime_[a-f0-9]{24}$/);
         await pool.query(`CREATE SCHEMA "${schema}"`);
         created = true;
-        await testPrisma(schema);
+        await testDrizzle(schema);
         await testQueue(suffix);
         await testCheckpoint(pool, schema);
     } finally {
@@ -283,6 +278,6 @@ export async function runRuntimeTests({ onlyDst = false } = {}) {
         }
     }
     console.log(
-        'Runtime 实验通过：Prisma 事务、BullMQ、PostgreSQL checkpoint 跨进程恢复与 fencing、DST。',
+        'Runtime 实验通过：Drizzle 事务、BullMQ、PostgreSQL checkpoint 跨进程恢复与 fencing、DST。',
     );
 }
