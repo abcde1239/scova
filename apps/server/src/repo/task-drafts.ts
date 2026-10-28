@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { withDeadline } from '@scova/connectors';
-import type { ApiServices } from '@/app/context.ts';
+import type { ApiServices } from '@/app/services';
 import { ApiError } from '@/utils/errors.ts';
 
 const fields = ['requests', 'attempts', 'inputTokens', 'outputTokens'] as const;

@@ -14,7 +14,7 @@ import {
     type Evidence,
     type Report,
 } from '@scova/models';
-import type { ApiServices } from '@/app/context.ts';
+import type { ApiServices } from '@/app/services';
 import {
     createReportRepo,
     type StoredEvidence,

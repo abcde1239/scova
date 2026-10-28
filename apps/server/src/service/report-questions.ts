@@ -12,7 +12,7 @@ import {
     QuestionAnswerSchema,
     type QuestionAnswer,
 } from '@scova/models';
-import type { ApiServices } from '@/app/context.ts';
+import type { ApiServices } from '@/app/services';
 import { createReportService } from '@/service/reports.ts';
 import { createRunService } from '@/service/runs.ts';
 import { createQuestionBudgetRepo, createReportQuestionRepo } from '@/repo/report-questions.ts';

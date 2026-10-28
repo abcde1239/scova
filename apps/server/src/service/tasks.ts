@@ -12,7 +12,7 @@ import {
     parseContract,
     type TaskConfig,
 } from '@scova/models';
-import type { ApiServices } from '@/app/context.ts';
+import type { ApiServices } from '@/app/services';
 import { ApiError } from '@/utils/errors.ts';
 import { TASK_BUDGET_LIMITS } from '@/app/task-policy.ts';
 import { createTaskRepo, type TaskStore } from '@/repo/tasks.ts';

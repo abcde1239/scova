@@ -51,3 +51,5 @@ release. Add a tool name to select part of the graph. For example, run
 Server 按 `main → app → router → handler → service → repo` 调用：`app` 装配 Elysia、Node 兼容层和生命周期；`router` 声明接口契约与中文文档；`handler` 处理 HTTP、会话与响应；`service` 组织业务规则与事务；`repo` 执行数据库和 Redis 访问；`utils` 仅放小工具。PostgreSQL 的 Drizzle schema、行类型、客户端和迁移统一放在 `packages/db`，Server/Worker 通过 `@scova/db` 引用；公开 DTO 与事件 schema 由 `@scova/models` 管理，不依赖数据库客户端。业务查询使用原生 Drizzle；历史 SQL 保持不可变，存量库接管先验证实际结构与迁移状态，不重置用户数据库。
 
 Worker 按 `main/node → app → handler → service → repo + queue` 调用：app 管配置、依赖及串行循环，handler 是后台批次入口，service 编排租约与投递规则，repo 执行数据库 CAS，queue 适配 BullMQ。停止时先阻止新领取、等待在途批次，再关闭队列、Redis 和数据库；不在 service 或导入模块时连接外部服务。Worker 调用 agent-core，不能把队列投递或技术实验当作 Agent 已完成执行。
+
+Server 的 `http` 放跨接口复用的 HTTP 适配能力：Cookie、Origin/CSRF 与会话认证桥接，以及 SSE 流的背压、心跳和连接清理。`handler` 保留具体接口入口，`service` 保留业务认证与授权规则，`utils` 仅放编码、哈希等小工具；流注册与应用停止仍由 `app` 管理。

@@ -2,7 +2,7 @@ import { type User as StoredUser } from '@scova/db';
 import { randomBytes } from 'node:crypto';
 import { Algorithm, hash, verify } from '@node-rs/argon2';
 import type { LoginInput, RegisterInput, UpdatePreferencesInput } from '@scova/models';
-import type { ApiServices } from '@/app/context.ts';
+import type { ApiServices } from '@/app/services';
 import { createAuthRepository, type AuthTransaction } from '@/repo/auth.ts';
 import { ApiError } from '@/utils/errors.ts';
 import { csrfForSession, isUuid, tokenHash } from '@/utils/security.ts';

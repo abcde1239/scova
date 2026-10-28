@@ -1,6 +1,6 @@
 import { createDatabaseClient, connectDatabase, closeDatabase } from '@scova/db';
 import { randomUUID } from 'node:crypto';
-import { createDefaultServices } from '../../src/app/context.ts';
+import { createDefaultServices } from '../../src/app/services.ts';
 import { createRunService } from '../../src/service/runs.ts';
 
 const url = process.env.SCOVA_SCHEDULER_PROBE_DATABASE_URL;

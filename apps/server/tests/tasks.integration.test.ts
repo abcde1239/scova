@@ -16,7 +16,7 @@ import { randomUUID } from 'node:crypto';
 import { Redis as RedisClient } from 'ioredis';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vite-plus/test';
 import { createApiApp } from '../src/app/index.ts';
-import { createDefaultServices, type ApiServices } from '../src/app/context.ts';
+import { createDefaultServices, type ApiServices } from '../src/app/services.ts';
 import { comparisonScopeHash } from '../src/service/tasks.ts';
 import type { TaskConfig } from '@scova/models';
 import { nextScheduledAt } from '@scova/shared';

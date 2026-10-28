@@ -9,7 +9,7 @@ import {
     ReportListResponseSchema,
     ReportSchema,
 } from '@scova/models';
-import type { ApiServices } from '@/app/context.ts';
+import type { ApiServices } from '@/app/services';
 import { createReportHandlers } from '@/handler/reports.ts';
 
 const limit = t.Optional(
@@ -31,7 +31,7 @@ const inboxQuery = t.Object(
     },
     { additionalProperties: false, description: '收件箱分页和已读状态筛选' },
 );
-
+/* 读取报告相关的路由插件 */
 export function createReportPlugin(services: ApiServices) {
     const handlers = createReportHandlers(services);
     const errors = {

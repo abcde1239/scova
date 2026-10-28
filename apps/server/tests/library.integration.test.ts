@@ -17,7 +17,7 @@ import { randomUUID } from 'node:crypto';
 import { Redis as RedisClient } from 'ioredis';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vite-plus/test';
 import { createApiApp } from '../src/app/index.ts';
-import { createDefaultServices, type ApiServices } from '../src/app/context.ts';
+import { createDefaultServices, type ApiServices } from '../src/app/services.ts';
 import { createLibraryService } from '../src/service/library.ts';
 import { draftConfig } from './support/task-drafts.ts';
 import { libraryFixture } from './support/library.ts';

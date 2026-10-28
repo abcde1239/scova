@@ -6,7 +6,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { Redis as RedisClient } from 'ioredis';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vite-plus/test';
 import { createApiApp } from '../src/app/index.ts';
-import { createDefaultServices } from '../src/app/context.ts';
+import { createDefaultServices } from '../src/app/services.ts';
 import { firstRow, requireRow } from '../src/utils/database.ts';
 
 const baseUrl =

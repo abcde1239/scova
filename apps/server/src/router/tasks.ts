@@ -10,7 +10,7 @@ import {
     TaskVersionSchema,
     UpdateTaskInputSchema,
 } from '@scova/models';
-import type { ApiServices } from '@/app/context.ts';
+import type { ApiServices } from '@/app/services';
 import { createTaskHandlers } from '@/handler/tasks.ts';
 
 // URL 查询串使用 Elysia 数值解码；service 继续按共享整数契约校验。

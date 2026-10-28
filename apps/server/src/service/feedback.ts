@@ -1,6 +1,6 @@
 import { type Feedback as StoredFeedback } from '@scova/db';
 import { FeedbackInputSchema, FeedbackSchema, parseContract } from '@scova/models';
-import type { ApiServices } from '@/app/context.ts';
+import type { ApiServices } from '@/app/services';
 import { createFeedbackRepo } from '@/repo/feedback.ts';
 import { ApiError } from '@/utils/errors.ts';
 import { isUuid } from '@/utils/security.ts';

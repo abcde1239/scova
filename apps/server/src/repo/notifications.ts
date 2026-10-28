@@ -11,7 +11,7 @@ import {
     type DatabaseExecutor,
     type SQL,
 } from '@scova/db';
-import type { ApiServices } from '@/app/context.ts';
+import type { ApiServices } from '@/app/services';
 import type { NotificationListQuery } from '@scova/models';
 const withRun = {
     run: { columns: { id: true, taskId: true, mode: true, status: true, failureCode: true } },

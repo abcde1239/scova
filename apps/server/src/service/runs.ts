@@ -12,7 +12,7 @@ import {
     type RunCommandInput,
     type TaskConfig,
 } from '@scova/models';
-import type { ApiServices } from '@/app/context.ts';
+import type { ApiServices } from '@/app/services';
 import { ApiError } from '@/utils/errors.ts';
 import { createRunRepo } from '@/repo/runs.ts';
 import { comparisonScopeHash } from '@/service/tasks.ts';

@@ -10,7 +10,7 @@ import {
     RunCommandResponseSchema,
     RunSchema,
 } from '@scova/models';
-import type { ApiServices } from '@/app/context.ts';
+import type { ApiServices } from '@/app/services';
 import { createRunHandlers } from '@/handler/runs.ts';
 
 const OptionalIdempotencyHeadersSchema = t.Object(
@@ -26,7 +26,7 @@ const OptionalIdempotencyHeadersSchema = t.Object(
     },
     { additionalProperties: true, description: '执行命令幂等请求头；缺失时返回 428' },
 );
-
+/* 调用agent进行执行任务相关的路由插件 */
 export function createRunPlugin(services: ApiServices) {
     const handlers = createRunHandlers(services);
     const errors = {

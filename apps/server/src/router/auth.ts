@@ -6,7 +6,7 @@ import {
     SessionResponseSchema,
     UpdatePreferencesInputSchema,
 } from '@scova/models';
-import type { ApiServices } from '@/app/context.ts';
+import type { ApiServices } from '@/app/services';
 import { createAuthHandlers } from '@/handler/auth.ts';
 
 const errorResponses = {
@@ -20,7 +20,7 @@ const errorResponses = {
     503: 'ApiError',
 } as const;
 
-/** 账号路由声明；输入输出契约与中文说明由此生成 Swagger。 */
+/** 账号相关的路由插件 */
 export function createAuthPlugin(services: ApiServices) {
     const handlers = createAuthHandlers(services);
     return new Elysia({ name: 'scova-auth', prefix: '/api/v1', normalize: false })

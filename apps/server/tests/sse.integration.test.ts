@@ -6,7 +6,7 @@ import { closeDatabase, type DatabaseClient } from '@scova/db';
 import { createObservedDatabase } from './support/query-observer.ts';
 import { afterAll, beforeAll, describe, expect, it } from 'vite-plus/test';
 import { createApiApp } from '../src/app/index.ts';
-import { createDefaultServices } from '../src/app/context.ts';
+import { createDefaultServices } from '../src/app/services.ts';
 import { csrfForSession, tokenHash } from '../src/utils/security.ts';
 import { outboxDatabase } from '../../worker/tests/support/outbox-database.ts';
 import { seedRun } from '../../worker/tests/support/run-database.ts';

@@ -13,7 +13,7 @@ import {
     createDefaultServices,
     type ApiServiceOverrides,
     type ApiServices,
-} from '../src/app/context.ts';
+} from '../src/app/services.ts';
 import type { TaskConfig } from '@scova/models';
 import { effectiveRunScopeHash } from '@scova/shared';
 import { createReportQuestionService } from '../src/service/report-questions.ts';

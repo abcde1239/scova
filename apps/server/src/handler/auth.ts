@@ -4,7 +4,7 @@ import {
     UpdatePreferencesInputSchema,
     parseContract,
 } from '@scova/models';
-import type { ApiServices } from '@/app/context.ts';
+import type { ApiServices } from '@/app/services';
 import { createAuthService } from '@/service/auth.ts';
 import {
     presentedToken,
@@ -13,9 +13,8 @@ import {
     requireSession,
     serializeSession,
     sessionCookie,
-} from '@/handler/session.ts';
+} from '@/http/session.ts';
 
-/** HTTP 输入、Cookie 与响应适配；业务判断由认证 service 执行。 */
 export function createAuthHandlers(services: ApiServices) {
     const auth = createAuthService(services);
     return {

@@ -45,6 +45,8 @@ API 不负责执行长任务，worker 不提供账号管理入口；Agent 没有
 
 Server 源码分层为 `main → app → router → handler → service → repo`：app 装配 Elysia、Node 适配与生命周期，router 声明路由和中文 OpenAPI，handler 处理 HTTP/会话/响应，service 编排业务规则及事务，repo 完成数据库与 Redis 访问。utils 放纯工具。Task CAS 与 Run/事件/Outbox 仍在同一事务中完成。
 
+`http/session.ts` 承载 Cookie、Origin/CSRF 与会话认证桥接，`http/sse.ts` 承载事件流背压、心跳、超时与断连清理，供具体 handler 调用。纯 SSE 帧编码仍在 utils，事件读取和业务规则仍在 service，流注册表与停机清理由 app 装配。
+
 Worker 使用 `main/node → app → handler → service → repo + queue`：app 管配置、资源和串行轮询，handler 接收后台批次和 Run 消息，service 编排 Outbox、Run、Agent 与交付，repo 执行 PostgreSQL 条件写，queue 适配 BullMQ。已实现 Run 消费、续期、有限接管、取消及持久化研究候选；交付服务复核已提升 checkpoint、成功工具正文与逐字引用后，原子保存报告、收件箱和终态。停止先阻止新领取、中断执行并等待在途领域写/checkpoint/交付，再关闭 consumer、队列、Redis、saver 和数据库。
 
 Outbox 每次领取的 `attempts + leaseExpiresAt` 作为本次持有凭据，领取和确认/退避均使用 CAS。过期持有者不能覆盖接管后的状态；发送成功但确认失败保留租约，到期后用同一 jobId 重投。这一边界保证至少一次传递，后续业务执行仍须幂等。

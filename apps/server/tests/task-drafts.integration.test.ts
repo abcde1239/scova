@@ -16,7 +16,7 @@ import {
     createDefaultServices,
     type ApiServices,
     type ApiServiceOverrides,
-} from '../src/app/context.ts';
+} from '../src/app/services.ts';
 import { draftConfig, draftExamples } from './support/task-drafts.ts';
 import { firstRow, requireRow } from '../src/utils/database.ts';
 

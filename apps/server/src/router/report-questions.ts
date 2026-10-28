@@ -6,8 +6,9 @@ import {
     QuestionFollowupInputSchema,
     RunCommandResponseSchema,
 } from '@scova/models';
-import type { ApiServices } from '@/app/context.ts';
+import type { ApiServices } from '@/app/services';
 import { createReportQuestionHandlers } from '@/handler/report-questions.ts';
+/* 报告追问相关的路由插件 */
 export function createReportQuestionPlugin(services: ApiServices) {
     const handlers = createReportQuestionHandlers(services);
     const errors = {

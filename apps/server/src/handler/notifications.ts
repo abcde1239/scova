@@ -1,6 +1,6 @@
 import type { Context } from 'elysia';
-import type { ApiServices } from '@/app/context.ts';
-import { requireCsrf, requireSession } from '@/handler/session.ts';
+import type { ApiServices } from '@/app/services';
+import { requireCsrf, requireSession } from '@/http/session.ts';
 import { createNotificationService } from '@/service/notifications.ts';
 
 export function createNotificationHandlers(services: ApiServices) {

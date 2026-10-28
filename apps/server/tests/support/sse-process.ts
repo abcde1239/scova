@@ -1,6 +1,6 @@
 import { closeDatabase } from '@scova/db';
 import { createObservedDatabase } from './query-observer.ts';
-import { createDefaultServices } from '../../src/app/context.ts';
+import { createDefaultServices } from '../../src/app/services.ts';
 import { createStreamRegistry } from '../../src/app/streams.ts';
 import { startServer } from '../../src/app/runtime.ts';
 

@@ -1,5 +1,5 @@
 import { createApiApp } from '../../src/app/index.ts';
-import { createDefaultServices } from '../../src/app/context.ts';
+import { createDefaultServices } from '../../src/app/services.ts';
 import { acceptanceQuestionModel } from './acceptance-question-model.ts';
 
 // Isolated socket probe uses the production router, session service and database transport.

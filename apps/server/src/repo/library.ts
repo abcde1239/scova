@@ -10,7 +10,7 @@ import {
 } from '@scova/db';
 import * as tables from '@scova/db';
 import { randomUUID } from 'node:crypto';
-import type { ApiServices } from '@/app/context.ts';
+import type { ApiServices } from '@/app/services';
 import type { LibrarySearchQuery, LibraryTarget, NoteListQuery, NoteInput } from '@scova/models';
 import type { LibraryCursor } from '@/utils/library.ts';
 import { firstRow, requireRow } from '@/utils/database.ts';

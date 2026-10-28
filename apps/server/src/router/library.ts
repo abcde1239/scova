@@ -17,7 +17,7 @@ import {
     LibrarySearchResponseSchema,
     IdempotencyHeadersSchema,
 } from '@scova/models';
-import type { ApiServices } from '@/app/context.ts';
+import type { ApiServices } from '@/app/services';
 import { createLibraryHandlers } from '@/handler/library.ts';
 
 const limit = t.Optional(

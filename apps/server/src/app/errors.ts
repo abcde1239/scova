@@ -55,7 +55,7 @@ export function createApiErrorPlugin() {
                 set.status = 422;
                 return {
                     code: 'VALIDATION_ERROR',
-                    message: '请求字段不符合接口契约',
+                    message: '请求字段不符合接口约束',
                     requestId,
                     fieldErrors: validationFields(error),
                 };

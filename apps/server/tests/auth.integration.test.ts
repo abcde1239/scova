@@ -16,9 +16,9 @@ import { Redis as RedisClient } from 'ioredis';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vite-plus/test';
 import { Elysia } from 'elysia';
 import { createAuthPlugin } from '../src/router/auth.ts';
-import { requireOwnedTask } from '../src/handler/session.ts';
+import { requireOwnedTask } from '../src/http/session.ts';
 import { createApiErrorPlugin } from '../src/app/errors.ts';
-import { createDefaultServices, type ApiServices } from '../src/app/context.ts';
+import { createDefaultServices, type ApiServices } from '../src/app/services.ts';
 import { firstRow, requireRow } from '../src/utils/database.ts';
 
 const baseUrl =

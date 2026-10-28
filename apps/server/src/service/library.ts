@@ -23,7 +23,7 @@ import {
     type LibraryTarget,
 } from '@scova/models';
 import { validatePublication } from '@scova/connectors';
-import type { ApiServices } from '@/app/context.ts';
+import type { ApiServices } from '@/app/services';
 import {
     createLibraryRepo,
     type StoredLibraryBookmark,

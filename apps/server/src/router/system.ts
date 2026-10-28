@@ -1,7 +1,7 @@
 import { Elysia } from 'elysia';
 import { HealthResponseSchema } from '@/app/contracts.ts';
 import { health } from '@/handler/system.ts';
-
+/* 系统相关插件，目前只有health检查 */
 export function createSystemPlugin() {
     return new Elysia({ name: 'scova-system' })
         .model({ HealthResponse: HealthResponseSchema })

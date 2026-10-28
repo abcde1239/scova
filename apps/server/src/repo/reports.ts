@@ -16,7 +16,7 @@ import {
     type DatabaseExecutor,
     type SQL,
 } from '@scova/db';
-import type { ApiServices } from '@/app/context.ts';
+import type { ApiServices } from '@/app/services';
 
 const summaryWith = { run: true } as const;
 const evidenceWith = {

@@ -3,7 +3,7 @@ import * as tables from '@scova/db';
 import { randomBytes } from 'node:crypto';
 import { parseContract, ReportSchema, NotificationListResponseSchema } from '@scova/models';
 import { createApiApp } from '../../src/app/index.ts';
-import { createDefaultServices } from '../../src/app/context.ts';
+import { createDefaultServices } from '../../src/app/services.ts';
 import { csrfForSession, tokenHash } from '../../src/utils/security.ts';
 import { firstRow } from '../../src/utils/database.ts';
 

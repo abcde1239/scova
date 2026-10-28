@@ -3,7 +3,7 @@ import { node } from '@elysiajs/node';
 import { Elysia } from 'elysia';
 import { contractModels, HealthResponseSchema } from '@/app/contracts.ts';
 import { createApiErrorPlugin } from '@/app/errors.ts';
-import { createDefaultServices, type ApiServices } from '@/app/context.ts';
+import { createDefaultServices, type ApiServices } from '@/app/services';
 import { createAuthPlugin } from '@/router/auth.ts';
 import { createTaskPlugin } from '@/router/tasks.ts';
 import { createTaskDraftPlugin } from '@/router/task-drafts.ts';

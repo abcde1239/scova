@@ -1,6 +1,6 @@
 import { and, eq, isNull, isUniqueConflict, type DatabaseExecutor, type User } from '@scova/db';
 import * as tables from '@scova/db';
-import type { ApiServices } from '@/app/context.ts';
+import type { ApiServices } from '@/app/services';
 import { firstRow } from '@/utils/database.ts';
 
 function sessionStore(database: DatabaseExecutor) {

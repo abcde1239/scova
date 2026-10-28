@@ -14,7 +14,7 @@ import {
     feedback,
     type DatabaseExecutor,
 } from '@scova/db';
-import type { ApiServices } from '@/app/context.ts';
+import type { ApiServices } from '@/app/services';
 import type { FeedbackInput } from '@scova/models';
 import { firstRow } from '@/utils/database.ts';
 

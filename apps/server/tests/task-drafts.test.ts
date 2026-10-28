@@ -13,7 +13,7 @@ import {
     type CallContext,
 } from '@scova/connectors';
 import type { Redis } from 'ioredis';
-import { createDefaultServices } from '../src/app/context.ts';
+import { createDefaultServices } from '../src/app/services.ts';
 import { createTaskDraftPolicy, createTaskDraftModel } from '../src/app/task-drafts.ts';
 import { createTaskDraftService } from '../src/service/task-drafts.ts';
 import type { AuthenticatedSession } from '../src/service/auth.ts';

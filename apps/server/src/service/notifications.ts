@@ -5,7 +5,7 @@ import {
     NotificationSchema,
     parseContract,
 } from '@scova/models';
-import type { ApiServices } from '@/app/context.ts';
+import type { ApiServices } from '@/app/services';
 import { createNotificationRepo, type StoredNotification } from '@/repo/notifications.ts';
 import { ApiError } from '@/utils/errors.ts';
 

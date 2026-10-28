@@ -11,7 +11,7 @@ import {
 } from '@scova/db';
 import * as tables from '@scova/db';
 import { captureFeedbackSnapshot } from '@scova/db/feedback';
-import type { ApiServices } from '@/app/context.ts';
+import type { ApiServices } from '@/app/services';
 import { createTaskStore } from '@/repo/tasks.ts';
 import { firstRow, requireRow } from '@/utils/database.ts';
 

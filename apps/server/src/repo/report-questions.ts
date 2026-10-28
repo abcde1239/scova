@@ -2,7 +2,7 @@ import { queryRows, sql as querySql, and, eq, isNull, type ReportQuestion } from
 import * as tables from '@scova/db';
 import { createHash } from 'node:crypto';
 import type { QuestionAnswer } from '@scova/models';
-import type { ApiServices } from '@/app/context.ts';
+import type { ApiServices } from '@/app/services';
 import { ApiError } from '@/utils/errors.ts';
 import { createTaskDraftRepo } from '@/repo/task-drafts.ts';
 import { firstRow, requireRow } from '@/utils/database.ts';

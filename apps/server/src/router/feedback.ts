@@ -5,8 +5,9 @@ import {
     FeedbackSchema,
     FeedbackListSchema,
 } from '@scova/models';
-import type { ApiServices } from '@/app/context.ts';
+import type { ApiServices } from '@/app/services';
 import { createFeedbackHandlers } from '@/handler/feedback.ts';
+/* 对任务反馈相关的路由插件 */
 export function createFeedbackPlugin(services: ApiServices) {
     const handlers = createFeedbackHandlers(services);
     const errors = {

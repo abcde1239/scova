@@ -4,7 +4,7 @@ import { firstRow, requireRow } from '../src/utils/database.ts';
 import { createDatabaseClient, connectDatabase, closeDatabase } from '@scova/db';
 import { createObservedDatabase } from './support/query-observer.ts';
 import { afterAll, beforeAll, expect, it } from 'vite-plus/test';
-import { createDefaultServices } from '../src/app/context.ts';
+import { createDefaultServices } from '../src/app/services.ts';
 import { createTaskService } from '../src/service/tasks.ts';
 import { historyFixture, seedHistoryRows } from './support/history-fixture.ts';
 

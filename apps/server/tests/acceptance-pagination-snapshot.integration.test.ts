@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { createDatabaseClient, connectDatabase, closeDatabase } from '@scova/db';
 import { createObservedDatabase } from './support/query-observer.ts';
 import { afterAll, beforeAll, describe, expect, it } from 'vite-plus/test';
-import { createDefaultServices } from '../src/app/context.ts';
+import { createDefaultServices } from '../src/app/services.ts';
 import { createNotificationService } from '../src/service/notifications.ts';
 import { createReportService } from '../src/service/reports.ts';
 import { historyFixture, seedHistoryRows } from './support/history-fixture.ts';

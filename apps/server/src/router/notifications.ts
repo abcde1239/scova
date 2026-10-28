@@ -6,9 +6,9 @@ import {
     NotificationListResponseSchema,
     NotificationPatchInputSchema,
 } from '@scova/models';
-import type { ApiServices } from '@/app/context.ts';
+import type { ApiServices } from '@/app/services';
 import { createNotificationHandlers } from '@/handler/notifications.ts';
-
+/* 消息，通知相关的路由插件 */
 export function createNotificationPlugin(services: ApiServices) {
     const handlers = createNotificationHandlers(services);
     const errors = {

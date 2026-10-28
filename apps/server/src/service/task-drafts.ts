@@ -12,7 +12,7 @@ import {
     withDeadline,
     type StructuredInput,
 } from '@scova/connectors';
-import type { ApiServices } from '@/app/context.ts';
+import type { ApiServices } from '@/app/services';
 import type { AuthenticatedSession } from '@/service/auth.ts';
 import { createTaskDraftRepo, type DraftReservation } from '@/repo/task-drafts.ts';
 import {

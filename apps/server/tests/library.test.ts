@@ -9,7 +9,7 @@ import {
     libraryExcerpt,
 } from '../src/utils/library.ts';
 import { createLibraryService } from '../src/service/library.ts';
-import { createDefaultServices } from '../src/app/context.ts';
+import { createDefaultServices } from '../src/app/services.ts';
 
 const repo = vi.hoisted(() => ({
     target: vi.fn(),

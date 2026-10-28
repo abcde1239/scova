@@ -1,8 +1,8 @@
 import { Elysia } from 'elysia';
 import { ApiErrorSchema, TaskDraftInputSchema, TaskDraftResponseSchema } from '@scova/models';
-import type { ApiServices } from '@/app/context.ts';
+import type { ApiServices } from '@/app/services';
 import { createTaskDraftHandlers } from '@/handler/task-drafts.ts';
-
+/* 规划任务相关的路由插件 */
 export function createTaskDraftPlugin(services: ApiServices) {
     return new Elysia({ name: 'scova-task-drafts', prefix: '/api/v1', normalize: false }).post(
         '/task-drafts',

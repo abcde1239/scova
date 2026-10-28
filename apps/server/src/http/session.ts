@@ -1,6 +1,6 @@
 import { timingSafeEqual } from 'node:crypto';
 import type { SessionResponse } from '@scova/models';
-import type { ApiServices } from '@/app/context.ts';
+import type { ApiServices } from '@/app/services';
 import { createAuthService, type AuthenticatedSession } from '@/service/auth.ts';
 import { ApiError } from '@/utils/errors.ts';
 import { tokenHash } from '@/utils/security.ts';

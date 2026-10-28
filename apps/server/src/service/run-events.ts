@@ -1,5 +1,5 @@
 import { parseContract, RunEventSchema, SseResetControlSchema } from '@scova/models';
-import type { ApiServices } from '@/app/context.ts';
+import type { ApiServices } from '@/app/services';
 import { createRunEventRepository, type EventSession, type EventPage } from '@/repo/run-events.ts';
 import { ApiError } from '@/utils/errors.ts';
 import { isUuid } from '@/utils/security.ts';

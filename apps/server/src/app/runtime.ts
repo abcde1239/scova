@@ -1,5 +1,5 @@
 import { createApiApp } from '@/app/index.ts';
-import { createDefaultServices, type ApiServices } from '@/app/context.ts';
+import { createDefaultServices, type ApiServices } from '@/app/services';
 import { serve } from 'srvx/node';
 
 /** 此处使用node:http，使 Bun/Node运行时均通过 write/drain 传播 socket 背压。后续应该会改 */
