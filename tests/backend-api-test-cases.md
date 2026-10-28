@@ -32,7 +32,7 @@
     3. 对合法任务配置运行运行时解析。
 - **Expected Results**：
     - 三个工作区使用同一字段名、枚举和值域，不存在重复接口定义。
-    - 合法配置解析成功，输出不包含 Prisma 实体内部字段。
+    - 合法配置解析成功，输出不包含数据库实体内部字段。
 - **Postconditions**：无持久化数据。
 
 #### TC-F-002：错误响应协议和字段定位
@@ -335,9 +335,9 @@
 
 ## Notes and Gaps
 
-- 本文件是需求驱动的 QA 设计，不代表这些接口已经实现或所有需求均已验证。“Complete”仅指表内测试设计映射，不能等同测试执行通过。目前 #2 工作区正在建立，API 健康检查和 OpenAPI 入口 smoke 不覆盖账号、任务、数据库、队列或恢复业务；常量/类型断言不得计作这些行为的验证。Prisma migration 尚未落地。
-- 当前可执行的基线命令仍是 `vp check`、`vp test` 和 `vp run ready`；Issue 对应的 `apps/server/tests/*.integration.test.ts`、真实 PostgreSQL/Redis 和 Elysia 注入测试需在后端工作区创建后加入 Vite+ task graph。
-- Swagger 生成器的具体插件版本应与 Elysia/Bun 兼容性 spike 一起锁定；测试只依赖 OpenAPI JSON 行为和中文描述，不预先假定不存在的插件 API。
+- 本文件是早期需求驱动的 QA 设计，“Complete”仅指表内测试设计映射，不等同于测试执行结果。当前后端已实现，业务迁移使用 Drizzle；具体覆盖以 `apps/server/tests/*.integration.test.ts` 和真实执行结果为准。
+- 当前基线命令为 `vp check`、`vp test` 和 `vp run ready`；完整门禁已包含真实 PostgreSQL/Redis、HTTP 与后端集成测试，环境及命令见[后端验收](../docs/public/guides/backend-verification.md)。
+- Swagger 从真实路由生成；通过 `vp run api:openapi:check` 校验文档与运行时契约一致。
 - Redis 队列采用 BullMQ；Redis 只作队列/租约辅助，PostgreSQL 仍是执行事实源。测试必须分别注入数据库成功、队列失败和 worker 迟到三类故障。
 - 真实 Tavily/模型服务不进入默认 CI；连接器烟测单独 opt-in。后端接口测试使用固定演示 provider 或可控 fake，避免费用和不确定网络响应。
 - 实施依赖为 #2 → #3/#4 → #5 → #8 → #10 → #12；#30 依赖 #2/#4，接口实现需满足其文档门禁。#10 实际依赖 #8，不能与 #8 宣称并行完成；DST/计划 occurrence 属 #18，运行时预算属 #14，不计入本批基础 API 的已完成范围。

@@ -78,7 +78,7 @@ export async function readLegacyMigrations(): Promise<LegacyMigration[]> {
         manifest.map(async (entry) => {
             if (!/^\d{14}_[a-z0-9_]+$/.test(entry.name)) throw new Error('非法历史迁移名称');
             const sql = await readFile(
-                new URL(`prisma/migrations/${entry.name}/migration.sql`, root),
+                new URL(`legacy/migrations/${entry.name}/migration.sql`, root),
                 'utf8',
             );
             if (digest(sql) !== entry.hash) throw new Error(`历史迁移校验和改变：${entry.name}`);

@@ -6,7 +6,7 @@ PostgreSQL 表与关系定义在 `packages/db/src/schema.ts`，Server/Worker 通
 
 配置 `DATABASE_URL` 后运行 `vp run db:migrate`，成功后启动 API/Worker，无需生成客户端。迁移使用 `packages/db/drizzle/` 的 SQL/journal 和 `_scova_migrations` 账本，在事务及按数据库/schema 隔离的 advisory lock 内执行，重复执行安全。
 
-已有 Prisma 数据库先验证备份、停止 API/Worker，再运行同一命令。接管前校验八组原迁移的名称、完成状态、已知 checksum，以及实际表、列、类型、默认值、枚举、外键、CHECK、索引与触发器；一致后才登记初始基线，不在存量表重放建表 SQL。原 `_prisma_migrations` 与 `packages/db/prisma/migrations/` 保留审计。只有已知 LF/CRLF 两种行尾校验和等价，其他内容变化仍拒绝。未知、失败、不完整历史或结构漂移会回滚报错，不清库、不自动放行。
+已有 Prisma 数据库先验证备份、停止 API/Worker，再运行同一命令。接管前校验八组原迁移的名称、完成状态、已知 checksum，以及实际表、列、类型、默认值、枚举、外键、CHECK、索引与触发器；一致后才登记初始基线，不在存量表重放建表 SQL。原 `_prisma_migrations` 与 `packages/db/legacy/migrations/` 保留审计，不再维护旧 ORM schema 或工具配置。只有已知 LF/CRLF 两种行尾校验和等价，其他内容变化仍拒绝。未知、失败、不完整历史或结构漂移会回滚报错，不清库、不自动放行。
 
 新变更先修改 schema，再执行 `vp run @scova/db#generate` 生成 SQL/snapshot/journal。配置专用 `SCOVA_TEST_DATABASE_URL` 后运行 `vp run @scova/db#baseline`，通过随机 schema 回滚事务生成候选物理结构基线。审查 SQL、snapshot、journal 和基线后一起提交；不能重写已应用迁移，也不能用 schema push 代替审查。
 

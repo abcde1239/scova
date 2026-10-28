@@ -11,7 +11,7 @@ vp install
 vp run db:migrate
 ```
 
-迁移前配置 `DATABASE_URL`。`?schema=名称` 指定业务 schema，默认 `public`；客户端明确将其转换为 PostgreSQL `search_path`，保留 `application_name`。连接配置见[数据库说明](../../prisma/README.md)。
+迁移前配置 `DATABASE_URL`。`?schema=名称` 指定业务 schema，默认 `public`；客户端明确将其转换为 PostgreSQL `search_path`，保留 `application_name`。连接及升级说明见[数据库参考](../../docs/public/reference/database.md)。
 
 ```ts
 import { createDatabaseClient, closeDatabase, eq, users } from '@scova/db';
@@ -35,7 +35,7 @@ await closeDatabase(db);
 
 空库执行初始 SQL。已有 Prisma 数据库须具有全部合法历史记录，并通过表、列、默认值、枚举、外键、CHECK、索引及触发器的物理结构校验，才能登记基线；外键内部触发器被禁用也会拒绝接管。不会重放建表或修改业务数据。已知 LF/CRLF 校验和均可识别，旧 `_prisma_migrations` 保留。未知历史、未完成迁移或结构漂移明确失败。
 
-`prisma/migrations` 与 `legacy-manifest.json` 只用于不可变历史审计，不需要 Prisma 运行时或生成客户端。`drizzle/` 保存当前 SQL、journal 和 Kit schema snapshot；`schema-baseline.json` 绑定已审查 SQL 的物理结构。正常升级前仍须停止写入，并备份业务库和 checkpoint，参见[部署指南](../../docs/public/guides/deployment.md)。
+`legacy/migrations` 与 `legacy-manifest.json` 用于不可变历史审计和旧库校验，不需要旧 ORM 的 schema、迁移工具或生成客户端。`drizzle/` 保存当前 SQL、journal 和 Kit schema snapshot；`schema-baseline.json` 绑定已审查 SQL 的物理结构。正常升级前仍须停止写入，并备份业务库和 checkpoint，参见[部署指南](../../docs/public/guides/deployment.md)。
 
 新增迁移的开发流程：
 

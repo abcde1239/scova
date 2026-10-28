@@ -35,6 +35,7 @@ catalog:
     vue: ^3.5.44
 overrides:
     vite@*: 'catalog:'
+    # Keep Drizzle's optional Prisma peers excluded from dependency installation.
     'drizzle-orm>@prisma/client': '-'
     'drizzle-orm>prisma': '-'
 peerDependencyRules:
