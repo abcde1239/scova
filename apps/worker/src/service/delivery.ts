@@ -1,21 +1,22 @@
+import { type DatabaseClient, runs as dbRuns, eq, and, reports as dbReports } from '@scova/db';
 import type { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import type { AgentCandidate } from '@scova/agent-core';
-import type { PrismaClient } from '@scova/db';
+
 import { createDeliveryRepository } from '@/repo/delivery.ts';
 import { RunExecutionError, type RunLeaseToken } from '@/utils/runs.ts';
 
 /** Trusted worker only. Reads one explicitly promoted checkpoint, never the latest raw state. */
-export function createDeliveryService(database: PrismaClient, saver: PostgresSaver) {
+export function createDeliveryService(database: DatabaseClient, saver: PostgresSaver) {
     const repository = createDeliveryRepository(database);
     return {
         async deliver(token: RunLeaseToken, candidate: AgentCandidate, deadline = false) {
             if (deadline) return repository.deliver(token, { candidate, deadline });
-            const run = await database.run.findFirst({
-                where: { id: token.runId, userId: token.userId },
+            const run = await database.query.runs.findFirst({
+                where: and(eq(dbRuns.id, token.runId), eq(dbRuns.userId, token.userId)),
             });
             if (!run) throw new RunExecutionError('INVALID_DELIVERY_EVIDENCE');
-            const existing = await database.report.findUnique({
-                where: { userId_runId: { userId: token.userId, runId: token.runId } },
+            const existing = await database.query.reports.findFirst({
+                where: and(eq(dbReports.userId, token.userId), eq(dbReports.runId, token.runId)),
             });
             if (existing) return { reportId: existing.id, reused: true };
             const ref = run.checkpointRef as {

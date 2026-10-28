@@ -1,5 +1,5 @@
+import { createDatabaseClient, closeDatabase, type DatabaseClient } from '@scova/db';
 import { createRequire } from 'node:module';
-import { createDatabaseClient, type PrismaClient } from '@scova/db';
 import type { Redis } from 'ioredis';
 import type { ModelProvider } from '@scova/connectors';
 import {
@@ -22,7 +22,7 @@ export interface AuthRateLimitConfig {
 
 /** 接口文档生成只创建此对象，不构造数据库或 Redis 客户端。 */
 export interface ApiServices {
-    db(): PrismaClient;
+    db(): DatabaseClient;
     redis(): Redis;
     origin: string;
     production: boolean;
@@ -55,7 +55,7 @@ function positiveSetting(name: string, fallback: number): number {
 }
 
 export function createDefaultServices(overrides: ApiServiceOverrides = {}): ApiServices {
-    let database: PrismaClient | undefined;
+    let database: DatabaseClient | undefined;
     let cache: Redis | undefined;
     let draftModel: ModelProvider | null | undefined;
     let questionModel: ModelProvider | null | undefined;
@@ -108,7 +108,7 @@ export function createDefaultServices(overrides: ApiServiceOverrides = {}): ApiS
             (() => {
                 if (!database) {
                     if (!process.env.DATABASE_URL) throw new Error('尚未配置业务数据库');
-                    database = createDatabaseClient();
+                    database = createDatabaseClient({ applicationName: 'scova-api' });
                 }
                 return database;
             }),
@@ -138,7 +138,7 @@ export function createDefaultServices(overrides: ApiServiceOverrides = {}): ApiS
                     return;
                 }
                 const tasks: Promise<unknown>[] = [];
-                if (database) tasks.push(database.$disconnect());
+                if (database) tasks.push(closeDatabase(database));
                 if (cache) {
                     if (cache.status === 'wait' || cache.status === 'end') cache.disconnect();
                     else tasks.push(cache.quit());

@@ -1,15 +1,14 @@
-import { execFileSync } from 'node:child_process';
-import { createRequire } from 'node:module';
+import { migrateDatabase } from '@scova/db/migrate';
+import { createDatabaseClient, connectDatabase, closeDatabase, and, eq } from '@scova/db';
+import * as tables from '@scova/db';
 import { createHash, randomUUID } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
-import { PrismaClient } from '@scova/db';
+
 import { Redis as RedisClient } from 'ioredis';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vite-plus/test';
 import { createApiApp } from '../src/app/index.ts';
 import { createDefaultServices } from '../src/app/context.ts';
+import { firstRow, requireRow } from '../src/utils/database.ts';
 
-const require = createRequire(import.meta.url);
-const root = fileURLToPath(new URL('../../../', import.meta.url));
 const baseUrl =
     process.env.SCOVA_TEST_DATABASE_URL ??
     process.env.RUNTIME_DATABASE_URL ??
@@ -19,7 +18,7 @@ const redisUrl =
 const schema = `scova_reports_${randomUUID().replaceAll('-', '')}`;
 const scopedUrl = new URL(baseUrl);
 scopedUrl.searchParams.set('schema', schema);
-const prisma = new PrismaClient({ datasources: { db: { url: scopedUrl.toString() } } });
+const db = createDatabaseClient({ connectionString: scopedUrl.toString() });
 const admin = new (require('pg').Client)({ connectionString: baseUrl });
 const redis = new RedisClient(redisUrl, {
     lazyConnect: true,
@@ -99,8 +98,9 @@ async function fixture(
         gaps: ['发布时间尚未核验'],
         exhausted: [],
     };
-    const run = await prisma.run.create({
-        data: {
+    const run = await db
+        .insert(tables.runs)
+        .values({
             userId: auth.userId,
             taskId: ownedTask.id,
             taskVersionId: ownedTask.currentVersionId,
@@ -112,16 +112,20 @@ async function fixture(
             usageJson: {},
             outcome: 'inconclusive',
             coverageJson: coverage,
-        },
-    });
+        })
+        .returning()
+        .then(firstRow);
     const url = `https://example.com/${randomUUID()}`;
     const text = '这是完整采集正文。活动日期尚需确认。';
     const quote = text.slice(0, 9);
-    const source = await prisma.source.create({
-        data: { userId: auth.userId, canonicalUrl: url, canonicalUrlHash: sha(url) },
-    });
-    const snapshot = await prisma.sourceSnapshot.create({
-        data: {
+    const source = await db
+        .insert(tables.sources)
+        .values({ userId: auth.userId, canonicalUrl: url, canonicalUrlHash: sha(url) })
+        .returning()
+        .then(firstRow);
+    const snapshot = await db
+        .insert(tables.sourceSnapshots)
+        .values({
             userId: auth.userId,
             sourceId: source.id,
             title: '来源页面',
@@ -137,10 +141,12 @@ async function fixture(
                 truncated: false,
                 untrusted: true,
             },
-        },
-    });
-    await prisma.runSource.create({
-        data: {
+        })
+        .returning()
+        .then(firstRow);
+    await db
+        .insert(tables.runSources)
+        .values({
             userId: auth.userId,
             runId: run.id,
             sourceId: source.id,
@@ -150,14 +156,16 @@ async function fixture(
             observedAt: now,
             fetchStatus: 'succeeded',
             metadataJson: { mode: 'demo', truncated: false },
-        },
-    });
-    const evidence = await prisma.evidence.create({
-        data: {
+        })
+        .returning()
+        .then(firstRow);
+    const evidence = await db
+        .insert(tables.evidence)
+        .values({
             userId: auth.userId,
             runId: run.id,
             snapshotId: snapshot.id,
-            quote,
+            quote: quote,
             quoteHash: sha(quote),
             selectorJson: {
                 type: 'text_offset',
@@ -165,10 +173,12 @@ async function fixture(
                 end: quote.length,
                 extractorVersion: 'reader-v1',
             },
-        },
-    });
-    const report = await prisma.report.create({
-        data: {
+        })
+        .returning()
+        .then(firstRow);
+    const report = await db
+        .insert(tables.reports)
+        .values({
             userId: auth.userId,
             runId: run.id,
             taskId: ownedTask.id,
@@ -179,10 +189,12 @@ async function fixture(
             completeness: 'partial',
             limitationsJson: ['演示资料', '发布时间尚未核验'],
             publishedAt: new Date(now.getTime() + index * 1000),
-        },
-    });
-    const claim = await prisma.claim.create({
-        data: {
+        })
+        .returning()
+        .then(firstRow);
+    const claim = await db
+        .insert(tables.claims)
+        .values({
             userId: auth.userId,
             taskId: ownedTask.id,
             reportId: report.id,
@@ -190,19 +202,24 @@ async function fixture(
             text: quote,
             confidenceLabel: '来自原文',
             order: 0,
-        },
-    });
-    const citation = await prisma.claimEvidence.create({
-        data: {
+        })
+        .returning()
+        .then(firstRow);
+    const citation = await db
+        .insert(tables.claimEvidence)
+        .values({
             userId: auth.userId,
             claimId: claim.id,
             evidenceId: evidence.id,
             relation: 'supports',
-        },
-    });
-    const inbox = await prisma.inboxItem.create({
-        data: { userId: auth.userId, reportId: report.id, createdAt: report.publishedAt },
-    });
+        })
+        .returning()
+        .then(firstRow);
+    const inbox = await db
+        .insert(tables.inboxItems)
+        .values({ userId: auth.userId, reportId: report.id, createdAt: report.publishedAt })
+        .returning()
+        .then(firstRow);
     return {
         task: ownedTask,
         run,
@@ -223,24 +240,8 @@ describe('报告证据与收件箱 API', () => {
         await admin.connect();
         await admin.query(`CREATE SCHEMA "${schema}"`);
         schemaCreated = true;
-        execFileSync(
-            process.execPath,
-            [
-                require.resolve('prisma/build/index.js'),
-                'migrate',
-                'deploy',
-                '--schema',
-                'packages/db/prisma/schema.prisma',
-            ],
-            {
-                cwd: root,
-                env: { ...process.env, DATABASE_URL: scopedUrl.toString() },
-                encoding: 'utf8',
-                windowsHide: true,
-                timeout: 60000,
-            },
-        );
-        await prisma.$connect();
+        await migrateDatabase({ connectionString: scopedUrl.toString() });
+        await connectDatabase(db);
         await redis.connect();
     }, 120000);
     beforeEach(() => {
@@ -253,7 +254,7 @@ describe('报告证据与收件箱 API', () => {
                 registrationEnabled: true,
                 sessionTtlSeconds: 3600,
                 clock: () => now,
-                db: () => prisma,
+                db: () => db,
                 redis: () => redis,
                 rateLimit: {
                     windowSeconds: 60,
@@ -266,7 +267,7 @@ describe('报告证据与收件箱 API', () => {
         );
     });
     afterAll(async () => {
-        await prisma.$disconnect();
+        await closeDatabase(db);
         if (redis.status === 'ready') await redis.quit();
         else redis.disconnect();
         if (schemaCreated) await admin.query(`DROP SCHEMA "${schema}" CASCADE`);
@@ -311,10 +312,12 @@ describe('报告证据与收件箱 API', () => {
             'passwordHash',
         ])
             expect(encoded).not.toContain(forbidden);
-        await prisma.sourceSnapshot.update({
-            where: { id: data.snapshot.id },
-            data: { textBody: null, textExpiresAt: now },
-        });
+        await db
+            .update(tables.sourceSnapshots)
+            .set({ textBody: null, textExpiresAt: now })
+            .where(and(eq(tables.sourceSnapshots.id, data.snapshot.id)))
+            .returning()
+            .then(firstRow);
         expect(await json(await read())).toEqual(body);
     });
 
@@ -373,9 +376,9 @@ describe('报告证据与收件箱 API', () => {
     it('引用显示本轮观测的截断与声明日期，不沿用首次快照元数据', async () => {
         const auth = await register();
         const data = await fixture(auth);
-        await prisma.runSource.update({
-            where: { runId_sourceId: { runId: data.run.id, sourceId: data.source.id } },
-            data: {
+        await db
+            .update(tables.runSources)
+            .set({
                 metadataJson: {
                     mode: 'demo',
                     truncated: true,
@@ -392,8 +395,17 @@ describe('报告证据与收件箱 API', () => {
                         ],
                     },
                 },
-            },
-        });
+            })
+            .where(
+                and(
+                    and(
+                        eq(tables.runSources.runId, data.run.id),
+                        eq(tables.runSources.sourceId, data.source.id),
+                    ),
+                ),
+            )
+            .returning()
+            .then(firstRow);
         const response = await request(`/reports/${data.report.id}`, { headers: headers(auth) });
         expect(response.status).toBe(200);
         const body = await json(response);
@@ -402,8 +414,11 @@ describe('报告证据与收件箱 API', () => {
             publishedAt: '2026-10-25T00:00:00.000Z',
         });
         expect(
-            (await prisma.sourceSnapshot.findUniqueOrThrow({ where: { id: data.snapshot.id } }))
-                .metadataJson,
+            (
+                await db.query.sourceSnapshots
+                    .findFirst({ where: and(eq(tables.sourceSnapshots.id, data.snapshot.id)) })
+                    .then(requireRow)
+            ).metadataJson,
         ).toMatchObject({ truncated: false });
     });
 
@@ -411,9 +426,9 @@ describe('报告证据与收件箱 API', () => {
         const auth = await register();
         const current = await fixture(auth);
         const previous = await fixture(auth, current.task, 1);
-        await prisma.run.update({
-            where: { id: previous.run.id },
-            data: {
+        await db
+            .update(tables.runs)
+            .set({
                 status: reason === 'partial' ? 'partial' : 'succeeded',
                 mode: reason === 'mode' ? 'live' : 'demo',
                 comparisonScopeHash:
@@ -424,28 +439,37 @@ describe('报告证据与收件箱 API', () => {
                     gaps: [],
                     exhausted: [],
                 },
-            },
-        });
+            })
+            .where(and(eq(tables.runs.id, previous.run.id)))
+            .returning()
+            .then(firstRow);
         if (reason === 'scope') {
             // Effective scope is enforced by a composite database foreign key before API mapping.
             await expect(
-                prisma.run.update({
-                    where: { id: current.run.id },
-                    data: { baselineRunId: previous.run.id },
-                }),
-            ).rejects.toMatchObject({ code: 'P2003' });
+                db
+                    .update(tables.runs)
+                    .set({ baselineRunId: previous.run.id })
+                    .where(and(eq(tables.runs.id, current.run.id)))
+                    .returning()
+                    .then(firstRow),
+            ).rejects.toMatchObject({ cause: { code: '23503' } });
             return;
         }
-        await prisma.run.update({
-            where: { id: current.run.id },
-            data: { baselineRunId: previous.run.id },
-        });
-        await prisma.report.update({
-            where: { id: current.report.id },
-            data: { baselineRunId: previous.run.id },
-        });
-        const change = await prisma.changeRecord.create({
-            data: {
+        await db
+            .update(tables.runs)
+            .set({ baselineRunId: previous.run.id })
+            .where(and(eq(tables.runs.id, current.run.id)))
+            .returning()
+            .then(firstRow);
+        await db
+            .update(tables.reports)
+            .set({ baselineRunId: previous.run.id })
+            .where(and(eq(tables.reports.id, current.report.id)))
+            .returning()
+            .then(firstRow);
+        const change = await db
+            .insert(tables.changeRecords)
+            .values({
                 userId: auth.userId,
                 reportId: current.report.id,
                 sourceId: current.source.id,
@@ -458,24 +482,29 @@ describe('报告证据与收件箱 API', () => {
                 newValue: 'new',
                 importance: 'important',
                 reason: '测试非法基线引用',
-            },
-        });
-        await prisma.changeEvidence.create({
-            data: {
+            })
+            .returning()
+            .then(firstRow);
+        await db
+            .insert(tables.changeEvidence)
+            .values({
                 userId: auth.userId,
                 changeRecordId: change.id,
                 evidenceId: previous.evidence.id,
                 side: 'old',
-            },
-        });
-        await prisma.changeEvidence.create({
-            data: {
+            })
+            .returning()
+            .then(firstRow);
+        await db
+            .insert(tables.changeEvidence)
+            .values({
                 userId: auth.userId,
                 changeRecordId: change.id,
                 evidenceId: current.evidence.id,
                 side: 'new',
-            },
-        });
+            })
+            .returning()
+            .then(firstRow);
         const response = await request(`/reports/${current.report.id}`, { headers: headers(auth) });
         expect(response.status).toBe(409);
         expect((await json(response)).code).toBe('INVALID_REPORT_EVIDENCE');
@@ -487,9 +516,9 @@ describe('报告证据与收件箱 API', () => {
             const auth = await register();
             const previous = await fixture(auth);
             const current = await fixture(auth, previous.task, 1);
-            await prisma.run.update({
-                where: { id: previous.run.id },
-                data: {
+            await db
+                .update(tables.runs)
+                .set({
                     status: 'succeeded',
                     outcome: 'baseline',
                     coverageJson: {
@@ -498,31 +527,41 @@ describe('报告证据与收件箱 API', () => {
                         gaps: [],
                         exhausted: [],
                     },
-                },
-            });
-            await prisma.report.update({
-                where: { id: previous.report.id },
-                data: { completeness: 'complete', limitationsJson: [] },
-            });
-            await prisma.run.update({
-                where: { id: current.run.id },
-                data: { baselineRunId: previous.run.id },
-            });
-            await prisma.report.update({
-                where: { id: current.report.id },
-                data: { baselineRunId: previous.run.id },
-            });
+                })
+                .where(and(eq(tables.runs.id, previous.run.id)))
+                .returning()
+                .then(firstRow);
+            await db
+                .update(tables.reports)
+                .set({ completeness: 'complete', limitationsJson: [] })
+                .where(and(eq(tables.reports.id, previous.report.id)))
+                .returning()
+                .then(firstRow);
+            await db
+                .update(tables.runs)
+                .set({ baselineRunId: previous.run.id })
+                .where(and(eq(tables.runs.id, current.run.id)))
+                .returning()
+                .then(firstRow);
+            await db
+                .update(tables.reports)
+                .set({ baselineRunId: previous.run.id })
+                .where(and(eq(tables.reports.id, current.report.id)))
+                .returning()
+                .then(firstRow);
             async function alternateSnapshot(sourceId: string) {
-                return prisma.sourceSnapshot.create({
-                    data: {
+                return db
+                    .insert(tables.sourceSnapshots)
+                    .values({
                         userId: auth.userId,
-                        sourceId,
+                        sourceId: sourceId,
                         title: '另一次正文版本',
                         contentHash: sha(randomUUID()),
                         extractorVersion: 'reader-v1',
                         metadataJson: {},
-                    },
-                });
+                    })
+                    .returning()
+                    .then(firstRow);
             }
             const oldSnapshot =
                 variant === 'old_snapshot'
@@ -532,8 +571,9 @@ describe('报告证据与收件箱 API', () => {
                 variant === 'new_snapshot'
                     ? await alternateSnapshot(current.source.id)
                     : current.snapshot;
-            const change = await prisma.changeRecord.create({
-                data: {
+            const change = await db
+                .insert(tables.changeRecords)
+                .values({
                     userId: auth.userId,
                     reportId: current.report.id,
                     sourceId: variant === 'new_source' ? previous.source.id : current.source.id,
@@ -546,10 +586,12 @@ describe('报告证据与收件箱 API', () => {
                     newValue: current.quote,
                     importance: 'important',
                     reason: '基线与本次事实对比',
-                },
-            });
-            await prisma.changeEvidence.createMany({
-                data: [
+                })
+                .returning()
+                .then(firstRow);
+            await db
+                .insert(tables.changeEvidence)
+                .values([
                     {
                         userId: auth.userId,
                         changeRecordId: change.id,
@@ -562,8 +604,9 @@ describe('报告证据与收件箱 API', () => {
                         evidenceId: current.evidence.id,
                         side: variant === 'reversed' ? 'old' : 'new',
                     },
-                ],
-            });
+                ])
+                .returning({ id: tables.changeEvidence.id })
+                .then((rows) => ({ count: rows.length }));
             const response = await request(`/reports/${current.report.id}`, {
                 headers: headers(auth),
             });
@@ -586,10 +629,12 @@ describe('报告证据与收件箱 API', () => {
         const auth = await register();
         const first = await fixture(auth);
         const second = await fixture(auth, first.task, 1);
-        await prisma.claimEvidence.update({
-            where: { id: first.citation.id },
-            data: { evidenceId: second.evidence.id },
-        });
+        await db
+            .update(tables.claimEvidence)
+            .set({ evidenceId: second.evidence.id })
+            .where(and(eq(tables.claimEvidence.id, first.citation.id)))
+            .returning()
+            .then(firstRow);
         const response = await request(`/reports/${first.report.id}`, { headers: headers(auth) });
         expect(response.status).toBe(409);
         const body = await json(response);
@@ -601,16 +646,18 @@ describe('报告证据与收件箱 API', () => {
     it('损坏的原文指纹与定位不得作为有效引用返回', async () => {
         const auth = await register();
         const data = await fixture(auth);
-        await prisma.evidence.update({
-            where: { id: data.evidence.id },
-            data: { quoteHash: '0'.repeat(64) },
-        });
+        await db
+            .update(tables.evidence)
+            .set({ quoteHash: '0'.repeat(64) })
+            .where(and(eq(tables.evidence.id, data.evidence.id)))
+            .returning()
+            .then(firstRow);
         expect(
             (await request(`/reports/${data.report.id}`, { headers: headers(auth) })).status,
         ).toBe(409);
-        await prisma.evidence.update({
-            where: { id: data.evidence.id },
-            data: {
+        await db
+            .update(tables.evidence)
+            .set({
                 quoteHash: sha(data.quote),
                 selectorJson: {
                     type: 'text_offset',
@@ -618,8 +665,10 @@ describe('报告证据与收件箱 API', () => {
                     end: 100,
                     extractorVersion: 'reader-v1',
                 },
-            },
-        });
+            })
+            .where(and(eq(tables.evidence.id, data.evidence.id)))
+            .returning()
+            .then(firstRow);
         expect(
             (await request(`/reports/${data.report.id}`, { headers: headers(auth) })).status,
         ).toBe(409);
@@ -664,7 +713,9 @@ describe('报告证据与收件箱 API', () => {
         expect((await json(await patch(true))).readAt).toBe(first.readAt);
         expect(
             (
-                await prisma.inboxItem.findUniqueOrThrow({ where: { id: data.inbox.id } })
+                await db.query.inboxItems
+                    .findFirst({ where: and(eq(tables.inboxItems.id, data.inbox.id)) })
+                    .then(requireRow)
             ).readAt?.toISOString(),
         ).toBe(first.readAt);
         expect(

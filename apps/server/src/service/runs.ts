@@ -1,6 +1,6 @@
+import { type Run as StoredRun, type RunEvent as StoredRunEvent } from '@scova/db';
 import { createHash } from 'node:crypto';
 import { effectiveRunScopeHash } from '@scova/shared';
-import type { Run as StoredRun, RunEvent as StoredRunEvent } from '@scova/db';
 import {
     PageQuerySchema,
     RunListResponseSchema,
@@ -61,7 +61,7 @@ function commandBody(input: RunCommandInput | undefined) {
     return { mode: parsed.mode ?? 'demo' } as const;
 }
 
-/** Run 业务规则与事务编排；不包含请求对象、Elysia 或 Prisma 查询。 */
+/** Run 业务规则与事务编排；不包含请求对象、Elysia 或数据库查询。 */
 export function createRunService(services: ApiServices) {
     const repo = createRunRepo(services);
 

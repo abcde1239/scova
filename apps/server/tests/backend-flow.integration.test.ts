@@ -1,3 +1,5 @@
+import { and, eq, exists, count } from '@scova/db';
+import * as tables from '@scova/db';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
@@ -12,6 +14,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vite-plus/test';
 import { parseContract, ReportSchema } from '@scova/models';
 import { nodeScriptCommand } from '../../../scripts/process-runtime.mjs';
 import { outboxDatabase } from '../../worker/tests/support/outbox-database.ts';
+import { requireRow } from '../src/utils/database.ts';
 
 const fixture = outboxDatabase();
 const bun =
@@ -263,26 +266,45 @@ describe('整体后端：真实 HTTP → PostgreSQL Outbox → BullMQ → Run co
                     { 'idempotency-key': `denied-${randomUUID()}` },
                 );
                 expect(denied.status).toBe(404);
-                expect(await fixture.db.run.count({ where: { taskId: task.id } })).toBe(1);
-                expect(await fixture.db.runEvent.count({ where: { runId: first.run.id } })).toBe(1);
                 expect(
-                    await fixture.db.outbox.count({ where: { aggregateId: first.run.id } }),
+                    await fixture.db
+                        .select({ count: count() })
+                        .from(tables.runs)
+                        .where(and(eq(tables.runs.taskId, task.id)))
+                        .then(([row]) => row!.count),
                 ).toBe(1);
-                const initial = await fixture.db.outbox.findFirstOrThrow({
-                    where: { aggregateId: first.run.id },
-                });
+                expect(
+                    await fixture.db
+                        .select({ count: count() })
+                        .from(tables.runEvents)
+                        .where(and(eq(tables.runEvents.runId, first.run.id)))
+                        .then(([row]) => row!.count),
+                ).toBe(1);
+                expect(
+                    await fixture.db
+                        .select({ count: count() })
+                        .from(tables.outbox)
+                        .where(and(eq(tables.outbox.aggregateId, first.run.id)))
+                        .then(([row]) => row!.count),
+                ).toBe(1);
+                const initial = await fixture.db.query.outbox
+                    .findFirst({ where: and(eq(tables.outbox.aggregateId, first.run.id)) })
+                    .then(requireRow);
                 expect(initial.userId).toBe(owner.userId);
                 expect(initial.sentAt).toBeNull();
                 worker = launch('worker', workerRuntime, env);
                 await waitUntil(
                     async () =>
-                        (await fixture.db.outbox.findUniqueOrThrow({ where: { id: initial.id } }))
-                            .sentAt !== null,
+                        (
+                            await fixture.db.query.outbox
+                                .findFirst({ where: and(eq(tables.outbox.id, initial.id)) })
+                                .then(requireRow)
+                        ).sentAt !== null,
                     worker,
                 );
-                const delivered = await fixture.db.outbox.findUniqueOrThrow({
-                    where: { id: initial.id },
-                });
+                const delivered = await fixture.db.query.outbox
+                    .findFirst({ where: and(eq(tables.outbox.id, initial.id)) })
+                    .then(requireRow);
                 expect(delivered.attempts).toBe(1);
                 expect(delivered.leaseExpiresAt).toBeNull();
                 const job = await queue.getJob(`run-${first.run.id}`);
@@ -293,13 +315,19 @@ describe('整体后端：真实 HTTP → PostgreSQL Outbox → BullMQ → Run co
                 });
                 await waitUntil(
                     async () =>
-                        (await fixture.db.run.findUniqueOrThrow({ where: { id: first.run.id } }))
-                            .status === 'partial',
+                        (
+                            await fixture.db.query.runs
+                                .findFirst({ where: and(eq(tables.runs.id, first.run.id)) })
+                                .then(requireRow)
+                        ).status === 'partial',
                     worker,
                 );
                 expect(
-                    (await fixture.db.run.findUniqueOrThrow({ where: { id: first.run.id } }))
-                        .failureCode,
+                    (
+                        await fixture.db.query.runs
+                            .findFirst({ where: and(eq(tables.runs.id, first.run.id)) })
+                            .then(requireRow)
+                    ).failureCode,
                 ).toBeNull();
                 await stop(worker);
                 worker = undefined;
@@ -310,23 +338,28 @@ describe('整体后端：真实 HTTP → PostgreSQL Outbox → BullMQ → Run co
                 await waitUntil(
                     async () =>
                         (
-                            await fixture.db.outbox.findFirstOrThrow({
-                                where: { aggregateId: second.run.id },
-                            })
+                            await fixture.db.query.outbox
+                                .findFirst({
+                                    where: and(eq(tables.outbox.aggregateId, second.run.id)),
+                                })
+                                .then(requireRow)
                         ).sentAt !== null,
                     worker,
                 );
                 await waitUntil(
                     async () =>
-                        (await fixture.db.run.findUniqueOrThrow({ where: { id: second.run.id } }))
-                            .status === 'partial',
+                        (
+                            await fixture.db.query.runs
+                                .findFirst({ where: and(eq(tables.runs.id, second.run.id)) })
+                                .then(requireRow)
+                        ).status === 'partial',
                     worker,
                 );
                 await stop(worker);
                 worker = undefined;
-                const unchanged = await fixture.db.outbox.findUniqueOrThrow({
-                    where: { id: initial.id },
-                });
+                const unchanged = await fixture.db.query.outbox
+                    .findFirst({ where: and(eq(tables.outbox.id, initial.id)) })
+                    .then(requireRow);
                 expect(unchanged.attempts).toBe(delivered.attempts);
                 expect(unchanged.sentAt).toEqual(delivered.sentAt);
                 expect(await startRun(task.id, owner, key)).toMatchObject({
@@ -334,7 +367,11 @@ describe('整体后端：真实 HTTP → PostgreSQL Outbox → BullMQ → Run co
                     run: { id: first.run.id },
                 });
                 expect(
-                    await fixture.db.outbox.count({ where: { aggregateId: first.run.id } }),
+                    await fixture.db
+                        .select({ count: count() })
+                        .from(tables.outbox)
+                        .where(and(eq(tables.outbox.aggregateId, first.run.id)))
+                        .then(([row]) => row!.count),
                 ).toBe(1);
                 const jobs = await queue.getJobs([
                     'wait',
@@ -351,13 +388,23 @@ describe('整体后端：真实 HTTP → PostgreSQL Outbox → BullMQ → Run co
                     jobs.every((item) => [first.run.id, second.run.id].includes(item.data.runId)),
                 ).toBe(true);
                 expect(
-                    await fixture.db.runEvent.count({
-                        where: { runId: first.run.id, type: 'run.completed' },
-                    }),
+                    await fixture.db
+                        .select({ count: count() })
+                        .from(tables.runEvents)
+                        .where(
+                            and(
+                                eq(tables.runEvents.runId, first.run.id),
+                                eq(tables.runEvents.type, 'run.completed'),
+                            ),
+                        )
+                        .then(([row]) => row!.count),
                 ).toBe(1);
                 expect(
-                    (await fixture.db.run.findUniqueOrThrow({ where: { id: first.run.id } }))
-                        .leaseEpoch,
+                    (
+                        await fixture.db.query.runs
+                            .findFirst({ where: and(eq(tables.runs.id, first.run.id)) })
+                            .then(requireRow)
+                    ).leaseEpoch,
                 ).toBe(1);
                 const final = await request(
                     `/api/v1/runs/${first.run.id}`,
@@ -372,16 +419,45 @@ describe('整体后端：真实 HTTP → PostgreSQL Outbox → BullMQ → Run co
                 };
                 expect(result.status).toBe('partial');
                 expect(result.failureCode).toBeNull();
-                expect(await fixture.db.report.count({ where: { runId: first.run.id } })).toBe(1);
                 expect(
-                    await fixture.db.inboxItem.count({
-                        where: { report: { runId: first.run.id } },
-                    }),
+                    await fixture.db
+                        .select({ count: count() })
+                        .from(tables.reports)
+                        .where(and(eq(tables.reports.runId, first.run.id)))
+                        .then(([row]) => row!.count),
                 ).toBe(1);
-                expect(await fixture.db.baseline.count({ where: { taskId: task.id } })).toBe(0);
-                const reportRow = await fixture.db.report.findFirstOrThrow({
-                    where: { runId: first.run.id },
-                });
+                expect(
+                    await fixture.db
+                        .select({ count: count() })
+                        .from(tables.inboxItems)
+                        .where(
+                            and(
+                                exists(
+                                    fixture.db
+                                        .select({ id: tables.reports.id })
+                                        .from(tables.reports)
+                                        .where(
+                                            and(
+                                                eq(tables.inboxItems.userId, tables.reports.userId),
+                                                eq(tables.inboxItems.reportId, tables.reports.id),
+                                                and(eq(tables.reports.runId, first.run.id)),
+                                            ),
+                                        ),
+                                ),
+                            ),
+                        )
+                        .then(([row]) => row!.count),
+                ).toBe(1);
+                expect(
+                    await fixture.db
+                        .select({ count: count() })
+                        .from(tables.baselines)
+                        .where(and(eq(tables.baselines.taskId, task.id)))
+                        .then(([row]) => row!.count),
+                ).toBe(0);
+                const reportRow = await fixture.db.query.reports
+                    .findFirst({ where: and(eq(tables.reports.runId, first.run.id)) })
+                    .then(requireRow);
                 const reportResponse = await request(
                     `/api/v1/reports/${reportRow.id}`,
                     'GET',
@@ -405,9 +481,16 @@ describe('整体后端：真实 HTTP → PostgreSQL Outbox → BullMQ → Run co
                     (await request(`/api/v1/reports/${report.id}`, 'GET', undefined, other)).status,
                 ).toBe(404);
                 expect(
-                    await fixture.db.runEvent.count({
-                        where: { runId: first.run.id, type: 'report.published' },
-                    }),
+                    await fixture.db
+                        .select({ count: count() })
+                        .from(tables.runEvents)
+                        .where(
+                            and(
+                                eq(tables.runEvents.runId, first.run.id),
+                                eq(tables.runEvents.type, 'report.published'),
+                            ),
+                        )
+                        .then(([row]) => row!.count),
                 ).toBe(1);
             } finally {
                 try {

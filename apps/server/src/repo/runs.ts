@@ -1,93 +1,176 @@
-import { Prisma } from '@scova/db';
+import {
+    queryRows,
+    isUniqueConflict,
+    sql as querySql,
+    and,
+    eq,
+    inArray,
+    isNull,
+    desc,
+    type DatabaseExecutor,
+} from '@scova/db';
+import * as tables from '@scova/db';
 import { captureFeedbackSnapshot } from '@scova/db/feedback';
 import type { ApiServices } from '@/app/context.ts';
 import { createTaskStore } from '@/repo/tasks.ts';
+import { firstRow, requireRow } from '@/utils/database.ts';
 
 /** Run、事件、幂等记录与 Outbox 共用同一个事务连接。 */
-function createRunStore(database: Prisma.TransactionClient) {
+function createRunStore(database: DatabaseExecutor) {
     const tasks = createTaskStore(database);
     return {
         feedbackSnapshot(userId: string, taskId: string) {
+            if (!('rollback' in database)) throw new Error('反馈快照必须在事务中读取');
             return captureFeedbackSnapshot(database, userId, taskId);
         },
         lockTask(taskId: string, userId: string) {
-            return database.$queryRaw<{ id: string }[]>`
+            return queryRows<{ id: string }>(
+                database,
+                querySql`
         SELECT id FROM tasks WHERE id = ${taskId}::uuid AND user_id = ${userId}::uuid FOR NO KEY UPDATE
-      `;
+      `,
+            );
         },
         lockRun(runId: string, userId: string) {
-            return database.$queryRaw<{ id: string }[]>`
+            return queryRows<{ id: string }>(
+                database,
+                querySql`
         SELECT id FROM runs WHERE id = ${runId}::uuid AND user_id = ${userId}::uuid FOR UPDATE
-      `;
+      `,
+            );
         },
         async listRuns(userId: string, taskId: string, take: number, cursorId?: string) {
             const boundary = cursorId
-                ? Prisma.sql`AND (queued_at,id)<(SELECT queued_at,id FROM runs WHERE user_id=${userId}::uuid AND task_id=${taskId}::uuid AND id=${cursorId}::uuid)`
-                : Prisma.empty;
-            const ids = await database.$queryRaw<
-                { id: string }[]
-            >`SELECT id FROM runs WHERE user_id=${userId}::uuid AND task_id=${taskId}::uuid ${boundary} ORDER BY queued_at DESC,id DESC LIMIT ${take}`;
-            return database.run.findMany({
-                where: { userId, taskId, id: { in: ids.map((row) => row.id) } },
-                orderBy: [{ queuedAt: 'desc' }, { id: 'desc' }],
+                ? querySql`AND (queued_at,id)<(SELECT queued_at,id FROM runs WHERE user_id=${userId}::uuid AND task_id=${taskId}::uuid AND id=${cursorId}::uuid)`
+                : querySql.empty();
+            const ids = await queryRows<{ id: string }>(
+                database,
+                querySql`SELECT id FROM runs WHERE user_id=${userId}::uuid AND task_id=${taskId}::uuid ${boundary} ORDER BY queued_at DESC,id DESC LIMIT ${take}`,
+            );
+            return database.query.runs.findMany({
+                where: and(
+                    eq(tables.runs.userId, userId),
+                    eq(tables.runs.taskId, taskId),
+                    inArray(
+                        tables.runs.id,
+                        ids.map((row) => row.id),
+                    ),
+                ),
+                orderBy: [desc(tables.runs.queuedAt), desc(tables.runs.id)],
             });
         },
         findQuestion(id: string, userId: string, reportRunId: string) {
-            return database.reportQuestion.findFirst({
-                where: { id, userId, report: { runId: reportRunId, userId } },
-            });
+            return database
+                .select({ question: tables.reportQuestions })
+                .from(tables.reportQuestions)
+                .innerJoin(
+                    tables.reports,
+                    and(
+                        eq(tables.reportQuestions.userId, tables.reports.userId),
+                        eq(tables.reportQuestions.reportId, tables.reports.id),
+                    ),
+                )
+                .where(
+                    and(
+                        eq(tables.reportQuestions.id, id),
+                        eq(tables.reportQuestions.userId, userId),
+                        eq(tables.reports.runId, reportRunId),
+                        eq(tables.reports.userId, userId),
+                    ),
+                )
+                .limit(1)
+                .then((rows) => rows[0]?.question ?? null);
         },
         linkQuestion(id: string, userId: string, runId: string) {
-            return database.reportQuestion.updateMany({
-                where: { id, userId, followupRunId: null },
-                data: { followupRunId: runId },
-            });
+            return database
+                .update(tables.reportQuestions)
+                .set({ followupRunId: runId })
+                .where(
+                    and(
+                        eq(tables.reportQuestions.id, id),
+                        eq(tables.reportQuestions.userId, userId),
+                        isNull(tables.reportQuestions.followupRunId),
+                    ),
+                )
+                .returning()
+                .then((rows) => ({ count: rows.length }));
         },
         findActiveRun(taskId: string, userId: string) {
-            return database.run.findFirst({
-                where: {
-                    taskId,
-                    userId,
-                    status: { in: ['queued', 'running', 'recovering', 'cancel_requested'] },
-                },
-            });
+            return database.query.runs
+                .findFirst({
+                    where: and(
+                        eq(tables.runs.taskId, taskId),
+                        eq(tables.runs.userId, userId),
+                        inArray(tables.runs.status, [
+                            'queued',
+                            'running',
+                            'recovering',
+                            'cancel_requested',
+                        ]),
+                    ),
+                })
+                .then((row) => row ?? null);
         },
         findTask: (...args: Parameters<typeof tasks.findTask>) => tasks.findTask(...args),
         findVersion: (...args: Parameters<typeof tasks.findVersion>) => tasks.findVersion(...args),
         findRun(runId: string, userId: string) {
-            return database.run.findFirst({ where: { id: runId, userId } });
+            return database.query.runs
+                .findFirst({
+                    where: and(eq(tables.runs.id, runId), eq(tables.runs.userId, userId)),
+                })
+                .then((row) => row ?? null);
         },
         requireRun(runId: string, userId: string) {
-            return database.run.findFirstOrThrow({ where: { id: runId, userId } });
+            return database.query.runs
+                .findFirst({
+                    where: and(eq(tables.runs.id, runId), eq(tables.runs.userId, userId)),
+                })
+                .then(requireRow);
         },
         findIdempotency(userId: string, scope: string, keyHash: string) {
-            return database.idempotencyRecord.findUnique({
-                where: { userId_scope_keyHash: { userId, scope, keyHash } },
-            });
+            return database.query.idempotencyRecords
+                .findFirst({
+                    where: and(
+                        and(
+                            eq(tables.idempotencyRecords.userId, userId),
+                            eq(tables.idempotencyRecords.scope, scope),
+                            eq(tables.idempotencyRecords.keyHash, keyHash),
+                        ),
+                    ),
+                })
+                .then((row) => row ?? null);
         },
-        createIdempotency(data: Prisma.IdempotencyRecordUncheckedCreateInput) {
-            return database.idempotencyRecord.create({ data });
+        createIdempotency(data: typeof tables.idempotencyRecords.$inferInsert) {
+            return database
+                .insert(tables.idempotencyRecords)
+                .values(data)
+                .returning()
+                .then(firstRow);
         },
         completeIdempotency(id: string, resourceId: string) {
-            return database.idempotencyRecord.update({
-                where: { id },
-                data: { status: 'completed', responseCode: 202, resourceId },
-            });
+            return database
+                .update(tables.idempotencyRecords)
+                .set({ status: 'completed', responseCode: 202, resourceId: resourceId })
+                .where(and(eq(tables.idempotencyRecords.id, id)))
+                .returning()
+                .then(firstRow);
         },
-        createRun(data: Prisma.RunUncheckedCreateInput) {
-            return database.run.create({ data });
+        createRun(data: typeof tables.runs.$inferInsert) {
+            return database.insert(tables.runs).values(data).returning().then(firstRow);
         },
-        createEvent(data: Prisma.RunEventUncheckedCreateInput) {
-            return database.runEvent.create({ data });
+        createEvent(data: typeof tables.runEvents.$inferInsert) {
+            return database.insert(tables.runEvents).values(data).returning().then(firstRow);
         },
-        createOutbox(data: Prisma.OutboxUncheckedCreateInput) {
-            return database.outbox.create({ data });
+        createOutbox(data: typeof tables.outbox.$inferInsert) {
+            return database.insert(tables.outbox).values(data).returning().then(firstRow);
         },
         requestCancel(runId: string, requestedAt: Date) {
-            return database.run.update({
-                where: { id: runId },
-                data: { status: 'cancel_requested', cancelRequestedAt: requestedAt },
-            });
+            return database
+                .update(tables.runs)
+                .set({ status: 'cancel_requested', cancelRequestedAt: requestedAt })
+                .where(and(eq(tables.runs.id, runId)))
+                .returning()
+                .then(firstRow);
         },
     };
 }
@@ -107,10 +190,10 @@ export function createRunRepo(services: Pick<ApiServices, 'db'>) {
         findIdempotency: (...args: Parameters<RunStore['findIdempotency']>) =>
             createRunStore(services.db()).findIdempotency(...args),
         transaction<T>(work: (store: RunStore) => Promise<T>): Promise<T> {
-            return services.db().$transaction((database) => work(createRunStore(database)));
+            return services.db().transaction((database) => work(createRunStore(database)));
         },
         isUniqueConflict(error: unknown) {
-            return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
+            return isUniqueConflict(error);
         },
     };
 }

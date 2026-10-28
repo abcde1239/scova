@@ -1,3 +1,4 @@
+import { type Note } from '@scova/db';
 import { createHash } from 'node:crypto';
 import {
     BookmarkInputSchema,
@@ -22,7 +23,6 @@ import {
     type LibraryTarget,
 } from '@scova/models';
 import { validatePublication } from '@scova/connectors';
-import type { Note } from '@scova/db';
 import type { ApiServices } from '@/app/context.ts';
 import {
     createLibraryRepo,

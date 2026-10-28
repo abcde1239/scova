@@ -1,8 +1,17 @@
+import { migrateDatabase } from '@scova/db/migrate';
+import {
+    createDatabaseClient,
+    connectDatabase,
+    closeDatabase,
+    and,
+    eq,
+    asc,
+    desc,
+    count,
+} from '@scova/db';
+import * as tables from '@scova/db';
 import { createHash, randomUUID } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
-import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
-import { PrismaClient } from '@scova/db';
+
 import { Redis as RedisClient } from 'ioredis';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vite-plus/test';
 import { Elysia } from 'elysia';
@@ -10,9 +19,8 @@ import { createAuthPlugin } from '../src/router/auth.ts';
 import { requireOwnedTask } from '../src/handler/session.ts';
 import { createApiErrorPlugin } from '../src/app/errors.ts';
 import { createDefaultServices, type ApiServices } from '../src/app/context.ts';
+import { firstRow, requireRow } from '../src/utils/database.ts';
 
-const require = createRequire(import.meta.url);
-const root = fileURLToPath(new URL('../../../', import.meta.url));
 const baseUrl =
     process.env.SCOVA_TEST_DATABASE_URL ??
     process.env.RUNTIME_DATABASE_URL ??
@@ -22,7 +30,7 @@ const redisUrl =
 const schema = `scova_auth_${randomUUID().replaceAll('-', '')}`;
 const scopedUrl = new URL(baseUrl);
 scopedUrl.searchParams.set('schema', schema);
-const prisma = new PrismaClient({ datasources: { db: { url: scopedUrl.toString() } } });
+const db = createDatabaseClient({ connectionString: scopedUrl.toString() });
 const admin = new (require('pg').Client)({ connectionString: baseUrl });
 const redis = new RedisClient(redisUrl, {
     lazyConnect: true,
@@ -57,7 +65,7 @@ function makeServices(overrides: Partial<Parameters<typeof createDefaultServices
         registrationEnabled: true,
         sessionTtlSeconds: 3600,
         clock: () => now,
-        db: () => prisma,
+        db: () => db,
         redis: () => redis,
         rateLimit: {
             windowSeconds: 60,
@@ -86,27 +94,8 @@ describe('邮箱密码认证与租户隔离', () => {
         await admin.connect();
         await admin.query(`CREATE SCHEMA "${schema}"`);
         schemaCreated = true;
-        const migrate = () =>
-            execFileSync(
-                process.execPath,
-                [
-                    require.resolve('prisma/build/index.js'),
-                    'migrate',
-                    'deploy',
-                    '--schema',
-                    'packages/db/prisma/schema.prisma',
-                ],
-                {
-                    cwd: root,
-                    env: { ...process.env, DATABASE_URL: scopedUrl.toString() },
-                    encoding: 'utf8',
-                    windowsHide: true,
-                    timeout: 60000,
-                },
-            );
-        migrate();
-        migrate();
-        await prisma.$connect();
+        await migrateDatabase({ connectionString: scopedUrl.toString() });
+        await connectDatabase(db);
         await redis.connect();
     }, 120000);
 
@@ -117,7 +106,7 @@ describe('邮箱密码认证与租户隔离', () => {
     });
 
     afterAll(async () => {
-        await prisma.$disconnect();
+        await closeDatabase(db);
         await redis.quit();
         if (schemaCreated && /^scova_auth_[0-9a-f]{32}$/.test(schema))
             await admin.query(`DROP SCHEMA "${schema}" CASCADE`);
@@ -133,10 +122,10 @@ describe('邮箱密码认证与租户隔离', () => {
         expect(body).not.toHaveProperty('sessionToken');
         const cookie = cookieHeader(response);
         expect(cookie).toMatch(/^scova_session=[A-Za-z0-9_-]{43}$/);
-        const session = await prisma.session.findFirstOrThrow();
+        const session = await db.query.sessions.findFirst({}).then(requireRow);
         expect(session.tokenHash).toMatch(/^[0-9a-f]{64}$/);
         expect(session.tokenHash).not.toBe(cookie.split('=')[1]);
-        const user = await prisma.user.findFirstOrThrow();
+        const user = await db.query.users.findFirst({}).then(requireRow);
         expect(user.passwordHash).toMatch(/^\$argon2id\$/);
         expect(user.passwordHash).not.toContain(registerBody().password);
     });
@@ -147,7 +136,13 @@ describe('邮箱密码认证与租户隔离', () => {
         const duplicate = await register(email.toUpperCase());
         expect(duplicate.status).toBe(409);
         expect((await responseJson(duplicate)).code).toBe('EMAIL_ALREADY_REGISTERED');
-        expect(await prisma.user.count({ where: { normalizedEmail: email } })).toBe(1);
+        expect(
+            await db
+                .select({ count: count() })
+                .from(tables.users)
+                .where(and(eq(tables.users.normalizedEmail, email)))
+                .then(([row]) => row!.count),
+        ).toBe(1);
     });
 
     it('登录错误使用同样的 Argon2id 校验，重复错误在 Redis 固定窗口后429', async () => {
@@ -227,25 +222,36 @@ describe('邮箱密码认证与租户隔离', () => {
         expect(
             (await responseJson(await request('/api/v1/me', { headers: { cookie } }))).csrfToken,
         ).toBe(csrf);
-        const task = await prisma.task.create({
-            data: { userId: (await prisma.user.findFirstOrThrow()).id, title: '版本不回写' },
-        });
-        const version = await prisma.taskVersion.create({
-            data: {
+        const task = await db
+            .insert(tables.tasks)
+            .values({
+                userId: (await db.query.users.findFirst({}).then(requireRow)).id,
+                title: '版本不回写',
+            })
+            .returning()
+            .then(firstRow);
+        const version = await db
+            .insert(tables.taskVersions)
+            .values({
                 userId: task.userId,
                 taskId: task.id,
                 version: 1,
                 configJson: { timezone: 'Asia/Shanghai' },
                 comparisonScopeHash: hashText('scope'),
-            },
-        });
+            })
+            .returning()
+            .then(firstRow);
         await request('/api/v1/me/preferences', {
             method: 'PATCH',
             headers: headers({ cookie, 'x-csrf-token': csrf }),
             body: JSON.stringify({ defaultTimezone: 'America/New_York' }),
         });
         expect(
-            (await prisma.taskVersion.findUniqueOrThrow({ where: { id: version.id } })).configJson,
+            (
+                await db.query.taskVersions
+                    .findFirst({ where: and(eq(tables.taskVersions.id, version.id)) })
+                    .then(requireRow)
+            ).configJson,
         ).toEqual({ timezone: 'Asia/Shanghai' });
     });
 
@@ -277,7 +283,9 @@ describe('邮箱密码认证与租户隔离', () => {
         const setCookie = response.headers.get('set-cookie') ?? '';
         expect(setCookie).toContain('Secure');
         expect(setCookie).not.toContain('Domain=');
-        const session = await prisma.session.findFirstOrThrow({ orderBy: { createdAt: 'desc' } });
+        const session = await db.query.sessions
+            .findFirst({ orderBy: [desc(tables.sessions.createdAt)] })
+            .then(requireRow);
         expect(setCookie).not.toContain(session.tokenHash);
     });
 
@@ -286,18 +294,25 @@ describe('邮箱密码认证与租户隔离', () => {
         const oneCookie = cookieHeader(one);
         const two = await register();
         expect(two.status).toBe(201);
-        const users = await prisma.user.findMany({ orderBy: { createdAt: 'asc' } });
-        const task = await prisma.task.create({
-            data: { userId: users[0]!.id, title: '私有任务' },
-        });
-        const firstSession = await services.db().session.findFirstOrThrow({
-            where: { userId: users[0]!.id },
-            include: { owner: true },
-        });
-        const raw = await prisma.session.findFirstOrThrow({
-            where: { userId: users[1]!.id },
-            include: { owner: true },
-        });
+        const users = await db.query.users.findMany({ orderBy: [asc(tables.users.createdAt)] });
+        const task = await db
+            .insert(tables.tasks)
+            .values({ userId: users[0]!.id, title: '私有任务' })
+            .returning()
+            .then(firstRow);
+        const firstSession = await services
+            .db()
+            .query.sessions.findFirst({
+                where: and(eq(tables.sessions.userId, users[0]!.id)),
+                with: { owner: true },
+            })
+            .then(requireRow);
+        const raw = await db.query.sessions
+            .findFirst({
+                where: and(eq(tables.sessions.userId, users[1]!.id)),
+                with: { owner: true },
+            })
+            .then(requireRow);
         const token = randomUUID();
         expect(raw.tokenHash).not.toBe(token);
         await expect(

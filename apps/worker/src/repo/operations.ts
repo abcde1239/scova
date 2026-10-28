@@ -1,4 +1,4 @@
-import { readdir } from 'node:fs/promises';
+import { verifyDatabase } from '@scova/db/migrate';
 import type pg from 'pg';
 import type { OutboxMessage } from '@/utils/outbox.ts';
 import { installedCheckpointVersion } from '@/utils/checkpoint-version.ts';
@@ -39,29 +39,9 @@ export function createOperationRepository(pool: pg.Pool, config: OperationConfig
     }
     return {
         async readiness() {
+            await verifyDatabase({ connectionString: config.databaseUrl });
             const client = await pool.connect();
             try {
-                const migrations =
-                    await client.query(`SELECT migration_name FROM ${business}._prisma_migrations
-          WHERE finished_at IS NULL AND rolled_back_at IS NULL`);
-                if (migrations.rowCount) throw new Error('业务迁移尚未完成');
-                const expected = (
-                    await readdir(
-                        new URL('../../../../packages/db/prisma/migrations/', import.meta.url),
-                        { withFileTypes: true },
-                    )
-                )
-                    .filter((entry) => entry.isDirectory())
-                    .map((entry) => entry.name);
-                const applied = await client.query(
-                    `SELECT migration_name FROM ${business}._prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL`,
-                );
-                if (
-                    expected.some(
-                        (name) => !applied.rows.some((row) => row.migration_name === name),
-                    )
-                )
-                    throw new Error('业务迁移缺失');
                 // The migration job records the exact installed saver package version.
                 const ready = await client.query(
                     `SELECT version FROM ${agent}.scova_schema_version WHERE id = 1`,

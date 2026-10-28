@@ -1,7 +1,27 @@
+import { requiredDatabaseValue } from '@/utils/database.ts';
+import {
+    createDatabaseClient,
+    connectDatabase,
+    tasks as dbTasks,
+    closeDatabase,
+    sql,
+    queryRows,
+    users as dbUsers,
+    taskVersions as dbTaskVersions,
+    eq,
+    runs as dbRuns,
+    scheduleOccurrences as dbScheduleOccurrences,
+    runEvents as dbRunEvents,
+    and,
+    count as dbCount,
+    outbox as dbOutbox,
+    reports as dbReports,
+    baselines as dbBaselines,
+} from '@scova/db';
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { PrismaClient } from '@scova/db';
+
 import { dueSchedule, effectiveRunScopeHash, resolveScheduledDate } from '@scova/shared';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vite-plus/test';
 import { createSchedulerRepository } from '../src/repo/scheduler.ts';
@@ -13,17 +33,21 @@ import { nodeScriptCommand } from '../../../scripts/process-runtime.mjs';
 const fixture = outboxDatabase();
 const db = fixture.db;
 const repository = createSchedulerRepository(db);
-const competitor = new PrismaClient({ datasources: { db: { url: fixture.databaseUrl } } });
+const competitor = createDatabaseClient({ connectionString: fixture.databaseUrl });
 const second = createSchedulerRepository(competitor);
 beforeAll(async () => {
     await fixture.setup();
-    await competitor.$connect();
+    await connectDatabase(competitor);
 }, 120_000);
 afterEach(async () => {
-    await db.task.updateMany({ data: { nextRunAt: null } });
+    await db
+        .update(dbTasks)
+        .set({ nextRunAt: null })
+        .returning({ id: dbTasks.id })
+        .then((rows) => ({ count: rows.length }));
 });
 afterAll(async () => {
-    await competitor.$disconnect();
+    await closeDatabase(competitor);
     await fixture.cleanup();
 });
 
@@ -35,7 +59,7 @@ function deferred() {
     return { promise, resolve };
 }
 async function databaseNow() {
-    const [row] = await db.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`;
+    const [row] = await queryRows<{ now: Date }>(db, sql`SELECT clock_timestamp() AS now`);
     return row!.now;
 }
 async function seed(daysAgo = 0) {
@@ -48,30 +72,42 @@ async function seed(daysAgo = 0) {
         schedule: { frequency: 'daily' as const, localTime: '00:00' },
     };
     const email = `${randomUUID()}@example.test`;
-    const user = await db.user.create({
-        data: { email, normalizedEmail: email, passwordHash: 'test' },
-    });
-    const task = await db.task.create({
-        data: { userId: user.id, title: config.title, nextRunAt: firstDue },
-    });
-    const version = await db.taskVersion.create({
-        data: {
+    const user = await db
+        .insert(dbUsers)
+        .values({ email: email, normalizedEmail: email, passwordHash: 'test' })
+        .returning()
+        .then((rows) => requiredDatabaseValue(rows[0]));
+    const task = await db
+        .insert(dbTasks)
+        .values({ userId: user.id, title: config.title, nextRunAt: firstDue })
+        .returning()
+        .then((rows) => requiredDatabaseValue(rows[0]));
+    const version = await db
+        .insert(dbTaskVersions)
+        .values({
             userId: user.id,
             taskId: task.id,
             version: 1,
             configJson: config,
             comparisonScopeHash: 'a'.repeat(64),
-        },
-    });
-    await db.task.update({ where: { id: task.id }, data: { currentVersionId: version.id } });
+        })
+        .returning()
+        .then((rows) => requiredDatabaseValue(rows[0]));
+    await db
+        .update(dbTasks)
+        .set({ currentVersionId: version.id })
+        .where(eq(dbTasks.id, task.id))
+        .returning()
+        .then((rows) => requiredDatabaseValue(rows[0]));
     return { user, task, version, config, today, firstDue };
 }
 async function activeRun(
     data: Awaited<ReturnType<typeof seed>>,
     status: 'queued' | 'running' | 'recovering' | 'cancel_requested' = 'queued',
 ) {
-    return db.run.create({
-        data: {
+    return db
+        .insert(dbRuns)
+        .values({
             userId: data.user.id,
             taskId: data.task.id,
             taskVersionId: data.version.id,
@@ -80,9 +116,10 @@ async function activeRun(
             trigger: 'manual',
             budgetJson: data.config.budget,
             usageJson: emptyUsage(),
-            status,
-        },
-    });
+            status: status,
+        })
+        .returning()
+        .then((rows) => requiredDatabaseValue(rows[0]));
 }
 
 describe('PostgreSQL 周期调度事务', () => {
@@ -124,10 +161,12 @@ describe('PostgreSQL 周期调度事务', () => {
             second.scheduleNext('demo', []),
         ]);
         expect(results.filter(Boolean)).toHaveLength(1);
-        const occurrence = await db.scheduleOccurrence.findFirstOrThrow({
-            where: { taskId: s.task.id },
-        });
-        const run = await db.run.findFirstOrThrow({ where: { taskId: s.task.id } });
+        const occurrence = await db.query.scheduleOccurrences
+            .findFirst({ where: eq(dbScheduleOccurrences.taskId, s.task.id) })
+            .then((row) => requiredDatabaseValue(row));
+        const run = await db.query.runs
+            .findFirst({ where: eq(dbRuns.taskId, s.task.id) })
+            .then((row) => requiredDatabaseValue(row));
         expect(occurrence).toMatchObject({
             scheduledAt: s.today,
             scheduleRevision: 1,
@@ -145,12 +184,38 @@ describe('PostgreSQL 周期调度事务', () => {
             comparisonScopeHash: effectiveRunScopeHash(s.version.comparisonScopeHash, 'demo'),
         });
         expect(
-            await db.runEvent.count({ where: { runId: run.id, seq: 1, type: 'run.queued' } }),
+            await db
+                .select({ count: dbCount() })
+                .from(dbRunEvents)
+                .where(
+                    and(
+                        eq(dbRunEvents.runId, run.id),
+                        eq(dbRunEvents.seq, 1),
+                        eq(dbRunEvents.type, 'run.queued'),
+                    ),
+                )
+                .then((rows) => rows[0]!.count),
         ).toBe(1);
-        expect(await db.outbox.count({ where: { aggregateId: run.id } })).toBe(1);
-        expect(await db.report.count({ where: { runId: run.id } })).toBe(0);
         expect(
-            (await db.task.findUniqueOrThrow({ where: { id: s.task.id } })).nextRunAt!.getTime(),
+            await db
+                .select({ count: dbCount() })
+                .from(dbOutbox)
+                .where(eq(dbOutbox.aggregateId, run.id))
+                .then((rows) => rows[0]!.count),
+        ).toBe(1);
+        expect(
+            await db
+                .select({ count: dbCount() })
+                .from(dbReports)
+                .where(eq(dbReports.runId, run.id))
+                .then((rows) => rows[0]!.count),
+        ).toBe(0);
+        expect(
+            (
+                await db.query.tasks
+                    .findFirst({ where: eq(dbTasks.id, s.task.id) })
+                    .then((row) => requiredDatabaseValue(row))
+            ).nextRunAt!.getTime(),
         ).toBeGreaterThan((await databaseNow()).getTime());
         expect(await repository.scheduleNext('demo', [])).toBeNull();
     });
@@ -205,12 +270,38 @@ describe('PostgreSQL 周期调度事务', () => {
             const result = first ?? (await repository.scheduleNext('demo', []));
             expect(result?.status).toMatch(/^(created|skipped_overlap)$/);
             const manual = JSON.parse(stdout) as { run: { id: string }; reused: boolean };
-            const run = await db.run.findFirstOrThrow({ where: { taskId: s.task.id } });
+            const run = await db.query.runs
+                .findFirst({ where: eq(dbRuns.taskId, s.task.id) })
+                .then((row) => requiredDatabaseValue(row));
             expect(run.id).toBe(manual.run.id);
-            expect(await db.run.count({ where: { taskId: s.task.id } })).toBe(1);
-            expect(await db.runEvent.count({ where: { runId: run.id } })).toBe(1);
-            expect(await db.outbox.count({ where: { aggregateId: run.id } })).toBe(1);
-            expect(await db.scheduleOccurrence.count({ where: { taskId: s.task.id } })).toBe(1);
+            expect(
+                await db
+                    .select({ count: dbCount() })
+                    .from(dbRuns)
+                    .where(eq(dbRuns.taskId, s.task.id))
+                    .then((rows) => rows[0]!.count),
+            ).toBe(1);
+            expect(
+                await db
+                    .select({ count: dbCount() })
+                    .from(dbRunEvents)
+                    .where(eq(dbRunEvents.runId, run.id))
+                    .then((rows) => rows[0]!.count),
+            ).toBe(1);
+            expect(
+                await db
+                    .select({ count: dbCount() })
+                    .from(dbOutbox)
+                    .where(eq(dbOutbox.aggregateId, run.id))
+                    .then((rows) => rows[0]!.count),
+            ).toBe(1);
+            expect(
+                await db
+                    .select({ count: dbCount() })
+                    .from(dbScheduleOccurrences)
+                    .where(eq(dbScheduleOccurrences.taskId, s.task.id))
+                    .then((rows) => rows[0]!.count),
+            ).toBe(1);
             expect(manual.reused).toBe(result?.status === 'created');
         } finally {
             if (child.connected) child.disconnect();
@@ -224,14 +315,14 @@ describe('PostgreSQL 周期调度事务', () => {
         const available = await seed();
         const entered = deferred();
         const release = deferred();
-        const holding = competitor.$transaction(
-            async (tx) => {
-                await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${locked.task.id}::uuid FOR NO KEY UPDATE`;
-                entered.resolve();
-                await release.promise;
-            },
-            { timeout: 10_000 },
-        );
+        const holding = competitor.transaction(async (tx) => {
+            await queryRows<Record<string, unknown>>(
+                tx,
+                sql`SELECT id FROM tasks WHERE id = ${locked.task.id}::uuid FOR NO KEY UPDATE`,
+            );
+            entered.resolve();
+            await release.promise;
+        });
         await entered.promise;
         try {
             expect(await repository.scheduleNext('demo', [])).toMatchObject({
@@ -239,23 +330,47 @@ describe('PostgreSQL 周期调度事务', () => {
                 status: 'created',
             });
             expect(await repository.scheduleNext('demo', [])).toBeNull();
-            expect(await db.run.count({ where: { taskId: locked.task.id } })).toBe(0);
+            expect(
+                await db
+                    .select({ count: dbCount() })
+                    .from(dbRuns)
+                    .where(eq(dbRuns.taskId, locked.task.id))
+                    .then((rows) => rows[0]!.count),
+            ).toBe(0);
         } finally {
             release.resolve();
             await holding;
         }
         await Promise.all([repository.scheduleNext('demo', []), second.scheduleNext('demo', [])]);
-        expect(await db.scheduleOccurrence.count({ where: { taskId: locked.task.id } })).toBe(1);
+        expect(
+            await db
+                .select({ count: dbCount() })
+                .from(dbScheduleOccurrences)
+                .where(eq(dbScheduleOccurrences.taskId, locked.task.id))
+                .then((rows) => rows[0]!.count),
+        ).toBe(1);
     });
 
     it('多日停机只补最近一次，较早时点记录 missedCount，live 模式显式快照', async () => {
         const s = await seed(7);
         expect(await repository.scheduleNext('live', [])).toMatchObject({ status: 'created' });
         expect(
-            await db.scheduleOccurrence.findFirstOrThrow({ where: { taskId: s.task.id } }),
+            await db.query.scheduleOccurrences
+                .findFirst({ where: eq(dbScheduleOccurrences.taskId, s.task.id) })
+                .then((row) => requiredDatabaseValue(row)),
         ).toMatchObject({ scheduledAt: s.today, missedCount: 7 });
-        expect(await db.run.count({ where: { taskId: s.task.id } })).toBe(1);
-        expect(await db.run.findFirstOrThrow({ where: { taskId: s.task.id } })).toMatchObject({
+        expect(
+            await db
+                .select({ count: dbCount() })
+                .from(dbRuns)
+                .where(eq(dbRuns.taskId, s.task.id))
+                .then((rows) => rows[0]!.count),
+        ).toBe(1);
+        expect(
+            await db.query.runs
+                .findFirst({ where: eq(dbRuns.taskId, s.task.id) })
+                .then((row) => requiredDatabaseValue(row)),
+        ).toMatchObject({
             mode: 'live',
             comparisonScopeHash: effectiveRunScopeHash(s.version.comparisonScopeHash, 'live'),
         });
@@ -264,21 +379,53 @@ describe('PostgreSQL 周期调度事务', () => {
     it('同计划时点重放复用 Occurrence；新 scheduleRevision 拥有独立唯一键', async () => {
         const s = await seed();
         await repository.scheduleNext('demo', []);
-        const first = await db.run.findFirstOrThrow({ where: { taskId: s.task.id } });
-        await db.run.update({
-            where: { id: first.id },
-            data: { status: 'failed', failureCode: 'TEST_DONE' },
-        });
-        await db.task.update({ where: { id: s.task.id }, data: { nextRunAt: s.firstDue } });
+        const first = await db.query.runs
+            .findFirst({ where: eq(dbRuns.taskId, s.task.id) })
+            .then((row) => requiredDatabaseValue(row));
+        await db
+            .update(dbRuns)
+            .set({ status: 'failed', failureCode: 'TEST_DONE' })
+            .where(eq(dbRuns.id, first.id))
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
+        await db
+            .update(dbTasks)
+            .set({ nextRunAt: s.firstDue })
+            .where(eq(dbTasks.id, s.task.id))
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
         expect(await repository.scheduleNext('demo', [])).toMatchObject({ status: 'reused' });
-        expect(await db.run.count({ where: { taskId: s.task.id } })).toBe(1);
-        await db.task.update({
-            where: { id: s.task.id },
-            data: { nextRunAt: s.firstDue, scheduleRevision: { increment: 1 } },
-        });
+        expect(
+            await db
+                .select({ count: dbCount() })
+                .from(dbRuns)
+                .where(eq(dbRuns.taskId, s.task.id))
+                .then((rows) => rows[0]!.count),
+        ).toBe(1);
+        await db
+            .update(dbTasks)
+            .set({
+                nextRunAt: s.firstDue,
+                scheduleRevision: sql`${dbTasks.scheduleRevision} + ${1}`,
+            })
+            .where(eq(dbTasks.id, s.task.id))
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
         expect(await repository.scheduleNext('demo', [])).toMatchObject({ status: 'created' });
-        expect(await db.scheduleOccurrence.count({ where: { taskId: s.task.id } })).toBe(2);
-        expect(await db.run.count({ where: { taskId: s.task.id } })).toBe(2);
+        expect(
+            await db
+                .select({ count: dbCount() })
+                .from(dbScheduleOccurrences)
+                .where(eq(dbScheduleOccurrences.taskId, s.task.id))
+                .then((rows) => rows[0]!.count),
+        ).toBe(2);
+        expect(
+            await db
+                .select({ count: dbCount() })
+                .from(dbRuns)
+                .where(eq(dbRuns.taskId, s.task.id))
+                .then((rows) => rows[0]!.count),
+        ).toBe(2);
     });
 
     it('未来计划与已取消 signal 不领取任务', async () => {
@@ -286,12 +433,20 @@ describe('PostgreSQL 周期调度事务', () => {
         const controller = new AbortController();
         controller.abort();
         expect(await repository.scheduleNext('demo', [], controller.signal)).toBeNull();
-        await db.task.update({
-            where: { id: s.task.id },
-            data: { nextRunAt: new Date(s.today.getTime() + 86_400_000) },
-        });
+        await db
+            .update(dbTasks)
+            .set({ nextRunAt: new Date(s.today.getTime() + 86_400_000) })
+            .where(eq(dbTasks.id, s.task.id))
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
         expect(await repository.scheduleNext('demo', [])).toBeNull();
-        expect(await db.scheduleOccurrence.count({ where: { taskId: s.task.id } })).toBe(0);
+        expect(
+            await db
+                .select({ count: dbCount() })
+                .from(dbScheduleOccurrences)
+                .where(eq(dbScheduleOccurrences.taskId, s.task.id))
+                .then((rows) => rows[0]!.count),
+        ).toBe(0);
     });
 
     it.each(['queued', 'running', 'recovering', 'cancel_requested'] as const)(
@@ -303,40 +458,91 @@ describe('PostgreSQL 周期调度事务', () => {
                 status: 'skipped_overlap',
             });
             expect(
-                await db.scheduleOccurrence.findFirstOrThrow({ where: { taskId: s.task.id } }),
+                await db.query.scheduleOccurrences
+                    .findFirst({ where: eq(dbScheduleOccurrences.taskId, s.task.id) })
+                    .then((row) => requiredDatabaseValue(row)),
             ).toMatchObject({ status: 'skipped_overlap', runId: null, missedCount: 2 });
-            expect(await db.run.count({ where: { taskId: s.task.id } })).toBe(1);
-            expect((await db.run.findUniqueOrThrow({ where: { id: run.id } })).status).toBe(status);
+            expect(
+                await db
+                    .select({ count: dbCount() })
+                    .from(dbRuns)
+                    .where(eq(dbRuns.taskId, s.task.id))
+                    .then((rows) => rows[0]!.count),
+            ).toBe(1);
+            expect(
+                (
+                    await db.query.runs
+                        .findFirst({ where: eq(dbRuns.id, run.id) })
+                        .then((row) => requiredDatabaseValue(row))
+                ).status,
+            ).toBe(status);
         },
     );
 
     it.each(['paused', 'archived'] as const)('%s 不创建调度，也不终止当前执行', async (status) => {
         const s = await seed();
         const run = await activeRun(s, 'running');
-        await db.task.update({ where: { id: s.task.id }, data: { status } });
+        await db
+            .update(dbTasks)
+            .set({ status: status })
+            .where(eq(dbTasks.id, s.task.id))
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
         expect(await repository.scheduleNext('demo', [])).toBeNull();
-        expect(await db.scheduleOccurrence.count({ where: { taskId: s.task.id } })).toBe(0);
-        expect((await db.run.findUniqueOrThrow({ where: { id: run.id } })).status).toBe('running');
+        expect(
+            await db
+                .select({ count: dbCount() })
+                .from(dbScheduleOccurrences)
+                .where(eq(dbScheduleOccurrences.taskId, s.task.id))
+                .then((rows) => rows[0]!.count),
+        ).toBe(0);
+        expect(
+            (
+                await db.query.runs
+                    .findFirst({ where: eq(dbRuns.id, run.id) })
+                    .then((row) => requiredDatabaseValue(row))
+            ).status,
+        ).toBe('running');
     });
 
     it('Outbox SQL 失败使 Occurrence/Run/事件和 nextRunAt 一起回滚', async () => {
         const s = await seed();
-        await db.$executeRawUnsafe(
-            `CREATE FUNCTION scheduler_fail_outbox() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.payload->>'taskId' = '${s.task.id}' THEN RAISE EXCEPTION 'scheduler rollback test'; END IF; RETURN NEW; END $$`,
+        await db.execute(
+            sql.raw(
+                `CREATE FUNCTION scheduler_fail_outbox() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.payload->>'taskId' = '${s.task.id}' THEN RAISE EXCEPTION 'scheduler rollback test'; END IF; RETURN NEW; END $$`,
+            ),
         );
-        await db.$executeRawUnsafe(
-            'CREATE TRIGGER scheduler_fail_outbox BEFORE INSERT ON outbox FOR EACH ROW EXECUTE FUNCTION scheduler_fail_outbox()',
+        await db.execute(
+            sql.raw(
+                'CREATE TRIGGER scheduler_fail_outbox BEFORE INSERT ON outbox FOR EACH ROW EXECUTE FUNCTION scheduler_fail_outbox()',
+            ),
         );
         try {
             await expect(repository.scheduleNext('demo', [])).rejects.toThrow('调度任务事务失败');
-            expect(await db.scheduleOccurrence.count({ where: { taskId: s.task.id } })).toBe(0);
-            expect(await db.run.count({ where: { taskId: s.task.id } })).toBe(0);
             expect(
-                (await db.task.findUniqueOrThrow({ where: { id: s.task.id } })).nextRunAt,
+                await db
+                    .select({ count: dbCount() })
+                    .from(dbScheduleOccurrences)
+                    .where(eq(dbScheduleOccurrences.taskId, s.task.id))
+                    .then((rows) => rows[0]!.count),
+            ).toBe(0);
+            expect(
+                await db
+                    .select({ count: dbCount() })
+                    .from(dbRuns)
+                    .where(eq(dbRuns.taskId, s.task.id))
+                    .then((rows) => rows[0]!.count),
+            ).toBe(0);
+            expect(
+                (
+                    await db.query.tasks
+                        .findFirst({ where: eq(dbTasks.id, s.task.id) })
+                        .then((row) => requiredDatabaseValue(row))
+                ).nextRunAt,
             ).toEqual(s.firstDue);
         } finally {
-            await db.$executeRawUnsafe('DROP TRIGGER scheduler_fail_outbox ON outbox');
-            await db.$executeRawUnsafe('DROP FUNCTION scheduler_fail_outbox()');
+            await db.execute(sql.raw('DROP TRIGGER scheduler_fail_outbox ON outbox'));
+            await db.execute(sql.raw('DROP FUNCTION scheduler_fail_outbox()'));
         }
         expect(await repository.scheduleNext('demo', [])).toMatchObject({ status: 'created' });
     });
@@ -344,14 +550,35 @@ describe('PostgreSQL 周期调度事务', () => {
     it('坏配置不堵住同批其他任务，并保留坏任务 nextRunAt 供后续修复', async () => {
         const bad = await seed(10);
         const good = await seed();
-        await db.taskVersion.update({ where: { id: bad.version.id }, data: { configJson: {} } });
+        await db
+            .update(dbTaskVersions)
+            .set({ configJson: {} })
+            .where(eq(dbTaskVersions.id, bad.version.id))
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
         const service = new SchedulerService({ repository, mode: 'demo', concurrency: 1 });
         await expect(service.scheduleOnce(5)).rejects.toThrow('调度批次部分任务失败');
-        expect(await db.run.count({ where: { taskId: good.task.id } })).toBe(1);
-        expect(await db.run.count({ where: { taskId: bad.task.id } })).toBe(0);
-        expect((await db.task.findUniqueOrThrow({ where: { id: bad.task.id } })).nextRunAt).toEqual(
-            bad.firstDue,
-        );
+        expect(
+            await db
+                .select({ count: dbCount() })
+                .from(dbRuns)
+                .where(eq(dbRuns.taskId, good.task.id))
+                .then((rows) => rows[0]!.count),
+        ).toBe(1);
+        expect(
+            await db
+                .select({ count: dbCount() })
+                .from(dbRuns)
+                .where(eq(dbRuns.taskId, bad.task.id))
+                .then((rows) => rows[0]!.count),
+        ).toBe(0);
+        expect(
+            (
+                await db.query.tasks
+                    .findFirst({ where: eq(dbTasks.id, bad.task.id) })
+                    .then((row) => requiredDatabaseValue(row))
+            ).nextRunAt,
+        ).toEqual(bad.firstDue);
     });
 
     it('Task NO KEY UPDATE 与 Run 锁内写 Baseline 外键兼容，避免归档交付锁环', async () => {
@@ -359,31 +586,45 @@ describe('PostgreSQL 周期调度事务', () => {
         const run = await activeRun(s);
         const taskLocked = deferred();
         const runLocked = deferred();
-        const archiveOrder = competitor.$transaction(
-            async (tx) => {
-                await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${s.task.id}::uuid FOR NO KEY UPDATE`;
-                taskLocked.resolve();
-                await runLocked.promise;
-                await tx.$queryRaw`SELECT id FROM runs WHERE id = ${run.id}::uuid FOR UPDATE`;
-            },
-            { timeout: 10_000 },
-        );
+        const archiveOrder = competitor.transaction(async (tx) => {
+            await queryRows<Record<string, unknown>>(
+                tx,
+                sql`SELECT id FROM tasks WHERE id = ${s.task.id}::uuid FOR NO KEY UPDATE`,
+            );
+            taskLocked.resolve();
+            await runLocked.promise;
+            await queryRows<Record<string, unknown>>(
+                tx,
+                sql`SELECT id FROM runs WHERE id = ${run.id}::uuid FOR UPDATE`,
+            );
+        });
         await taskLocked.promise;
         try {
-            await db.$transaction(async (tx) => {
-                await tx.$queryRaw`SELECT id FROM runs WHERE id = ${run.id}::uuid FOR UPDATE`;
+            await db.transaction(async (tx) => {
+                await queryRows<Record<string, unknown>>(
+                    tx,
+                    sql`SELECT id FROM runs WHERE id = ${run.id}::uuid FOR UPDATE`,
+                );
                 runLocked.resolve();
-                await tx.baseline.create({
-                    data: {
+                await tx
+                    .insert(dbBaselines)
+                    .values({
                         userId: s.user.id,
                         taskId: s.task.id,
                         comparisonScopeHash: run.comparisonScopeHash,
                         completeRunId: run.id,
-                    },
-                });
+                    })
+                    .returning()
+                    .then((rows) => requiredDatabaseValue(rows[0]));
             });
             await archiveOrder;
-            expect(await db.baseline.count({ where: { taskId: s.task.id } })).toBe(1);
+            expect(
+                await db
+                    .select({ count: dbCount() })
+                    .from(dbBaselines)
+                    .where(eq(dbBaselines.taskId, s.task.id))
+                    .then((rows) => rows[0]!.count),
+            ).toBe(1);
         } finally {
             runLocked.resolve();
             await archiveOrder.catch(() => undefined);

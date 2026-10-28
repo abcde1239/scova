@@ -1,3 +1,26 @@
+import { requiredDatabaseValue } from '@/utils/database.ts';
+import {
+    type Run,
+    sessions as dbSessions,
+    taskVersions as dbTaskVersions,
+    eq,
+    runs as dbRuns,
+    sources as dbSources,
+    and,
+    claims as dbClaims,
+    runSources as dbRunSources,
+    tasks as dbTasks,
+    feedback as dbFeedback,
+    count as dbCount,
+    toolCalls as dbToolCalls,
+    asc,
+    sql,
+    reports as dbReports,
+    inboxItems as dbInboxItems,
+    runEvents as dbRunEvents,
+    baselines as dbBaselines,
+    changeRecords as dbChangeRecords,
+} from '@scova/db';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import pg from 'pg';
@@ -5,7 +28,7 @@ import { beforeAll, afterAll, describe, it, expect } from 'vite-plus/test';
 import { effectiveRunScopeHash } from '@scova/shared';
 import { readFeedbackSnapshot, type Feedback, type FeedbackEffect } from '@scova/models';
 import type { ConnectorBundle, ReadPage, StructuredInput, CallContext } from '@scova/connectors';
-import type { Run } from '@scova/db';
+
 import { createApiApp } from '../../server/src/app/index.ts';
 import { createDefaultServices } from '../../server/src/app/context.ts';
 import { createRunService } from '../../server/src/service/runs.ts';
@@ -55,14 +78,16 @@ type Seed = Awaited<ReturnType<typeof seedRun>>;
 async function auth(userId: string) {
     const token = randomBytes(32).toString('base64url'),
         csrf = csrfForSession(token);
-    await db.session.create({
-        data: {
-            userId,
+    await db
+        .insert(dbSessions)
+        .values({
+            userId: userId,
             tokenHash: tokenHash(token),
             csrfTokenHash: tokenHash(csrf),
             expiresAt: new Date(Date.now() + 3600000),
-        },
-    });
+        })
+        .returning()
+        .then((rows) => requiredDatabaseValue(rows[0]));
     return {
         cookie: `scova_session=${token}`,
         'x-csrf-token': csrf,
@@ -234,23 +259,31 @@ async function initial(options: { scheduled?: boolean; searchBudget?: number } =
     const seed = await seedRun(db, { mode: 'live' });
     if (options.scheduled) seed.config.schedule = { frequency: 'daily', localTime: '00:00' };
     if (options.searchBudget) seed.config.budget.maxSearches = options.searchBudget;
-    await db.taskVersion.update({
-        where: { id: seed.version.id },
-        data: { configJson: seed.config },
-    });
-    seed.run = await db.run.update({
-        where: { id: seed.run.id },
-        data: {
+    await db
+        .update(dbTaskVersions)
+        .set({ configJson: seed.config })
+        .where(eq(dbTaskVersions.id, seed.version.id))
+        .returning()
+        .then((rows) => requiredDatabaseValue(rows[0]));
+    seed.run = await db
+        .update(dbRuns)
+        .set({
             comparisonScopeHash: effectiveRunScopeHash(seed.version.comparisonScopeHash, 'live'),
             budgetJson: seed.config.budget,
-        },
-    });
+        })
+        .where(eq(dbRuns.id, seed.run.id))
+        .returning()
+        .then((rows) => requiredDatabaseValue(rows[0]));
     const result = await execute(seed.run);
     const delivered = await delivery.deliver(result.claimed.token, result.candidate);
-    const source = await db.source.findFirstOrThrow({
-        where: { userId: seed.user.id, canonicalUrl: primary },
-    });
-    const claim = await db.claim.findFirstOrThrow({ where: { reportId: delivered.reportId } });
+    const source = await db.query.sources
+        .findFirst({
+            where: and(eq(dbSources.userId, seed.user.id), eq(dbSources.canonicalUrl, primary)),
+        })
+        .then((row) => requiredDatabaseValue(row));
+    const claim = await db.query.claims
+        .findFirst({ where: eq(dbClaims.reportId, delivered.reportId) })
+        .then((row) => requiredDatabaseValue(row));
     return { ...seed, source, claim, reportId: delivered.reportId };
 }
 async function queued(seed: Seed) {
@@ -260,11 +293,14 @@ async function queued(seed: Seed) {
         { mode: 'live' },
         randomUUID(),
     );
-    return db.run.findUniqueOrThrow({ where: { id: result.run.id } });
+    return db.query.runs
+        .findFirst({ where: eq(dbRuns.id, result.run.id) })
+        .then((row) => requiredDatabaseValue(row));
 }
 async function observed(seed: Seed, url: string) {
-    const run = await db.run.create({
-        data: {
+    const run = await db
+        .insert(dbRuns)
+        .values({
             userId: seed.user.id,
             taskId: seed.task.id,
             taskVersionId: seed.version.id,
@@ -276,20 +312,25 @@ async function observed(seed: Seed, url: string) {
             comparisonScopeHash: seed.run.comparisonScopeHash,
             budgetJson: seed.config.budget,
             usageJson: emptyUsage(),
-        },
-    });
-    const source = await db.source.create({
-        data: { userId: seed.user.id, canonicalUrl: url, canonicalUrlHash: sha(url) },
-    });
-    await db.runSource.create({
-        data: {
+        })
+        .returning()
+        .then((rows) => requiredDatabaseValue(rows[0]));
+    const source = await db
+        .insert(dbSources)
+        .values({ userId: seed.user.id, canonicalUrl: url, canonicalUrlHash: sha(url) })
+        .returning()
+        .then((rows) => requiredDatabaseValue(rows[0]));
+    await db
+        .insert(dbRunSources)
+        .values({
             userId: seed.user.id,
             runId: run.id,
             sourceId: source.id,
             requestedUrl: url,
             fetchStatus: 'failed',
-        },
-    });
+        })
+        .returning()
+        .then((rows) => requiredDatabaseValue(rows[0]));
     return source;
 }
 const snapshot = (run: Run) =>
@@ -313,9 +354,11 @@ describe('可撤销资料反馈与实际后续执行（真实PG/checkpoint）', 
         expect((await request('/feedback', await auth(other.user.id), 'POST', input)).status).toBe(
             404,
         );
-        const otherTask = await db.task.create({
-            data: { userId: seed.user.id, title: '另一个任务' },
-        });
+        const otherTask = await db
+            .insert(dbTasks)
+            .values({ userId: seed.user.id, title: '另一个任务' })
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
         expect(
             (await request('/feedback', headers, 'POST', { ...input, taskId: otherTask.id }))
                 .status,
@@ -348,7 +391,13 @@ describe('可撤销资料反馈与实际后续执行（真实PG/checkpoint）', 
         expect((await request(`/tasks/${seed.task.id}/feedback`, headers)).status).toBe(200);
         expect((await mark(seed, seed.source.id, 'known')).id).toBe(changed.id);
         expect(
-            await db.feedback.count({ where: { userId: seed.user.id, taskId: seed.task.id } }),
+            await db
+                .select({ count: dbCount() })
+                .from(dbFeedback)
+                .where(
+                    and(eq(dbFeedback.userId, seed.user.id), eq(dbFeedback.taskId, seed.task.id)),
+                )
+                .then((rows) => rows[0]!.count),
         ).toBe(1);
     });
     it('排队时冻结含空快照；切换、撤销与租约恢复不改旧Run，retry捕获当前反馈', async () => {
@@ -360,23 +409,38 @@ describe('可撤销资料反馈与实际后续执行（真实PG/checkpoint）', 
         await mark(seed, seed.source.id, 'deeper');
         const first = await runs.claim(run.id, 'first', 60000);
         if (first.kind !== 'claimed') throw new Error('claim');
-        await db.run.update({ where: { id: run.id }, data: { leaseExpiresAt: new Date(0) } });
+        await db
+            .update(dbRuns)
+            .set({ leaseExpiresAt: new Date(0) })
+            .where(eq(dbRuns.id, run.id))
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
         const recovered = await runs.claim(run.id, 'second', 60000);
         if (recovered.kind !== 'claimed') throw new Error('recover');
         expect((await createAgentRepository(db, recovered.token).comparison()).feedback).toEqual(
             snapshot(run),
         );
         expect(
-            (await db.run.findUniqueOrThrow({ where: { id: run.id } })).feedbackSnapshotJson,
+            (
+                await db.query.runs
+                    .findFirst({ where: eq(dbRuns.id, run.id) })
+                    .then((row) => requiredDatabaseValue(row))
+            ).feedbackSnapshotJson,
         ).toEqual(frozen);
         await runs.finish(recovered.token, { code: 'FIXTURE' });
         await request(`/feedback/${feedback.id}`, await auth(seed.user.id), 'DELETE');
         const retried = await commands.retry(seed.user.id, run.id, { mode: 'live' }, randomUUID());
-        const retry = await db.run.findUniqueOrThrow({ where: { id: retried.run.id } });
+        const retry = await db.query.runs
+            .findFirst({ where: eq(dbRuns.id, retried.run.id) })
+            .then((row) => requiredDatabaseValue(row));
         expect(snapshot(retry).items).toEqual([]);
         await mark(seed, seed.source.id, 'known');
         expect(
-            (await db.run.findUniqueOrThrow({ where: { id: retry.id } })).feedbackSnapshotJson,
+            (
+                await db.query.runs
+                    .findFirst({ where: eq(dbRuns.id, retry.id) })
+                    .then((row) => requiredDatabaseValue(row))
+            ).feedbackSnapshotJson,
         ).toEqual(retry.feedbackSnapshotJson);
     });
     it.each(['known', 'irrelevant', 'deeper'] as const)(
@@ -388,19 +452,19 @@ describe('可撤销资料反馈与实际后续执行（真实PG/checkpoint）', 
             const frozen = structuredClone(run.feedbackSnapshotJson);
             const first = await execute(run);
             await first.session.drain();
-            const savedCalls = await db.toolCall.findMany({
-                where: { runId: run.id },
-                orderBy: { id: 'asc' },
+            const savedCalls = await db.query.toolCalls.findMany({
+                where: eq(dbToolCalls.runId, run.id),
+                orderBy: [asc(dbToolCalls.id)],
             });
             expect(
                 savedCalls.some((call) => call.tool === 'read' && call.status === 'succeeded'),
             ).toBe(true);
             // 模拟成功正文已提交后进程退出，待原截止时间已过再由新runtime接管。
-            await db.$executeRaw`
+            await db.execute(sql`
         UPDATE runs SET deadline_at=clock_timestamp(),
           lease_expires_at=clock_timestamp()-interval '1 second'
         WHERE id=${run.id}::uuid
-      `;
+      `);
             expect(
                 (await request(`/feedback/${feedback.id}`, await auth(seed.user.id), 'DELETE'))
                     .status,
@@ -430,7 +494,9 @@ describe('可撤销资料反馈与实际后续执行（真实PG/checkpoint）', 
                 });
                 expect(await service.execute(run.id)).toBe('processed');
                 expect(executeCalls).toBe(0);
-                const recovered = await db.run.findUniqueOrThrow({ where: { id: run.id } });
+                const recovered = await db.query.runs
+                    .findFirst({ where: eq(dbRuns.id, run.id) })
+                    .then((row) => requiredDatabaseValue(row));
                 expect(recovered).toMatchObject({
                     status: 'partial',
                     outcome: 'inconclusive',
@@ -439,27 +505,52 @@ describe('可撤销资料反馈与实际后续执行（真实PG/checkpoint）', 
                     recoveryCount: 1,
                     feedbackSnapshotJson: frozen,
                 });
-                const report = await db.report.findFirstOrThrow({ where: { runId: run.id } });
+                const report = await db.query.reports
+                    .findFirst({ where: eq(dbReports.runId, run.id) })
+                    .then((row) => requiredDatabaseValue(row));
                 expect(report.feedbackEffectsJson).toContainEqual(
                     expect.objectContaining({ feedbackId: feedback.id, kind }),
                 );
                 expect(
-                    await db.toolCall.findMany({
-                        where: { runId: run.id },
-                        orderBy: { id: 'asc' },
+                    await db.query.toolCalls.findMany({
+                        where: eq(dbToolCalls.runId, run.id),
+                        orderBy: [asc(dbToolCalls.id)],
                     }),
                 ).toEqual(savedCalls);
-                expect(await db.inboxItem.count({ where: { reportId: report.id } })).toBe(1);
                 expect(
-                    await db.runEvent.count({ where: { runId: run.id, type: 'report.published' } }),
+                    await db
+                        .select({ count: dbCount() })
+                        .from(dbInboxItems)
+                        .where(eq(dbInboxItems.reportId, report.id))
+                        .then((rows) => rows[0]!.count),
                 ).toBe(1);
                 expect(
-                    await db.baseline.findFirstOrThrow({ where: { taskId: seed.task.id } }),
+                    await db
+                        .select({ count: dbCount() })
+                        .from(dbRunEvents)
+                        .where(
+                            and(
+                                eq(dbRunEvents.runId, run.id),
+                                eq(dbRunEvents.type, 'report.published'),
+                            ),
+                        )
+                        .then((rows) => rows[0]!.count),
+                ).toBe(1);
+                expect(
+                    await db.query.baselines
+                        .findFirst({ where: eq(dbBaselines.taskId, seed.task.id) })
+                        .then((row) => requiredDatabaseValue(row)),
                 ).toMatchObject({
                     completeRunId: seed.run.id,
                 });
                 expect(await service.execute(run.id)).toBe('ignored');
-                expect(await db.report.count({ where: { runId: run.id } })).toBe(1);
+                expect(
+                    await db
+                        .select({ count: dbCount() })
+                        .from(dbReports)
+                        .where(eq(dbReports.runId, run.id))
+                        .then((rows) => rows[0]!.count),
+                ).toBe(1);
             } finally {
                 await runtime.close();
             }
@@ -469,26 +560,34 @@ describe('可撤销资料反馈与实际后续执行（真实PG/checkpoint）', 
         const seed = await initial(),
             headers = await auth(seed.user.id),
             ids = Array.from({ length: 201 }, () => randomUUID());
-        await db.claim.createMany({
-            data: ids.map((id, order) => ({
-                id,
-                userId: seed.user.id,
-                taskId: seed.task.id,
-                reportId: seed.reportId,
-                kind: 'fact' as const,
-                text: `容量验证结论${order}`,
-                confidenceLabel: '直接原文',
-                order: order + 100,
-            })),
-        });
-        await db.feedback.createMany({
-            data: ids.slice(0, 200).map((claimId) => ({
-                userId: seed.user.id,
-                taskId: seed.task.id,
-                claimId,
-                kind: 'known' as const,
-            })),
-        });
+        await db
+            .insert(dbClaims)
+            .values(
+                ids.map((id, order) => ({
+                    id,
+                    userId: seed.user.id,
+                    taskId: seed.task.id,
+                    reportId: seed.reportId,
+                    kind: 'fact' as const,
+                    text: `容量验证结论${order}`,
+                    confidenceLabel: '直接原文',
+                    order: order + 100,
+                })),
+            )
+            .returning({ id: dbClaims.id })
+            .then((rows) => ({ count: rows.length }));
+        await db
+            .insert(dbFeedback)
+            .values(
+                ids.slice(0, 200).map((claimId) => ({
+                    userId: seed.user.id,
+                    taskId: seed.task.id,
+                    claimId,
+                    kind: 'known' as const,
+                })),
+            )
+            .returning({ id: dbFeedback.id })
+            .then((rows) => ({ count: rows.length }));
         const set = (claimId: string, kind = 'known') =>
             request('/feedback', headers, 'POST', { taskId: seed.task.id, claimId, kind });
         expect((await set(ids[200]!)).status).toBe(409);
@@ -511,30 +610,51 @@ describe('可撤销资料反馈与实际后续执行（真实PG/checkpoint）', 
     it('周期Run也在Task锁内复制反馈；不新建版本或清空基线', async () => {
         const seed = await initial({ scheduled: true }),
             feedback = await mark(seed, seed.source.id, 'deeper');
-        const baseline = await db.baseline.findFirstOrThrow({ where: { taskId: seed.task.id } });
+        const baseline = await db.query.baselines
+            .findFirst({ where: eq(dbBaselines.taskId, seed.task.id) })
+            .then((row) => requiredDatabaseValue(row));
         const firstDue = new Date(Date.now() - 86400000);
         firstDue.setUTCHours(0, 0, 0, 0);
-        await db.task.update({
-            where: { id: seed.task.id },
-            data: { nextRunAt: firstDue },
-        });
+        await db
+            .update(dbTasks)
+            .set({ nextRunAt: firstDue })
+            .where(eq(dbTasks.id, seed.task.id))
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
         expect(await createSchedulerRepository(db).scheduleNext('live', [])).toMatchObject({
             taskId: seed.task.id,
             status: 'created',
         });
-        const scheduled = await db.run.findFirstOrThrow({
-            where: { taskId: seed.task.id, trigger: 'scheduled' },
-        });
+        const scheduled = await db.query.runs
+            .findFirst({
+                where: and(eq(dbRuns.taskId, seed.task.id), eq(dbRuns.trigger, 'scheduled')),
+            })
+            .then((row) => requiredDatabaseValue(row));
         expect(snapshot(scheduled).items[0]?.id).toBe(feedback.id);
-        expect(await db.baseline.findUniqueOrThrow({ where: { id: baseline.id } })).toEqual(
-            baseline,
-        );
-        expect(await db.taskVersion.count({ where: { taskId: seed.task.id } })).toBe(1);
-        await db.task.update({ where: { id: seed.task.id }, data: { nextRunAt: null } });
+        expect(
+            await db.query.baselines
+                .findFirst({ where: eq(dbBaselines.id, baseline.id) })
+                .then((row) => requiredDatabaseValue(row)),
+        ).toEqual(baseline);
+        expect(
+            await db
+                .select({ count: dbCount() })
+                .from(dbTaskVersions)
+                .where(eq(dbTaskVersions.taskId, seed.task.id))
+                .then((rows) => rows[0]!.count),
+        ).toBe(1);
+        await db
+            .update(dbTasks)
+            .set({ nextRunAt: null })
+            .where(eq(dbTasks.id, seed.task.id))
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
     });
     it('真实工具账本体现新发现排除/深入查询和读取，解释可读且旧报告不变', async () => {
         const seed = await initial(),
-            oldReport = await db.report.findUniqueOrThrow({ where: { id: seed.reportId } });
+            oldReport = await db.query.reports
+                .findFirst({ where: eq(dbReports.id, seed.reportId) })
+                .then((row) => requiredDatabaseValue(row));
         const excluded = await observed(seed, ignored),
             detail = await observed(seed, deeper);
         const excludedFeedback = await mark(seed, excluded.id, 'irrelevant');
@@ -550,7 +670,9 @@ describe('可撤销资料反馈与实际后续执行（真实PG/checkpoint）', 
             code: 'INVALID_DELIVERY_EVIDENCE',
         });
         const delivered = await delivery.deliver(result.claimed.token, result.candidate);
-        const report = await db.report.findUniqueOrThrow({ where: { id: delivered.reportId } });
+        const report = await db.query.reports
+            .findFirst({ where: eq(dbReports.id, delivered.reportId) })
+            .then((row) => requiredDatabaseValue(row));
         const effects = report.feedbackEffectsJson as FeedbackEffect[];
         expect(effects.map((effect) => effect.effect)).toEqual(
             expect.arrayContaining(['excluded', 'expanded_query', 'promoted']),
@@ -560,9 +682,11 @@ describe('可撤销资料反馈与实际后续执行（真实PG/checkpoint）', 
         expect(
             ((await response.json()) as { feedbackEffects: FeedbackEffect[] }).feedbackEffects,
         ).toEqual(effects);
-        expect(await db.report.findUniqueOrThrow({ where: { id: seed.reportId } })).toEqual(
-            oldReport,
-        );
+        expect(
+            await db.query.reports
+                .findFirst({ where: eq(dbReports.id, seed.reportId) })
+                .then((row) => requiredDatabaseValue(row)),
+        ).toEqual(oldReport);
         await request(`/feedback/${excludedFeedback.id}`, await auth(seed.user.id), 'DELETE');
         const nextReads: string[] = [],
             next = await execute(await queued(seed), {
@@ -581,20 +705,31 @@ describe('可撤销资料反馈与实际后续执行（真实PG/checkpoint）', 
         '%s不跳过冻结基线复读，重要日期新值仍交付双方证据',
         async (kind) => {
             const seed = await initial(),
-                oldReport = await db.report.findUniqueOrThrow({ where: { id: seed.reportId } });
+                oldReport = await db.query.reports
+                    .findFirst({ where: eq(dbReports.id, seed.reportId) })
+                    .then((row) => requiredDatabaseValue(row));
             await mark(seed, seed.source.id, kind);
             const run = await queued(seed),
                 reads: string[] = [];
             const result = await execute(run, { body: bodyNew, reads });
             const delivered = await delivery.deliver(result.claimed.token, result.candidate);
             expect(reads).toContain(primary);
-            expect(await db.run.findUniqueOrThrow({ where: { id: run.id } })).toMatchObject({
+            expect(
+                await db.query.runs
+                    .findFirst({ where: eq(dbRuns.id, run.id) })
+                    .then((row) => requiredDatabaseValue(row)),
+            ).toMatchObject({
                 outcome: 'important_change',
             });
-            const change = await db.changeRecord.findFirstOrThrow({
-                where: { reportId: delivered.reportId, kind: 'changed' },
-                include: { citations: true },
-            });
+            const change = await db.query.changeRecords
+                .findFirst({
+                    where: and(
+                        eq(dbChangeRecords.reportId, delivered.reportId),
+                        eq(dbChangeRecords.kind, 'changed'),
+                    ),
+                    with: { citations: true },
+                })
+                .then((row) => requiredDatabaseValue(row));
             expect(change).toMatchObject({
                 oldValue: bodyOld,
                 newValue: bodyNew,
@@ -611,9 +746,11 @@ describe('可撤销资料反馈与实际后续执行（真实PG/checkpoint）', 
                     (effect) => effect.effect === 'deprioritized',
                 ),
             ).toBe(false);
-            expect(await db.report.findUniqueOrThrow({ where: { id: seed.reportId } })).toEqual(
-                oldReport,
-            );
+            expect(
+                await db.query.reports
+                    .findFirst({ where: eq(dbReports.id, seed.reportId) })
+                    .then((row) => requiredDatabaseValue(row)),
+            ).toEqual(oldReport);
             if (kind === 'known') {
                 const third = await queued(seed);
                 expect(snapshot(third).items[0]?.sources[0]?.contentHash).toBe(sha(bodyOld));
@@ -661,11 +798,16 @@ describe('可撤销资料反馈与实际后续执行（真实PG/checkpoint）', 
         const run = await queued(seed);
         const raw = { ...snapshot(run), userId: randomUUID() };
         await expect(
-            db.run.update({ where: { id: run.id }, data: { feedbackSnapshotJson: raw } }),
+            db
+                .update(dbRuns)
+                .set({ feedbackSnapshotJson: raw })
+                .where(eq(dbRuns.id, run.id))
+                .returning()
+                .then((rows) => requiredDatabaseValue(rows[0])),
         ).rejects.toThrow();
-        await db.run.update({
-            where: { id: run.id },
-            data: {
+        await db
+            .update(dbRuns)
+            .set({
                 feedbackSnapshotJson: {
                     ...snapshot(run),
                     items: snapshot(run).items.map((item) => ({
@@ -674,8 +816,10 @@ describe('可撤销资料反馈与实际后续执行（真实PG/checkpoint）', 
                         claimId: null,
                     })),
                 },
-            },
-        });
+            })
+            .where(eq(dbRuns.id, run.id))
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
         const claimed = await runs.claim(run.id, 'bad-feedback', 60000);
         if (claimed.kind !== 'claimed') throw new Error('claim');
         await expect(createAgentRepository(db, claimed.token).comparison()).rejects.toThrow();
@@ -683,17 +827,19 @@ describe('可撤销资料反馈与实际后续执行（真实PG/checkpoint）', 
     it('长合法自动解释结论被标记后仍能创建Run，并保持完整文本', async () => {
         const seed = await initial(),
             text = '次级来源解释' + '旧值'.repeat(1000) + '；关联原文' + '新值'.repeat(1000);
-        const claim = await db.claim.create({
-            data: {
+        const claim = await db
+            .insert(dbClaims)
+            .values({
                 userId: seed.user.id,
                 taskId: seed.task.id,
                 reportId: seed.reportId,
                 kind: 'inference',
-                text,
+                text: text,
                 confidenceLabel: '自动关系解释',
                 order: 100,
-            },
-        });
+            })
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
         const response = await request('/feedback', await auth(seed.user.id), 'POST', {
             taskId: seed.task.id,
             claimId: claim.id,

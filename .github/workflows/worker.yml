@@ -39,6 +39,5 @@ jobs:
                   sudo apt-get install --yes postgresql-client
                   pg_dump --version
             - run: pg_dump --version && pg_restore --version
-            - run: vp exec prisma generate
             - name: Verify backend and contracts
               run: vp run ready

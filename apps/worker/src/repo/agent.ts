@@ -1,3 +1,19 @@
+import { requiredDatabaseValue } from '@/utils/database.ts';
+import {
+    type DatabaseClient,
+    type Run,
+    type ToolCall,
+    toolCalls as dbToolCalls,
+    eq,
+    and,
+    desc,
+    runs as dbRuns,
+    inArray,
+    lte,
+    asc,
+    type DatabaseTransaction,
+    type JsonValue,
+} from '@scova/db';
 import {
     BudgetSchema,
     UsageSchema,
@@ -6,7 +22,7 @@ import {
     type Usage,
     type FeedbackSnapshot,
 } from '@scova/models';
-import type { Prisma, PrismaClient, Run, ToolCall } from '@scova/db';
+
 import { appendEvent, withRunFence } from '@/repo/runs.ts';
 import type { RunLeaseToken } from '@/utils/runs.ts';
 import { loadBaseline } from '@/repo/comparison.ts';
@@ -200,13 +216,16 @@ function checkpointRef(value: unknown, runId: string, epoch: number): AgentCheck
 }
 
 /** 仅受信 worker 持有 db/token；Agent 只得到绑定当前 Run 的有限领域方法。 */
-export function createAgentRepository(db: PrismaClient, token: RunLeaseToken): AgentRepository {
-    const fence = <T>(
-        operation: (tx: Prisma.TransactionClient, run: Run, now: Date) => Promise<T>,
-    ) => withRunFence(db, token, 'work', operation);
-    const callForSettlement = async (tx: Prisma.TransactionClient, id: string) => {
-        const call = await tx.toolCall.findFirst({
-            where: { id, userId: token.userId, runId: token.runId },
+export function createAgentRepository(db: DatabaseClient, token: RunLeaseToken): AgentRepository {
+    const fence = <T>(operation: (tx: DatabaseTransaction, run: Run, now: Date) => Promise<T>) =>
+        withRunFence(db, token, 'work', operation);
+    const callForSettlement = async (tx: DatabaseTransaction, id: string) => {
+        const call = await tx.query.toolCalls.findFirst({
+            where: and(
+                eq(dbToolCalls.id, id),
+                eq(dbToolCalls.userId, token.userId),
+                eq(dbToolCalls.runId, token.runId),
+            ),
         });
         if (!call || heldReservation(call).leaseEpoch !== token.leaseEpoch)
             throw new AgentPersistenceError('INVALID_TOOL_CALL');
@@ -233,9 +252,13 @@ export function createAgentRepository(db: PrismaClient, token: RunLeaseToken): A
             const reserved = reservation(input);
             return fence(async (tx, run, now) => {
                 const current = usage(run.usageJson);
-                const calls = await tx.toolCall.findMany({
-                    where: { userId: run.userId, runId: run.id, operationKey: input.operationKey },
-                    orderBy: { attemptNo: 'desc' },
+                const calls = await tx.query.toolCalls.findMany({
+                    where: and(
+                        eq(dbToolCalls.userId, run.userId),
+                        eq(dbToolCalls.runId, run.id),
+                        eq(dbToolCalls.operationKey, input.operationKey),
+                    ),
+                    orderBy: [desc(dbToolCalls.attemptNo)],
                 });
                 if (calls.some((call) => call.tool !== input.tool))
                     throw new AgentPersistenceError('INVALID_TOOL_CALL');
@@ -252,22 +275,25 @@ export function createAgentRepository(db: PrismaClient, token: RunLeaseToken): A
                     if (call.status !== 'reserved' && call.status !== 'running') continue;
                     if (heldReservation(call).leaseEpoch === token.leaseEpoch)
                         throw new AgentPersistenceError('TOOL_CALL_BUSY');
-                    await tx.toolCall.update({
-                        where: { id: call.id },
-                        data: { status: 'unknown', finishedAt: now },
-                    });
+                    await tx
+                        .update(dbToolCalls)
+                        .set({ status: 'unknown', finishedAt: now })
+                        .where(eq(dbToolCalls.id, call.id))
+                        .returning()
+                        .then((rows) => requiredDatabaseValue(rows[0]));
                 }
                 const attemptNo = (calls[0]?.attemptNo ?? 0) + 1;
                 if (!Number.isSafeInteger(attemptNo) || attemptNo > 2_147_483_647)
                     throw new AgentPersistenceError('INVALID_TOOL_CALL');
                 const nextUsage = addUsage(current, reserved, run);
-                const call = await tx.toolCall.create({
-                    data: {
+                const call = await tx
+                    .insert(dbToolCalls)
+                    .values({
                         userId: run.userId,
                         runId: run.id,
                         operationKey: input.operationKey,
                         tool: input.tool,
-                        attemptNo,
+                        attemptNo: attemptNo,
                         status: 'running',
                         inputSummary: TOOL_SUMMARIES[input.tool],
                         reservedBudget: {
@@ -276,9 +302,15 @@ export function createAgentRepository(db: PrismaClient, token: RunLeaseToken): A
                             reserved,
                         },
                         startedAt: now,
-                    },
-                });
-                await tx.run.update({ where: { id: run.id }, data: { usageJson: nextUsage } });
+                    })
+                    .returning()
+                    .then((rows) => requiredDatabaseValue(rows[0]));
+                await tx
+                    .update(dbRuns)
+                    .set({ usageJson: nextUsage })
+                    .where(eq(dbRuns.id, run.id))
+                    .returning()
+                    .then((rows) => requiredDatabaseValue(rows[0]));
                 await appendEvent(tx, run, now, {
                     type: 'tool.started',
                     payload: {
@@ -330,16 +362,23 @@ export function createAgentRepository(db: PrismaClient, token: RunLeaseToken): A
                     }
                     settled.estimated = actual.estimated;
                 }
-                await tx.toolCall.update({
-                    where: { id: call.id },
-                    data: {
+                await tx
+                    .update(dbToolCalls)
+                    .set({
                         status: 'succeeded',
                         usage: settled,
-                        outputRef: { schemaVersion: 1, result: output } as Prisma.InputJsonValue,
+                        outputRef: { schemaVersion: 1, result: output } as JsonValue,
                         finishedAt: now,
-                    },
-                });
-                await tx.run.update({ where: { id: run.id }, data: { usageJson: nextUsage } });
+                    })
+                    .where(eq(dbToolCalls.id, call.id))
+                    .returning()
+                    .then((rows) => requiredDatabaseValue(rows[0]));
+                await tx
+                    .update(dbRuns)
+                    .set({ usageJson: nextUsage })
+                    .where(eq(dbRuns.id, run.id))
+                    .returning()
+                    .then((rows) => requiredDatabaseValue(rows[0]));
                 if (!Object.hasOwn(TOOL_SUMMARIES, call.tool))
                     throw new AgentPersistenceError('INVALID_TOOL_CALL');
                 await appendEvent(tx, run, now, {
@@ -367,13 +406,15 @@ export function createAgentRepository(db: PrismaClient, token: RunLeaseToken): A
                 if (call.status !== 'reserved' && call.status !== 'running') return;
                 if (!Object.hasOwn(TOOL_SUMMARIES, call.tool))
                     throw new AgentPersistenceError('INVALID_TOOL_CALL');
-                await tx.toolCall.update({
-                    where: { id: call.id },
-                    data: {
+                await tx
+                    .update(dbToolCalls)
+                    .set({
                         status: input.unknown === false ? 'failed' : 'unknown',
                         finishedAt: now,
-                    },
-                });
+                    })
+                    .where(eq(dbToolCalls.id, call.id))
+                    .returning()
+                    .then((rows) => requiredDatabaseValue(rows[0]));
                 await appendEvent(tx, run, now, {
                     type: 'tool.failed',
                     payload: {
@@ -391,20 +432,22 @@ export function createAgentRepository(db: PrismaClient, token: RunLeaseToken): A
         },
         markInterruptedUnknown() {
             return fence(async (tx, run, now) => {
-                const calls = await tx.toolCall.findMany({
-                    where: {
-                        userId: run.userId,
-                        runId: run.id,
-                        status: { in: ['reserved', 'running'] },
-                    },
+                const calls = await tx.query.toolCalls.findMany({
+                    where: and(
+                        eq(dbToolCalls.userId, run.userId),
+                        eq(dbToolCalls.runId, run.id),
+                        inArray(dbToolCalls.status, ['reserved', 'running']),
+                    ),
                 });
                 let count = 0;
                 for (const call of calls) {
                     if (heldReservation(call).leaseEpoch === token.leaseEpoch) continue;
-                    await tx.toolCall.update({
-                        where: { id: call.id },
-                        data: { status: 'unknown', finishedAt: now },
-                    });
+                    await tx
+                        .update(dbToolCalls)
+                        .set({ status: 'unknown', finishedAt: now })
+                        .where(eq(dbToolCalls.id, call.id))
+                        .returning()
+                        .then((rows) => requiredDatabaseValue(rows[0]));
                     count += 1;
                 }
                 return count;
@@ -422,10 +465,12 @@ export function createAgentRepository(db: PrismaClient, token: RunLeaseToken): A
             if (checked.leaseEpoch !== token.leaseEpoch)
                 throw new AgentPersistenceError('INVALID_CHECKPOINT');
             return fence(async (tx, run) => {
-                await tx.run.update({
-                    where: { id: run.id },
-                    data: { checkpointRef: { ...checked } },
-                });
+                await tx
+                    .update(dbRuns)
+                    .set({ checkpointRef: { ...checked } })
+                    .where(eq(dbRuns.id, run.id))
+                    .returning()
+                    .then((rows) => requiredDatabaseValue(rows[0]));
             });
         },
         readPages: (options = {}) =>
@@ -434,15 +479,15 @@ export function createAgentRepository(db: PrismaClient, token: RunLeaseToken): A
                 token,
                 options.allowDeadline ? 'deadline_delivery' : 'work',
                 async (tx, run) => {
-                    const calls = await tx.toolCall.findMany({
-                        where: {
-                            userId: run.userId,
-                            runId: run.id,
-                            tool: 'read',
-                            status: 'succeeded',
-                            finishedAt: { lte: run.deadlineAt! },
-                        },
-                        orderBy: [{ operationKey: 'asc' }, { attemptNo: 'asc' }],
+                    const calls = await tx.query.toolCalls.findMany({
+                        where: and(
+                            eq(dbToolCalls.userId, run.userId),
+                            eq(dbToolCalls.runId, run.id),
+                            eq(dbToolCalls.tool, 'read'),
+                            eq(dbToolCalls.status, 'succeeded'),
+                            lte(dbToolCalls.finishedAt, run.deadlineAt!),
+                        ),
+                        orderBy: [asc(dbToolCalls.operationKey), asc(dbToolCalls.attemptNo)],
                     });
                     return calls.map(completedOutput);
                 },

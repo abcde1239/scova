@@ -1,21 +1,35 @@
 # 业务数据库
 
-Prisma 6.19 管理 `packages/db/prisma/schema.prisma` 中的 PostgreSQL 业务模型与同目录迁移；Server/Worker 通过 `@scova/db` 引用同一生成客户端。Bun 为主运行时，Node.js 使用同一模型。`DATABASE_URL` 必须由部署者环境配置，不提交密码。
+PostgreSQL 表与关系定义在 `packages/db/src/schema.ts`，Server/Worker 通过 `@scova/db` 使用原生 Drizzle 客户端与推导行类型。公开 DTO、事件和运行时校验独立放在 `@scova/models`。Bun 为主运行时，Node.js 使用相同实现。连接由部署者配置，不提交密码。
 
-首次部署先执行 `vp exec prisma generate` 与 `vp exec prisma migrate deploy`，确认成功后再启动 API/worker。再次执行 deploy 不重复建表。不使用 `db push` 替代已审查的 SQL migration，也不重置共享或用户数据库。
+## 初始化与升级
 
-所有用户私有实体带 `userId` 和 `(userId,id)` 唯一键。跨实体引用使用带 owner 的复合外键；Task 当前版本、Run 配置版本、Report 对应 Run、SourceSnapshot/RunSource 与 Evidence 的来源/观测关系另绑定任务或来源，防止拼接其他账号或其他任务的合法 UUID。账号删除通过 owner 外键级联清理；非 owner 关系为 NO ACTION，单独硬删除需由服务先处理合法依赖。
+配置 `DATABASE_URL` 后运行 `vp run db:migrate`，成功后启动 API/Worker，无需生成客户端。迁移使用 `packages/db/drizzle/` 的 SQL/journal 和 `_scova_migrations` 账本，在事务及按数据库/schema 隔离的 advisory lock 内执行，重复执行安全。
 
-`ChangeEvidence` 与 `QuestionEvidence` 将逻辑模型中的证据列表归一化为关系，保证每条证据具备 owner 外键。`ChangeRecord.oldSourceId` 显式标识旧快照来源，支持保留转载关系；其与 oldSnapshotId 必须同时为空或同时存在。Feedback 的 claim 还绑定 task，不能把同用户其他任务的结论拼接进来。
+已有 Prisma 数据库先验证备份、停止 API/Worker，再运行同一命令。接管前校验八组原迁移的名称、完成状态、已知 checksum，以及实际表、列、类型、默认值、枚举、外键、CHECK、索引与触发器；一致后才登记初始基线，不在存量表重放建表 SQL。原 `_prisma_migrations` 与 `packages/db/prisma/migrations/` 保留审计。只有已知 LF/CRLF 两种行尾校验和等价，其他内容变化仍拒绝。未知、失败、不完整历史或结构漂移会回滚报错，不清库、不自动放行。
 
-Outbox 首版只保存 Run 命令，其 aggregateId 由 owner 复合外键绑定 Run；未来新增聚合类型必须显式调整 schema。幂等 resourceId 是服务内部的响应引用而不是可自由访问的资源授权，读取时仍须依据 scope 与会话验证 owner。
+新变更先修改 schema，再执行 `vp run @scova/db#generate` 生成 SQL/snapshot/journal。配置专用 `SCOVA_TEST_DATABASE_URL` 后运行 `vp run @scova/db#baseline`，通过随机 schema 回滚事务生成候选物理结构基线。审查 SQL、snapshot、journal 和基线后一起提交；不能重写已应用迁移，也不能用 schema push 代替审查。
 
-部分唯一索引和 CHECK 位于 migration 尾部，包括活动 Run 互斥、反馈条件唯一键、目标恰一、事件类型/版本/序号、修订和计数边界。后续 migration diff 不得丢弃这些手写约束。Prisma 无法通过 CHECK 跨表判断基线完整、引用来源于当前/基线执行等条件，这些由领域交付事务校验；数据库仍独立保证 owner 与关联身份。
+维护窗口、备份恢复及回退边界见[部署指南](../guides/deployment.md)。恢复写入后不能直接还原旧备份丢弃新增数据，须先评估版本兼容性与恢复点。
 
-周期扫描使用 `tasks_due_active(next_run_at,id)` 部分索引，仅覆盖 active 且有下一时点的任务。Occurrence 以 `(taskId,scheduleRevision,scheduledAt)` 唯一；计划修改与暂停、恢复、归档增加计划修订，普通配置编辑不覆盖扫描器推进的时点。
+## 隔离与一致性
 
-LangGraph checkpoint 使用独立 schema 与迁移，不由 Prisma 管理。`Run.checkpointRef` 仅保存经过 fencing 提升的显式引用，不能将客户端输入作为 checkpoint 地址。
+私有实体带 `userId` 和 `(userId,id)` 唯一键；跨实体引用使用 owner 复合外键，任务版本、报告、来源、快照及观测另绑定关联身份，防止拼接其他账号或其他任务的合法 UUID。账号删除通过 owner 外键级联清理；其他关联按约束先处理合法依赖。
 
-Worker 显式启动 PostgreSQL saver，使用 `AGENT_CHECKPOINT_SCHEMA`（默认 `scova_agent`）和独立连接池；启动迁移跨进程串行执行。工具结果保存在当前 owner/Run 的 ToolCall 输出中，预留、结果与累计用量均受 Run 行锁和 epoch fencing 保护。接管只加载合法引用的 channel values，不继承旧线程后续 pending writes。业务表清理与 checkpoint 备份/清理须共同规划，不能仅删除 Prisma 数据就认为研究正文已清除；账号删除和保留期的完整入口仍须后续功能接入。
+活动 Run、反馈目标、事件类型/版本/序号及计数边界由部分唯一索引与 CHECK 保证。`ChangeEvidence`、`QuestionEvidence` 将证据列表归一化；旧来源/快照成对存在，反馈 claim 绑定任务。跨表的基线完整性、引用合法性与一次性报告交付仍由领域事务核验，不能只依赖 ORM 类型。
 
-`apps/server/tests/database.integration.test.ts` 使用专属随机 `scova_db_*` schema，在空 schema 执行 migrate deploy 两次，再用真实 PostgreSQL 验证外键、唯一键、CHECK 与并发互斥；结束后仅清理该次生成的 schema。测试优先读取 `SCOVA_TEST_DATABASE_URL`、其次 `RUNTIME_DATABASE_URL`，否则使用 compose.test.yaml 的本地测试端口。不会读取生产 DATABASE_URL，不执行 reset、TRUNCATE 全库或 Redis FLUSHALL。
+Outbox 的 aggregateId 绑定 Run；幂等响应引用不替代读取授权。调度部分索引 `tasks_due_active(next_run_at,id)` 与 `(taskId,scheduleRevision,scheduledAt)` 唯一约束保留。Run/Outbox CAS、epoch fencing、PG 时钟及 Task→Run 锁顺序保持原语义，不跨网络等待持有业务事务。
+
+UUID 与 Task/Baseline/Feedback/Note 的更新时间有显式应用默认值；显式传入历史时间仍保留。时间列使用 `timestamptz(6)`，内部分页游标通过 SQL 保留微秒，不能降为 JS Date 的毫秒边界。
+
+## 连接与 checkpoint
+
+客户端工厂只构造连接池，应用负责显式连接及停止。URL 中 `schema` 是应用约定，工厂校验后设置 PostgreSQL search_path，并保留 application_name。连接池与超时见 [db 包说明](../../../packages/db/README.md)。
+
+LangGraph checkpoint 保持独立 schema、版本账本、连接池和迁移，由原 saver 管理，不进入业务 Drizzle 迁移。Worker 按配置启动或外部维护模式核验 saver；Run.checkpointRef 仅保存经租约 fencing 提升的引用。备份、保留期与账号删除共同处理业务和 checkpoint 数据，不能仅删除业务表就认为研究内容已清除。
+
+## 验证
+
+`vp run test:database` 使用专用随机 schema，验证空库和存量升级、重复与并发迁移、物理约束和损坏拒绝；Server 真实数据库测试继续覆盖外键、唯一、CHECK 与业务互斥。配置优先读取 `SCOVA_TEST_DATABASE_URL`，其次 `RUNTIME_DATABASE_URL`，默认使用 compose.test.yaml 的测试端口，不读取生产 DATABASE_URL。
+
+`vp run test:integration` 串行验证完整后端；Node/Bun runtime 验证原生 Drizzle 提交/回滚与队列、checkpoint 恢复。所有清理只针对各次测试生成的 schema/队列，不 reset 用户或共享数据库。

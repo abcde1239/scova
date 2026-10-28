@@ -1,14 +1,22 @@
-import { execFileSync } from 'node:child_process';
+import { migrateDatabase } from '@scova/db/migrate';
+import { requiredDatabaseValue } from '@/utils/database.ts';
+import {
+    createDatabaseClient,
+    connectDatabase,
+    closeDatabase,
+    users as dbUsers,
+    tasks as dbTasks,
+    taskVersions as dbTaskVersions,
+    runs as dbRuns,
+    outbox as dbOutbox,
+} from '@scova/db';
 import { createRequire } from 'node:module';
 import { randomUUID } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
-import { PrismaClient } from '@scova/db';
 
 const require = createRequire(import.meta.url);
 
 /** 每个套件只拥有自己的随机 schema，不清空共享 Redis。 */
 export function outboxDatabase() {
-    const root = fileURLToPath(new URL('../../../../', import.meta.url));
     const baseUrl =
         process.env.SCOVA_TEST_DATABASE_URL ??
         process.env.RUNTIME_DATABASE_URL ??
@@ -22,7 +30,7 @@ export function outboxDatabase() {
     const scopedUrl = new URL(baseUrl);
     scopedUrl.searchParams.set('schema', schema);
     const databaseUrl = scopedUrl.toString();
-    const db = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
+    const db = createDatabaseClient({ connectionString: databaseUrl });
     const admin = new (require('pg').Client)({ connectionString: baseUrl });
     let created = false;
     return {
@@ -34,54 +42,45 @@ export function outboxDatabase() {
             await admin.connect();
             await admin.query(`CREATE SCHEMA "${schema}"`);
             created = true;
-            execFileSync(
-                process.execPath,
-                [
-                    require.resolve('prisma/build/index.js'),
-                    'migrate',
-                    'deploy',
-                    '--schema',
-                    'packages/db/prisma/schema.prisma',
-                ],
-                {
-                    cwd: root,
-                    env: { ...process.env, DATABASE_URL: databaseUrl },
-                    encoding: 'utf8',
-                    windowsHide: true,
-                    timeout: 60_000,
-                },
-            );
-            await db.$connect();
+            await migrateDatabase({ connectionString: databaseUrl });
+            await connectDatabase(db);
         },
         async cleanup() {
-            await db.$disconnect();
+            await closeDatabase(db);
             if (created) await admin.query(`DROP SCHEMA "${schema}" CASCADE`);
             if (created) await admin.query(`DROP SCHEMA IF EXISTS "${checkpointSchema}" CASCADE`);
             await admin.end();
         },
         async seed(now = new Date()) {
             const id = randomUUID();
-            const user = await db.user.create({
-                data: {
+            const user = await db
+                .insert(dbUsers)
+                .values({
                     email: `${id}@example.test`,
                     normalizedEmail: `${id}@example.test`,
                     passwordHash: 'test',
-                },
-            });
-            const task = await db.task.create({
-                data: { userId: user.id, title: 'Worker 架构验证' },
-            });
-            const version = await db.taskVersion.create({
-                data: {
+                })
+                .returning()
+                .then((rows) => requiredDatabaseValue(rows[0]));
+            const task = await db
+                .insert(dbTasks)
+                .values({ userId: user.id, title: 'Worker 架构验证' })
+                .returning()
+                .then((rows) => requiredDatabaseValue(rows[0]));
+            const version = await db
+                .insert(dbTaskVersions)
+                .values({
                     userId: user.id,
                     taskId: task.id,
                     version: 1,
                     configJson: {},
                     comparisonScopeHash: 'a'.repeat(64),
-                },
-            });
-            const run = await db.run.create({
-                data: {
+                })
+                .returning()
+                .then((rows) => requiredDatabaseValue(rows[0]));
+            const run = await db
+                .insert(dbRuns)
+                .values({
                     userId: user.id,
                     taskId: task.id,
                     taskVersionId: version.id,
@@ -90,18 +89,21 @@ export function outboxDatabase() {
                     trigger: 'manual',
                     budgetJson: {},
                     usageJson: {},
-                },
-            });
-            return db.outbox.create({
-                data: {
+                })
+                .returning()
+                .then((rows) => requiredDatabaseValue(rows[0]));
+            return db
+                .insert(dbOutbox)
+                .values({
                     userId: user.id,
                     aggregateId: run.id,
                     eventType: 'run.enqueue',
                     dedupeKey: `run-${run.id}`,
                     payload: { runId: run.id },
                     availableAt: now,
-                },
-            });
+                })
+                .returning()
+                .then((rows) => requiredDatabaseValue(rows[0]));
         },
     };
 }

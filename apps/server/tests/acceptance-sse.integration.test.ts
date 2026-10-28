@@ -1,6 +1,9 @@
+import { and, eq } from '@scova/db';
+import * as tables from '@scova/db';
 import { performance } from 'node:perf_hooks';
 import { afterAll, beforeAll, describe, expect, it } from 'vite-plus/test';
 import { historyFixture, seedHistoryRows } from './support/history-fixture.ts';
+import { firstRow } from '../src/utils/database.ts';
 
 const fixture = historyFixture();
 beforeAll(() => fixture.setup(), 120000);
@@ -69,19 +72,23 @@ describe('真实socket持续SSE两秒可见性与续传', () => {
             other = await fixture.register();
         const data = await seedHistoryRows(fixture.db, owner, 1, 1),
             run = data.runs[0]!;
-        await fixture.db.run.update({
-            where: { id: run.id },
-            data: { status: 'running', outcome: null, coverageJson: undefined, finishedAt: null },
-        });
-        const first = await fixture.db.runEvent.create({
-            data: {
+        await fixture.db
+            .update(tables.runs)
+            .set({ status: 'running', outcome: null, coverageJson: undefined, finishedAt: null })
+            .where(and(eq(tables.runs.id, run.id)))
+            .returning()
+            .then(firstRow);
+        const first = await fixture.db
+            .insert(tables.runEvents)
+            .values({
                 userId: owner.id,
                 runId: run.id,
                 seq: 1,
                 type: 'step.started',
                 payload: { step: 'plan' },
-            },
-        });
+            })
+            .returning()
+            .then(firstRow);
         const controller = new AbortController();
         const response = await fixture.request(`/runs/${run.id}/events`, owner, {
             signal: controller.signal,
@@ -96,15 +103,17 @@ describe('真实socket持续SSE两秒可见性与续传', () => {
                 event: 'step.started',
                 data: { seq: 1, runId: run.id },
             });
-            const second = await fixture.db.runEvent.create({
-                data: {
+            const second = await fixture.db
+                .insert(tables.runEvents)
+                .values({
                     userId: owner.id,
                     runId: run.id,
                     seq: 2,
                     type: 'step.completed',
                     payload: { step: 'plan', durationMs: 1 },
-                },
-            });
+                })
+                .returning()
+                .then(firstRow);
             const committedAt = performance.now();
             const visible = await stream.next();
             const latencyMs = performance.now() - committedAt;
@@ -125,15 +134,17 @@ describe('真实socket持续SSE两秒可见性与续传', () => {
             );
             controller.abort();
             await stream.cancel().catch(() => undefined);
-            const third = await fixture.db.runEvent.create({
-                data: {
+            const third = await fixture.db
+                .insert(tables.runEvents)
+                .values({
                     userId: owner.id,
                     runId: run.id,
                     seq: 3,
                     type: 'step.started',
                     payload: { step: 'search' },
-                },
-            });
+                })
+                .returning()
+                .then(firstRow);
             const reconnectController = new AbortController();
             const reconnect = await fixture.request(`/runs/${run.id}/events`, owner, {
                 headers: { 'last-event-id': second.id },

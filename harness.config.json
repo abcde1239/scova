@@ -35,7 +35,8 @@
         },
         {
             "root": "packages/db",
-            "id": "packages-db"
+            "id": "packages-db",
+            "tests": { "requireConfiguredTask": true }
         },
         {
             "root": "packages/agent-core",
@@ -225,7 +226,7 @@
             "id": "backend-integration",
             "workspace": "root",
             "argv": ["vp", "run", "test:integration"],
-            "covers": ["apps-server", "apps-worker"],
+            "covers": ["apps-server", "apps-worker", "packages-db"],
             "timeoutMs": 900000,
             "kind": "test"
         }

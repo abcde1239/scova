@@ -1,3 +1,26 @@
+import { requiredDatabaseValue } from '@/utils/database.ts';
+import {
+    reports as dbReports,
+    eq,
+    count as dbCount,
+    evidence as dbEvidence,
+    runSources as dbRunSources,
+    taskVersions as dbTaskVersions,
+    runs as dbRuns,
+    notifications as dbNotifications,
+    inboxItems as dbInboxItems,
+    sql,
+    baselines as dbBaselines,
+    changeRecords as dbChangeRecords,
+    toolCalls as dbToolCalls,
+    claims as dbClaims,
+    sources as dbSources,
+    and,
+    runEvents as dbRunEvents,
+    asc,
+    queryRows,
+    sourceSnapshots as dbSourceSnapshots,
+} from '@scova/db';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -72,9 +95,27 @@ async function research() {
     return { ...seed, claimed, context, session, candidate };
 }
 async function assertEmpty(runId: string) {
-    expect(await fixture.db.report.count({ where: { runId } })).toBe(0);
-    expect(await fixture.db.evidence.count({ where: { runId } })).toBe(0);
-    expect(await fixture.db.runSource.count({ where: { runId } })).toBe(0);
+    expect(
+        await fixture.db
+            .select({ count: dbCount() })
+            .from(dbReports)
+            .where(eq(dbReports.runId, runId))
+            .then((rows) => rows[0]!.count),
+    ).toBe(0);
+    expect(
+        await fixture.db
+            .select({ count: dbCount() })
+            .from(dbEvidence)
+            .where(eq(dbEvidence.runId, runId))
+            .then((rows) => rows[0]!.count),
+    ).toBe(0);
+    expect(
+        await fixture.db
+            .select({ count: dbCount() })
+            .from(dbRunSources)
+            .where(eq(dbRunSources.runId, runId))
+            .then((rows) => rows[0]!.count),
+    ).toBe(0);
 }
 
 async function liveResearch(
@@ -99,14 +140,17 @@ async function liveResearch(
     const initial = options.previous ?? (await seedRun(fixture.db, { mode: 'live' }));
     if (options.notificationPreference) {
         initial.config.notificationPreference = options.notificationPreference;
-        await fixture.db.taskVersion.update({
-            where: { id: initial.version.id },
-            data: { configJson: initial.config },
-        });
+        await fixture.db
+            .update(dbTaskVersions)
+            .set({ configJson: initial.config })
+            .where(eq(dbTaskVersions.id, initial.version.id))
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
     }
     const run = options.previous
-        ? await fixture.db.run.create({
-              data: {
+        ? await fixture.db
+              .insert(dbRuns)
+              .values({
                   userId: initial.user.id,
                   taskId: initial.task.id,
                   taskVersionId: initial.version.id,
@@ -121,8 +165,9 @@ async function liveResearch(
                       outputTokens: 0,
                       estimated: false,
                   },
-              },
-          })
+              })
+              .returning()
+              .then((rows) => requiredDatabaseValue(rows[0]))
         : initial.run;
     const claimed = await runs.claim(run.id, 'delivery-live', 60_000);
     if (claimed.kind !== 'claimed') throw new Error('Expected claimed live Run');
@@ -289,16 +334,18 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
                     body: '申请截止日期为十一月十五日。',
                 });
                 const firstDelivery = await delivery.deliver(first.claimed.token, first.candidate);
-                const firstRows = await fixture.db.notification.findMany({
-                    where: { runId: first.run.id },
+                const firstRows = await fixture.db.query.notifications.findMany({
+                    where: eq(dbNotifications.runId, first.run.id),
                 });
                 expect(firstRows.map((row) => row.kind)).toEqual(
                     mode === 'summary' ? ['summary'] : [],
                 );
                 expect(
-                    await fixture.db.inboxItem.count({
-                        where: { reportId: firstDelivery.reportId },
-                    }),
+                    await fixture.db
+                        .select({ count: dbCount() })
+                        .from(dbInboxItems)
+                        .where(eq(dbInboxItems.reportId, firstDelivery.reportId))
+                        .then((rows) => rows[0]!.count),
                 ).toBe(1);
                 const second = await liveResearch({
                     previous: first,
@@ -306,19 +353,24 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
                 });
                 const delivered = await delivery.deliver(second.claimed.token, second.candidate);
                 expect(
-                    (await fixture.db.run.findUniqueOrThrow({ where: { id: second.run.id } }))
-                        .outcome,
+                    (
+                        await fixture.db.query.runs
+                            .findFirst({ where: eq(dbRuns.id, second.run.id) })
+                            .then((row) => requiredDatabaseValue(row))
+                    ).outcome,
                 ).toBe('important_change');
-                const rows = await fixture.db.notification.findMany({
-                    where: { runId: second.run.id },
+                const rows = await fixture.db.query.notifications.findMany({
+                    where: eq(dbNotifications.runId, second.run.id),
                 });
                 expect(rows.map((row) => row.kind)).toEqual(mode === 'off' ? [] : [mode]);
                 const readAt = new Date('2026-01-01T00:00:00Z');
                 if (rows[0])
-                    await fixture.db.notification.update({
-                        where: { id: rows[0].id },
-                        data: { readAt },
-                    });
+                    await fixture.db
+                        .update(dbNotifications)
+                        .set({ readAt: readAt })
+                        .where(eq(dbNotifications.id, rows[0].id))
+                        .returning()
+                        .then((rows) => requiredDatabaseValue(rows[0]));
                 expect(
                     await delivery.deliver(second.claimed.token, second.candidate),
                 ).toMatchObject({
@@ -328,9 +380,9 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
                 if (rows[0])
                     expect(
                         (
-                            await fixture.db.notification.findUniqueOrThrow({
-                                where: { id: rows[0].id },
-                            })
+                            await fixture.db.query.notifications
+                                .findFirst({ where: eq(dbNotifications.id, rows[0].id) })
+                                .then((row) => requiredDatabaseValue(row))
                         ).readAt,
                     ).toEqual(readAt);
                 const third = await liveResearch({
@@ -340,26 +392,39 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
                 });
                 const partial = await delivery.deliver(third.claimed.token, third.candidate);
                 expect(
-                    (await fixture.db.run.findUniqueOrThrow({ where: { id: third.run.id } }))
-                        .status,
+                    (
+                        await fixture.db.query.runs
+                            .findFirst({ where: eq(dbRuns.id, third.run.id) })
+                            .then((row) => requiredDatabaseValue(row))
+                    ).status,
                 ).toBe('partial');
                 expect(
                     (
-                        await fixture.db.notification.findMany({ where: { runId: third.run.id } })
+                        await fixture.db.query.notifications.findMany({
+                            where: eq(dbNotifications.runId, third.run.id),
+                        })
                     ).map((row) => row.kind),
                 ).toEqual(runIssues ? ['run_issue'] : []);
                 expect(
-                    await fixture.db.inboxItem.count({ where: { reportId: partial.reportId } }),
+                    await fixture.db
+                        .select({ count: dbCount() })
+                        .from(dbInboxItems)
+                        .where(eq(dbInboxItems.reportId, partial.reportId))
+                        .then((rows) => rows[0]!.count),
                 ).toBe(1);
             });
 
     it('通知SQL失败使报告/Inbox/基线/终态一起回滚，修复后可重试', async () => {
         const researched = await liveResearch();
-        await fixture.db.$executeRawUnsafe(
-            `CREATE FUNCTION notification_fail() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected notification failure'; END $$`,
+        await fixture.db.execute(
+            sql.raw(
+                `CREATE FUNCTION notification_fail() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected notification failure'; END $$`,
+            ),
         );
-        await fixture.db.$executeRawUnsafe(
-            'CREATE TRIGGER notification_fail BEFORE INSERT ON notifications FOR EACH ROW EXECUTE FUNCTION notification_fail()',
+        await fixture.db.execute(
+            sql.raw(
+                'CREATE TRIGGER notification_fail BEFORE INSERT ON notifications FOR EACH ROW EXECUTE FUNCTION notification_fail()',
+            ),
         );
         try {
             await expect(
@@ -367,23 +432,38 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
             ).rejects.toThrow();
             await assertEmpty(researched.run.id);
             expect(
-                await fixture.db.notification.count({ where: { runId: researched.run.id } }),
+                await fixture.db
+                    .select({ count: dbCount() })
+                    .from(dbNotifications)
+                    .where(eq(dbNotifications.runId, researched.run.id))
+                    .then((rows) => rows[0]!.count),
             ).toBe(0);
-            expect(await fixture.db.baseline.count({ where: { taskId: researched.task.id } })).toBe(
-                0,
-            );
             expect(
-                (await fixture.db.run.findUniqueOrThrow({ where: { id: researched.run.id } }))
-                    .status,
+                await fixture.db
+                    .select({ count: dbCount() })
+                    .from(dbBaselines)
+                    .where(eq(dbBaselines.taskId, researched.task.id))
+                    .then((rows) => rows[0]!.count),
+            ).toBe(0);
+            expect(
+                (
+                    await fixture.db.query.runs
+                        .findFirst({ where: eq(dbRuns.id, researched.run.id) })
+                        .then((row) => requiredDatabaseValue(row))
+                ).status,
             ).toBe('running');
         } finally {
-            await fixture.db.$executeRawUnsafe('DROP TRIGGER notification_fail ON notifications');
-            await fixture.db.$executeRawUnsafe('DROP FUNCTION notification_fail()');
+            await fixture.db.execute(sql.raw('DROP TRIGGER notification_fail ON notifications'));
+            await fixture.db.execute(sql.raw('DROP FUNCTION notification_fail()'));
         }
         await delivery.deliver(researched.claimed.token, researched.candidate);
-        expect(await fixture.db.notification.count({ where: { runId: researched.run.id } })).toBe(
-            1,
-        );
+        expect(
+            await fixture.db
+                .select({ count: dbCount() })
+                .from(dbNotifications)
+                .where(eq(dbNotifications.runId, researched.run.id))
+                .then((rows) => rows[0]!.count),
+        ).toBe(1);
     });
     it.each(['new', 'repost'] as const)('新增URL按%s分类，不把转载当独立新增', async (kind) => {
         const first = await liveResearch();
@@ -398,16 +478,18 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
                     : undefined,
         });
         const result = await delivery.deliver(second.claimed.token, second.candidate);
-        const changes = await fixture.db.changeRecord.findMany({
-            where: { reportId: result.reportId },
-            include: { source: true },
+        const changes = await fixture.db.query.changeRecords.findMany({
+            where: eq(dbChangeRecords.reportId, result.reportId),
+            with: { source: true },
         });
         expect(changes.find((change) => change.source.canonicalUrl === addedUrl)).toMatchObject({
             kind: kind === 'new' ? 'new' : 'duplicate_candidate',
             importance: 'normal',
         });
         expect(
-            await fixture.db.run.findUniqueOrThrow({ where: { id: second.run.id } }),
+            await fixture.db.query.runs
+                .findFirst({ where: eq(dbRuns.id, second.run.id) })
+                .then((row) => requiredDatabaseValue(row)),
         ).toMatchObject({
             status: 'succeeded',
             outcome: kind === 'new' ? 'new_findings' : 'no_important_change',
@@ -423,15 +505,21 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
         });
         const result = await delivery.deliver(second.claimed.token, second.candidate);
         expect(
-            await fixture.db.report.findUniqueOrThrow({ where: { id: result.reportId } }),
+            await fixture.db.query.reports
+                .findFirst({ where: eq(dbReports.id, result.reportId) })
+                .then((row) => requiredDatabaseValue(row)),
         ).toMatchObject({ completeness: 'partial' });
         expect(
-            await fixture.db.run.findUniqueOrThrow({ where: { id: second.run.id } }),
+            await fixture.db.query.runs
+                .findFirst({ where: eq(dbRuns.id, second.run.id) })
+                .then((row) => requiredDatabaseValue(row)),
         ).toMatchObject({
             outcome: 'inconclusive',
         });
         expect(
-            await fixture.db.baseline.findFirstOrThrow({ where: { taskId: first.task.id } }),
+            await fixture.db.query.baselines
+                .findFirst({ where: eq(dbBaselines.taskId, first.task.id) })
+                .then((row) => requiredDatabaseValue(row)),
         ).toMatchObject({ completeRunId: first.run.id });
     });
 
@@ -446,20 +534,26 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
                 manifest.pages[0].facts[0].quote = '没有保留引用的旧事实';
                 manifest.pages[0].facts[0].value = '旧事实';
             }
-            await fixture.db.report.updateMany({
-                where: { runId: first.run.id },
-                data: { comparisonJson: JSON.parse(JSON.stringify(manifest)) },
-            });
+            await fixture.db
+                .update(dbReports)
+                .set({ comparisonJson: JSON.parse(JSON.stringify(manifest)) })
+                .where(eq(dbReports.runId, first.run.id))
+                .returning({ id: dbReports.id })
+                .then((rows) => ({ count: rows.length }));
             const second = await liveResearch({ previous: first });
             expect(
                 await createAgentRepository(fixture.db, second.claimed.token).comparison(),
             ).toMatchObject({ baselineRunId: first.run.id, baseline: { status: 'unavailable' } });
             await delivery.deliver(second.claimed.token, second.candidate);
             expect(
-                await fixture.db.run.findUniqueOrThrow({ where: { id: second.run.id } }),
+                await fixture.db.query.runs
+                    .findFirst({ where: eq(dbRuns.id, second.run.id) })
+                    .then((row) => requiredDatabaseValue(row)),
             ).toMatchObject({ status: 'partial', outcome: 'inconclusive' });
             expect(
-                await fixture.db.baseline.findFirstOrThrow({ where: { taskId: first.task.id } }),
+                await fixture.db.query.baselines
+                    .findFirst({ where: eq(dbBaselines.taskId, first.task.id) })
+                    .then((row) => requiredDatabaseValue(row)),
             ).toMatchObject({ completeRunId: first.run.id });
         },
     );
@@ -467,8 +561,9 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
     it('首次冻结null后即使出现新指针，恢复仍保持null；模式不匹配的基线不采用', async () => {
         const initial = await liveResearch({ skipExecute: true });
         expect(initial.claimed.run.baselineRunId).toBeNull();
-        const history = await fixture.db.run.create({
-            data: {
+        const history = await fixture.db
+            .insert(dbRuns)
+            .values({
                 userId: initial.user.id,
                 taskId: initial.task.id,
                 taskVersionId: initial.version.id,
@@ -484,10 +579,12 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
                     searchedQueries: [],
                     exhausted: [],
                 },
-            },
-        });
-        await fixture.db.report.create({
-            data: {
+            })
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
+        await fixture.db
+            .insert(dbReports)
+            .values({
                 userId: initial.user.id,
                 taskId: initial.task.id,
                 taskVersionId: initial.version.id,
@@ -496,20 +593,25 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
                 summary: '历史完整来源',
                 format: 'brief',
                 completeness: 'complete',
-            },
-        });
-        await fixture.db.baseline.create({
-            data: {
+            })
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
+        await fixture.db
+            .insert(dbBaselines)
+            .values({
                 userId: initial.user.id,
                 taskId: initial.task.id,
                 comparisonScopeHash: initial.run.comparisonScopeHash,
                 completeRunId: history.id,
-            },
-        });
-        await fixture.db.run.update({
-            where: { id: initial.run.id },
-            data: { leaseExpiresAt: new Date(0) },
-        });
+            })
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
+        await fixture.db
+            .update(dbRuns)
+            .set({ leaseExpiresAt: new Date(0) })
+            .where(eq(dbRuns.id, initial.run.id))
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
         const recovered = await runs.claim(initial.run.id, 'null-recovery', 60_000);
         if (recovered.kind !== 'claimed') throw new Error('Expected recovery');
         expect(recovered.run.baselineRunId).toBeNull();
@@ -520,8 +622,9 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
             },
         );
         await runs.finish(recovered.token, { code: 'EXECUTOR_FAILED' });
-        const demo = await fixture.db.run.create({
-            data: {
+        const demo = await fixture.db
+            .insert(dbRuns)
+            .values({
                 userId: initial.user.id,
                 taskId: initial.task.id,
                 taskVersionId: initial.version.id,
@@ -536,8 +639,9 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
                     outputTokens: 0,
                     estimated: false,
                 },
-            },
-        });
+            })
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
         const demoClaim = await runs.claim(demo.id, 'demo-isolation');
         if (demoClaim.kind !== 'claimed') throw new Error('Expected demo claim');
         expect(demoClaim.run.baselineRunId).toBeNull();
@@ -552,13 +656,17 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
         });
         expect(second.claimed.run.baselineRunId).toBe(first.run.id);
         const result = await delivery.deliver(second.claimed.token, second.candidate);
-        const report = await fixture.db.report.findUniqueOrThrow({
-            where: { id: result.reportId },
-            include: { changes: { include: { citations: { include: { evidence: true } } } } },
-        });
+        const report = await fixture.db.query.reports
+            .findFirst({
+                where: eq(dbReports.id, result.reportId),
+                with: { changes: { with: { citations: { with: { evidence: true } } } } },
+            })
+            .then((row) => requiredDatabaseValue(row));
         expect(report).toMatchObject({ baselineRunId: first.run.id, completeness: 'complete' });
         expect(
-            await fixture.db.run.findUniqueOrThrow({ where: { id: second.run.id } }),
+            await fixture.db.query.runs
+                .findFirst({ where: eq(dbRuns.id, second.run.id) })
+                .then((row) => requiredDatabaseValue(row)),
         ).toMatchObject({
             status: 'succeeded',
             outcome: 'important_change',
@@ -617,22 +725,32 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
         });
         await delivery.deliver(third.claimed.token, third.candidate);
         expect(
-            await fixture.db.run.findUniqueOrThrow({ where: { id: third.run.id } }),
+            await fixture.db.query.runs
+                .findFirst({ where: eq(dbRuns.id, third.run.id) })
+                .then((row) => requiredDatabaseValue(row)),
         ).toMatchObject({
             status: 'partial',
             outcome: 'inconclusive',
         });
         expect(
-            await fixture.db.baseline.findFirstOrThrow({ where: { taskId: first.task.id } }),
+            await fixture.db.query.baselines
+                .findFirst({ where: eq(dbBaselines.taskId, first.task.id) })
+                .then((row) => requiredDatabaseValue(row)),
         ).toMatchObject({ completeRunId: second.run.id });
         expect(await delivery.deliver(second.claimed.token, second.candidate)).toMatchObject({
             reportId: result.reportId,
             reused: true,
         });
-        expect(await fixture.db.report.count({ where: { runId: first.run.id } })).toBe(1);
-        const immutableFirst = await fixture.db.report.findUniqueOrThrow({
-            where: { id: firstDelivery.reportId },
-        });
+        expect(
+            await fixture.db
+                .select({ count: dbCount() })
+                .from(dbReports)
+                .where(eq(dbReports.runId, first.run.id))
+                .then((rows) => rows[0]!.count),
+        ).toBe(1);
+        const immutableFirst = await fixture.db.query.reports
+            .findFirst({ where: eq(dbReports.id, firstDelivery.reportId) })
+            .then((row) => requiredDatabaseValue(row));
         expect(immutableFirst.comparisonJson).toEqual(first.candidate.manifest);
         expect(JSON.stringify(immutableFirst.comparisonJson)).not.toContain('"text":');
     });
@@ -650,10 +768,14 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
         });
         const result = await delivery.deliver(second.claimed.token, second.candidate);
         expect(
-            await fixture.db.changeRecord.findMany({ where: { reportId: result.reportId } }),
+            await fixture.db.query.changeRecords.findMany({
+                where: eq(dbChangeRecords.reportId, result.reportId),
+            }),
         ).toMatchObject([{ kind: 'non_material', importance: 'normal' }]);
         expect(
-            await fixture.db.run.findUniqueOrThrow({ where: { id: second.run.id } }),
+            await fixture.db.query.runs
+                .findFirst({ where: eq(dbRuns.id, second.run.id) })
+                .then((row) => requiredDatabaseValue(row)),
         ).toMatchObject({
             outcome: 'no_important_change',
             status: 'succeeded',
@@ -670,19 +792,22 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
             importance: 'unknown',
         });
         const result = await delivery.deliver(second.claimed.token, second.candidate);
-        const report = await fixture.db.report.findUniqueOrThrow({
-            where: { id: result.reportId },
-            include: { changes: true },
-        });
+        const report = await fixture.db.query.reports
+            .findFirst({ where: eq(dbReports.id, result.reportId), with: { changes: true } })
+            .then((row) => requiredDatabaseValue(row));
         expect(report).toMatchObject({ completeness: 'partial', baselineRunId: first.run.id });
         expect(report.changes.every((entry) => entry.importance !== 'important')).toBe(true);
         expect(
-            await fixture.db.run.findUniqueOrThrow({ where: { id: second.run.id } }),
+            await fixture.db.query.runs
+                .findFirst({ where: eq(dbRuns.id, second.run.id) })
+                .then((row) => requiredDatabaseValue(row)),
         ).toMatchObject({
             outcome: 'inconclusive',
         });
         expect(
-            await fixture.db.baseline.findFirstOrThrow({ where: { taskId: first.task.id } }),
+            await fixture.db.query.baselines
+                .findFirst({ where: eq(dbBaselines.taskId, first.task.id) })
+                .then((row) => requiredDatabaseValue(row)),
         ).toMatchObject({ completeRunId: first.run.id });
     });
 
@@ -693,15 +818,23 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
         await delivery.deliver(prior.claimed.token, prior.candidate);
         const current = await liveResearch({ previous: prior });
         expect(current.claimed.run.baselineRunId).toBe(prior.run.id);
-        await fixture.db.baseline.updateMany({
-            where: { taskId: first.task.id },
-            data: { completeRunId: first.run.id },
-        });
-        const count = await fixture.db.toolCall.count({ where: { runId: current.run.id } });
-        await fixture.db.run.update({
-            where: { id: current.run.id },
-            data: { leaseExpiresAt: new Date(0) },
-        });
+        await fixture.db
+            .update(dbBaselines)
+            .set({ completeRunId: first.run.id })
+            .where(eq(dbBaselines.taskId, first.task.id))
+            .returning({ id: dbBaselines.id })
+            .then((rows) => ({ count: rows.length }));
+        const count = await fixture.db
+            .select({ count: dbCount() })
+            .from(dbToolCalls)
+            .where(eq(dbToolCalls.runId, current.run.id))
+            .then((rows) => rows[0]!.count);
+        await fixture.db
+            .update(dbRuns)
+            .set({ leaseExpiresAt: new Date(0) })
+            .where(eq(dbRuns.id, current.run.id))
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
         const next = await runs.claim(current.run.id, 'comparison-recovery', 60_000);
         if (next.kind !== 'claimed') throw new Error('Expected recovered claim');
         expect(next.run.baselineRunId).toBe(prior.run.id);
@@ -723,7 +856,13 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
             },
         });
         const candidate = await session.execute();
-        expect(await fixture.db.toolCall.count({ where: { runId: current.run.id } })).toBe(count);
+        expect(
+            await fixture.db
+                .select({ count: dbCount() })
+                .from(dbToolCalls)
+                .where(eq(dbToolCalls.runId, current.run.id))
+                .then((rows) => rows[0]!.count),
+        ).toBe(count);
         expect(candidate).toEqual(current.candidate);
         await expect(
             delivery.deliver(current.claimed.token, current.candidate),
@@ -736,8 +875,9 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
     it('历史无manifest的合法基线保留冻结指针但比较保守partial，不当首次建基线', async () => {
         const first = await liveResearch();
         await delivery.deliver(first.claimed.token, first.candidate);
-        await fixture.db
-            .$executeRaw`UPDATE reports SET comparison_json=NULL WHERE run_id=${first.run.id}::uuid`;
+        await fixture.db.execute(
+            sql`UPDATE reports SET comparison_json=NULL WHERE run_id=${first.run.id}::uuid`,
+        );
         const second = await liveResearch({ previous: first });
         expect(second.claimed.run.baselineRunId).toBe(first.run.id);
         expect(
@@ -745,13 +885,17 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
         ).toMatchObject({ baseline: { status: 'unavailable' } });
         await delivery.deliver(second.claimed.token, second.candidate);
         expect(
-            await fixture.db.run.findUniqueOrThrow({ where: { id: second.run.id } }),
+            await fixture.db.query.runs
+                .findFirst({ where: eq(dbRuns.id, second.run.id) })
+                .then((row) => requiredDatabaseValue(row)),
         ).toMatchObject({
             status: 'partial',
             outcome: 'inconclusive',
         });
         expect(
-            await fixture.db.baseline.findFirstOrThrow({ where: { taskId: first.task.id } }),
+            await fixture.db.query.baselines
+                .findFirst({ where: eq(dbBaselines.taskId, first.task.id) })
+                .then((row) => requiredDatabaseValue(row)),
         ).toMatchObject({ completeRunId: first.run.id });
     });
 
@@ -765,15 +909,17 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
         });
         const other = await liveResearch();
         await delivery.deliver(other.claimed.token, other.candidate);
-        const foreign = await fixture.db.evidence.findFirstOrThrow({
-            where: { runId: other.run.id },
-        });
+        const foreign = await fixture.db.query.evidence
+            .findFirst({ where: eq(dbEvidence.runId, other.run.id) })
+            .then((row) => requiredDatabaseValue(row));
         const forged = structuredClone(second.candidate);
         forged.changes![0].oldEvidenceIds = [foreign.id];
         await expect(delivery.deliver(second.claimed.token, forged)).rejects.toMatchObject({
             code: 'INVALID_DELIVERY_EVIDENCE',
         });
-        const row = await fixture.db.run.findUniqueOrThrow({ where: { id: second.run.id } });
+        const row = await fixture.db.query.runs
+            .findFirst({ where: eq(dbRuns.id, second.run.id) })
+            .then((row) => requiredDatabaseValue(row));
         const ref = row.checkpointRef as {
             threadId: string;
             namespace: '';
@@ -824,9 +970,9 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
         async (kind) => {
             const seed = await liveResearch({ claimKind: kind });
             const result = await delivery.deliver(seed.claimed.token, seed.candidate);
-            const claims = await fixture.db.claim.findMany({
-                where: { reportId: result.reportId },
-                include: { citations: true },
+            const claims = await fixture.db.query.claims.findMany({
+                where: eq(dbClaims.reportId, result.reportId),
+                with: { citations: true },
             });
             expect(claims).toHaveLength(1);
             expect(claims[0]).toMatchObject({
@@ -839,7 +985,9 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
                     new Set(['supports', 'contradicts']),
                 );
                 expect(
-                    await fixture.db.run.findUniqueOrThrow({ where: { id: seed.run.id } }),
+                    await fixture.db.query.runs
+                        .findFirst({ where: eq(dbRuns.id, seed.run.id) })
+                        .then((row) => requiredDatabaseValue(row)),
                 ).toMatchObject({ status: 'partial', outcome: 'inconclusive' });
             }
         },
@@ -852,15 +1000,23 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
             code: 'NO_EVIDENCE',
         });
         await assertEmpty(seed.run.id);
-        expect(await fixture.db.source.count({ where: { userId: seed.user.id } })).toBe(0);
+        expect(
+            await fixture.db
+                .select({ count: dbCount() })
+                .from(dbSources)
+                .where(eq(dbSources.userId, seed.user.id))
+                .then((rows) => rows[0]!.count),
+        ).toBe(0);
     });
 
     it.each(['unknown', 'failed'] as const)('%s的read结果不可升级成报告证据', async (status) => {
         const seed = await research();
-        await fixture.db.toolCall.updateMany({
-            where: { runId: seed.run.id, tool: 'read' },
-            data: { status },
-        });
+        await fixture.db
+            .update(dbToolCalls)
+            .set({ status: status })
+            .where(and(eq(dbToolCalls.runId, seed.run.id), eq(dbToolCalls.tool, 'read')))
+            .returning({ id: dbToolCalls.id })
+            .then((rows) => ({ count: rows.length }));
         await expect(delivery.deliver(seed.claimed.token, seed.candidate)).rejects.toMatchObject({
             code: 'INVALID_DELIVERY_EVIDENCE',
         });
@@ -872,23 +1028,28 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
         expect(seed.candidate.coverage).toMatchObject({ completeness: 'complete', gaps: [] });
         const { reportId } = await delivery.deliver(seed.claimed.token, seed.candidate);
         expect(
-            await fixture.db.report.findUniqueOrThrow({ where: { id: reportId } }),
+            await fixture.db.query.reports
+                .findFirst({ where: eq(dbReports.id, reportId) })
+                .then((row) => requiredDatabaseValue(row)),
         ).toMatchObject({
             completeness: 'complete',
         });
         expect(
-            await fixture.db.run.findUniqueOrThrow({ where: { id: seed.run.id } }),
+            await fixture.db.query.runs
+                .findFirst({ where: eq(dbRuns.id, seed.run.id) })
+                .then((row) => requiredDatabaseValue(row)),
         ).toMatchObject({
             status: 'succeeded',
             outcome: 'baseline',
         });
         expect(
-            await fixture.db.baseline.findFirstOrThrow({ where: { taskId: seed.task.id } }),
+            await fixture.db.query.baselines
+                .findFirst({ where: eq(dbBaselines.taskId, seed.task.id) })
+                .then((row) => requiredDatabaseValue(row)),
         ).toMatchObject({ completeRunId: seed.run.id });
-        const observation = await fixture.db.runSource.findFirstOrThrow({
-            where: { runId: seed.run.id },
-            include: { snapshot: true },
-        });
+        const observation = await fixture.db.query.runSources
+            .findFirst({ where: eq(dbRunSources.runId, seed.run.id), with: { snapshot: true } })
+            .then((row) => requiredDatabaseValue(row));
         expect(observation.snapshot!.publishedAt).not.toBeNull();
         expect(observation.metadataJson).toMatchObject({
             publication: { status: 'known' },
@@ -906,13 +1067,15 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
             coverage: { completeness: 'complete', gaps: [] },
         });
         const result = await delivery.deliver(second.claimed.token, second.candidate);
-        const report = await fixture.db.report.findUniqueOrThrow({
-            where: { id: result.reportId },
-        });
+        const report = await fixture.db.query.reports
+            .findFirst({ where: eq(dbReports.id, result.reportId) })
+            .then((row) => requiredDatabaseValue(row));
         expect(report).toMatchObject({ completeness: 'complete', baselineRunId: first.run.id });
         expect(report.limitationsJson).toEqual([]);
         expect(
-            await fixture.db.run.findUniqueOrThrow({ where: { id: second.run.id } }),
+            await fixture.db.query.runs
+                .findFirst({ where: eq(dbRuns.id, second.run.id) })
+                .then((row) => requiredDatabaseValue(row)),
         ).toMatchObject({
             status: 'succeeded',
             outcome: 'no_important_change',
@@ -922,18 +1085,33 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
             },
         });
         expect(
-            await fixture.db.baseline.findFirstOrThrow({ where: { taskId: first.task.id } }),
+            await fixture.db.query.baselines
+                .findFirst({ where: eq(dbBaselines.taskId, first.task.id) })
+                .then((row) => requiredDatabaseValue(row)),
         ).toMatchObject({ completeRunId: second.run.id });
-        expect(await fixture.db.inboxItem.count({ where: { reportId: result.reportId } })).toBe(1);
-        const completed = await fixture.db.runEvent.findFirstOrThrow({
-            where: { runId: second.run.id, type: 'run.completed' },
-        });
+        expect(
+            await fixture.db
+                .select({ count: dbCount() })
+                .from(dbInboxItems)
+                .where(eq(dbInboxItems.reportId, result.reportId))
+                .then((rows) => rows[0]!.count),
+        ).toBe(1);
+        const completed = await fixture.db.query.runEvents
+            .findFirst({
+                where: and(
+                    eq(dbRunEvents.runId, second.run.id),
+                    eq(dbRunEvents.type, 'run.completed'),
+                ),
+            })
+            .then((row) => requiredDatabaseValue(row));
         expect(completed.payload).toMatchObject({
             status: 'succeeded',
             outcome: 'no_important_change',
         });
         expect(
-            await fixture.db.changeRecord.findMany({ where: { reportId: report.id } }),
+            await fixture.db.query.changeRecords.findMany({
+                where: eq(dbChangeRecords.reportId, report.id),
+            }),
         ).toMatchObject([{ kind: 'duplicate' }]);
     });
 
@@ -946,8 +1124,8 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
                 maxTextChars: prefix.length,
             });
             await delivery.deliver(first.claimed.token, first.candidate);
-            const before = await fixture.db.baseline.findFirst({
-                where: { taskId: first.task.id },
+            const before = await fixture.db.query.baselines.findFirst({
+                where: eq(dbBaselines.taskId, first.task.id),
             });
             const second = await liveResearch({
                 previous: first,
@@ -958,37 +1136,43 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
                 second.candidate.pages[0].contentHash,
             );
             await delivery.deliver(second.claimed.token, second.candidate);
-            const one = await fixture.db.runSource.findFirstOrThrow({
-                where: { runId: first.run.id },
-                include: { snapshot: true },
-            });
-            const two = await fixture.db.runSource.findFirstOrThrow({
-                where: { runId: second.run.id },
-            });
+            const one = await fixture.db.query.runSources
+                .findFirst({
+                    where: eq(dbRunSources.runId, first.run.id),
+                    with: { snapshot: true },
+                })
+                .then((row) => requiredDatabaseValue(row));
+            const two = await fixture.db.query.runSources
+                .findFirst({ where: eq(dbRunSources.runId, second.run.id) })
+                .then((row) => requiredDatabaseValue(row));
             expect(two.snapshotId).toBe(one.snapshotId);
             expect(two.observedAt.getTime()).toBeGreaterThan(one.observedAt.getTime());
             expect(one.metadataJson).toMatchObject({ truncated: firstTruncated });
             expect(two.metadataJson).toMatchObject({ truncated: !firstTruncated });
             expect(one.snapshot!.metadataJson).toMatchObject({ truncated: firstTruncated });
-            const after = await fixture.db.baseline.findFirst({ where: { taskId: first.task.id } });
+            const after = await fixture.db.query.baselines.findFirst({
+                where: eq(dbBaselines.taskId, first.task.id),
+            });
             if (!firstTruncated) expect(after!.completeRunId).toBe(before!.completeRunId);
             else expect(after!.completeRunId).toBe(second.run.id);
-            const secondRun = await fixture.db.run.findUniqueOrThrow({
-                where: { id: second.run.id },
-            });
+            const secondRun = await fixture.db.query.runs
+                .findFirst({ where: eq(dbRuns.id, second.run.id) })
+                .then((row) => requiredDatabaseValue(row));
             expect(secondRun.outcome).not.toBe('no_important_change');
         },
     );
     it('保留正文与精确quote定位，partial原子交付1报告/Inbox/终态且不建基线', async () => {
         const seed = await research();
         const result = await delivery.deliver(seed.claimed.token, seed.candidate);
-        const report = await fixture.db.report.findUniqueOrThrow({
-            where: { id: result.reportId },
-            include: {
-                claims: { include: { citations: { include: { evidence: true } } } },
-                inboxItems: true,
-            },
-        });
+        const report = await fixture.db.query.reports
+            .findFirst({
+                where: eq(dbReports.id, result.reportId),
+                with: {
+                    claims: { with: { citations: { with: { evidence: true } } } },
+                    inboxItems: true,
+                },
+            })
+            .then((row) => requiredDatabaseValue(row));
         expect(report).toMatchObject({
             userId: seed.user.id,
             runId: seed.run.id,
@@ -998,9 +1182,9 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
         });
         expect(report.inboxItems).toHaveLength(1);
         expect(report.limitationsJson).toContain(seed.candidate.demoReason);
-        const observations = await fixture.db.runSource.findMany({
-            where: { runId: seed.run.id },
-            include: { snapshot: true, source: true },
+        const observations = await fixture.db.query.runSources.findMany({
+            where: eq(dbRunSources.runId, seed.run.id),
+            with: { snapshot: true, source: true },
         });
         expect(observations).toHaveLength(1);
         expect(observations[0]).toMatchObject({
@@ -1038,7 +1222,9 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
             }
         }
         expect(
-            await fixture.db.run.findUniqueOrThrow({ where: { id: seed.run.id } }),
+            await fixture.db.query.runs
+                .findFirst({ where: eq(dbRuns.id, seed.run.id) })
+                .then((row) => requiredDatabaseValue(row)),
         ).toMatchObject({
             status: 'partial',
             outcome: 'inconclusive',
@@ -1046,10 +1232,16 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
             leaseOwner: null,
             coverageJson: { completeness: 'partial' },
         });
-        expect(await fixture.db.baseline.count({ where: { taskId: seed.task.id } })).toBe(0);
-        const events = await fixture.db.runEvent.findMany({
-            where: { runId: seed.run.id },
-            orderBy: { seq: 'asc' },
+        expect(
+            await fixture.db
+                .select({ count: dbCount() })
+                .from(dbBaselines)
+                .where(eq(dbBaselines.taskId, seed.task.id))
+                .then((rows) => rows[0]!.count),
+        ).toBe(0);
+        const events = await fixture.db.query.runEvents.findMany({
+            where: eq(dbRunEvents.runId, seed.run.id),
+            orderBy: [asc(dbRunEvents.seq)],
         });
         expect(events.slice(-3).map((event) => event.type)).toEqual([
             'coverage.updated',
@@ -1073,19 +1265,40 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
             reused: true,
         });
         expect(await runs.claim(seed.run.id, 'redelivery')).toEqual({ kind: 'ignored' });
-        expect(await fixture.db.report.count({ where: { runId: seed.run.id } })).toBe(1);
-        expect(await fixture.db.inboxItem.count({ where: { reportId: results[0].reportId } })).toBe(
-            1,
-        );
         expect(
-            await fixture.db.runEvent.count({
-                where: { runId: seed.run.id, type: 'report.published' },
-            }),
+            await fixture.db
+                .select({ count: dbCount() })
+                .from(dbReports)
+                .where(eq(dbReports.runId, seed.run.id))
+                .then((rows) => rows[0]!.count),
         ).toBe(1);
         expect(
-            await fixture.db.runEvent.count({
-                where: { runId: seed.run.id, type: 'run.completed' },
-            }),
+            await fixture.db
+                .select({ count: dbCount() })
+                .from(dbInboxItems)
+                .where(eq(dbInboxItems.reportId, results[0].reportId))
+                .then((rows) => rows[0]!.count),
+        ).toBe(1);
+        expect(
+            await fixture.db
+                .select({ count: dbCount() })
+                .from(dbRunEvents)
+                .where(
+                    and(
+                        eq(dbRunEvents.runId, seed.run.id),
+                        eq(dbRunEvents.type, 'report.published'),
+                    ),
+                )
+                .then((rows) => rows[0]!.count),
+        ).toBe(1);
+        expect(
+            await fixture.db
+                .select({ count: dbCount() })
+                .from(dbRunEvents)
+                .where(
+                    and(eq(dbRunEvents.runId, seed.run.id), eq(dbRunEvents.type, 'run.completed')),
+                )
+                .then((rows) => rows[0]!.count),
         ).toBe(1);
     });
 
@@ -1113,13 +1326,21 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
                 code: 'INVALID_DELIVERY_EVIDENCE',
             });
             await assertEmpty(seed.run.id);
-            expect(await fixture.db.source.count({ where: { userId: seed.user.id } })).toBe(0);
+            expect(
+                await fixture.db
+                    .select({ count: dbCount() })
+                    .from(dbSources)
+                    .where(eq(dbSources.userId, seed.user.id))
+                    .then((rows) => rows[0]!.count),
+            ).toBe(0);
         },
     );
 
     it('即使伪造正文已写入并提升checkpoint也必须匹配当前Run成功read账本', async () => {
         const seed = await research();
-        const run = await fixture.db.run.findUniqueOrThrow({ where: { id: seed.run.id } });
+        const run = await fixture.db.query.runs
+            .findFirst({ where: eq(dbRuns.id, seed.run.id) })
+            .then((row) => requiredDatabaseValue(row));
         const ref = run.checkpointRef as {
             threadId: string;
             namespace: '';
@@ -1175,12 +1396,17 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
         const release = new Promise<void>((resolve) => {
             unlock = resolve;
         });
-        const cancel = fixture.db.$transaction(async (tx) => {
-            await tx.$queryRaw`SELECT id FROM runs WHERE id=${seed.run.id}::uuid FOR UPDATE`;
-            await tx.run.update({
-                where: { id: seed.run.id },
-                data: { status: 'cancel_requested', cancelRequestedAt: new Date() },
-            });
+        const cancel = fixture.db.transaction(async (tx) => {
+            await queryRows<Record<string, unknown>>(
+                tx,
+                sql`SELECT id FROM runs WHERE id=${seed.run.id}::uuid FOR UPDATE`,
+            );
+            await tx
+                .update(dbRuns)
+                .set({ status: 'cancel_requested', cancelRequestedAt: new Date() })
+                .where(eq(dbRuns.id, seed.run.id))
+                .returning()
+                .then((rows) => requiredDatabaseValue(rows[0]));
             entered();
             await release;
         });
@@ -1194,7 +1420,9 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
             await assertEmpty(seed.run.id);
             expect(await runs.finish(seed.claimed.token, { code: 'EXECUTOR_FAILED' })).toBe(true);
             expect(
-                await fixture.db.run.findUniqueOrThrow({ where: { id: seed.run.id } }),
+                await fixture.db.query.runs
+                    .findFirst({ where: eq(dbRuns.id, seed.run.id) })
+                    .then((row) => requiredDatabaseValue(row)),
             ).toMatchObject({
                 status: 'canceled',
             });
@@ -1206,43 +1434,68 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
 
     it('事务末尾Inbox写入失败回滚来源、快照、证据、报告及Run状态', async () => {
         const seed = await research();
-        await fixture.db.$executeRawUnsafe(
-            `CREATE FUNCTION fail_delivery_inbox() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected inbox failure'; END $$`,
+        await fixture.db.execute(
+            sql.raw(
+                `CREATE FUNCTION fail_delivery_inbox() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected inbox failure'; END $$`,
+            ),
         );
-        await fixture.db.$executeRawUnsafe(
-            `CREATE TRIGGER fail_delivery_inbox BEFORE INSERT ON inbox_items FOR EACH ROW EXECUTE FUNCTION fail_delivery_inbox()`,
+        await fixture.db.execute(
+            sql.raw(
+                `CREATE TRIGGER fail_delivery_inbox BEFORE INSERT ON inbox_items FOR EACH ROW EXECUTE FUNCTION fail_delivery_inbox()`,
+            ),
         );
         try {
             await expect(delivery.deliver(seed.claimed.token, seed.candidate)).rejects.toThrow();
             await assertEmpty(seed.run.id);
-            expect(await fixture.db.source.count({ where: { userId: seed.user.id } })).toBe(0);
-            expect(await fixture.db.sourceSnapshot.count({ where: { userId: seed.user.id } })).toBe(
-                0,
-            );
             expect(
-                await fixture.db.run.findUniqueOrThrow({ where: { id: seed.run.id } }),
+                await fixture.db
+                    .select({ count: dbCount() })
+                    .from(dbSources)
+                    .where(eq(dbSources.userId, seed.user.id))
+                    .then((rows) => rows[0]!.count),
+            ).toBe(0);
+            expect(
+                await fixture.db
+                    .select({ count: dbCount() })
+                    .from(dbSourceSnapshots)
+                    .where(eq(dbSourceSnapshots.userId, seed.user.id))
+                    .then((rows) => rows[0]!.count),
+            ).toBe(0);
+            expect(
+                await fixture.db.query.runs
+                    .findFirst({ where: eq(dbRuns.id, seed.run.id) })
+                    .then((row) => requiredDatabaseValue(row)),
             ).toMatchObject({
                 status: 'running',
                 finishedAt: null,
             });
             expect(
-                await fixture.db.runEvent.count({
-                    where: { runId: seed.run.id, type: 'report.published' },
-                }),
+                await fixture.db
+                    .select({ count: dbCount() })
+                    .from(dbRunEvents)
+                    .where(
+                        and(
+                            eq(dbRunEvents.runId, seed.run.id),
+                            eq(dbRunEvents.type, 'report.published'),
+                        ),
+                    )
+                    .then((rows) => rows[0]!.count),
             ).toBe(0);
         } finally {
-            await fixture.db.$executeRawUnsafe('DROP TRIGGER fail_delivery_inbox ON inbox_items');
-            await fixture.db.$executeRawUnsafe('DROP FUNCTION fail_delivery_inbox()');
+            await fixture.db.execute(sql.raw('DROP TRIGGER fail_delivery_inbox ON inbox_items'));
+            await fixture.db.execute(sql.raw('DROP FUNCTION fail_delivery_inbox()'));
         }
         expect((await delivery.deliver(seed.claimed.token, seed.candidate)).reused).toBe(false);
     });
 
     it('deadline仅使用截止前成功正文，不再调用provider，确定性partial可交付', async () => {
         const seed = await research();
-        await fixture.db.run.update({
-            where: { id: seed.run.id },
-            data: { deadlineAt: new Date(Date.now() - 1) },
-        });
+        await fixture.db
+            .update(dbRuns)
+            .set({ deadlineAt: new Date(Date.now() - 1) })
+            .where(eq(dbRuns.id, seed.run.id))
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
         const partial = (await seed.session.partial())!;
         expect(partial.coverage.exhausted).toContain('time');
         const forged = structuredClone(partial);
@@ -1260,10 +1513,14 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
         };
         const result = await delivery.deliver(seed.claimed.token, partial, true);
         expect(
-            await fixture.db.report.findUniqueOrThrow({ where: { id: result.reportId } }),
+            await fixture.db.query.reports
+                .findFirst({ where: eq(dbReports.id, result.reportId) })
+                .then((row) => requiredDatabaseValue(row)),
         ).toMatchObject({ completeness: 'partial' });
         expect(
-            await fixture.db.run.findUniqueOrThrow({ where: { id: seed.run.id } }),
+            await fixture.db.query.runs
+                .findFirst({ where: eq(dbRuns.id, seed.run.id) })
+                .then((row) => requiredDatabaseValue(row)),
         ).toMatchObject({
             status: 'partial',
             outcome: 'inconclusive',
@@ -1275,17 +1532,21 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
         const seed = await research();
         const partial = await seed.session.partial();
         expect(partial).not.toBeNull();
-        await fixture.db.run.update({
-            where: { id: seed.run.id },
-            data: { deadlineAt: new Date(0) },
-        });
+        await fixture.db
+            .update(dbRuns)
+            .set({ deadlineAt: new Date(0) })
+            .where(eq(dbRuns.id, seed.run.id))
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
         await expect(delivery.deliver(seed.claimed.token, partial!, true)).rejects.toMatchObject({
             code: 'NO_EVIDENCE',
         });
-        await fixture.db.run.update({
-            where: { id: seed.run.id },
-            data: { status: 'cancel_requested', cancelRequestedAt: new Date() },
-        });
+        await fixture.db
+            .update(dbRuns)
+            .set({ status: 'cancel_requested', cancelRequestedAt: new Date() })
+            .where(eq(dbRuns.id, seed.run.id))
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
         await expect(delivery.deliver(seed.claimed.token, partial!, true)).rejects.toMatchObject({
             code: 'RUN_CANCELED',
         });
@@ -1294,10 +1555,12 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
 
     it('旧epoch交付拒绝；成功账本与候选无正文时NO_EVIDENCE失败不产生报告', async () => {
         const seed = await research();
-        await fixture.db.run.update({
-            where: { id: seed.run.id },
-            data: { leaseExpiresAt: new Date(0) },
-        });
+        await fixture.db
+            .update(dbRuns)
+            .set({ leaseExpiresAt: new Date(0) })
+            .where(eq(dbRuns.id, seed.run.id))
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
         const next = await runs.claim(seed.run.id, 'new-owner');
         expect(next.kind).toBe('claimed');
         await expect(delivery.deliver(seed.claimed.token, seed.candidate)).rejects.toMatchObject({
@@ -1330,7 +1593,9 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
                 }).execute(empty.run.id),
             ).toBe('processed');
             expect(
-                await fixture.db.run.findUniqueOrThrow({ where: { id: empty.run.id } }),
+                await fixture.db.query.runs
+                    .findFirst({ where: eq(dbRuns.id, empty.run.id) })
+                    .then((row) => requiredDatabaseValue(row)),
             ).toMatchObject({ status: 'failed', failureCode: 'NO_EVIDENCE' });
             await assertEmpty(empty.run.id);
         } finally {
@@ -1352,13 +1617,21 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
                 repository: runs,
                 executorFactory: (token) => runtime.executorFactory(token),
             }).execute(seed.run.id);
-            const run = await fixture.db.run.findUniqueOrThrow({ where: { id: seed.run.id } });
+            const run = await fixture.db.query.runs
+                .findFirst({ where: eq(dbRuns.id, seed.run.id) })
+                .then((row) => requiredDatabaseValue(row));
             expect(run).toMatchObject({
                 status: 'partial',
                 outcome: 'inconclusive',
                 failureCode: null,
             });
-            expect(await fixture.db.report.count({ where: { runId: seed.run.id } })).toBe(1);
+            expect(
+                await fixture.db
+                    .select({ count: dbCount() })
+                    .from(dbReports)
+                    .where(eq(dbReports.runId, seed.run.id))
+                    .then((rows) => rows[0]!.count),
+            ).toBe(1);
         } finally {
             await runtime.close();
         }

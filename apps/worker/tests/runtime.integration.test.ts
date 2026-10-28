@@ -1,3 +1,14 @@
+import { requiredDatabaseValue } from '@/utils/database.ts';
+import {
+    outbox as dbOutbox,
+    eq,
+    runs as dbRuns,
+    reports as dbReports,
+    count as dbCount,
+    inboxItems as dbInboxItems,
+    sql,
+    and,
+} from '@scova/db';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -85,7 +96,12 @@ async function ended(process: ReturnType<typeof launch>) {
 describe('Worker Bun/Node 真实进程', () => {
     beforeAll(() => fixture.setup(), 120_000);
     afterAll(() => fixture.cleanup());
-    beforeEach(() => fixture.db.outbox.deleteMany());
+    beforeEach(() =>
+        fixture.db
+            .delete(dbOutbox)
+            .returning({ id: dbOutbox.id })
+            .then((rows) => ({ count: rows.length })),
+    );
 
     it.each(['bun', 'node'] as const)('%s 启动后实际投递，IPC 停止并释放连接', async (runtime) => {
         const { outbox: item } = await seedRun(fixture.db);
@@ -108,8 +124,11 @@ describe('Worker Bun/Node 真实进程', () => {
         try {
             await waitUntil(
                 async () =>
-                    (await fixture.db.outbox.findUniqueOrThrow({ where: { id: item.id } }))
-                        .sentAt !== null,
+                    (
+                        await fixture.db.query.outbox
+                            .findFirst({ where: eq(dbOutbox.id, item.id) })
+                            .then((row) => requiredDatabaseValue(row))
+                    ).sentAt !== null,
                 process,
             );
             expect(process.output).toContain('Outbox dispatcher running');
@@ -118,21 +137,36 @@ describe('Worker Bun/Node 真实进程', () => {
             });
             await waitUntil(
                 async () =>
-                    (await fixture.db.run.findUniqueOrThrow({ where: { id: item.aggregateId } }))
-                        .status === 'partial',
+                    (
+                        await fixture.db.query.runs
+                            .findFirst({ where: eq(dbRuns.id, item.aggregateId) })
+                            .then((row) => requiredDatabaseValue(row))
+                    ).status === 'partial',
                 process,
             );
             expect(
-                await fixture.db.run.findUniqueOrThrow({ where: { id: item.aggregateId } }),
+                await fixture.db.query.runs
+                    .findFirst({ where: eq(dbRuns.id, item.aggregateId) })
+                    .then((row) => requiredDatabaseValue(row)),
             ).toMatchObject({
                 status: 'partial',
                 failureCode: null,
             });
-            expect(await fixture.db.report.count({ where: { runId: item.aggregateId } })).toBe(1);
             expect(
-                await fixture.db.inboxItem.count({
-                    where: { report: { runId: item.aggregateId } },
-                }),
+                await fixture.db
+                    .select({ count: dbCount() })
+                    .from(dbReports)
+                    .where(eq(dbReports.runId, item.aggregateId))
+                    .then((rows) => rows[0]!.count),
+            ).toBe(1);
+            expect(
+                await fixture.db
+                    .select({ count: dbCount() })
+                    .from(dbInboxItems)
+                    .where(
+                        sql`EXISTS (SELECT 1 FROM ${dbReports} WHERE ${and(eq(dbInboxItems.userId, dbReports.userId), eq(dbInboxItems.reportId, dbReports.id), eq(dbReports.runId, item.aggregateId))})`,
+                    )
+                    .then((rows) => rows[0]!.count),
             ).toBe(1);
             process.child.send('scova:shutdown');
             await ended(process);

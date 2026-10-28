@@ -1,9 +1,11 @@
+import { type DatabaseClient, type Source } from '@scova/db';
+import * as tables from '@scova/db';
 import { randomUUID, createHash } from 'node:crypto';
-import type { PrismaClient, Source } from '@scova/db';
 import { draftConfig } from './task-drafts.ts';
+import { firstRow } from '../../src/utils/database.ts';
 const sha = (value: string) => createHash('sha256').update(value).digest('hex');
 export async function libraryFixture(
-    database: PrismaClient,
+    database: DatabaseClient,
     userId: string,
     task: { id: string; currentVersionId: string },
     options: {
@@ -22,9 +24,10 @@ export async function libraryFixture(
         gaps: options.complete ? [] : ['测试样例'],
         exhausted: [],
     };
-    const run = await database.run.create({
-        data: {
-            userId,
+    const run = await database
+        .insert(tables.runs)
+        .values({
+            userId: userId,
             taskId: task.id,
             taskVersionId: task.currentVersionId,
             comparisonScopeHash: sha('library-scope'),
@@ -35,29 +38,35 @@ export async function libraryFixture(
             budgetJson: draftConfig().budget,
             usageJson: { searches: 1, pages: 1, inputTokens: 0, outputTokens: 0, estimated: false },
             coverageJson: coverage,
-        },
-    });
+        })
+        .returning()
+        .then(firstRow);
     const url = 'https://example.com/library/' + randomUUID();
-    const source =
+    const source: Source =
         options.source ??
-        (await database.source.create({
-            data: { userId, canonicalUrl: url, canonicalUrlHash: sha(url) },
-        }));
-    const snapshot = await database.sourceSnapshot.create({
-        data: {
+        (await database
+            .insert(tables.sources)
+            .values({ userId: userId, canonicalUrl: url, canonicalUrlHash: sha(url) })
+            .returning()
+            .then(firstRow));
+    const snapshot = await database
+        .insert(tables.sourceSnapshots)
+        .values({
             id: options.snapshotId,
-            userId,
+            userId: userId,
             sourceId: source.id,
             title: options.title ?? '小样本学习资料',
             contentHash: sha(text),
             extractorVersion: 'reader-v1',
             textBody: text,
             textExpiresAt: new Date('2099-01-01T00:00:00Z'),
-        },
-    });
-    const observation = await database.runSource.create({
-        data: {
-            userId,
+        })
+        .returning()
+        .then(firstRow);
+    const observation = await database
+        .insert(tables.runSources)
+        .values({
+            userId: userId,
             runId: run.id,
             sourceId: source.id,
             snapshotId: snapshot.id,
@@ -66,15 +75,17 @@ export async function libraryFixture(
             observedAt: options.observedAt ?? new Date(),
             fetchStatus: 'succeeded',
             metadataJson: { mode: 'demo', truncated: false },
-        },
-    });
+        })
+        .returning()
+        .then(firstRow);
     const quote = text.slice(0, Math.min(text.length, 18));
-    const evidence = await database.evidence.create({
-        data: {
-            userId,
+    const evidence = await database
+        .insert(tables.evidence)
+        .values({
+            userId: userId,
             runId: run.id,
             snapshotId: snapshot.id,
-            quote,
+            quote: quote,
             quoteHash: sha(quote),
             selectorJson: {
                 type: 'text_offset',
@@ -82,8 +93,9 @@ export async function libraryFixture(
                 end: quote.length,
                 extractorVersion: 'reader-v1',
             },
-        },
-    });
+        })
+        .returning()
+        .then(firstRow);
     const manifest = {
         version: 1,
         pages: [
@@ -95,9 +107,10 @@ export async function libraryFixture(
             },
         ],
     };
-    const report = await database.report.create({
-        data: {
-            userId,
+    const report = await database
+        .insert(tables.reports)
+        .values({
+            userId: userId,
             runId: run.id,
             taskId: task.id,
             taskVersionId: task.currentVersionId,
@@ -107,21 +120,31 @@ export async function libraryFixture(
             completeness: options.complete ? 'complete' : 'partial',
             limitationsJson: options.complete ? [] : ['测试样例'],
             comparisonJson: manifest,
-        },
-    });
-    const claim = await database.claim.create({
-        data: {
-            userId,
+        })
+        .returning()
+        .then(firstRow);
+    const claim = await database
+        .insert(tables.claims)
+        .values({
+            userId: userId,
             taskId: task.id,
             reportId: report.id,
             kind: 'fact',
             text: quote,
             confidenceLabel: '原文引用',
             order: 0,
-        },
-    });
-    await database.claimEvidence.create({
-        data: { userId, claimId: claim.id, evidenceId: evidence.id, relation: 'supports' },
-    });
+        })
+        .returning()
+        .then(firstRow);
+    await database
+        .insert(tables.claimEvidence)
+        .values({
+            userId: userId,
+            claimId: claim.id,
+            evidenceId: evidence.id,
+            relation: 'supports',
+        })
+        .returning()
+        .then(firstRow);
     return { run, source, snapshot, observation, evidence, report, quote, manifest };
 }

@@ -1,4 +1,13 @@
-import { PrismaClient } from '@scova/db';
+import {
+    createDatabaseClient,
+    toolCalls as dbToolCalls,
+    eq,
+    and,
+    sql,
+    connectDatabase,
+    closeDatabase,
+} from '@scova/db';
+
 import {
     createConnectorBundle,
     type ConnectorBundle,
@@ -24,15 +33,19 @@ const databaseUrl = process.env.DATABASE_URL!;
 const schema = new URL(databaseUrl).searchParams.get('schema');
 if (!schema || !/^scova_worker_[a-f0-9]{32}$/.test(schema))
     throw new Error('Invalid recovery schema');
-const db = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
+const db = createDatabaseClient({ connectionString: databaseUrl });
 const pool = new pg.Pool({ connectionString: databaseUrl, max: 2 });
 const never = new Promise<void>(() => {});
 let blocked = false;
 async function beforeCheckpointWrite() {
     if (phase !== 'crash') return;
     if (blocked) return never;
-    const succeeded = await db.toolCall.findFirst({
-        where: { runId, tool: boundary, status: 'succeeded' },
+    const succeeded = await db.query.toolCalls.findFirst({
+        where: and(
+            eq(dbToolCalls.runId, runId),
+            eq(dbToolCalls.tool, boundary),
+            eq(dbToolCalls.status, 'succeeded'),
+        ),
     });
     if (!succeeded) return;
     blocked = true;
@@ -56,7 +69,9 @@ class FaultBoundarySaver extends PostgresSaver {
 const saver = new FaultBoundarySaver(pool, undefined, { schema });
 const base = createConnectorBundle();
 async function count(kind: string, input: string) {
-    await db.$executeRaw`INSERT INTO recovery_external_calls (run_id, kind, input) VALUES (${runId}::uuid, ${kind}, ${input})`;
+    await db.execute(
+        sql`INSERT INTO recovery_external_calls (run_id, kind, input) VALUES (${runId}::uuid, ${kind}, ${input})`,
+    );
 }
 const bundle: ConnectorBundle = {
     ...base,
@@ -80,7 +95,7 @@ const bundle: ConnectorBundle = {
     },
 };
 try {
-    await db.$connect();
+    await connectDatabase(db);
     await saver.setup();
     const runs = createRunRepository(db);
     const claimed = await runs.claim(runId!, `agent-${phase}-${process.pid}`, 60_000);
@@ -114,6 +129,6 @@ try {
     process.exitCode = 1;
 } finally {
     await saver.end();
-    await db.$disconnect();
+    await closeDatabase(db);
     process.disconnect?.();
 }

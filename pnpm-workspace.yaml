@@ -8,9 +8,6 @@ catalogMode: prefer
 # Native esbuild scripts are unnecessary: Vite+ provides the build toolchain.
 allowBuilds:
     esbuild: false
-    '@prisma/client': true
-    '@prisma/engines': true
-    prisma: true
     msgpackr-extract: false
 
 catalog:
@@ -21,23 +18,25 @@ catalog:
     '@langchain/langgraph': ^1.5.2
     '@langchain/langgraph-checkpoint-postgres': ^1.1.2
     '@node-rs/argon2': ^2.2.2
-    '@prisma/client': 6.19.0
     '@types/node': ^24
     '@types/jsdom': ^30.0.0
     '@types/pg': ^8.23.1
     '@vitejs/plugin-vue': ^6.0.10
     bullmq: ^6.4.0
+    drizzle-orm: 0.45.4
+    drizzle-kit: 0.31.11
     ajv: ^8.20.0
     ioredis: ^6.0.0
     jsdom: ^26.1.0
     pg: ^8.23.1
-    prisma: 6.19.0
     typescript: ^7.0.2
     vite: npm:@voidzero-dev/vite-plus-core@1.4.0
     vite-plus: 1.4.0
     vue: ^3.5.44
 overrides:
     vite@*: 'catalog:'
+    'drizzle-orm>@prisma/client': '-'
+    'drizzle-orm>prisma': '-'
 peerDependencyRules:
     allowAny:
         - vite

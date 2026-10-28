@@ -1,5 +1,16 @@
+import { requiredDatabaseValue } from '@/utils/database.ts';
+import {
+    type DatabaseClient,
+    users as dbUsers,
+    tasks as dbTasks,
+    taskVersions as dbTaskVersions,
+    eq,
+    runs as dbRuns,
+    runEvents as dbRunEvents,
+    outbox as dbOutbox,
+} from '@scova/db';
 import { randomUUID } from 'node:crypto';
-import type { PrismaClient } from '@scova/db';
+
 import type { TaskConfig } from '@scova/models';
 
 export const runConfig = (): TaskConfig => ({
@@ -31,25 +42,39 @@ export const emptyUsage = () => ({
 });
 
 /** Each scenario owns an independent user/task/run; never flush the shared Redis. */
-export async function seedRun(db: PrismaClient, options: { mode?: 'live' | 'demo' } = {}) {
+export async function seedRun(db: DatabaseClient, options: { mode?: 'live' | 'demo' } = {}) {
     const config = runConfig();
     const email = `${randomUUID()}@example.test`;
-    const user = await db.user.create({
-        data: { email, normalizedEmail: email, passwordHash: 'test' },
-    });
-    const task = await db.task.create({ data: { userId: user.id, title: config.title } });
-    const version = await db.taskVersion.create({
-        data: {
+    const user = await db
+        .insert(dbUsers)
+        .values({ email: email, normalizedEmail: email, passwordHash: 'test' })
+        .returning()
+        .then((rows) => requiredDatabaseValue(rows[0]));
+    const task = await db
+        .insert(dbTasks)
+        .values({ userId: user.id, title: config.title })
+        .returning()
+        .then((rows) => requiredDatabaseValue(rows[0]));
+    const version = await db
+        .insert(dbTaskVersions)
+        .values({
             userId: user.id,
             taskId: task.id,
             version: 1,
             comparisonScopeHash: 'a'.repeat(64),
             configJson: config,
-        },
-    });
-    await db.task.update({ where: { id: task.id }, data: { currentVersionId: version.id } });
-    const run = await db.run.create({
-        data: {
+        })
+        .returning()
+        .then((rows) => requiredDatabaseValue(rows[0]));
+    await db
+        .update(dbTasks)
+        .set({ currentVersionId: version.id })
+        .where(eq(dbTasks.id, task.id))
+        .returning()
+        .then((rows) => requiredDatabaseValue(rows[0]));
+    const run = await db
+        .insert(dbRuns)
+        .values({
             userId: user.id,
             taskId: task.id,
             taskVersionId: version.id,
@@ -58,26 +83,31 @@ export async function seedRun(db: PrismaClient, options: { mode?: 'live' | 'demo
             comparisonScopeHash: 'a'.repeat(64),
             budgetJson: config.budget,
             usageJson: emptyUsage(),
-        },
-    });
-    await db.runEvent.create({
-        data: {
+        })
+        .returning()
+        .then((rows) => requiredDatabaseValue(rows[0]));
+    await db
+        .insert(dbRunEvents)
+        .values({
             userId: user.id,
             runId: run.id,
             seq: 1,
             type: 'run.queued',
             payload: { status: 'queued', taskVersionId: version.id },
-        },
-    });
-    const outbox = await db.outbox.create({
-        data: {
+        })
+        .returning()
+        .then((rows) => requiredDatabaseValue(rows[0]));
+    const outbox = await db
+        .insert(dbOutbox)
+        .values({
             userId: user.id,
             aggregateId: run.id,
             eventType: 'run.enqueue',
             dedupeKey: `run-${run.id}-enqueue`,
             payload: { runId: run.id },
             availableAt: new Date(),
-        },
-    });
+        })
+        .returning()
+        .then((rows) => requiredDatabaseValue(rows[0]));
     return { user, task, version, run, outbox, config };
 }

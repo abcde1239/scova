@@ -1,15 +1,22 @@
-import { execFileSync } from 'node:child_process';
-import { createRequire } from 'node:module';
+import { migrateDatabase } from '@scova/db/migrate';
+import {
+    createDatabaseClient,
+    connectDatabase,
+    closeDatabase,
+    and,
+    eq,
+    inArray,
+    count,
+} from '@scova/db';
+import * as tables from '@scova/db';
 import { randomUUID } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
-import { PrismaClient } from '@scova/db';
+
 import { Redis as RedisClient } from 'ioredis';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vite-plus/test';
 import { createApiApp } from '../src/app/index.ts';
 import { createDefaultServices, type ApiServices } from '../src/app/context.ts';
+import { firstRow, requireRow } from '../src/utils/database.ts';
 
-const require = createRequire(import.meta.url);
-const root = fileURLToPath(new URL('../../../', import.meta.url));
 const baseUrl =
     process.env.SCOVA_TEST_DATABASE_URL ??
     process.env.RUNTIME_DATABASE_URL ??
@@ -19,7 +26,7 @@ const redisUrl =
 const schema = `scova_runs_${randomUUID().replaceAll('-', '')}`;
 const scopedUrl = new URL(baseUrl);
 scopedUrl.searchParams.set('schema', schema);
-const prisma = new PrismaClient({ datasources: { db: { url: scopedUrl.toString() } } });
+const db = createDatabaseClient({ connectionString: scopedUrl.toString() });
 const admin = new (require('pg').Client)({ connectionString: baseUrl });
 const redis = new RedisClient(redisUrl, {
     lazyConnect: true,
@@ -86,26 +93,8 @@ describe('Run API、事务 Outbox 与事件回放', () => {
         await admin.connect();
         await admin.query(`CREATE SCHEMA "${schema}"`);
         schemaCreated = true;
-        const migrate = () =>
-            execFileSync(
-                process.execPath,
-                [
-                    require.resolve('prisma/build/index.js'),
-                    'migrate',
-                    'deploy',
-                    '--schema',
-                    'packages/db/prisma/schema.prisma',
-                ],
-                {
-                    cwd: root,
-                    env: { ...process.env, DATABASE_URL: scopedUrl.toString() },
-                    encoding: 'utf8',
-                    windowsHide: true,
-                    timeout: 60000,
-                },
-            );
-        migrate();
-        await prisma.$connect();
+        await migrateDatabase({ connectionString: scopedUrl.toString() });
+        await connectDatabase(db);
         await redis.connect();
     }, 120000);
     beforeEach(async () => {
@@ -115,7 +104,7 @@ describe('Run API、事务 Outbox 与事件回放', () => {
             registrationEnabled: true,
             sessionTtlSeconds: 3600,
             clock: () => new Date('2026-10-24T12:00:00.000Z'),
-            db: () => prisma,
+            db: () => db,
             redis: () => redis,
             rateLimit: {
                 windowSeconds: 60,
@@ -129,7 +118,7 @@ describe('Run API、事务 Outbox 与事件回放', () => {
         await redis.flushdb();
     });
     afterAll(async () => {
-        await prisma.$disconnect();
+        await closeDatabase(db);
         await redis.quit();
         if (schemaCreated) await admin.query(`DROP SCHEMA "${schema}" CASCADE`);
         await admin.end();
@@ -165,10 +154,30 @@ describe('Run API、事务 Outbox 与事件回放', () => {
         });
         expect(second.status).toBe(202);
         expect((await json(second)).reused).toBe(true);
-        expect(await prisma.run.count()).toBe(1);
-        expect(await prisma.runEvent.count()).toBe(1);
-        expect(await prisma.outbox.count()).toBe(1);
-        expect(await prisma.idempotencyRecord.count()).toBe(1);
+        expect(
+            await db
+                .select({ count: count() })
+                .from(tables.runs)
+                .then(([row]) => row!.count),
+        ).toBe(1);
+        expect(
+            await db
+                .select({ count: count() })
+                .from(tables.runEvents)
+                .then(([row]) => row!.count),
+        ).toBe(1);
+        expect(
+            await db
+                .select({ count: count() })
+                .from(tables.outbox)
+                .then(([row]) => row!.count),
+        ).toBe(1);
+        expect(
+            await db
+                .select({ count: count() })
+                .from(tables.idempotencyRecords)
+                .then(([row]) => row!.count),
+        ).toBe(1);
         const events = await request(`/api/v1/runs/${firstBody.run.id}/events`, {
             headers: { cookie: auth.cookie },
         });
@@ -231,9 +240,27 @@ describe('Run API、事务 Outbox 与事件回放', () => {
         const bodies = await Promise.all(started.map(json));
         expect(bodies[0]!.run.id).toBe(bodies[1]!.run.id);
         const runId = bodies[0]!.run.id as string;
-        expect(await prisma.run.count({ where: { taskId: task.id } })).toBe(1);
-        expect(await prisma.outbox.count({ where: { aggregateId: runId } })).toBe(1);
-        expect(await prisma.runEvent.count({ where: { runId } })).toBe(1);
+        expect(
+            await db
+                .select({ count: count() })
+                .from(tables.runs)
+                .where(and(eq(tables.runs.taskId, task.id)))
+                .then(([row]) => row!.count),
+        ).toBe(1);
+        expect(
+            await db
+                .select({ count: count() })
+                .from(tables.outbox)
+                .where(and(eq(tables.outbox.aggregateId, runId)))
+                .then(([row]) => row!.count),
+        ).toBe(1);
+        expect(
+            await db
+                .select({ count: count() })
+                .from(tables.runEvents)
+                .where(and(eq(tables.runEvents.runId, runId)))
+                .then(([row]) => row!.count),
+        ).toBe(1);
 
         const cancel = () =>
             request(`/api/v1/runs/${runId}/cancel`, {
@@ -251,13 +278,31 @@ describe('Run API、事务 Outbox 与事件回放', () => {
         expect(repeated.status).toBe(200);
         expect((await json(repeated)).reused).toBe(true);
         expect(
-            await prisma.outbox.count({
-                where: { aggregateId: runId, eventType: 'run.cancel_requested' },
-            }),
+            await db
+                .select({ count: count() })
+                .from(tables.outbox)
+                .where(
+                    and(
+                        eq(tables.outbox.aggregateId, runId),
+                        eq(tables.outbox.eventType, 'run.cancel_requested'),
+                    ),
+                )
+                .then(([row]) => row!.count),
         ).toBe(1);
-        await prisma.run.update({ where: { id: runId }, data: { status: 'canceled' } });
+        await db
+            .update(tables.runs)
+            .set({ status: 'canceled' })
+            .where(and(eq(tables.runs.id, runId)))
+            .returning()
+            .then(firstRow);
         expect((await json(await start('concurrent-start-two'))).run.id).toBe(runId);
-        expect(await prisma.run.count({ where: { taskId: task.id } })).toBe(1);
+        expect(
+            await db
+                .select({ count: count() })
+                .from(tables.runs)
+                .where(and(eq(tables.runs.taskId, task.id)))
+                .then(([row]) => row!.count),
+        ).toBe(1);
         expect((await json(await cancel())).run.status).toBe('canceled');
     });
 
@@ -271,7 +316,9 @@ describe('Run API、事务 Outbox 与事件回放', () => {
         });
         expect(created.status).toBe(202);
         const original = (await json(created)).run;
-        const storedOriginal = await prisma.run.findUniqueOrThrow({ where: { id: original.id } });
+        const storedOriginal = await db.query.runs
+            .findFirst({ where: and(eq(tables.runs.id, original.id)) })
+            .then(requireRow);
         const editedConfig = config();
         editedConfig.topic = '官方招生通知';
         editedConfig.budget.maxSearches = 2;
@@ -283,7 +330,12 @@ describe('Run API、事务 Outbox 与事件回放', () => {
         expect(edited.status).toBe(200);
         const latest = await json(edited);
         expect(latest.task.currentVersionId).not.toBe(original.taskVersionId);
-        await prisma.run.update({ where: { id: original.id }, data: { status: 'failed' } });
+        await db
+            .update(tables.runs)
+            .set({ status: 'failed' })
+            .where(and(eq(tables.runs.id, original.id)))
+            .returning()
+            .then(firstRow);
 
         const retry = () =>
             request(`/api/v1/runs/${original.id}/retry`, {
@@ -299,20 +351,41 @@ describe('Run API、事务 Outbox 与事件回放', () => {
             parentRunId: original.id,
             budget: original.budget,
         });
-        const storedRetry = await prisma.run.findUniqueOrThrow({ where: { id: body.run.id } });
+        const storedRetry = await db.query.runs
+            .findFirst({ where: and(eq(tables.runs.id, body.run.id)) })
+            .then(requireRow);
         expect(storedRetry.comparisonScopeHash).toBe(storedOriginal.comparisonScopeHash);
         expect(
-            (await prisma.outbox.findFirstOrThrow({ where: { aggregateId: body.run.id } })).payload,
+            (
+                await db.query.outbox
+                    .findFirst({ where: and(eq(tables.outbox.aggregateId, body.run.id)) })
+                    .then(requireRow)
+            ).payload,
         ).toMatchObject({ taskVersionId: original.taskVersionId });
         expect(
-            (await prisma.runEvent.findFirstOrThrow({ where: { runId: body.run.id } })).payload,
+            (
+                await db.query.runEvents
+                    .findFirst({ where: and(eq(tables.runEvents.runId, body.run.id)) })
+                    .then(requireRow)
+            ).payload,
         ).toMatchObject({ taskVersionId: original.taskVersionId });
         const replayed = await retry();
         expect(replayed.status).toBe(202);
         expect(await json(replayed)).toMatchObject({ reused: true, run: { id: body.run.id } });
-        expect(await prisma.outbox.count({ where: { aggregateId: body.run.id } })).toBe(1);
+        expect(
+            await db
+                .select({ count: count() })
+                .from(tables.outbox)
+                .where(and(eq(tables.outbox.aggregateId, body.run.id)))
+                .then(([row]) => row!.count),
+        ).toBe(1);
 
-        await prisma.run.update({ where: { id: body.run.id }, data: { status: 'failed' } });
+        await db
+            .update(tables.runs)
+            .set({ status: 'failed' })
+            .where(and(eq(tables.runs.id, body.run.id)))
+            .returning()
+            .then(firstRow);
         const fresh = await request(`/api/v1/tasks/${task.id}/runs`, {
             method: 'POST',
             headers: authHeaders(auth, { 'idempotency-key': 'run-current-version' }),
@@ -346,10 +419,12 @@ describe('Run API、事务 Outbox 与事件回放', () => {
         });
         expect(repeatedCancel.status).toBe(200);
         expect((await json(repeatedCancel)).reused).toBe(true);
-        await prisma.run.update({
-            where: { id: original.run.id },
-            data: { status: 'failed', failureCode: 'TEST_FAILURE' },
-        });
+        await db
+            .update(tables.runs)
+            .set({ status: 'failed', failureCode: 'TEST_FAILURE' })
+            .where(and(eq(tables.runs.id, original.run.id)))
+            .returning()
+            .then(firstRow);
         const retried = await request(`/api/v1/runs/${original.run.id}/retry`, {
             method: 'POST',
             headers: authHeaders(auth, { 'idempotency-key': 'run-key-retry1234' }),
@@ -359,9 +434,11 @@ describe('Run API、事务 Outbox 与事件回放', () => {
         const body = await json(retried);
         expect(body.run.parentRunId).toBe(original.run.id);
         expect(
-            await prisma.outbox.count({
-                where: { aggregateId: { in: [original.run.id, body.run.id] } },
-            }),
+            await db
+                .select({ count: count() })
+                .from(tables.outbox)
+                .where(and(inArray(tables.outbox.aggregateId, [original.run.id, body.run.id])))
+                .then(([row]) => row!.count),
         ).toBe(3);
     });
 
@@ -378,13 +455,27 @@ describe('Run API、事务 Outbox 与事件回放', () => {
             return (await json(response)).run;
         };
         const demo = await start('demo', 'mode-scope-demo-key');
-        const demoStored = await prisma.run.findUniqueOrThrow({ where: { id: demo.id } });
-        await prisma.run.update({ where: { id: demo.id }, data: { status: 'failed' } });
+        const demoStored = await db.query.runs
+            .findFirst({ where: and(eq(tables.runs.id, demo.id)) })
+            .then(requireRow);
+        await db
+            .update(tables.runs)
+            .set({ status: 'failed' })
+            .where(and(eq(tables.runs.id, demo.id)))
+            .returning()
+            .then(firstRow);
         const live = await start('live', 'mode-scope-live-key');
-        const liveStored = await prisma.run.findUniqueOrThrow({ where: { id: live.id } });
+        const liveStored = await db.query.runs
+            .findFirst({ where: and(eq(tables.runs.id, live.id)) })
+            .then(requireRow);
         expect(live.taskVersionId).toBe(demo.taskVersionId);
         expect(liveStored.comparisonScopeHash).not.toBe(demoStored.comparisonScopeHash);
-        await prisma.run.update({ where: { id: live.id }, data: { status: 'failed' } });
+        await db
+            .update(tables.runs)
+            .set({ status: 'failed' })
+            .where(and(eq(tables.runs.id, live.id)))
+            .returning()
+            .then(firstRow);
         const retry = await request(`/api/v1/runs/${live.id}/retry`, {
             method: 'POST',
             headers: authHeaders(auth, { 'idempotency-key': 'mode-scope-retry-key' }),
@@ -393,7 +484,11 @@ describe('Run API、事务 Outbox 与事件回放', () => {
         expect(retry.status).toBe(202);
         const retried = (await json(retry)).run;
         expect(
-            (await prisma.run.findUniqueOrThrow({ where: { id: retried.id } })).comparisonScopeHash,
+            (
+                await db.query.runs
+                    .findFirst({ where: and(eq(tables.runs.id, retried.id)) })
+                    .then(requireRow)
+            ).comparisonScopeHash,
         ).toBe(liveStored.comparisonScopeHash);
     });
 });

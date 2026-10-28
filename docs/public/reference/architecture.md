@@ -37,11 +37,11 @@ API、worker 分别作为两个进程，PostgreSQL 和 Redis 是唯一首版基�
 | apps/worker         | 调度器、outbox dispatcher、BullMQ worker、租约、交付事务                    | models、db、agent-core、connectors                       |
 | packages/models     | 可运行时校验的请求/响应、事件版本、枚举与错误码；不暴露 ORM 实体            | 不依赖应用                                               |
 | packages/shared     | Server/Worker 共用的纯调度计算与执行范围指纹                                | 不依赖应用                                               |
-| packages/db         | 业务数据模型、Prisma schema、迁移与服务端客户端；反馈持久化子入口           | 不依赖应用；反馈投影使用 models                          |
+| packages/db         | Drizzle 表与关系、迁移与服务端客户端；反馈持久化子入口                      | 不依赖应用；反馈投影使用 models                          |
 | packages/agent-core | LangGraph 状态图、有限研究策略、候选和原文引用校验                          | models、connectors 类型、LangGraph；不使用 Elysia/BullMQ |
 | packages/connectors | 默认 SearxNG、可选 Tavily、HTTP 抓取、Readability 和演示数据适配器          | 向 agent-core 提供工具接口                               |
 
-API 不负责执行长任务，worker 不提供账号管理入口；Agent 没有通用 SQL、文件系统或任意脚本工具。`packages/db/prisma` 维护唯一业务 schema 和迁移；Server/Worker 从 `@scova/db` 引用生成模型，公开接口仍使用 `@scova/models`。
+API 不负责执行长任务，worker 不提供账号管理入口；Agent 没有通用 SQL、文件系统或任意脚本工具。`packages/db/src/schema.ts` 与 `packages/db/drizzle` 维护业务结构和迁移；Server/Worker 从 `@scova/db` 引用持久化类型，公开接口仍使用 `@scova/models`。
 
 Server 源码分层为 `main → app → router → handler → service → repo`：app 装配 Elysia、Node 适配与生命周期，router 声明路由和中文 OpenAPI，handler 处理 HTTP/会话/响应，service 编排业务规则及事务，repo 完成数据库与 Redis 访问。utils 放纯工具。Task CAS 与 Run/事件/Outbox 仍在同一事务中完成。
 
@@ -144,7 +144,7 @@ LangGraph checkpointer 使用 PostgreSQL，实现时在适配层验证 Bun 兼�
 | SearchProvider.search            | 默认 SearxNG；Tavily 显式可选               | 结构化候选 URL、标题、片段、引擎与覆盖缺口；请求有超时/限额 |
 | PageReader.read                  | HTTP + jsdom + Readability                  | HTML 限长 2 MiB、正文限长、每次请求最多 15 秒，保留抓取状态 |
 | ModelProvider.generateStructured | 部署者配置的兼容模型服务                    | 通过适配层映射 structured output、usage、AbortSignal 与错误 |
-| EvidenceRepository               | worker 注入的受限领域接口                   | 仅当前用户、当前 Run；不暴露 Prisma client                  |
+| EvidenceRepository               | worker 注入的受限领域接口                   | 仅当前用户、当前 Run；不暴露数据库客户端                    |
 | CheckpointAdapter                | LangGraph PostgreSQL saver + epoch 引用提升 | 实验验证恢复协议，运行迁移与连接池限制                      |
 
 默认每次 10 次搜索、20 次网页读取、5 分钟，另设累计输入 40,000 token、输出 8,000 token 上限。每次模型调用先预留估算输入和最大输出 token，最终按 usage 结算；供应商不返回 usage 时使用保守预留并标为估算。提示词/结构化修复调用同样计费和计入限制。恢复/重试不得绕过限制，预算修改只影响新版本。时间预算到达后停止所有外部调用，仅允许从已存证据用确定性模板交付 partial（无证据则 failed），不得再启动模型综合；用户取消则不交付。
@@ -213,7 +213,7 @@ requestlane 0.1.3 当前 Client 的 responseType 不包含流式类型；SSE 因
 
 所有读写通过 owner 过滤和复合外键；worker 从 Run 反查用户与权限，不信任队列 payload 中的用户信息。抓取限制 http/https、80/443 端口和公共 IP，阻止 localhost、私网、link-local、IPv4 映射 IPv6 与云元数据地址。DNS 解析结果必须绑定实际连接，重定向每跳重验，最多 3 次；无法保证解析与连接一致时拒绝请求。尊重来源限制，不绕过登录、反爬或付费墙；下载限长、按来源限制并发。
 
-Compose 最终包括 web 反向代理、api、worker、postgres、redis；健康检查、数据库持久卷、Redis AOF、应用无 root 运行、优雅停止和外部端口最小暴露。先运行独立迁移步骤再启动 API/worker；不让每个副本抢着迁移。Prisma 业务迁移与 LangGraph checkpoint 迁移分别记录版本。
+Compose 最终包括 web 反向代理、api、worker、postgres、redis；健康检查、数据库持久卷、Redis AOF、应用无 root 运行、优雅停止和外部端口最小暴露。先运行独立迁移步骤再启动 API/worker；不让每个副本抢着迁移。Drizzle 业务迁移与 LangGraph checkpoint 迁移分别记录版本。
 
 结构化日志关联 requestId/taskId/runId/epoch，密钥脱敏；指标包含成功/不完整/失败、队列延迟、恢复次数、预算消耗、去重命中、引用校验失败。默认正文和详细工具日志保留 30 天；有报告引用的短证据片段与 snapshot 元数据保留至报告删除。基础删除流程清理收藏、笔记和账号数据；备份文件设保留窗口并验证恢复。
 

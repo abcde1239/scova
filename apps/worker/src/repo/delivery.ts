@@ -1,3 +1,27 @@
+import { requiredDatabaseValue } from '@/utils/database.ts';
+import {
+    type DatabaseClient,
+    type Run,
+    type ToolCall,
+    reports as dbReports,
+    eq,
+    and,
+    taskVersions as dbTaskVersions,
+    toolCalls as dbToolCalls,
+    asc,
+    sources as dbSources,
+    sourceSnapshots as dbSourceSnapshots,
+    runSources as dbRunSources,
+    baselines as dbBaselines,
+    evidence as dbEvidence,
+    claims as dbClaims,
+    claimEvidence as dbClaimEvidence,
+    inArray,
+    changeRecords as dbChangeRecords,
+    changeEvidence as dbChangeEvidence,
+    inboxItems as dbInboxItems,
+    runs as dbRuns,
+} from '@scova/db';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import {
@@ -15,7 +39,7 @@ import {
     readFeedbackSnapshot,
 } from '@scova/models';
 import { validatePublication, type ReadPage, type SearchResponse } from '@scova/connectors';
-import type { PrismaClient, Run, ToolCall } from '@scova/db';
+
 import { appendEvent, withRunFence } from '@/repo/runs.ts';
 import { loadBaseline } from '@/repo/comparison.ts';
 import { createTerminalNotifications } from '@/repo/notifications.ts';
@@ -75,10 +99,10 @@ function deadlineCandidate(context: AgentContext, calls: ToolCall[]): AgentCandi
 }
 
 /** All business writes share the Run fence; no provider/checkpointer I/O in this transaction. */
-export function createDeliveryRepository(db: PrismaClient) {
+export function createDeliveryRepository(db: DatabaseClient) {
     async function existing(token: RunLeaseToken) {
-        const report = await db.report.findUnique({
-            where: { userId_runId: { userId: token.userId, runId: token.runId } },
+        const report = await db.query.reports.findFirst({
+            where: and(eq(dbReports.userId, token.userId), eq(dbReports.runId, token.runId)),
         });
         return report ? { reportId: report.id, reused: true } : null;
     }
@@ -97,12 +121,12 @@ export function createDeliveryRepository(db: PrismaClient) {
                     proof.deadline ? 'deadline_delivery' : 'work',
                     async (tx, run, now) => {
                         if (proof.deadline && (!run.deadlineAt || run.deadlineAt > now)) invalid();
-                        const version = await tx.taskVersion.findFirst({
-                            where: {
-                                id: run.taskVersionId,
-                                userId: run.userId,
-                                taskId: run.taskId,
-                            },
+                        const version = await tx.query.taskVersions.findFirst({
+                            where: and(
+                                eq(dbTaskVersions.id, run.taskVersionId),
+                                eq(dbTaskVersions.userId, run.userId),
+                                eq(dbTaskVersions.taskId, run.taskId),
+                            ),
                         });
                         if (!version) return invalid();
                         const config = parseContract(
@@ -113,9 +137,12 @@ export function createDeliveryRepository(db: PrismaClient) {
                         context.comparisonScopeHash = run.comparisonScopeHash;
                         context.baselineRunId = run.baselineRunId;
                         context.baseline = await loadBaseline(tx, run);
-                        const calls = await tx.toolCall.findMany({
-                            where: { userId: run.userId, runId: run.id },
-                            orderBy: [{ operationKey: 'asc' }, { attemptNo: 'asc' }],
+                        const calls = await tx.query.toolCalls.findMany({
+                            where: and(
+                                eq(dbToolCalls.userId, run.userId),
+                                eq(dbToolCalls.runId, run.id),
+                            ),
+                            orderBy: [asc(dbToolCalls.operationKey), asc(dbToolCalls.attemptNo)],
                         });
                         const successful = calls.filter(
                             (call) =>
@@ -290,31 +317,33 @@ export function createDeliveryRepository(db: PrismaClient) {
                             const fingerprint = `${page.contentHash}:${page.extractionVersion}`;
                             if (priorHash && priorHash !== fingerprint) invalid();
                             byUrl.set(page.url, fingerprint);
-                            const source = await tx.source.upsert({
-                                where: {
-                                    userId_canonicalUrlHash: {
-                                        userId: run.userId,
-                                        canonicalUrlHash: hash(page.url),
-                                    },
-                                },
-                                create: {
+                            const source = await tx
+                                .insert(dbSources)
+                                .values({
                                     userId: run.userId,
                                     canonicalUrl: page.url,
                                     canonicalUrlHash: hash(page.url),
-                                },
-                                update: {},
-                            });
+                                })
+                                .onConflictDoNothing({
+                                    target: [dbSources.userId, dbSources.canonicalUrlHash],
+                                })
+                                .returning()
+                                .then(
+                                    async (rows) =>
+                                        rows[0] ??
+                                        requiredDatabaseValue(
+                                            await tx.query.sources.findFirst({
+                                                where: and(
+                                                    eq(dbSources.userId, run.userId),
+                                                    eq(dbSources.canonicalUrlHash, hash(page.url)),
+                                                ),
+                                            }),
+                                        ),
+                                );
                             if (source.canonicalUrl !== page.url) invalid();
-                            const snapshot = await tx.sourceSnapshot.upsert({
-                                where: {
-                                    userId_sourceId_extractorVersion_contentHash: {
-                                        userId: run.userId,
-                                        sourceId: source.id,
-                                        extractorVersion: page.extractionVersion,
-                                        contentHash: page.contentHash,
-                                    },
-                                },
-                                create: {
+                            const snapshot = await tx
+                                .insert(dbSourceSnapshots)
+                                .values({
                                     userId: run.userId,
                                     sourceId: source.id,
                                     contentHash: page.contentHash,
@@ -334,16 +363,43 @@ export function createDeliveryRepository(db: PrismaClient) {
                                         truncated: page.truncated,
                                         untrusted: true,
                                     },
-                                },
-                                update: {},
-                            });
+                                })
+                                .onConflictDoNothing({
+                                    target: [
+                                        dbSourceSnapshots.userId,
+                                        dbSourceSnapshots.sourceId,
+                                        dbSourceSnapshots.extractorVersion,
+                                        dbSourceSnapshots.contentHash,
+                                    ],
+                                })
+                                .returning()
+                                .then(
+                                    async (rows) =>
+                                        rows[0] ??
+                                        requiredDatabaseValue(
+                                            await tx.query.sourceSnapshots.findFirst({
+                                                where: and(
+                                                    eq(dbSourceSnapshots.userId, run.userId),
+                                                    eq(dbSourceSnapshots.sourceId, source.id),
+                                                    eq(
+                                                        dbSourceSnapshots.extractorVersion,
+                                                        page.extractionVersion,
+                                                    ),
+                                                    eq(
+                                                        dbSourceSnapshots.contentHash,
+                                                        page.contentHash,
+                                                    ),
+                                                ),
+                                            }),
+                                        ),
+                                );
                             if (snapshot.textBody !== null && snapshot.textBody !== page.text)
                                 invalid();
                             if ((snapshot.metadataJson as { mode?: string }).mode !== run.mode)
                                 invalid();
-                            await tx.runSource.upsert({
-                                where: { runId_sourceId: { runId: run.id, sourceId: source.id } },
-                                create: {
+                            await tx
+                                .insert(dbRunSources)
+                                .values({
                                     userId: run.userId,
                                     runId: run.id,
                                     sourceId: source.id,
@@ -379,9 +435,23 @@ export function createDeliveryRepository(db: PrismaClient) {
                                                     }));
                                             }),
                                     },
-                                },
-                                update: {},
-                            });
+                                })
+                                .onConflictDoNothing({
+                                    target: [dbRunSources.runId, dbRunSources.sourceId],
+                                })
+                                .returning()
+                                .then(
+                                    async (rows) =>
+                                        rows[0] ??
+                                        requiredDatabaseValue(
+                                            await tx.query.runSources.findFirst({
+                                                where: and(
+                                                    eq(dbRunSources.runId, run.id),
+                                                    eq(dbRunSources.sourceId, source.id),
+                                                ),
+                                            }),
+                                        ),
+                                );
                             pageRecords.set(page.id, {
                                 sourceId: source.id,
                                 snapshotId: snapshot.id,
@@ -389,14 +459,12 @@ export function createDeliveryRepository(db: PrismaClient) {
                                 extractor: page.extractionVersion,
                             });
                         }
-                        const baseline = await tx.baseline.findUnique({
-                            where: {
-                                userId_taskId_comparisonScopeHash: {
-                                    userId: run.userId,
-                                    taskId: run.taskId,
-                                    comparisonScopeHash: run.comparisonScopeHash,
-                                },
-                            },
+                        const baseline = await tx.query.baselines.findFirst({
+                            where: and(
+                                eq(dbBaselines.userId, run.userId),
+                                eq(dbBaselines.taskId, run.taskId),
+                                eq(dbBaselines.comparisonScopeHash, run.comparisonScopeHash),
+                            ),
                         });
                         if (
                             (baseline || run.baselineRunId) &&
@@ -435,8 +503,9 @@ export function createDeliveryRepository(db: PrismaClient) {
                                 : changes.some((change) => change.kind === 'new')
                                   ? 'new_findings'
                                   : 'no_important_change';
-                        const report = await tx.report.create({
-                            data: {
+                        const report = await tx
+                            .insert(dbReports)
+                            .values({
                                 userId: run.userId,
                                 runId: run.id,
                                 taskId: run.taskId,
@@ -451,8 +520,9 @@ export function createDeliveryRepository(db: PrismaClient) {
                                 comparisonJson: candidate.manifest
                                     ? JSON.parse(JSON.stringify(candidate.manifest))
                                     : undefined,
-                            },
-                        });
+                            })
+                            .returning()
+                            .then((rows) => requiredDatabaseValue(rows[0]));
                         const evidence = new Map<string, string>();
                         async function saveEvidence(citation: {
                             pageId: string;
@@ -472,8 +542,9 @@ export function createDeliveryRepository(db: PrismaClient) {
                             const key = `${page.snapshotId}:${hash(citation.quote)}`;
                             const previous = evidence.get(key);
                             if (previous) return previous;
-                            const record = await tx.evidence.create({
-                                data: {
+                            const record = await tx
+                                .insert(dbEvidence)
+                                .values({
                                     userId: run.userId,
                                     runId: run.id,
                                     snapshotId: page.snapshotId,
@@ -486,8 +557,9 @@ export function createDeliveryRepository(db: PrismaClient) {
                                         end: start + citation.quote.length,
                                         extractorVersion: page.extractor,
                                     },
-                                },
-                            });
+                                })
+                                .returning()
+                                .then((rows) => requiredDatabaseValue(rows[0]));
                             evidence.set(key, record.id);
                             return record.id;
                         }
@@ -495,22 +567,24 @@ export function createDeliveryRepository(db: PrismaClient) {
                             for (const fact of page.facts)
                                 await saveEvidence({ pageId: page.pageId, quote: fact.quote });
                         for (const [order, item] of candidate.claims.entries()) {
-                            const claim = await tx.claim.create({
-                                data: {
+                            const claim = await tx
+                                .insert(dbClaims)
+                                .values({
                                     userId: run.userId,
                                     taskId: run.taskId,
                                     reportId: report.id,
                                     kind: item.kind,
                                     text: item.text,
-                                    order,
+                                    order: order,
                                     confidenceLabel: {
                                         fact: '采集原文事实',
                                         inference: '基于来源的推断',
                                         conflict: '来源存在冲突，待核验',
                                         insufficient: '证据不足',
                                     }[item.kind],
-                                },
-                            });
+                                })
+                                .returning()
+                                .then((rows) => requiredDatabaseValue(rows[0]));
                             for (const [index, citation] of item.citations.entries()) {
                                 const page = pageRecords.get(citation.pageId);
                                 if (!page) return invalid();
@@ -525,8 +599,9 @@ export function createDeliveryRepository(db: PrismaClient) {
                                 const key = `${page.snapshotId}:${hash(citation.quote)}`;
                                 let evidenceId = evidence.get(key);
                                 if (!evidenceId) {
-                                    const record = await tx.evidence.create({
-                                        data: {
+                                    const record = await tx
+                                        .insert(dbEvidence)
+                                        .values({
                                             userId: run.userId,
                                             runId: run.id,
                                             snapshotId: page.snapshotId,
@@ -539,26 +614,42 @@ export function createDeliveryRepository(db: PrismaClient) {
                                                 extractorVersion: page.extractor,
                                             },
                                             capturedAt: now,
-                                        },
-                                    });
+                                        })
+                                        .returning()
+                                        .then((rows) => requiredDatabaseValue(rows[0]));
                                     evidenceId = record.id;
                                     evidence.set(key, evidenceId);
                                 }
-                                await tx.claimEvidence.upsert({
-                                    where: {
-                                        claimId_evidenceId: { claimId: claim.id, evidenceId },
-                                    },
-                                    create: {
+                                await tx
+                                    .insert(dbClaimEvidence)
+                                    .values({
                                         userId: run.userId,
                                         claimId: claim.id,
-                                        evidenceId,
+                                        evidenceId: evidenceId,
                                         relation:
                                             item.kind === 'conflict' && index > 0
                                                 ? 'contradicts'
                                                 : 'supports',
-                                    },
-                                    update: {},
-                                });
+                                    })
+                                    .onConflictDoNothing({
+                                        target: [
+                                            dbClaimEvidence.claimId,
+                                            dbClaimEvidence.evidenceId,
+                                        ],
+                                    })
+                                    .returning()
+                                    .then(
+                                        async (rows) =>
+                                            rows[0] ??
+                                            requiredDatabaseValue(
+                                                await tx.query.claimEvidence.findFirst({
+                                                    where: and(
+                                                        eq(dbClaimEvidence.claimId, claim.id),
+                                                        eq(dbClaimEvidence.evidenceId, evidenceId),
+                                                    ),
+                                                }),
+                                            ),
+                                    );
                             }
                         }
                         for (const item of changes) {
@@ -571,16 +662,14 @@ export function createDeliveryRepository(db: PrismaClient) {
                             );
                             if (oldIds.some((id) => !allowedOld.has(id))) invalid();
                             const oldEvidence = oldIds.length
-                                ? await tx.evidence.findMany({
-                                      where: {
-                                          id: { in: oldIds },
-                                          userId: run.userId,
-                                          runId: run.baselineRunId!,
-                                      },
-                                      include: {
-                                          observation: {
-                                              include: { source: true, snapshot: true },
-                                          },
+                                ? await tx.query.evidence.findMany({
+                                      where: and(
+                                          inArray(dbEvidence.id, oldIds),
+                                          eq(dbEvidence.userId, run.userId),
+                                          eq(dbEvidence.runId, run.baselineRunId!),
+                                      ),
+                                      with: {
+                                          observation: { with: { source: true, snapshot: true } },
                                       },
                                   })
                                 : [];
@@ -613,8 +702,9 @@ export function createDeliveryRepository(db: PrismaClient) {
                             )
                                 invalid();
                             if (item.important && item.kind !== 'changed') invalid();
-                            const change = await tx.changeRecord.create({
-                                data: {
+                            const change = await tx
+                                .insert(dbChangeRecords)
+                                .values({
                                     userId: run.userId,
                                     reportId: report.id,
                                     sourceId: page.sourceId,
@@ -627,78 +717,93 @@ export function createDeliveryRepository(db: PrismaClient) {
                                     newSnapshotId: page.snapshotId,
                                     importance: item.important ? 'important' : 'normal',
                                     reason: item.reason,
-                                },
-                            });
+                                })
+                                .returning()
+                                .then((rows) => requiredDatabaseValue(rows[0]));
                             for (const old of oldEvidence)
-                                await tx.changeEvidence.create({
-                                    data: {
+                                await tx
+                                    .insert(dbChangeEvidence)
+                                    .values({
                                         userId: run.userId,
                                         changeRecordId: change.id,
                                         evidenceId: old.id,
                                         side: 'old',
-                                    },
-                                });
+                                    })
+                                    .returning()
+                                    .then((rows) => requiredDatabaseValue(rows[0]));
                             const newIds = new Set<string>();
                             for (const citation of item.newCitations) {
                                 if (citation.pageId !== item.pageId) invalid();
                                 newIds.add(await saveEvidence(citation));
                             }
                             for (const evidenceId of newIds)
-                                await tx.changeEvidence.create({
-                                    data: {
+                                await tx
+                                    .insert(dbChangeEvidence)
+                                    .values({
                                         userId: run.userId,
                                         changeRecordId: change.id,
-                                        evidenceId,
+                                        evidenceId: evidenceId,
                                         side: 'new',
-                                    },
-                                });
+                                    })
+                                    .returning()
+                                    .then((rows) => requiredDatabaseValue(rows[0]));
                         }
                         if (!evidence.size) throw new RunExecutionError('NO_EVIDENCE');
-                        await tx.inboxItem.create({
-                            data: { userId: run.userId, reportId: report.id },
-                        });
+                        await tx
+                            .insert(dbInboxItems)
+                            .values({ userId: run.userId, reportId: report.id })
+                            .returning()
+                            .then((rows) => requiredDatabaseValue(rows[0]));
                         await createTerminalNotifications(tx, run, {
                             status: complete ? 'succeeded' : 'partial',
                             outcome,
                             reportId: report.id,
                         });
-                        await tx.toolCall.updateMany({
-                            where: {
-                                userId: run.userId,
-                                runId: run.id,
-                                status: { in: ['reserved', 'running'] },
-                            },
-                            data: { status: 'unknown', finishedAt: now },
-                        });
-                        await tx.run.update({
-                            where: { id: run.id },
-                            data: {
+                        await tx
+                            .update(dbToolCalls)
+                            .set({ status: 'unknown', finishedAt: now })
+                            .where(
+                                and(
+                                    eq(dbToolCalls.userId, run.userId),
+                                    eq(dbToolCalls.runId, run.id),
+                                    inArray(dbToolCalls.status, ['reserved', 'running']),
+                                ),
+                            )
+                            .returning({ id: dbToolCalls.id })
+                            .then((rows) => ({ count: rows.length }));
+                        await tx
+                            .update(dbRuns)
+                            .set({
                                 status: complete ? 'succeeded' : 'partial',
-                                outcome,
+                                outcome: outcome,
                                 coverageJson: candidate.coverage,
                                 finishedAt: now,
                                 failureCode: null,
                                 leaseOwner: null,
                                 leaseExpiresAt: null,
-                            },
-                        });
+                            })
+                            .where(eq(dbRuns.id, run.id))
+                            .returning()
+                            .then((rows) => requiredDatabaseValue(rows[0]));
                         if (complete)
-                            await tx.baseline.upsert({
-                                where: {
-                                    userId_taskId_comparisonScopeHash: {
-                                        userId: run.userId,
-                                        taskId: run.taskId,
-                                        comparisonScopeHash: run.comparisonScopeHash,
-                                    },
-                                },
-                                create: {
+                            await tx
+                                .insert(dbBaselines)
+                                .values({
                                     userId: run.userId,
                                     taskId: run.taskId,
                                     comparisonScopeHash: run.comparisonScopeHash,
                                     completeRunId: run.id,
-                                },
-                                update: { completeRunId: run.id },
-                            });
+                                })
+                                .onConflictDoUpdate({
+                                    target: [
+                                        dbBaselines.userId,
+                                        dbBaselines.taskId,
+                                        dbBaselines.comparisonScopeHash,
+                                    ],
+                                    set: { completeRunId: run.id },
+                                })
+                                .returning()
+                                .then((rows) => requiredDatabaseValue(rows[0]));
                         await appendEvent(tx, run, now, {
                             type: 'coverage.updated',
                             payload: candidate.coverage,

@@ -1,8 +1,19 @@
-import { execFileSync } from 'node:child_process';
+import { migrateDatabase } from '@scova/db/migrate';
+import {
+    createDatabaseClient,
+    connectDatabase,
+    closeDatabase,
+    queryRows,
+    sql as querySql,
+    and,
+    eq,
+    isNull,
+    count,
+} from '@scova/db';
+import * as tables from '@scova/db';
 import { createRequire } from 'node:module';
 import { randomUUID } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
-import { PrismaClient } from '@scova/db';
+
 import { Redis as RedisClient } from 'ioredis';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vite-plus/test';
 import { createApiApp } from '../src/app/index.ts';
@@ -10,8 +21,8 @@ import { createDefaultServices, type ApiServices } from '../src/app/context.ts';
 import { createLibraryService } from '../src/service/library.ts';
 import { draftConfig } from './support/task-drafts.ts';
 import { libraryFixture } from './support/library.ts';
-const require = createRequire(import.meta.url),
-    root = fileURLToPath(new URL('../../../', import.meta.url));
+import { firstRow, requireRow } from '../src/utils/database.ts';
+const require = createRequire(import.meta.url);
 const baseUrl =
     process.env.SCOVA_TEST_DATABASE_URL ??
     process.env.RUNTIME_DATABASE_URL ??
@@ -21,7 +32,7 @@ const redisUrl =
 const schema = 'scova_library_' + randomUUID().replaceAll('-', '');
 const scopedUrl = new URL(baseUrl);
 scopedUrl.searchParams.set('schema', schema);
-const prisma = new PrismaClient({ datasources: { db: { url: scopedUrl.toString() } } });
+const db = createDatabaseClient({ connectionString: scopedUrl.toString() });
 const admin = new (require('pg').Client)({ connectionString: baseUrl });
 const redis = new RedisClient(redisUrl, {
     lazyConnect: true,
@@ -114,31 +125,15 @@ describe('资料库HTTP、PostgreSQL全文检索、历史授权与清理', () =>
         await admin.connect();
         await admin.query('CREATE SCHEMA "' + schema + '"');
         schemaCreated = true;
-        execFileSync(
-            process.execPath,
-            [
-                require.resolve('prisma/build/index.js'),
-                'migrate',
-                'deploy',
-                '--schema',
-                'packages/db/prisma/schema.prisma',
-            ],
-            {
-                cwd: root,
-                env: { ...process.env, DATABASE_URL: scopedUrl.toString() },
-                encoding: 'utf8',
-                windowsHide: true,
-                timeout: 60_000,
-            },
-        );
-        await prisma.$connect();
+        await migrateDatabase({ connectionString: scopedUrl.toString() });
+        await connectDatabase(db);
         await redis.connect();
     }, 120_000);
     beforeEach(() => {
         services = createDefaultServices({
             origin,
             production: false,
-            db: () => prisma,
+            db: () => db,
             redis: () => redis,
             rateLimit: {
                 keyPrefix: 'scova:library-auth:' + randomUUID() + ':',
@@ -150,7 +145,7 @@ describe('资料库HTTP、PostgreSQL全文检索、历史授权与清理', () =>
         app = createApiApp('node', services);
     });
     afterAll(async () => {
-        await prisma.$disconnect();
+        await closeDatabase(db);
         if (redis.status === 'wait' || redis.status === 'end') redis.disconnect();
         else await redis.quit();
         if (schemaCreated && /^scova_library_[0-9a-f]{32}$/.test(schema))
@@ -159,7 +154,7 @@ describe('资料库HTTP、PostgreSQL全文检索、历史授权与清理', () =>
     });
     it('并发重复收藏唯一且取消收藏不删除来源和报告', async () => {
         const owner = await register(),
-            data = await libraryFixture(prisma, owner.id, await task(owner));
+            data = await libraryFixture(db, owner.id, await task(owner));
         const responses = await Promise.all([
             bookmark(owner, data.source.id),
             bookmark(owner, data.source.id),
@@ -169,7 +164,16 @@ describe('资料库HTTP、PostgreSQL全文检索、历史授权与清理', () =>
         const commands = await Promise.all(responses.map(json));
         expect(new Set(commands.map((row) => row.bookmark.id)).size).toBe(1);
         expect(
-            await prisma.bookmark.count({ where: { userId: owner.id, sourceId: data.source.id } }),
+            await db
+                .select({ count: count() })
+                .from(tables.bookmarks)
+                .where(
+                    and(
+                        eq(tables.bookmarks.userId, owner.id),
+                        eq(tables.bookmarks.sourceId, data.source.id),
+                    ),
+                )
+                .then(([row]) => row!.count),
         ).toBe(1);
         const list = await json(await request('/bookmarks', { headers: headers(owner) }));
         expect(list.items[0].source).toMatchObject({
@@ -183,13 +187,21 @@ describe('资料库HTTP、PostgreSQL全文检索、历史授权与清理', () =>
         });
         expect(removed.status).toBe(204);
         expect(await removed.text()).toBe('');
-        expect(await prisma.source.findUnique({ where: { id: data.source.id } })).not.toBeNull();
-        expect(await prisma.report.findUnique({ where: { id: data.report.id } })).not.toBeNull();
+        expect(
+            await db.query.sources
+                .findFirst({ where: and(eq(tables.sources.id, data.source.id)) })
+                .then((row) => row ?? null),
+        ).not.toBeNull();
+        expect(
+            await db.query.reports
+                .findFirst({ where: and(eq(tables.reports.id, data.report.id)) })
+                .then((row) => row ?? null),
+        ).not.toBeNull();
     });
     it('写入要求会话CSRF，目标恰一且跨owner资源404', async () => {
         const owner = await register(),
             other = await register(),
-            data = await libraryFixture(prisma, owner.id, await task(owner));
+            data = await libraryFixture(db, owner.id, await task(owner));
         expect(
             (
                 await request('/bookmarks', {
@@ -229,11 +241,17 @@ describe('资料库HTTP、PostgreSQL全文检索、历史授权与清理', () =>
                     })
                 ).status,
             ).toBe(422);
-        expect(await prisma.note.count({ where: { userId: other.id } })).toBe(0);
+        expect(
+            await db
+                .select({ count: count() })
+                .from(tables.notes)
+                .where(and(eq(tables.notes.userId, other.id)))
+                .then(([row]) => row!.count),
+        ).toBe(0);
     });
     it('笔记持久幂等同键异参409，删除后旧键不能重建', async () => {
         const owner = await register(),
-            data = await libraryFixture(prisma, owner.id, await task(owner)),
+            data = await libraryFixture(db, owner.id, await task(owner)),
             key = randomUUID(),
             target = { kind: 'source' as const, id: data.source.id };
         expect(
@@ -253,7 +271,13 @@ describe('资料库HTTP、PostgreSQL全文检索、历史授权与清理', () =>
         const commands = await Promise.all(responses.map(json));
         expect(commands[0]!.note.id).toBe(commands[1]!.note.id);
         expect((await note(owner, target, '其他内容', key)).status).toBe(409);
-        expect(await prisma.note.count({ where: { userId: owner.id } })).toBe(1);
+        expect(
+            await db
+                .select({ count: count() })
+                .from(tables.notes)
+                .where(and(eq(tables.notes.userId, owner.id)))
+                .then(([row]) => row!.count),
+        ).toBe(1);
         expect(
             (
                 await request('/notes/' + commands[0]!.note.id, {
@@ -265,14 +289,20 @@ describe('资料库HTTP、PostgreSQL全文检索、历史授权与清理', () =>
         const old = await note(owner, target, '原文', key);
         expect(old.status).toBe(409);
         expect((await json(old)).code).toBe('IDEMPOTENCY_RESOURCE_DELETED');
-        expect(await prisma.note.count({ where: { userId: owner.id } })).toBe(0);
+        expect(
+            await db
+                .select({ count: count() })
+                .from(tables.notes)
+                .where(and(eq(tables.notes.userId, owner.id)))
+                .then(([row]) => row!.count),
+        ).toBe(0);
         expect((await note(owner, target, '原文', randomUUID())).status).toBe(201);
     });
     it('幂等键按owner隔离，一个来源可有多条笔记也支持报告目标', async () => {
         const owner = await register(),
             other = await register(),
-            first = await libraryFixture(prisma, owner.id, await task(owner)),
-            second = await libraryFixture(prisma, other.id, await task(other)),
+            first = await libraryFixture(db, owner.id, await task(owner)),
+            second = await libraryFixture(db, other.id, await task(other)),
             key = randomUUID();
         const own = await note(owner, { kind: 'source', id: first.source.id }, '同一内容', key),
             theirs = await note(other, { kind: 'source', id: second.source.id }, '同一内容', key);
@@ -300,7 +330,7 @@ describe('资料库HTTP、PostgreSQL全文检索、历史授权与清理', () =>
     it('笔记原样纯文本，CAS编辑和删除不覆盖新修订且目标不可改', async () => {
         const owner = await register(),
             other = await register(),
-            data = await libraryFixture(prisma, owner.id, await task(owner));
+            data = await libraryFixture(db, owner.id, await task(owner));
         const created = await json(await note(owner, { kind: 'report', id: data.report.id }));
         expect(created.note.body).toBe('  纯文本笔记 <b>保持原样</b>  ');
         const path = '/notes/' + created.note.id;
@@ -360,24 +390,28 @@ describe('资料库HTTP、PostgreSQL全文检索、历史授权与清理', () =>
                 })
             ).status,
         ).toBe(204);
-        expect(await prisma.report.findUnique({ where: { id: data.report.id } })).not.toBeNull();
+        expect(
+            await db.query.reports
+                .findFirst({ where: and(eq(tables.reports.id, data.report.id)) })
+                .then((row) => row ?? null),
+        ).not.toBeNull();
     });
     it('历史快照绑定来源owner，按成功观测时间而非UUID排序', async () => {
         const owner = await register(),
             other = await register(),
             ownedTask = await task(owner);
-        const older = await libraryFixture(prisma, owner.id, ownedTask, {
+        const older = await libraryFixture(db, owner.id, ownedTask, {
             snapshotId: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
             text: '旧正文',
             observedAt: new Date('2026-01-01T00:00:00Z'),
         });
-        const newer = await libraryFixture(prisma, owner.id, ownedTask, {
+        const newer = await libraryFixture(db, owner.id, ownedTask, {
             source: older.source,
             snapshotId: '00000000-0000-4000-8000-000000000001',
             text: '新正文',
             observedAt: new Date('2026-01-02T00:00:00Z'),
         });
-        const different = await libraryFixture(prisma, owner.id, ownedTask, {
+        const different = await libraryFixture(db, owner.id, ownedTask, {
             text: '不同来源正文',
         });
         const list = await json(
@@ -419,11 +453,12 @@ describe('资料库HTTP、PostgreSQL全文检索、历史授权与清理', () =>
     it('重复观测选最近成功元数据，失败观测不覆盖成功历史', async () => {
         const owner = await register(),
             ownedTask = await task(owner),
-            data = await libraryFixture(prisma, owner.id, ownedTask, {
+            data = await libraryFixture(db, owner.id, ownedTask, {
                 observedAt: new Date('2026-01-01T00:00:00Z'),
             });
-        const run = await prisma.run.create({
-            data: {
+        const run = await db
+            .insert(tables.runs)
+            .values({
                 userId: owner.id,
                 taskId: ownedTask.id,
                 taskVersionId: ownedTask.currentVersionId,
@@ -433,10 +468,12 @@ describe('资料库HTTP、PostgreSQL全文检索、历史授权与清理', () =>
                 mode: 'demo',
                 budgetJson: draftConfig().budget,
                 usageJson: {},
-            },
-        });
-        const recent = await prisma.runSource.create({
-            data: {
+            })
+            .returning()
+            .then(firstRow);
+        const recent = await db
+            .insert(tables.runSources)
+            .values({
                 userId: owner.id,
                 runId: run.id,
                 sourceId: data.source.id,
@@ -446,8 +483,9 @@ describe('资料库HTTP、PostgreSQL全文检索、历史授权与清理', () =>
                 observedAt: new Date('2026-01-02T00:00:00Z'),
                 fetchStatus: 'succeeded',
                 metadataJson: { mode: 'demo', truncated: true },
-            },
-        });
+            })
+            .returning()
+            .then(firstRow);
         const response = await json(
             await request(snapshotPath(data.source.id, data.snapshot.id), {
                 headers: headers(owner),
@@ -455,10 +493,12 @@ describe('资料库HTTP、PostgreSQL全文检索、历史授权与清理', () =>
         );
         expect(response.snapshot.observationId).toBe(recent.id);
         expect(response.snapshot.truncated).toBe(true);
-        await prisma.runSource.update({
-            where: { id: recent.id },
-            data: { fetchStatus: 'failed' },
-        });
+        await db
+            .update(tables.runSources)
+            .set({ fetchStatus: 'failed' })
+            .where(and(eq(tables.runSources.id, recent.id)))
+            .returning()
+            .then(firstRow);
         const fallback = await json(
             await request(snapshotPath(data.source.id, data.snapshot.id), {
                 headers: headers(owner),
@@ -470,11 +510,11 @@ describe('资料库HTTP、PostgreSQL全文检索、历史授权与清理', () =>
     it('真实FTS英文命中，中文simple miss由字面子串补充且不跨用户', async () => {
         const owner = await register(),
             other = await register();
-        const own = await libraryFixture(prisma, owner.id, await task(owner), {
+        const own = await libraryFixture(db, owner.id, await task(owner), {
             title: '中文标题资料',
             text: '最新小样本学习研究进展。Robotics evidence.',
         });
-        const theirs = await libraryFixture(prisma, other.id, await task(other), {
+        const theirs = await libraryFixture(db, other.id, await task(other), {
             title: '中文标题私有资料',
             text: '最新小样本学习研究私有内容。Robotics private.',
         });
@@ -487,12 +527,13 @@ describe('资料库HTTP、PostgreSQL全文检索、历史授权与清理', () =>
                 ),
             )
         ).note;
-        const [probe] = await prisma.$queryRaw<
-            { vector: string; fts: boolean; substring: boolean }[]
-        >`
+        const [probe] = await queryRows<{ vector: string; fts: boolean; substring: boolean }>(
+            db,
+            querySql`
      SELECT to_tsvector('simple','最新小样本学习研究')::text AS vector,
      to_tsvector('simple','最新小样本学习研究') @@ plainto_tsquery('simple','小样本') AS fts,
-     strpos('最新小样本学习研究','小样本')>0 AS substring`;
+     strpos('最新小样本学习研究','小样本')>0 AS substring`,
+        );
         expect(probe!.fts).toBe(false);
         expect(probe!.substring).toBe(true);
         expect(probe!.vector).toContain('最新小样本学习研究');
@@ -523,7 +564,7 @@ describe('资料库HTTP、PostgreSQL全文检索、历史授权与清理', () =>
     });
     it('百分号下划线和SQL文本按字面检索，收藏/类型筛选有界', async () => {
         const owner = await register(),
-            data = await libraryFixture(prisma, owner.id, await task(owner), {
+            data = await libraryFixture(db, owner.id, await task(owner), {
                 text: '只有这里出现100%_literal的标记。',
             });
         const saved = (
@@ -548,10 +589,10 @@ describe('资料库HTTP、PostgreSQL全文检索、历史授权与清理', () =>
     it('PG微秒分页不漏同一毫秒内收藏、笔记、快照或搜索项', async () => {
         const owner = await register(),
             ownedTask = await task(owner),
-            first = await libraryFixture(prisma, owner.id, ownedTask, {
+            first = await libraryFixture(db, owner.id, ownedTask, {
                 text: 'precisionprobe 第一正文',
             });
-        const second = await libraryFixture(prisma, owner.id, ownedTask, {
+        const second = await libraryFixture(db, owner.id, ownedTask, {
             text: 'precisionprobe 第二正文',
         });
         const firstB = (await json(await bookmark(owner, first.source.id))).bookmark,
@@ -566,17 +607,31 @@ describe('资料库HTTP、PostgreSQL全文检索、历史授权与清理', () =>
                 await note(owner, { kind: 'source', id: first.source.id }, 'precisionprobe 笔记二'),
             )
         ).note;
-        await prisma.$executeRaw`UPDATE bookmarks SET created_at='2026-02-01T00:00:00.123456Z'::timestamptz WHERE id=${firstB.id}::uuid`;
-        await prisma.$executeRaw`UPDATE bookmarks SET created_at='2026-02-01T00:00:00.123455Z'::timestamptz WHERE id=${secondB.id}::uuid`;
-        await prisma.$executeRaw`UPDATE notes SET updated_at='2026-02-01T00:00:00.123454Z'::timestamptz WHERE id=${firstN.id}::uuid`;
-        await prisma.$executeRaw`UPDATE notes SET updated_at='2026-02-01T00:00:00.123453Z'::timestamptz WHERE id=${secondN.id}::uuid`;
-        await prisma.$executeRaw`UPDATE run_sources SET observed_at='2026-02-01T00:00:00.123452Z'::timestamptz WHERE id=${first.observation.id}::uuid`;
-        await prisma.$executeRaw`UPDATE run_sources SET observed_at='2026-02-01T00:00:00.123451Z'::timestamptz WHERE id=${second.observation.id}::uuid`;
-        const third = await libraryFixture(prisma, owner.id, ownedTask, {
+        await db.execute(
+            querySql`UPDATE bookmarks SET created_at='2026-02-01T00:00:00.123456Z'::timestamptz WHERE id=${firstB.id}::uuid`,
+        );
+        await db.execute(
+            querySql`UPDATE bookmarks SET created_at='2026-02-01T00:00:00.123455Z'::timestamptz WHERE id=${secondB.id}::uuid`,
+        );
+        await db.execute(
+            querySql`UPDATE notes SET updated_at='2026-02-01T00:00:00.123454Z'::timestamptz WHERE id=${firstN.id}::uuid`,
+        );
+        await db.execute(
+            querySql`UPDATE notes SET updated_at='2026-02-01T00:00:00.123453Z'::timestamptz WHERE id=${secondN.id}::uuid`,
+        );
+        await db.execute(
+            querySql`UPDATE run_sources SET observed_at='2026-02-01T00:00:00.123452Z'::timestamptz WHERE id=${first.observation.id}::uuid`,
+        );
+        await db.execute(
+            querySql`UPDATE run_sources SET observed_at='2026-02-01T00:00:00.123451Z'::timestamptz WHERE id=${second.observation.id}::uuid`,
+        );
+        const third = await libraryFixture(db, owner.id, ownedTask, {
             source: first.source,
             text: 'precisionprobe 第三正文',
         });
-        await prisma.$executeRaw`UPDATE run_sources SET observed_at='2026-02-01T00:00:00.123450Z'::timestamptz WHERE id=${third.observation.id}::uuid`;
+        await db.execute(
+            querySql`UPDATE run_sources SET observed_at='2026-02-01T00:00:00.123450Z'::timestamptz WHERE id=${third.observation.id}::uuid`,
+        );
         expect(await pages(owner, '/bookmarks')).toEqual([firstB.id, secondB.id]);
         expect(await pages(owner, '/notes')).toEqual([firstN.id, secondN.id]);
         expect(await pages(owner, snapshotPath(first.source.id))).toEqual([
@@ -594,7 +649,7 @@ describe('资料库HTTP、PostgreSQL全文检索、历史授权与清理', () =>
     it('游标绑定owner和查询，笔记anchor修改后旧游标拒绝继续', async () => {
         const owner = await register(),
             other = await register(),
-            data = await libraryFixture(prisma, owner.id, await task(owner));
+            data = await libraryFixture(db, owner.id, await task(owner));
         await note(owner, { kind: 'source', id: data.source.id }, 'cursorprobe 第一');
         await note(owner, { kind: 'source', id: data.source.id }, 'cursorprobe 第二');
         const page = await json(await request('/notes?limit=1', { headers: headers(owner) }));
@@ -634,19 +689,21 @@ describe('资料库HTTP、PostgreSQL全文检索、历史授权与清理', () =>
     it('过期正文立即不读不搜，清理保留引用元数据manifest与有效基线', async () => {
         const owner = await register(),
             ownedTask = await task(owner),
-            data = await libraryFixture(prisma, owner.id, ownedTask, {
+            data = await libraryFixture(db, owner.id, ownedTask, {
                 complete: true,
                 text: 'expiredbodyonly 原文证据片段',
                 title: '保留标题',
             });
-        const baseline = await prisma.baseline.create({
-            data: {
+        const baseline = await db
+            .insert(tables.baselines)
+            .values({
                 userId: owner.id,
                 taskId: ownedTask.id,
                 comparisonScopeHash: data.run.comparisonScopeHash,
                 completeRunId: data.run.id,
-            },
-        });
+            })
+            .returning()
+            .then(firstRow);
         const selected = (await json(await bookmark(owner, data.source.id))).bookmark,
             saved = (
                 await json(
@@ -666,7 +723,9 @@ describe('资料库HTTP、PostgreSQL全文检索、历史授权与清理', () =>
                 )
             ).textBody,
         ).not.toBeNull();
-        await prisma.$executeRaw`UPDATE source_snapshots SET text_expires_at=clock_timestamp()-interval '1 second' WHERE id=${data.snapshot.id}::uuid`;
+        await db.execute(
+            querySql`UPDATE source_snapshots SET text_expires_at=clock_timestamp()-interval '1 second' WHERE id=${data.snapshot.id}::uuid`,
+        );
         const expired = await json(
             await request(snapshotPath(data.source.id, data.snapshot.id), {
                 headers: headers(owner),
@@ -678,8 +737,11 @@ describe('资料库HTTP、PostgreSQL全文检索、历史授权与清理', () =>
         expect((await json(await search(owner, 'expiredbodyonly'))).items).toHaveLength(0);
         expect((await json(await search(owner, '保留标题'))).items[0].id).toBe(data.snapshot.id);
         expect(
-            (await prisma.sourceSnapshot.findUniqueOrThrow({ where: { id: data.snapshot.id } }))
-                .textBody,
+            (
+                await db.query.sourceSnapshots
+                    .findFirst({ where: and(eq(tables.sourceSnapshots.id, data.snapshot.id)) })
+                    .then(requireRow)
+            ).textBody,
         ).not.toBeNull();
         expect(
             (
@@ -689,59 +751,94 @@ describe('资料库HTTP、PostgreSQL全文检索、历史授权与清理', () =>
                 })
             ).cleared,
         ).toBe(1);
-        const after = await prisma.sourceSnapshot.findUniqueOrThrow({
-            where: { id: data.snapshot.id },
-        });
+        const after = await db.query.sourceSnapshots
+            .findFirst({ where: and(eq(tables.sourceSnapshots.id, data.snapshot.id)) })
+            .then(requireRow);
         expect(after.textBody).toBeNull();
         expect(after.contentHash).toBe(data.snapshot.contentHash);
         const report = await request('/reports/' + data.report.id, { headers: headers(owner) });
         expect(report.status).toBe(200);
         expect((await json(report)).evidence[0].quote).toBe(data.quote);
         expect(
-            (await prisma.evidence.findUniqueOrThrow({ where: { id: data.evidence.id } }))
-                .selectorJson,
+            (
+                await db.query.evidence
+                    .findFirst({ where: and(eq(tables.evidence.id, data.evidence.id)) })
+                    .then(requireRow)
+            ).selectorJson,
         ).toEqual(data.evidence.selectorJson);
         expect(
-            (await prisma.report.findUniqueOrThrow({ where: { id: data.report.id } }))
-                .comparisonJson,
+            (
+                await db.query.reports
+                    .findFirst({ where: and(eq(tables.reports.id, data.report.id)) })
+                    .then(requireRow)
+            ).comparisonJson,
         ).toEqual(data.manifest);
         expect(
-            (await prisma.baseline.findUniqueOrThrow({ where: { id: baseline.id } })).completeRunId,
+            (
+                await db.query.baselines
+                    .findFirst({ where: and(eq(tables.baselines.id, baseline.id)) })
+                    .then(requireRow)
+            ).completeRunId,
         ).toBe(data.run.id);
         await request('/bookmarks/' + selected.id, { method: 'DELETE', headers: headers(owner) });
         await request('/notes/' + saved.id, {
             method: 'DELETE',
             headers: headers(owner, { 'if-match': '"1"' }),
         });
-        expect(await prisma.source.findUnique({ where: { id: data.source.id } })).not.toBeNull();
         expect(
-            (await prisma.baseline.findUniqueOrThrow({ where: { id: baseline.id } })).completeRunId,
+            await db.query.sources
+                .findFirst({ where: and(eq(tables.sources.id, data.source.id)) })
+                .then((row) => row ?? null),
+        ).not.toBeNull();
+        expect(
+            (
+                await db.query.baselines
+                    .findFirst({ where: and(eq(tables.baselines.id, baseline.id)) })
+                    .then(requireRow)
+            ).completeRunId,
         ).toBe(data.run.id);
     });
     it('内部清理owner和batch边界生效且未过期正文不清理', async () => {
         const owner = await register(),
             other = await register(),
             ownedTask = await task(owner);
-        const first = await libraryFixture(prisma, owner.id, ownedTask),
-            second = await libraryFixture(prisma, owner.id, ownedTask),
-            future = await libraryFixture(prisma, owner.id, ownedTask),
-            theirs = await libraryFixture(prisma, other.id, await task(other));
+        const first = await libraryFixture(db, owner.id, ownedTask),
+            second = await libraryFixture(db, owner.id, ownedTask),
+            future = await libraryFixture(db, owner.id, ownedTask),
+            theirs = await libraryFixture(db, other.id, await task(other));
         for (const row of [first, second, theirs])
-            await prisma.$executeRaw`UPDATE source_snapshots SET text_expires_at=clock_timestamp()-interval '1 day' WHERE id=${row.snapshot.id}::uuid`;
+            await db.execute(
+                querySql`UPDATE source_snapshots SET text_expires_at=clock_timestamp()-interval '1 day' WHERE id=${row.snapshot.id}::uuid`,
+            );
         const library = createLibraryService(services);
         expect(
             (await library.purgeExpiredSnapshotBodies({ limit: 1, userId: owner.id })).cleared,
         ).toBe(1);
         expect(
-            await prisma.sourceSnapshot.count({ where: { userId: owner.id, textBody: null } }),
+            await db
+                .select({ count: count() })
+                .from(tables.sourceSnapshots)
+                .where(
+                    and(
+                        eq(tables.sourceSnapshots.userId, owner.id),
+                        isNull(tables.sourceSnapshots.textBody),
+                    ),
+                )
+                .then(([row]) => row!.count),
         ).toBe(1);
         expect(
-            (await prisma.sourceSnapshot.findUniqueOrThrow({ where: { id: theirs.snapshot.id } }))
-                .textBody,
+            (
+                await db.query.sourceSnapshots
+                    .findFirst({ where: and(eq(tables.sourceSnapshots.id, theirs.snapshot.id)) })
+                    .then(requireRow)
+            ).textBody,
         ).not.toBeNull();
         expect(
-            (await prisma.sourceSnapshot.findUniqueOrThrow({ where: { id: future.snapshot.id } }))
-                .textBody,
+            (
+                await db.query.sourceSnapshots
+                    .findFirst({ where: and(eq(tables.sourceSnapshots.id, future.snapshot.id)) })
+                    .then(requireRow)
+            ).textBody,
         ).not.toBeNull();
         expect(
             (await library.purgeExpiredSnapshotBodies({ limit: 100, userId: owner.id })).cleared,
@@ -752,11 +849,13 @@ describe('资料库HTTP、PostgreSQL全文检索、历史授权与清理', () =>
     });
     it('坏正文或引用hash拒绝整个历史详情，无成功观测不可读取', async () => {
         const owner = await register(),
-            data = await libraryFixture(prisma, owner.id, await task(owner));
-        await prisma.sourceSnapshot.update({
-            where: { id: data.snapshot.id },
-            data: { textBody: '被篡改' },
-        });
+            data = await libraryFixture(db, owner.id, await task(owner));
+        await db
+            .update(tables.sourceSnapshots)
+            .set({ textBody: '被篡改' })
+            .where(and(eq(tables.sourceSnapshots.id, data.snapshot.id)))
+            .returning()
+            .then(firstRow);
         expect(
             (
                 await request(snapshotPath(data.source.id, data.snapshot.id), {
@@ -764,14 +863,18 @@ describe('资料库HTTP、PostgreSQL全文检索、历史授权与清理', () =>
                 })
             ).status,
         ).toBe(409);
-        await prisma.sourceSnapshot.update({
-            where: { id: data.snapshot.id },
-            data: { textBody: null },
-        });
-        await prisma.evidence.update({
-            where: { id: data.evidence.id },
-            data: { quoteHash: '0'.repeat(64) },
-        });
+        await db
+            .update(tables.sourceSnapshots)
+            .set({ textBody: null })
+            .where(and(eq(tables.sourceSnapshots.id, data.snapshot.id)))
+            .returning()
+            .then(firstRow);
+        await db
+            .update(tables.evidence)
+            .set({ quoteHash: '0'.repeat(64) })
+            .where(and(eq(tables.evidence.id, data.evidence.id)))
+            .returning()
+            .then(firstRow);
         expect(
             (
                 await request(snapshotPath(data.source.id, data.snapshot.id), {
@@ -779,10 +882,12 @@ describe('资料库HTTP、PostgreSQL全文检索、历史授权与清理', () =>
                 })
             ).status,
         ).toBe(409);
-        await prisma.runSource.update({
-            where: { id: data.observation.id },
-            data: { fetchStatus: 'failed' },
-        });
+        await db
+            .update(tables.runSources)
+            .set({ fetchStatus: 'failed' })
+            .where(and(eq(tables.runSources.id, data.observation.id)))
+            .returning()
+            .then(firstRow);
         expect(
             (
                 await request(snapshotPath(data.source.id, data.snapshot.id), {

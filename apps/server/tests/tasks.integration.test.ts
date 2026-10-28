@@ -1,8 +1,18 @@
-import { execFileSync } from 'node:child_process';
-import { createRequire } from 'node:module';
+import { migrateDatabase } from '@scova/db/migrate';
+import {
+    createDatabaseClient,
+    connectDatabase,
+    closeDatabase,
+    queryRows,
+    sql as querySql,
+    and,
+    eq,
+    asc,
+    count,
+} from '@scova/db';
+import * as tables from '@scova/db';
 import { randomUUID } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
-import { PrismaClient } from '@scova/db';
+
 import { Redis as RedisClient } from 'ioredis';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vite-plus/test';
 import { createApiApp } from '../src/app/index.ts';
@@ -10,9 +20,8 @@ import { createDefaultServices, type ApiServices } from '../src/app/context.ts';
 import { comparisonScopeHash } from '../src/service/tasks.ts';
 import type { TaskConfig } from '@scova/models';
 import { nextScheduledAt } from '@scova/shared';
+import { firstRow, requireRow } from '../src/utils/database.ts';
 
-const require = createRequire(import.meta.url);
-const root = fileURLToPath(new URL('../../../', import.meta.url));
 const baseUrl =
     process.env.SCOVA_TEST_DATABASE_URL ??
     process.env.RUNTIME_DATABASE_URL ??
@@ -22,7 +31,7 @@ const redisUrl =
 const schema = `scova_tasks_${randomUUID().replaceAll('-', '')}`;
 const scopedUrl = new URL(baseUrl);
 scopedUrl.searchParams.set('schema', schema);
-const prisma = new PrismaClient({ datasources: { db: { url: scopedUrl.toString() } } });
+const db = createDatabaseClient({ connectionString: scopedUrl.toString() });
 const admin = new (require('pg').Client)({ connectionString: baseUrl });
 const redis = new RedisClient(redisUrl, {
     lazyConnect: true,
@@ -94,27 +103,8 @@ describe('长期任务、不可变版本与并发编辑', () => {
         await admin.connect();
         await admin.query(`CREATE SCHEMA "${schema}"`);
         schemaCreated = true;
-        const migrate = () =>
-            execFileSync(
-                process.execPath,
-                [
-                    require.resolve('prisma/build/index.js'),
-                    'migrate',
-                    'deploy',
-                    '--schema',
-                    'packages/db/prisma/schema.prisma',
-                ],
-                {
-                    cwd: root,
-                    env: { ...process.env, DATABASE_URL: scopedUrl.toString() },
-                    encoding: 'utf8',
-                    windowsHide: true,
-                    timeout: 60_000,
-                },
-            );
-        migrate();
-        migrate();
-        await prisma.$connect();
+        await migrateDatabase({ connectionString: scopedUrl.toString() });
+        await connectDatabase(db);
         await redis.connect();
     }, 120_000);
 
@@ -126,7 +116,7 @@ describe('长期任务、不可变版本与并发编辑', () => {
             registrationEnabled: true,
             sessionTtlSeconds: 3600,
             clock: () => now,
-            db: () => prisma,
+            db: () => db,
             redis: () => redis,
             rateLimit: {
                 windowSeconds: 60,
@@ -141,7 +131,7 @@ describe('长期任务、不可变版本与并发编辑', () => {
     });
 
     afterAll(async () => {
-        await prisma.$disconnect();
+        await closeDatabase(db);
         await redis.quit();
         if (schemaCreated && /^scova_tasks_[0-9a-f]{32}$/.test(schema))
             await admin.query(`DROP SCHEMA "${schema}" CASCADE`);
@@ -230,7 +220,9 @@ describe('长期任务、不可变版本与并发编辑', () => {
         expect(second.baselineResetRequired).toBe(false);
         expect(second.version.config.title).toBe('更新标题');
         expect(
-            await prisma.taskVersion.findUniqueOrThrow({ where: { id: second.version.id } }),
+            await db.query.taskVersions
+                .findFirst({ where: and(eq(tables.taskVersions.id, second.version.id)) })
+                .then(requireRow),
         ).toMatchObject({ inputText: '原始自然语言需求' });
         const semantic = await request(`/api/v1/tasks/${first.task.id}`, {
             method: 'PATCH',
@@ -239,15 +231,18 @@ describe('长期任务、不可变版本与并发编辑', () => {
         });
         expect(semantic.status).toBe(200);
         expect((await json(semantic)).baselineResetRequired).toBe(true);
-        const versions = await prisma.taskVersion.findMany({
-            where: { taskId: first.task.id },
-            orderBy: { version: 'asc' },
+        const versions = await db.query.taskVersions.findMany({
+            where: and(eq(tables.taskVersions.taskId, first.task.id)),
+            orderBy: [asc(tables.taskVersions.version)],
         });
         expect(versions).toHaveLength(3);
         expect((versions[0]!.configJson as Record<string, unknown>).title).toBe('每周英语听力');
         expect(
-            (await prisma.task.findUniqueOrThrow({ where: { id: first.task.id } }))
-                .scheduleRevision,
+            (
+                await db.query.tasks
+                    .findFirst({ where: and(eq(tables.tasks.id, first.task.id)) })
+                    .then(requireRow)
+            ).scheduleRevision,
         ).toBe(1);
     });
 
@@ -272,8 +267,11 @@ describe('长期任务、不可变版本与并发编辑', () => {
         });
         expect(changed.status).toBe(200);
         expect(
-            (await prisma.task.findUniqueOrThrow({ where: { id: first.task.id } }))
-                .scheduleRevision,
+            (
+                await db.query.tasks
+                    .findFirst({ where: and(eq(tables.tasks.id, first.task.id)) })
+                    .then(requireRow)
+            ).scheduleRevision,
         ).toBe(2);
         const conflict = await request(`/api/v1/tasks/${first.task.id}`, {
             method: 'PATCH',
@@ -281,7 +279,13 @@ describe('长期任务、不可变版本与并发编辑', () => {
             body: JSON.stringify({ config: config({ title: '过期编辑' }) }),
         });
         expect(conflict.status).toBe(409);
-        expect(await prisma.taskVersion.count({ where: { taskId: first.task.id } })).toBe(2);
+        expect(
+            await db
+                .select({ count: count() })
+                .from(tables.taskVersions)
+                .where(and(eq(tables.taskVersions.taskId, first.task.id)))
+                .then(([row]) => row!.count),
+        ).toBe(2);
     });
 
     it('两个并发编辑只有一个成功，失败请求不产生重复版本', async () => {
@@ -304,9 +308,19 @@ describe('长期任务、不可变版本与并发编辑', () => {
         expect(responses.map((response) => response.status).sort((a, b) => a - b)).toEqual([
             200, 409,
         ]);
-        expect(await prisma.taskVersion.count({ where: { taskId: first.task.id } })).toBe(2);
         expect(
-            (await prisma.task.findUniqueOrThrow({ where: { id: first.task.id } })).revision,
+            await db
+                .select({ count: count() })
+                .from(tables.taskVersions)
+                .where(and(eq(tables.taskVersions.taskId, first.task.id)))
+                .then(([row]) => row!.count),
+        ).toBe(2);
+        expect(
+            (
+                await db.query.tasks
+                    .findFirst({ where: and(eq(tables.tasks.id, first.task.id)) })
+                    .then(requireRow)
+            ).revision,
         ).toBe(2);
     });
 
@@ -389,18 +403,30 @@ describe('长期任务、不可变版本与并发编辑', () => {
             nextRunAt: null,
             currentVersionId: created.task.currentVersionId,
         });
-        expect((await prisma.run.findUniqueOrThrow({ where: { id: first.run.id } })).status).toBe(
-            'queued',
-        );
+        expect(
+            (
+                await db.query.runs
+                    .findFirst({ where: and(eq(tables.runs.id, first.run.id)) })
+                    .then(requireRow)
+            ).status,
+        ).toBe('queued');
         expect(await json(await start('paused-reuse-active-key'))).toMatchObject({
             reused: true,
             run: { id: first.run.id },
         });
-        await prisma.run.update({ where: { id: first.run.id }, data: { status: 'failed' } });
+        await db
+            .update(tables.runs)
+            .set({ status: 'failed' })
+            .where(and(eq(tables.runs.id, first.run.id)))
+            .returning()
+            .then(firstRow);
         const explicit = await start('paused-explicit-new-key');
         expect(explicit.status).toBe(202);
         expect((await json(explicit)).reused).toBe(false);
-        const [before] = await prisma.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`;
+        const [before] = await queryRows<{ now: Date }>(
+            db,
+            querySql`SELECT clock_timestamp() AS now`,
+        );
         const resumed = await request(`/api/v1/tasks/${created.task.id}/resume`, {
             method: 'POST',
             headers: authHeaders(owner, { 'if-match': '"2"' }),
@@ -409,15 +435,27 @@ describe('长期任务、不可变版本与并发编辑', () => {
         const body = await json(resumed);
         expect(body.task).toMatchObject({ status: 'active', revision: 3 });
         expect(new Date(body.task.nextRunAt).getTime()).toBeGreaterThan(before!.now.getTime());
-        const [after] = await prisma.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`;
+        const [after] = await queryRows<{ now: Date }>(
+            db,
+            querySql`SELECT clock_timestamp() AS now`,
+        );
         expect([
             nextScheduledAt(config() as TaskConfig, before!.now)!.toISOString(),
             nextScheduledAt(config() as TaskConfig, after!.now)!.toISOString(),
         ]).toContain(body.task.nextRunAt);
-        expect(await prisma.taskVersion.count({ where: { taskId: created.task.id } })).toBe(1);
         expect(
-            (await prisma.task.findUniqueOrThrow({ where: { id: created.task.id } }))
-                .scheduleRevision,
+            await db
+                .select({ count: count() })
+                .from(tables.taskVersions)
+                .where(and(eq(tables.taskVersions.taskId, created.task.id)))
+                .then(([row]) => row!.count),
+        ).toBe(1);
+        expect(
+            (
+                await db.query.tasks
+                    .findFirst({ where: and(eq(tables.tasks.id, created.task.id)) })
+                    .then(requireRow)
+            ).scheduleRevision,
         ).toBe(3);
     });
 
@@ -456,15 +494,30 @@ describe('长期任务、不可变版本与并发编辑', () => {
             revision: 2,
         });
         expect(
-            await prisma.outbox.count({
-                where: { aggregateId: run.id, eventType: 'run.cancel_requested' },
-            }),
+            await db
+                .select({ count: count() })
+                .from(tables.outbox)
+                .where(
+                    and(
+                        eq(tables.outbox.aggregateId, run.id),
+                        eq(tables.outbox.eventType, 'run.cancel_requested'),
+                    ),
+                )
+                .then(([row]) => row!.count),
         ).toBe(1);
-        expect((await prisma.run.findUniqueOrThrow({ where: { id: run.id } })).status).toBe(
-            'cancel_requested',
-        );
         expect(
-            (await prisma.task.findUniqueOrThrow({ where: { id: created.task.id } })).archivedAt,
+            (
+                await db.query.runs
+                    .findFirst({ where: and(eq(tables.runs.id, run.id)) })
+                    .then(requireRow)
+            ).status,
+        ).toBe('cancel_requested');
+        expect(
+            (
+                await db.query.tasks
+                    .findFirst({ where: and(eq(tables.tasks.id, created.task.id)) })
+                    .then(requireRow)
+            ).archivedAt,
         ).not.toBeNull();
         const repeated = await request(`/api/v1/tasks/${created.task.id}/archive`, {
             method: 'POST',
@@ -500,7 +553,12 @@ describe('长期任务、不可变版本与并发编辑', () => {
             reused: true,
             run: { id: run.id, status: 'cancel_requested' },
         });
-        await prisma.run.update({ where: { id: run.id }, data: { status: 'canceled' } });
+        await db
+            .update(tables.runs)
+            .set({ status: 'canceled' })
+            .where(and(eq(tables.runs.id, run.id)))
+            .returning()
+            .then(firstRow);
         expect(
             (
                 await request(`/api/v1/runs/${run.id}/retry`, {
@@ -514,10 +572,31 @@ describe('长期任务、不可变版本与并发编辑', () => {
             (await request(`/api/v1/tasks/${created.task.id}`, { headers: authHeaders(owner) }))
                 .status,
         ).toBe(200);
-        expect(await prisma.taskVersion.count({ where: { taskId: created.task.id } })).toBe(1);
-        expect(await prisma.run.count({ where: { taskId: created.task.id } })).toBe(1);
         expect(
-            await prisma.outbox.count({ where: { aggregateId: run.id, eventType: 'run.enqueue' } }),
+            await db
+                .select({ count: count() })
+                .from(tables.taskVersions)
+                .where(and(eq(tables.taskVersions.taskId, created.task.id)))
+                .then(([row]) => row!.count),
+        ).toBe(1);
+        expect(
+            await db
+                .select({ count: count() })
+                .from(tables.runs)
+                .where(and(eq(tables.runs.taskId, created.task.id)))
+                .then(([row]) => row!.count),
+        ).toBe(1);
+        expect(
+            await db
+                .select({ count: count() })
+                .from(tables.outbox)
+                .where(
+                    and(
+                        eq(tables.outbox.aggregateId, run.id),
+                        eq(tables.outbox.eventType, 'run.enqueue'),
+                    ),
+                )
+                .then(([row]) => row!.count),
         ).toBe(1);
     });
 
@@ -569,7 +648,13 @@ describe('长期任务、不可变版本与并发编辑', () => {
             headers: authHeaders(owner, { 'if-match': '"2"' }),
         });
         expect((await json(repeated)).task.revision).toBe(2);
-        expect(await prisma.taskVersion.count({ where: { taskId: created.task.id } })).toBe(1);
+        expect(
+            await db
+                .select({ count: count() })
+                .from(tables.taskVersions)
+                .where(and(eq(tables.taskVersions.taskId, created.task.id)))
+                .then(([row]) => row!.count),
+        ).toBe(1);
     });
 
     it('非计划编辑保留到期时点，暂停后的计划编辑不重新启用触发', async () => {
@@ -582,7 +667,12 @@ describe('长期任务、不可变版本与并发编辑', () => {
             }),
         );
         const due = new Date('2026-10-19T12:00:00Z');
-        await prisma.task.update({ where: { id: created.task.id }, data: { nextRunAt: due } });
+        await db
+            .update(tables.tasks)
+            .set({ nextRunAt: due })
+            .where(and(eq(tables.tasks.id, created.task.id)))
+            .returning()
+            .then(firstRow);
         const edited = await request(`/api/v1/tasks/${created.task.id}`, {
             method: 'PATCH',
             headers: authHeaders(owner, { 'if-match': '"1"' }),
@@ -608,8 +698,11 @@ describe('长期任务、不可变版本与并发编辑', () => {
             revision: 4,
         });
         expect(
-            (await prisma.task.findUniqueOrThrow({ where: { id: created.task.id } }))
-                .scheduleRevision,
+            (
+                await db.query.tasks
+                    .findFirst({ where: and(eq(tables.tasks.id, created.task.id)) })
+                    .then(requireRow)
+            ).scheduleRevision,
         ).toBe(3);
     });
 
@@ -637,7 +730,11 @@ describe('长期任务、不可变版本与并发编辑', () => {
             200, 409,
         ]);
         expect(
-            (await prisma.task.findUniqueOrThrow({ where: { id: created.task.id } })).revision,
+            (
+                await db.query.tasks
+                    .findFirst({ where: and(eq(tables.tasks.id, created.task.id)) })
+                    .then(requireRow)
+            ).revision,
         ).toBe(2);
     });
 });

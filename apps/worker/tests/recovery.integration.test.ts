@@ -1,3 +1,16 @@
+import { requiredDatabaseValue } from '@/utils/database.ts';
+import {
+    runs as dbRuns,
+    eq,
+    sql,
+    queryRows,
+    toolCalls as dbToolCalls,
+    runEvents as dbRunEvents,
+    reports as dbReports,
+    count as dbCount,
+    asc,
+    taskVersions as dbTaskVersions,
+} from '@scova/db';
 import type { Usage } from '@scova/models';
 import type { AgentCandidate } from '@scova/agent-core';
 import {
@@ -46,19 +59,27 @@ async function setup(options: { mode?: 'live' | 'demo' } = {}) {
     return { ...seed, current, repo: createAgentRepository(fixture.db, current.token) };
 }
 async function takeover(runId: string) {
-    await fixture.db.run.update({ where: { id: runId }, data: { leaseExpiresAt: new Date(0) } });
+    await fixture.db
+        .update(dbRuns)
+        .set({ leaseExpiresAt: new Date(0) })
+        .where(eq(dbRuns.id, runId))
+        .returning()
+        .then((rows) => requiredDatabaseValue(rows[0]));
     const current = await claim(runId, 'recovery-B');
     return { current, repo: createAgentRepository(fixture.db, current.token) };
 }
 /** Preserve the real ordering: a successful ToolCall commits before the fixed deadline elapses. */
 async function expireAfterEvidence(runId: string, expireLease = false): Promise<Date> {
-    const [row] = await fixture.db.$queryRaw<{ deadlineAt: Date }[]>`
+    const [row] = await queryRows<{ deadlineAt: Date }>(
+        fixture.db,
+        sql`
     UPDATE runs
     SET deadline_at = clock_timestamp(),
         lease_expires_at = CASE WHEN ${expireLease} THEN clock_timestamp() - interval '1 second' ELSE lease_expires_at END
     WHERE id = ${runId}::uuid
     RETURNING deadline_at AS "deadlineAt"
-  `;
+  `,
+    );
     return row!.deadlineAt;
 }
 function sessionFixture(
@@ -96,8 +117,9 @@ function sessionFixture(
 
 beforeAll(async () => {
     await fixture.setup();
-    await fixture.db
-        .$executeRaw`CREATE TABLE recovery_external_calls (id bigserial PRIMARY KEY, run_id uuid NOT NULL, kind text NOT NULL, input text NOT NULL)`;
+    await fixture.db.execute(
+        sql`CREATE TABLE recovery_external_calls (id bigserial PRIMARY KEY, run_id uuid NOT NULL, kind text NOT NULL, input text NOT NULL)`,
+    );
 }, 120_000);
 afterAll(() => fixture.cleanup());
 
@@ -119,14 +141,24 @@ describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）',
             output: result,
             usage: { searches: 1 },
         });
-        const calls = await fixture.db.toolCall.findMany({ where: { runId: seed.run.id } });
+        const calls = await fixture.db.query.toolCalls.findMany({
+            where: eq(dbToolCalls.runId, seed.run.id),
+        });
         expect(calls).toHaveLength(1);
         expect(calls[0]!.inputSummary).not.toContain('secret');
-        const events = await fixture.db.runEvent.findMany({ where: { runId: seed.run.id } });
+        const events = await fixture.db.query.runEvents.findMany({
+            where: eq(dbRunEvents.runId, seed.run.id),
+        });
         expect(JSON.stringify(events)).not.toContain('secret prompt');
         expect(events.filter((event) => event.type === 'tool.started')).toHaveLength(1);
         expect(events.filter((event) => event.type === 'tool.completed')).toHaveLength(1);
-        expect(await fixture.db.report.count({ where: { runId: seed.run.id } })).toBe(0);
+        expect(
+            await fixture.db
+                .select({ count: dbCount() })
+                .from(dbReports)
+                .where(eq(dbReports.runId, seed.run.id))
+                .then((rows) => rows[0]!.count),
+        ).toBe(0);
     });
 
     it.each([
@@ -153,10 +185,12 @@ describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）',
         'C14-E01 并发预留 $counter 到上限后原子拒绝，不能超卖',
         async ({ tool, counter, budget, reserved }) => {
             const seed = await setup();
-            await fixture.db.run.update({
-                where: { id: seed.run.id },
-                data: { budgetJson: { ...seed.config.budget, [budget]: 2 } },
-            });
+            await fixture.db
+                .update(dbRuns)
+                .set({ budgetJson: { ...seed.config.budget, [budget]: 2 } })
+                .where(eq(dbRuns.id, seed.run.id))
+                .returning()
+                .then((rows) => requiredDatabaseValue(rows[0]));
             const results = await Promise.allSettled(
                 Array.from({ length: 8 }, (_, i) =>
                     seed.repo.reserve({
@@ -173,10 +207,16 @@ describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）',
                 if (item.status === 'rejected')
                     expect(item.reason).toMatchObject({ code: 'BUDGET_EXCEEDED' });
             expect((await seed.repo.usage())[counter]).toBe(2);
-            expect(await fixture.db.toolCall.count({ where: { runId: seed.run.id } })).toBe(2);
-            const events = await fixture.db.runEvent.findMany({
-                where: { runId: seed.run.id },
-                orderBy: { seq: 'asc' },
+            expect(
+                await fixture.db
+                    .select({ count: dbCount() })
+                    .from(dbToolCalls)
+                    .where(eq(dbToolCalls.runId, seed.run.id))
+                    .then((rows) => rows[0]!.count),
+            ).toBe(2);
+            const events = await fixture.db.query.runEvents.findMany({
+                where: eq(dbRunEvents.runId, seed.run.id),
+                orderBy: [asc(dbRunEvents.seq)],
             });
             expect(events.filter((event) => event.type === 'tool.started')).toHaveLength(2);
             expect(events.filter((event) => event.type === 'budget.updated')).toHaveLength(2);
@@ -207,10 +247,12 @@ describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）',
         'C14-ST01 unknown=%s 保留已预留预算，重试新 attempt 再收费',
         async (unknown) => {
             const seed = await setup();
-            await fixture.db.run.update({
-                where: { id: seed.run.id },
-                data: { budgetJson: { ...seed.config.budget, maxSearches: 2 } },
-            });
+            await fixture.db
+                .update(dbRuns)
+                .set({ budgetJson: { ...seed.config.budget, maxSearches: 2 } })
+                .where(eq(dbRuns.id, seed.run.id))
+                .returning()
+                .then((rows) => requiredDatabaseValue(rows[0]));
             const first = await seed.repo.reserve(search('retry'));
             await seed.repo.fail({ toolCallId: first.toolCallId, unknown });
             expect(await seed.repo.usage()).toMatchObject({ searches: 1 });
@@ -224,9 +266,9 @@ describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）',
             await expect(seed.repo.reserve(search('retry'))).rejects.toMatchObject({
                 code: 'BUDGET_EXCEEDED',
             });
-            const calls = await fixture.db.toolCall.findMany({
-                where: { runId: seed.run.id },
-                orderBy: { attemptNo: 'asc' },
+            const calls = await fixture.db.query.toolCalls.findMany({
+                where: eq(dbToolCalls.runId, seed.run.id),
+                orderBy: [asc(dbToolCalls.attemptNo)],
             });
             expect(calls.map((call) => call.status)).toEqual([
                 unknown ? 'unknown' : 'failed',
@@ -257,7 +299,9 @@ describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）',
             output: { current: true },
         });
         expect(
-            await fixture.db.toolCall.findUniqueOrThrow({ where: { id: old.toolCallId } }),
+            await fixture.db.query.toolCalls
+                .findFirst({ where: eq(dbToolCalls.id, old.toolCallId) })
+                .then((row) => requiredDatabaseValue(row)),
         ).toMatchObject({ status: 'unknown', outputRef: null });
     });
 
@@ -340,7 +384,9 @@ describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）',
         ).rejects.toMatchObject({ code: 'INVALID_TOOL_RESULT' });
         expect(await seed.repo.usage()).toMatchObject({ inputTokens: 260, outputTokens: 100 });
         expect(
-            await fixture.db.toolCall.findUniqueOrThrow({ where: { id: third.toolCallId } }),
+            await fixture.db.query.toolCalls
+                .findFirst({ where: eq(dbToolCalls.id, third.toolCallId) })
+                .then((row) => requiredDatabaseValue(row)),
         ).toMatchObject({ status: 'running', outputRef: null });
     });
 
@@ -455,7 +501,13 @@ describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）',
             } finally {
                 await recovery.close();
             }
-            expect(await fixture.db.report.count({ where: { runId: seed.run.id } })).toBe(0);
+            expect(
+                await fixture.db
+                    .select({ count: dbCount() })
+                    .from(dbReports)
+                    .where(eq(dbReports.runId, seed.run.id))
+                    .then((rows) => rows[0]!.count),
+            ).toBe(0);
         } finally {
             await saver.end();
         }
@@ -474,10 +526,12 @@ describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）',
             await seed.repo.settle({ toolCallId: page.toolCallId, output: storedPage });
             const pending = await seed.repo.reserve(search('pending'));
             if (reason === 'cancel')
-                await fixture.db.run.update({
-                    where: { id: seed.run.id },
-                    data: { cancelRequestedAt: new Date(), status: 'cancel_requested' },
-                });
+                await fixture.db
+                    .update(dbRuns)
+                    .set({ cancelRequestedAt: new Date(), status: 'cancel_requested' })
+                    .where(eq(dbRuns.id, seed.run.id))
+                    .returning()
+                    .then((rows) => requiredDatabaseValue(rows[0]));
             else await expireAfterEvidence(seed.run.id);
             const code = reason === 'cancel' ? 'RUN_CANCELED' : 'DEADLINE_EXCEEDED';
             await expect(seed.repo.reserve(search('forbidden'))).rejects.toMatchObject({ code });
@@ -502,8 +556,20 @@ describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）',
                 await expect(seed.repo.readPages({ allowDeadline: true })).rejects.toMatchObject({
                     code,
                 });
-            expect(await fixture.db.toolCall.count({ where: { runId: seed.run.id } })).toBe(2);
-            expect(await fixture.db.report.count({ where: { runId: seed.run.id } })).toBe(0);
+            expect(
+                await fixture.db
+                    .select({ count: dbCount() })
+                    .from(dbToolCalls)
+                    .where(eq(dbToolCalls.runId, seed.run.id))
+                    .then((rows) => rows[0]!.count),
+            ).toBe(2);
+            expect(
+                await fixture.db
+                    .select({ count: dbCount() })
+                    .from(dbReports)
+                    .where(eq(dbReports.runId, seed.run.id))
+                    .then((rows) => rows[0]!.count),
+            ).toBe(0);
         },
     );
 
@@ -537,10 +603,12 @@ describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）',
             try {
                 await session.tools.read('saved', DEMO_URL);
                 if (reason === 'cancel')
-                    await fixture.db.run.update({
-                        where: { id: seed.run.id },
-                        data: { cancelRequestedAt: new Date(), status: 'cancel_requested' },
-                    });
+                    await fixture.db
+                        .update(dbRuns)
+                        .set({ cancelRequestedAt: new Date(), status: 'cancel_requested' })
+                        .where(eq(dbRuns.id, seed.run.id))
+                        .returning()
+                        .then((rows) => requiredDatabaseValue(rows[0]));
                 else await expireAfterEvidence(seed.run.id);
                 const code = reason === 'cancel' ? 'RUN_CANCELED' : 'DEADLINE_EXCEEDED';
                 await expect(
@@ -569,8 +637,20 @@ describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）',
                     });
                 } else await expect(session.partial()).rejects.toMatchObject({ code });
                 expect(counts).toEqual({ search: 0, read: 1, model: 0 });
-                expect(await fixture.db.toolCall.count({ where: { runId: seed.run.id } })).toBe(1);
-                expect(await fixture.db.report.count({ where: { runId: seed.run.id } })).toBe(0);
+                expect(
+                    await fixture.db
+                        .select({ count: dbCount() })
+                        .from(dbToolCalls)
+                        .where(eq(dbToolCalls.runId, seed.run.id))
+                        .then((rows) => rows[0]!.count),
+                ).toBe(1);
+                expect(
+                    await fixture.db
+                        .select({ count: dbCount() })
+                        .from(dbReports)
+                        .where(eq(dbReports.runId, seed.run.id))
+                        .then((rows) => rows[0]!.count),
+                ).toBe(0);
             } finally {
                 await close();
             }
@@ -579,10 +659,12 @@ describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）',
 
     it('C14-ST04 provider 内重试每次独立收费；成功同key复用且超预算不进入provider', async () => {
         const seed = await setup();
-        await fixture.db.run.update({
-            where: { id: seed.run.id },
-            data: { budgetJson: { ...seed.config.budget, maxSearches: 2 } },
-        });
+        await fixture.db
+            .update(dbRuns)
+            .set({ budgetJson: { ...seed.config.budget, maxSearches: 2 } })
+            .where(eq(dbRuns.id, seed.run.id))
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
         const base = createConnectorBundle();
         let externalAttempts = 0;
         const { session, close } = sessionFixture(seed, {
@@ -601,9 +683,9 @@ describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）',
             const result = await session.tools.search('retry-provider', 'same-input');
             expect(await session.tools.search('retry-provider', 'same-input')).toEqual(result);
             expect(externalAttempts).toBe(2);
-            const calls = await fixture.db.toolCall.findMany({
-                where: { runId: seed.run.id },
-                orderBy: { attemptNo: 'asc' },
+            const calls = await fixture.db.query.toolCalls.findMany({
+                where: eq(dbToolCalls.runId, seed.run.id),
+                orderBy: [asc(dbToolCalls.attemptNo)],
             });
             expect(
                 calls.map((call) => ({ attemptNo: call.attemptNo, status: call.status })),
@@ -616,7 +698,13 @@ describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）',
                 session.tools.search('retry-provider', 'different-input'),
             ).rejects.toMatchObject({ code: 'BUDGET_EXCEEDED' });
             expect(externalAttempts).toBe(2);
-            expect(await fixture.db.toolCall.count({ where: { runId: seed.run.id } })).toBe(2);
+            expect(
+                await fixture.db
+                    .select({ count: dbCount() })
+                    .from(dbToolCalls)
+                    .where(eq(dbToolCalls.runId, seed.run.id))
+                    .then((rows) => rows[0]!.count),
+            ).toBe(2);
         } finally {
             await close();
         }
@@ -634,8 +722,11 @@ describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）',
         const locked = deferred();
         const release = deferred();
         const entered = deferred();
-        const locker = fixture.db.$transaction(async (tx) => {
-            await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtext(${seed.run.id}))`;
+        const locker = fixture.db.transaction(async (tx) => {
+            await queryRows<Record<string, unknown>>(
+                tx,
+                sql`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtext(${seed.run.id}))`,
+            );
             locked.resolve();
             await release.promise;
         });
@@ -647,8 +738,11 @@ describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）',
             async reserve(input) {
                 const held = await seed.repo.reserve(input);
                 entered.resolve();
-                await fixture.db.$transaction(async (tx) => {
-                    await tx.$queryRaw`SELECT 1 AS waited FROM pg_advisory_xact_lock(hashtext(${seed.run.id}))`;
+                await fixture.db.transaction(async (tx) => {
+                    await queryRows<Record<string, unknown>>(
+                        tx,
+                        sql`SELECT 1 AS waited FROM pg_advisory_xact_lock(hashtext(${seed.run.id}))`,
+                    );
                 });
                 return held;
             },
@@ -685,10 +779,18 @@ describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）',
             await draining;
             await expect(operation).rejects.toMatchObject({ code: 'aborted' });
             expect(providerCalls).toBe(0);
-            const calls = await fixture.db.toolCall.findMany({ where: { runId: seed.run.id } });
+            const calls = await fixture.db.query.toolCalls.findMany({
+                where: eq(dbToolCalls.runId, seed.run.id),
+            });
             expect(calls).toMatchObject([{ status: 'running', attemptNo: 1, outputRef: null }]);
             expect(await seed.repo.usage()).toMatchObject({ searches: 1 });
-            expect(await fixture.db.report.count({ where: { runId: seed.run.id } })).toBe(0);
+            expect(
+                await fixture.db
+                    .select({ count: dbCount() })
+                    .from(dbReports)
+                    .where(eq(dbReports.runId, seed.run.id))
+                    .then((rows) => rows[0]!.count),
+            ).toBe(0);
         } finally {
             release.resolve();
             await locker;
@@ -718,7 +820,12 @@ describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）',
             maxInputTokens: estimated * 2,
             maxOutputTokens: 200,
         };
-        await fixture.db.run.update({ where: { id: seed.run.id }, data: { budgetJson: budget } });
+        await fixture.db
+            .update(dbRuns)
+            .set({ budgetJson: budget })
+            .where(eq(dbRuns.id, seed.run.id))
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
         seed.current.budget = budget;
         let httpCalls = 0;
         const http: SafeHttpClient = {
@@ -760,9 +867,9 @@ describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）',
                 outputTokens: 100,
                 estimated: true,
             });
-            const calls = await fixture.db.toolCall.findMany({
-                where: { runId: seed.run.id },
-                orderBy: { attemptNo: 'asc' },
+            const calls = await fixture.db.query.toolCalls.findMany({
+                where: eq(dbToolCalls.runId, seed.run.id),
+                orderBy: [asc(dbToolCalls.attemptNo)],
             });
             expect(
                 calls.map((call) => ({ status: call.status, attemptNo: call.attemptNo })),
@@ -775,8 +882,11 @@ describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）',
                 outputTokens: 200,
             });
             expect(
-                (await fixture.db.run.findUniqueOrThrow({ where: { id: seed.run.id } }))
-                    .checkpointRef,
+                (
+                    await fixture.db.query.runs
+                        .findFirst({ where: eq(dbRuns.id, seed.run.id) })
+                        .then((row) => requiredDatabaseValue(row))
+                ).checkpointRef,
             ).toBeNull();
             const next = await takeover(seed.run.id);
             resumed = sessionFixture({ ...seed, current: next.current, repo: next.repo }, bundle);
@@ -792,7 +902,13 @@ describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）',
                 inputTokens: estimated * 2,
                 outputTokens: 200,
             });
-            expect(await fixture.db.toolCall.count({ where: { runId: seed.run.id } })).toBe(2);
+            expect(
+                await fixture.db
+                    .select({ count: dbCount() })
+                    .from(dbToolCalls)
+                    .where(eq(dbToolCalls.runId, seed.run.id))
+                    .then((rows) => rows[0]!.count),
+            ).toBe(2);
         } finally {
             await first.close();
             await resumed?.close();
@@ -802,7 +918,12 @@ describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）',
     it('C14-M02 两次可信model usage实时累计，第二请求按剩余output上限且仅预留完整输入估算', async () => {
         const seed = await setup({ mode: 'live' });
         const budget = { ...seed.config.budget, maxInputTokens: 5_000, maxOutputTokens: 100 };
-        await fixture.db.run.update({ where: { id: seed.run.id }, data: { budgetJson: budget } });
+        await fixture.db
+            .update(dbRuns)
+            .set({ budgetJson: budget })
+            .where(eq(dbRuns.id, seed.run.id))
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
         seed.current.budget = budget;
         const bodies: { max_tokens: number }[] = [];
         const http: SafeHttpClient = {
@@ -850,9 +971,9 @@ describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）',
             await session.tools.model('second-model', { ...input, prompt: '另一次核验' });
             expect(bodies.map((body) => body.max_tokens)).toEqual([100, 30]);
             expect(await seed.repo.usage()).toMatchObject({ inputTokens: 25, outputTokens: 100 });
-            const calls = await fixture.db.toolCall.findMany({
-                where: { runId: seed.run.id },
-                orderBy: { startedAt: 'asc' },
+            const calls = await fixture.db.query.toolCalls.findMany({
+                where: eq(dbToolCalls.runId, seed.run.id),
+                orderBy: [asc(dbToolCalls.startedAt)],
             });
             expect(calls).toHaveLength(2);
             for (const call of calls)
@@ -864,7 +985,13 @@ describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）',
                     (call) => (call.reservedBudget as { reserved: Usage }).reserved.outputTokens,
                 ),
             ).toEqual([100, 30]);
-            expect(await fixture.db.report.count({ where: { runId: seed.run.id } })).toBe(0);
+            expect(
+                await fixture.db
+                    .select({ count: dbCount() })
+                    .from(dbReports)
+                    .where(eq(dbReports.runId, seed.run.id))
+                    .then((rows) => rows[0]!.count),
+            ).toBe(0);
         } finally {
             await close();
         }
@@ -916,7 +1043,9 @@ describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）',
                 estimated: true,
             });
             expect(
-                await fixture.db.toolCall.findMany({ where: { runId: seed.run.id } }),
+                await fixture.db.query.toolCalls.findMany({
+                    where: eq(dbToolCalls.runId, seed.run.id),
+                }),
             ).toMatchObject([{ status: 'unknown', outputRef: null }]);
         } finally {
             await close();
@@ -971,13 +1100,15 @@ describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）',
                             async onDeadline(context) {
                                 deadlineCalls++;
                                 if (cancel)
-                                    await fixture.db.run.update({
-                                        where: { id: seed.run.id },
-                                        data: {
+                                    await fixture.db
+                                        .update(dbRuns)
+                                        .set({
                                             status: 'cancel_requested',
                                             cancelRequestedAt: new Date(),
-                                        },
-                                    });
+                                        })
+                                        .where(eq(dbRuns.id, seed.run.id))
+                                        .returning()
+                                        .then((rows) => requiredDatabaseValue(rows[0]));
                                 await executor.onDeadline!(context);
                             },
                         };
@@ -995,7 +1126,9 @@ describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）',
                         pages: [expect.objectContaining({ text: page.text, url: page.url })],
                     });
                 expect(
-                    await fixture.db.run.findUniqueOrThrow({ where: { id: seed.run.id } }),
+                    await fixture.db.query.runs
+                        .findFirst({ where: eq(dbRuns.id, seed.run.id) })
+                        .then((row) => requiredDatabaseValue(row)),
                 ).toMatchObject({
                     leaseEpoch: seed.current.token.leaseEpoch + 1,
                     recoveryCount: 1,
@@ -1004,8 +1137,20 @@ describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）',
                     failureCode: cancel ? null : 'DEADLINE_EXCEEDED',
                     usageJson: { pages: 1 },
                 });
-                expect(await fixture.db.toolCall.count({ where: { runId: seed.run.id } })).toBe(1);
-                expect(await fixture.db.report.count({ where: { runId: seed.run.id } })).toBe(0);
+                expect(
+                    await fixture.db
+                        .select({ count: dbCount() })
+                        .from(dbToolCalls)
+                        .where(eq(dbToolCalls.runId, seed.run.id))
+                        .then((rows) => rows[0]!.count),
+                ).toBe(1);
+                expect(
+                    await fixture.db
+                        .select({ count: dbCount() })
+                        .from(dbReports)
+                        .where(eq(dbReports.runId, seed.run.id))
+                        .then((rows) => rows[0]!.count),
+                ).toBe(0);
             } finally {
                 await runtime.close();
             }
@@ -1117,28 +1262,32 @@ describe('Agent 真实双进程恢复（PostgresSaver，无 Redis）', () => {
         async ({ runtime, boundary }) => {
             const seed = await seedRun(fixture.db);
             const budget = { ...seed.config.budget, maxSearches: 1, maxPages: 1 };
-            await fixture.db.taskVersion.update({
-                where: { id: seed.version.id },
-                data: { configJson: { ...seed.config, focusPoints: [], budget } },
-            });
-            await fixture.db.run.update({
-                where: { id: seed.run.id },
-                data: { budgetJson: budget },
-            });
+            await fixture.db
+                .update(dbTaskVersions)
+                .set({ configJson: { ...seed.config, focusPoints: [], budget } })
+                .where(eq(dbTaskVersions.id, seed.version.id))
+                .returning()
+                .then((rows) => requiredDatabaseValue(rows[0]));
+            await fixture.db
+                .update(dbRuns)
+                .set({ budgetJson: budget })
+                .where(eq(dbRuns.id, seed.run.id))
+                .returning()
+                .then((rows) => requiredDatabaseValue(rows[0]));
             const first = launchAgent(runtime, 'crash', seed.run.id, boundary);
             let second: ReturnType<typeof launchAgent> | undefined;
             try {
                 await waitAgentMessage(first, 'settled-before-checkpoint');
-                const initial = await fixture.db.run.findUniqueOrThrow({
-                    where: { id: seed.run.id },
-                });
+                const initial = await fixture.db.query.runs
+                    .findFirst({ where: eq(dbRuns.id, seed.run.id) })
+                    .then((row) => requiredDatabaseValue(row));
                 expect(initial.checkpointRef).not.toBeNull();
                 expect(initial.usageJson).toMatchObject({
                     searches: 1,
                     pages: boundary === 'read' ? 1 : 0,
                 });
-                const initialCalls = await fixture.db.toolCall.findMany({
-                    where: { runId: seed.run.id },
+                const initialCalls = await fixture.db.query.toolCalls.findMany({
+                    where: eq(dbToolCalls.runId, seed.run.id),
                 });
                 expect(initialCalls).toHaveLength(boundary === 'read' ? 2 : 1);
                 expect(
@@ -1174,17 +1323,19 @@ describe('Agent 真实双进程恢复（PostgresSaver，无 Redis）', () => {
                 } finally {
                     await raw.end();
                 }
-                await fixture.db.run.update({
-                    where: { id: seed.run.id },
-                    data: { leaseExpiresAt: new Date(0) },
-                });
+                await fixture.db
+                    .update(dbRuns)
+                    .set({ leaseExpiresAt: new Date(0) })
+                    .where(eq(dbRuns.id, seed.run.id))
+                    .returning()
+                    .then((rows) => requiredDatabaseValue(rows[0]));
                 second = launchAgent(runtime, 'resume', seed.run.id, boundary);
                 await waitAgentMessage(second, 'candidate');
                 await endAgent(second);
                 expect(second.exit?.code, second.output).toBe(0);
-                const recovered = await fixture.db.run.findUniqueOrThrow({
-                    where: { id: seed.run.id },
-                });
+                const recovered = await fixture.db.query.runs
+                    .findFirst({ where: eq(dbRuns.id, seed.run.id) })
+                    .then((row) => requiredDatabaseValue(row));
                 expect(recovered).toMatchObject({
                     leaseEpoch: initial.leaseEpoch + 1,
                     recoveryCount: initial.recoveryCount + 1,
@@ -1195,12 +1346,13 @@ describe('Agent 真实双进程恢复（PostgresSaver，无 Redis）', () => {
                     budgetJson: budget,
                     checkpointRef: { leaseEpoch: initial.leaseEpoch + 1 },
                 });
-                const calls = await fixture.db.$queryRaw<
-                    { kind: string; input: string }[]
-                >`SELECT kind, input FROM recovery_external_calls WHERE run_id = ${seed.run.id}::uuid ORDER BY id`;
+                const calls = await queryRows<{ kind: string; input: string }>(
+                    fixture.db,
+                    sql`SELECT kind, input FROM recovery_external_calls WHERE run_id = ${seed.run.id}::uuid ORDER BY id`,
+                );
                 expect(calls.map((call) => call.kind)).toEqual(['search', 'read']);
-                const ledger = await fixture.db.toolCall.findMany({
-                    where: { runId: seed.run.id },
+                const ledger = await fixture.db.query.toolCalls.findMany({
+                    where: eq(dbToolCalls.runId, seed.run.id),
                 });
                 expect(ledger).toHaveLength(2);
                 expect(
@@ -1209,7 +1361,13 @@ describe('Agent 真实双进程恢复（PostgresSaver，无 Redis）', () => {
                 expect(
                     second.messages.find((message) => message.type === 'candidate')!.candidate,
                 ).toMatchObject({ runId: seed.run.id, mode: 'demo', pages: [expect.anything()] });
-                expect(await fixture.db.report.count({ where: { runId: seed.run.id } })).toBe(0);
+                expect(
+                    await fixture.db
+                        .select({ count: dbCount() })
+                        .from(dbReports)
+                        .where(eq(dbReports.runId, seed.run.id))
+                        .then((rows) => rows[0]!.count),
+                ).toBe(0);
             } finally {
                 if (!first.exit) await endAgent(first, true);
                 if (second && !second.exit) await endAgent(second, true);

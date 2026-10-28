@@ -10,12 +10,16 @@
 2. 执行 `docker compose up --build -d`，再用 `docker compose ps` 查看健康状态。
 3. 默认只绑定 `127.0.0.1:8080`。`GET http://localhost:8080/health` 是存活检查；容器健康检查另外核验 PostgreSQL、Redis、全部业务迁移和 saver 版本。Worker 还必须持续更新就绪心跳。
 
-启动先执行一次性 `migrate` 服务。Prisma 业务迁移和 LangGraph saver 迁移均成功后，API/Worker 才启动。迁移服务再次运行时若核验当前全部版本已齐，仅返回只读的 current 结果；需要 DDL 时仍要求 API/Worker 已停止。容器中的 `AGENT_CHECKPOINT_MIGRATION=external` 禁止 Worker 自动建表；本地开发默认保留启动时初始化 saver 的行为。升级镜像后，停止应用并重新执行迁移：
+启动先执行一次性 `migrate` 服务。Drizzle 业务迁移和 LangGraph saver 迁移均成功后，API/Worker 才启动。迁移服务再次运行时若核验当前全部版本已齐，仅返回只读的 current 结果；需要 DDL 时仍要求 API/Worker 已停止。容器中的 `AGENT_CHECKPOINT_MIGRATION=external` 禁止 Worker 自动建表；本地开发默认保留启动时初始化 saver 的行为。升级前先使用旧版本镜像完成备份并验证恢复；保持应用停止，再构建新镜像、执行迁移并启动：
 
 ```sh
+vp run operations backup
+docker compose build
 vp run operations migrate
-docker compose up -d --build
+docker compose up -d
 ```
+
+从 Prisma 版本首次升级时，新镜像的备份命令要求原生迁移账本已经存在，因此升级前备份须由旧镜像执行。迁移会核验旧账本与完整物理结构后接管，保留业务数据和历史账本。失败时保持应用停止并检查原因。仅在新版本尚未写入且旧版本结构兼容时才考虑回退镜像；恢复备份会丢弃恢复点后的数据，必须先评估并保存新增数据。
 
 应用镜像由非 root 用户运行，只读根文件系统和临时 `/tmp`；PostgreSQL 与 Redis 使用独立持久卷，Redis 开启 AOF/everysec。仅代理发布端口，数据库、队列和搜索均在 Compose 网络内部。正常 `docker compose down` 保留数据；不要使用 `down -v` 作为升级或恢复步骤。
 
