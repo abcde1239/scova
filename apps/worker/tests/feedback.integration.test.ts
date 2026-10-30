@@ -30,7 +30,7 @@ import { readFeedbackSnapshot, type Feedback, type FeedbackEffect } from '@scova
 import type { ConnectorBundle, ReadPage, StructuredInput, CallContext } from '@scova/connectors';
 
 import { createApiApp } from '../../server/src/app/index.ts';
-import { createDefaultServices } from '../../server/src/app/context.ts';
+import { createDefaultServices } from '../../server/src/app/services.ts';
 import { createRunService } from '../../server/src/service/runs.ts';
 import { csrfForSession, tokenHash } from '../../server/src/utils/security.ts';
 import { createRunRepository } from '../src/repo/runs.ts';
