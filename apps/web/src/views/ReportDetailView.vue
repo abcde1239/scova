@@ -57,6 +57,12 @@
             :retryable="error.retryable && valid && query.isError.value"
             @retry="retry"
         />
+        <report-questions
+            v-if="questionIdentity"
+            :key="questionIdentity"
+            :report-id="String(route.params.reportId)"
+            :report="report"
+        />
     </div>
 </template>
 
@@ -70,6 +76,7 @@ import FeedbackEffects from '@/components/reports/FeedbackEffects.vue';
 import BookmarkAction from '@/components/library/BookmarkAction.vue';
 import NotesPanel from '@/components/library/NotesPanel.vue';
 import { bookmarksPending, reportBookmarkSources } from '@/composables/useBookmarks';
+import ReportQuestions from '@/components/reports/ReportQuestions.vue';
 import StatePanel from '@/components/common/StatePanel.vue';
 import { useReport } from '@/composables/useReport';
 import { inboxReturn } from '@/composables/useInbox';
@@ -121,6 +128,25 @@ watch(
     () => {
         selectedSource.value = '';
     },
+);
+// Keep only the editor identity, never a second Report cache, across same-owner read failures.
+const questionIdentity = ref('');
+const routeIdentity = computed(
+    () => `${lifecycle.session.epoch}:${accountId.value ?? ''}:${route.params.reportId}`,
+);
+watch(
+    routeIdentity,
+    () => {
+        questionIdentity.value = '';
+    },
+    { flush: 'sync' },
+);
+watch(
+    report,
+    (value) => {
+        if (value) questionIdentity.value = routeIdentity.value;
+    },
+    { immediate: true, flush: 'sync' },
 );
 const detail = ref<HTMLElement>();
 async function retry() {
