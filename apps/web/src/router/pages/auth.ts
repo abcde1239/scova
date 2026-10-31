@@ -1,6 +1,12 @@
 import type { RouteRecordRaw } from 'vue-router';
 export default [
     {
+        path: '/register',
+        name: 'register',
+        component: () => import('@/views/RegisterView.vue'),
+        meta: { title: '注册' },
+    },
+    {
         path: '/login',
         name: 'login',
         component: () => import('@/views/LoginView.vue'),
