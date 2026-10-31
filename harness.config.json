@@ -157,6 +157,46 @@
             "enabled": false
         },
         {
+            "id": "web-run-history-browser",
+            "workspace": "web-shell-e2e",
+            "kind": "test",
+            "argv": ["vp", "run", "test:e2e", "--config", "tests/e2e/run-history.config.ts"],
+            "covers": ["web-shell-e2e"],
+            "timeoutMs": 180000,
+            "cwd": ".",
+            "required": false,
+            "enabled": false
+        },
+        {
+            "id": "web-execution-browser",
+            "workspace": "web-shell-e2e",
+            "kind": "test",
+            "argv": [
+                "vp",
+                "exec",
+                "playwright",
+                "test",
+                "--config",
+                "tests/e2e/execution.config.ts"
+            ],
+            "covers": ["web-shell-e2e"],
+            "timeoutMs": 180000,
+            "cwd": ".",
+            "required": false,
+            "enabled": false
+        },
+        {
+            "id": "web-report-browser",
+            "workspace": "web-shell-e2e",
+            "kind": "test",
+            "argv": ["vp", "run", "test:e2e", "tests/e2e/report.spec.ts"],
+            "covers": ["web-shell-e2e"],
+            "timeoutMs": 180000,
+            "cwd": ".",
+            "required": false,
+            "enabled": false
+        },
+        {
             "id": "web-shell-browser",
             "workspace": "web-shell-e2e",
             "kind": "test",
