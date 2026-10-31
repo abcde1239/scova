@@ -18,6 +18,9 @@ export default defineConfig(({ mode }) => ({
                           reportComparison: fileURLToPath(
                               new URL('./test-fixtures/report-comparison.html', import.meta.url),
                           ),
+                          reportResearch: fileURLToPath(
+                              new URL('./test-fixtures/report-research.html', import.meta.url),
+                          ),
                       },
                   },
               },
