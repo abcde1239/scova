@@ -1,6 +1,6 @@
 # Web 字体交付
 
-字体方向已由 [#88](https://github.com/abcde1239/scova/issues/88) 确认。这里提供加载声明和许可，页面用途排版与本地阅读偏好由后续功能消费；当前入口未自动挂载这些字体。
+字体方向已由 [#88](https://github.com/abcde1239/scova/issues/88) 确认。工作台已挂载界面字体与共享用途排版，`/account/appearance` 提供本地阅读偏好和预览。业务页面后续按用途应用样式，不逐页引入字体。
 
 ## 资产与许可
 
@@ -16,13 +16,30 @@
 
 ## 消费方式
 
-界面入口导入 `@/styles/fonts.css`，然后由用途排版层使用 `font-family: var(--scova-font-interface)`。该文件只定义字体与变量，不覆盖根字号或页面布局。界面回退依次为 Inter、Noto Sans SC、PingFang SC、Microsoft YaHei、system-ui、sans-serif。
+`AppThemeProvider` 导入 `@/styles/fonts.css` 和 `@/styles/typography.css`，naive-ui 与根界面均使用 `var(--scova-font-interface)`。界面回退依次为 Inter、Noto Sans SC、PingFang SC、Microsoft YaHei、system-ui、sans-serif。实际 Fontsource 族名包含 `Variable`，不要另写不匹配的字体族名。
 
-打开报告/资料阅读时再导入 `@/styles/reading-fonts.css`，阅读内容使用 `font-family: var(--scova-font-reading)`，回退为 Noto Serif SC、Songti SC、STSong、SimSun、serif。表格、按钮和工具仍使用界面字体。阅读模块可通过动态 `import('@/styles/reading-fonts.css')` 交给 Vite 分离加载；避免在界面首屏预加载衬线字体。
+内容标题、报告或笔记组件在 setup 中调用 `useReadingTypography()`，挂载时经共享 `loadReadingFonts()` 动态导入 `@/styles/reading-fonts.css`；非组件入口可直接调用后者。加载共享同一个 Promise，失败时保留系统回退并允许后续挂载重试。`ready` 只表示 CSS 加载完成，实际字形完成需等待浏览器字体加载。阅读字体回退为 Noto Serif SC、Songti SC、STSong、SimSun、serif。纯操作页不提前加载阅读 CSS；外观页因包含内容预览而加载。
+
+| 用途                      | 共享 class                                        | 字体与字重                                           |
+| ------------------------- | ------------------------------------------------- | ---------------------------------------------------- |
+| 界面正文                  | `scova-interface` / `scova-ui`                    | Inter + Noto Sans SC，400                            |
+| 操作 / 界面标题           | `scova-action` / `scova-heading`                  | 界面字体，500 / 600                                  |
+| 内容列表标题 / 报告主标题 | `scova-content-title` / `scova-report-title`      | Noto Serif SC，600，不随正文偏好改变                 |
+| 阅读正文 / 笔记           | `scova-reading` / `scova-note`                    | 默认 Noto Serif SC，400、行高 2；内部 h2/h3 小节 600 |
+| 表格 / 警告 / 图注        | `scova-table` / `scova-warning` / `scova-caption` | 界面字体，不随正文偏好改变；图注 0.875rem            |
+| 引用 / 问答工具           | `scova-citation-tools` / `scova-question-tools`   | 界面字体，不随正文偏好改变                           |
+
+在阅读容器上应用正文 class，段落和列表继承设置；表格和原生交互控件保留界面字体。自定义警告、图注和工具组件需显式应用对应 class。内容标题使用独立 class，即使放在阅读容器中也保留衬线和 600。主标题及列表标题使用基于 rem 的 clamp，正文使用 `clamp(1rem, var(--scova-reading-size), 1.1875rem)`；不禁用浏览器缩放。
+
+## 本地阅读偏好
+
+`useReadingStore()` 只管理阅读正文族名 `serif` / `sans` 与 `1` / `1.0625` / `1.1875rem` 三档字号。`AppThemeProvider` 将对应 CSS 变量应用到工作台，界面、表格、警告、图注和工具继续使用独立的界面字体及字号。更新应使用 `setFamily()` / `setSize()`，不直接写入 store 字段。
+
+设置只以 `{ version: 1, family, size }` 写入本机 `localStorage` 的 `scova.reading.v1`；刷新后恢复，没有账号同步。缺失、损坏、不支持的版本或选项回退到衬线/标准；存储被禁用或写入失败时仍可在当前页面切换。删除该 key 可恢复默认，不需要清除会话或其他偏好。
 
 所有声明使用 `font-display: swap`，URL 由 Vite 从 npm 本地依赖转换为同源带哈希资源；运行时没有 Google Fonts、CDN 或外部字体服务请求。保留上游 Unicode 分片，浏览器仅请求实际出现字符命中的分片；不要预加载整套中文字体。初次安装 npm 依赖需要包仓库访问，部署后的浏览器字体请求只访问本站。
 
-保留浏览器默认根字号。后续字号、间距和尺寸用 rem/em 等相对单位，容器用百分比及 min/max/clamp；本项不设置固定像素布局，也不以视口单位单独限制文字缩放。
+保留浏览器默认根字号。字号、间距和尺寸用 rem/em 等相对单位，容器用百分比及 min/max/clamp；不设置固定像素布局，也不以视口单位单独限制文字缩放。
 
 ## 加载预算与验证
 
@@ -32,9 +49,11 @@
 
 完全阻断字体请求的 320 宽度样本实际回退为 Microsoft YaHei / STSong，中文、英文、数字仍可读，按钮可点击。390 宽度以 300ms 延迟、64 KiB/s 下载及每个字体额外 1.5s 延迟验证回退到加载完成的切换，长标题与按钮无重叠、无整页溢出。所有样本保留默认根字号，使用弹性相对尺寸。以上为本机 Chromium 的受控字体交付测试，不代表真实业务页面、实体移动设备、所有操作系统或完整可访问性验收。
 
-运行 `vp test apps/web/tests/fonts.test.ts` 核对发行许可保留、400/500/600、中文样本分片覆盖、有效 WOFF2 和资产预算。页面接入后在浏览器禁用缓存重新检查：
+运行 `vp test apps/web/tests/fonts.test.ts apps/web/tests/reading-typography.test.ts` 核对发行许可保留、字重、中文分片、有效 WOFF2、资产预算和本地偏好恢复/存储故障。共享排版可在外观页预览及受控内容样本中检查；任务、收件箱/资料库、报告等业务页面尚需在实际接入后验收，样本不代替页面结论。页面接入后在浏览器禁用缓存重新检查：
 
 1. Network 仅有同源字体；记录首屏请求和字节，打开阅读前不出现 Noto Serif。
 2. Rendered Fonts 检查实际中文及 Latin 字形，分别验证 400/500/600。
 3. 阻断全部 `.woff2` 并刷新，核对文本可读和按钮操作；恢复后用慢网检查长标题与操作位置。
 4. 在实际页面和目标设备另验缩放、滚动、键盘及字体加载失败；不要将本项样本代替后续页面验收。
+
+用途排版另在生产构建的外观页与注入的语义内容样本中验证：1440、320、390 宽度，默认根字号及测试环境 200% 文字（根字号 32px）均能重排，无整页横向溢出。切换正文族名与三档字号、刷新恢复和键盘选择有效；内容主标题、界面及排除项字体/字号保持独立。DevTools 平台字体信息确认中英文实际字形与 400/500/600，纯操作页不请求衬线字体。这是本机 Chromium 的文字缩放检查，不等同于完整浏览器缩放、真实业务页面或实体移动端验收。

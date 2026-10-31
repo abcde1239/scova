@@ -62,7 +62,7 @@ export function themeOverrides(accent: Accent, scheme: ColorScheme): GlobalTheme
             warningColor: colors.partial,
             errorColor: colors.danger,
             successColor: colors.success,
-            fontFamily: 'Inter, "Noto Sans SC", system-ui, sans-serif',
+            fontFamily: 'var(--scova-font-interface)',
             fontSize: '1rem',
             fontSizeMini: '0.875rem',
             fontSizeTiny: '0.875rem',

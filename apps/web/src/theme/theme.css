@@ -2,7 +2,7 @@
     min-block-size: 100%;
     color: var(--scova-text);
     background: var(--scova-canvas);
-    font-family: Inter, 'Noto Sans SC', system-ui, sans-serif;
+    font-family: var(--scova-font-interface);
     font-size: 1rem;
     line-height: 1.6;
     color-scheme: light;
