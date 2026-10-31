@@ -11,9 +11,11 @@
                     :key="String(item.name)"
                     :to="item.path"
                     :class="{ selected: isSelected(item) }"
-                    :aria-current="isSelected(item) ? 'page' : undefined"
-                    >{{ item.meta.title }}</router-link
+                    :aria-current="route.path === item.path ? 'page' : undefined"
                 >
+                    <app-icon :name="navigationIcon(item.meta.section)" />
+                    {{ item.meta.title }}
+                </router-link>
             </nav>
             <nav class="tool-navigation" aria-label="全局工具">
                 <router-link
@@ -21,10 +23,16 @@
                     :key="String(item.name)"
                     :to="item.path"
                     :class="{ selected: isSelected(item) }"
-                    :aria-current="isSelected(item) ? 'page' : undefined"
-                    >{{ item.meta.title }}</router-link
+                    :aria-current="route.path === item.path ? 'page' : undefined"
                 >
+                    <app-icon :name="navigationIcon(item.meta.section)" />
+                    {{ item.meta.title }}
+                </router-link>
+                <router-link to="/account/appearance">
+                    <app-icon name="appearance" />外观
+                </router-link>
             </nav>
+            <mobile-navigation :items="mobileItems" />
         </header>
         <main id="main-content" class="workbench-main" tabindex="-1" aria-labelledby="page-title">
             <div class="page-heading">
@@ -42,6 +50,9 @@
 import { computed } from 'vue';
 import { RouterLink, useRoute } from 'vue-router';
 import type { RouteRecordNormalized } from 'vue-router';
+import AppIcon from '@/components/common/AppIcon.vue';
+import type { IconName } from '@/components/common/icons';
+import MobileNavigation from '@/layout/MobileNavigation.vue';
 
 const props = defineProps<{ title: string; navigation: RouteRecordNormalized[] }>();
 defineSlots<{ default(): unknown; context(): unknown; tools(): unknown; reading(): unknown }>();
@@ -51,6 +62,24 @@ const primary = computed(() =>
 );
 const tools = computed(() => props.navigation.filter((item) => item.meta.navigation === 'tool'));
 const isSelected = (item: RouteRecordNormalized) => route.meta.section === item.meta.section;
+function navigationIcon(section: unknown): IconName {
+    if (
+        section === 'tasks' ||
+        section === 'inbox' ||
+        section === 'library' ||
+        section === 'notifications'
+    )
+        return section;
+    return 'account';
+}
+const mobileItems = computed(() => [
+    ...[...primary.value, ...tools.value].map((item) => ({
+        path: item.path,
+        label: String(item.meta.title),
+        icon: navigationIcon(item.meta.section),
+    })),
+    { path: '/account/appearance', label: '外观', icon: 'appearance' as const },
+]);
 </script>
 
 <style scoped>
@@ -63,6 +92,7 @@ const isSelected = (item: RouteRecordNormalized) => route.meta.section === item.
     width: min(100%, 68.75rem);
     margin-inline: auto;
     padding-inline: clamp(1rem, 4%, 3rem);
+    min-inline-size: 0;
 }
 
 .workbench-header {
@@ -97,6 +127,7 @@ nav {
 a {
     display: inline-flex;
     align-items: center;
+    gap: 0.5em;
     min-block-size: 2.75rem;
     color: inherit;
     text-decoration: none;
@@ -140,6 +171,28 @@ a:focus-visible {
     justify-content: space-between;
     gap: 1rem;
     margin-block-end: 2rem;
+}
+
+.page-heading > *,
+.page-tools,
+.page-context,
+.reading-tools {
+    min-inline-size: 0;
+    max-inline-size: 100%;
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 53.999rem) {
+    .primary-navigation,
+    .tool-navigation {
+        display: none;
+    }
+
+    .workbench-header {
+        gap: 0.5rem 1rem;
+        min-block-size: 4.5rem;
+        padding-block: 0.75rem;
+    }
 }
 
 h1 {

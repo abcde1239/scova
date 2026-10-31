@@ -2,9 +2,10 @@ import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 
 async function openPrimaryNavigation(page: Page) {
-    const navigation = page.getByRole('navigation', { name: '主导航', exact: true });
+    let navigation = page.getByRole('navigation', { name: '主导航', exact: true });
     if (!(await navigation.isVisible())) {
         await page.getByRole('button', { name: /打开.*导航|展开.*导航|菜单/ }).click();
+        navigation = page.getByRole('navigation', { name: '工作台菜单', exact: true });
     }
     await expect(navigation).toBeVisible();
     return navigation;
@@ -28,7 +29,7 @@ test('有效路径与未知路径均可刷新直达，标题、导航和焦点�
         ['/library', '资料库', '资料库'],
         ['/notifications', '通知', '通知'],
         ['/account', '账号', '账号'],
-        ['/account/appearance', '外观', '账号'],
+        ['/account/appearance', '外观', '外观'],
         ['/unknown/deep?from=shell', '页面未找到', null],
     ] as const) {
         await page.goto(url);
@@ -72,7 +73,7 @@ test('导航可用且 390 视口没有整页横溢出，跳到主内容可键盘
     await expect(
         (await openPrimaryNavigation(page)).getByRole('link', { name: '收件箱', exact: true }),
     ).toHaveAttribute('aria-current', 'page');
-    const closeNavigation = page.getByRole('button', { name: /关闭.*导航|收起.*导航/ });
+    const closeNavigation = page.getByRole('button', { name: '菜单', expanded: true });
     if (await closeNavigation.isVisible()) await closeNavigation.click();
     expect(
         await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
