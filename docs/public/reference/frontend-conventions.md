@@ -55,4 +55,16 @@ native 会跳过 Client 的 endpoint、session、cache 和错误 hook，必须�
 
 `ApiRequestError` 保留错误分类及可用的状态、错误码、追踪 ID 和字段定位；取消可由 `kind === 'cancelled'` 识别。`createApi({ fetcher })` 用于注入测试 transport；`dispose()` 取消整个 HTTP 调用（含异步校验）。默认实例与 `transport` 共用同一 Fetch transport。原生 `transport.native` 是后续 SSE 桥接入口，跳过 HTTP 客户端校验、凭据配置和 dispose，调用方必须自行传入 credentials/signal 并管理清理。
 
-运行 `vp test apps/web/tests/requestlane.test.ts` 验证通信契约。Query 会话 epoch、真实登录页面、SSE 解析与续传及完整浏览器旅程仍由后续功能接入，不属于这些单元测试的覆盖范围。
+运行 `vp test apps/web/tests/requestlane.test.ts` 验证通信契约。真实登录页面、SSE 解析与续传及完整浏览器旅程仍由后续功能接入，不属于这些单元测试的覆盖范围。
+
+## 6. Query 与会话作用域
+
+应用入口安装一个 `createSessionLifecycle()`，共享它的 Pinia、QueryClient 与注入键。业务读取使用 `useSessionQuery(endpoint, input, key)`，写命令使用 `useSessionMutation(endpoint)`；Query 是唯一服务端缓存，Mutation 默认不重试。查询 key 自动包含账号、epoch、端点和输入，查询卸载时的 signal 传到同一 HTTP 入口。`queryOptions` 可供非组件调用 `queryClient.fetchQuery`；当前未安装账号时组件查询保持禁用，恢复会话由后续流程显式请求。
+
+登录、恢复和退出流程在动作开始时保存 `const scope = lifecycle.capture()`，经 `scope.request(...)` 请求，再以 `scope.replaceSession(result.data)` 或 `scope.replaceSession(null)` 完成交接。作用域过期时交接被拒绝，不能在迟到回调中直接安装旧会话。生命周期内的当前认证请求 401 会清空当前会话；匿名登录失败不会清掉已安装账号。`replaceSession` 是统一安装入口，不执行登录、注销 HTTP 或路由跳转。
+
+切换动作先推进 epoch、中止旧 scope signal、取消 Query 和 HTTP、释放注册清理回调并清缓存，再创建新 HTTP client、安装新用户摘要；CSRF 只在内存闭包中保留，不进入 Pinia 或持久化存储。全局 Query/Mutation 错误观察过滤取消错误，UI 采用相同的 `shouldReportQueryError`，不为取消/卸载提示失败。普通错误仍由页面展示，失效按实际资源 key 定向执行，不默认轮询或窗口焦点刷新。
+
+后续流模块从捕获的 scope 取得同一 `transport` 与 `signal`，通过 `scope.registerCleanup(close)` 注册关闭回调，主动关闭时调用返回的注销函数。接收数据前检查 `scope.isCurrent()`；native 请求仍须显式设置同源凭据并连接该 signal。此接口只管理流生命周期，不解析或重连 SSE。
+
+运行 `vp test apps/web/tests/query-lifecycle.test.ts` 验证会话切换、迟到结果隔离、取消和定向刷新。该测试使用受控响应，不代表真实后端登录或 SSE 联调。
