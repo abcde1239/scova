@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="zh-CN">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>报告对比组件样本 · 仅测试</title>
+        <style>
+            .fixture-controls {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 1rem;
+                align-items: center;
+                padding: 1.25rem;
+                font-family: system-ui, sans-serif;
+                overflow-wrap: anywhere;
+            }
+            .fixture-controls h1 {
+                flex-basis: 100%;
+                font-size: 1.5rem;
+                margin: 0;
+            }
+            .fixture-controls label {
+                display: grid;
+                gap: 0.5rem;
+                min-inline-size: 0;
+                max-inline-size: 100%;
+            }
+            .fixture-controls select {
+                min-block-size: 2.75rem;
+                max-inline-size: 100%;
+                font: inherit;
+                cursor: pointer;
+            }
+            .fixture-report {
+                max-inline-size: 68.75rem;
+                margin-inline: auto;
+                padding: 2rem clamp(1rem, 5vw, 3rem);
+                min-inline-size: 0;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="fixture-controls" aria-label="仅测试的对比样本控制">
+            <h1>报告对比组件样本（仅测试）</h1>
+            <label
+                >样本布局<select id="sample-view">
+                    <option value="comparison">对比表</option>
+                    <option value="brief">简报</option>
+                </select></label
+            >
+            <label
+                >样本完整性<select id="sample-coverage">
+                    <option value="partial">部分交付</option>
+                    <option value="complete">完整交付</option>
+                </select></label
+            >
+            <label
+                >样本模式<select id="sample-mode">
+                    <option value="demo">演示</option>
+                    <option value="live">真实查阅模式样本</option>
+                </select></label
+            >
+            <label
+                >测试明暗<select id="sample-scheme">
+                    <option value="light">浅色</option>
+                    <option value="dark">深色</option>
+                </select></label
+            >
+            <label
+                >测试主色<select id="sample-accent">
+                    <option value="blue">蓝色</option>
+                    <option value="pine">松绿</option>
+                    <option value="iris">鸢尾</option>
+                    <option value="amber">琥珀</option>
+                </select></label
+            >
+            <label
+                >阅读字体<select id="sample-family">
+                    <option value="serif">衬线</option>
+                    <option value="sans">无衬线</option>
+                </select></label
+            >
+        </div>
+        <div id="fixture"></div>
+        <script type="module">
+            import { createApp, h } from 'vue';
+            import { createPinia } from 'pinia';
+            import { ReportSchema, parseContract } from '@scova/models';
+            import AppThemeProvider from '/src/theme/AppThemeProvider.vue';
+            import ReportBrief from '/src/components/reports/ReportBrief.vue';
+            import ComparisonReport from '/src/components/reports/ComparisonReport.vue';
+            import { useAppearanceStore } from '/src/store/appearance';
+            import { useReadingStore } from '/src/store/reading';
+            import '/src/style.css';
+
+            const id = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+            const time = '2026-10-31T01:00:00Z';
+            const evidence = (n, title, quote) => ({
+                id: id(n),
+                sourceId: id(100),
+                snapshotId: id(n + 200),
+                title,
+                url: `https://example.test/${'long-saved-source-path-'.repeat(10)}${n}`,
+                quote,
+                location: '已保存原文第 2 段',
+                observedAt: time,
+            });
+            const kinds = [
+                'baseline',
+                'new',
+                'changed',
+                'duplicate',
+                'duplicate_candidate',
+                'non_material',
+                'uncertain',
+            ];
+            const sample = {
+                id: id(1),
+                taskId: id(2),
+                runId: id(3),
+                taskVersionId: id(4),
+                baselineRunId: id(5),
+                schemaVersion: 1,
+                title: '招生申请期限、费用与尚待核验安排：旧值与本次观测的完整对比样本',
+                summary:
+                    '这是一份受控组件样本，保留报告给出的分类、原因与双方引用，不代表真实比较执行。',
+                format: 'comparison',
+                mode: 'demo',
+                outcome: 'inconclusive',
+                coverage: {
+                    completeness: 'partial',
+                    searchedQueries: ['受控招生资料比较'],
+                    gaps: ['一个来源未能完成查阅'],
+                    exhausted: ['pages'],
+                },
+                limitations: ['仅为已保存 DTO 的展示样本。'],
+                claims: [
+                    {
+                        id: id(10),
+                        kind: 'fact',
+                        text: '本次已保存的截止日期是12月1日，申请费为150元。'.repeat(5),
+                        confidenceLabel: '已保存逐字引用',
+                        evidenceIds: [id(21), id(20)],
+                    },
+                    {
+                        id: id(11),
+                        kind: 'inference',
+                        text: '跨学期安排可能影响部分申请人，仍需核验。',
+                        confidenceLabel: '推断不等于事实',
+                        evidenceIds: [id(21)],
+                    },
+                    {
+                        id: id(12),
+                        kind: 'conflict',
+                        text: '不同来源的补交资料说明仍有冲突。',
+                        confidenceLabel: '冲突尚未解释',
+                        evidenceIds: [id(20)],
+                    },
+                    {
+                        id: id(13),
+                        kind: 'insufficient',
+                        text: '目前无直接证据确认延期适用所有人。',
+                        confidenceLabel: '证据不足',
+                        evidenceIds: [],
+                    },
+                    {
+                        id: id(14),
+                        kind: 'inference',
+                        text: '跨学期安排可能影响部分申请人，仍需核验。',
+                        confidenceLabel: '同文不同 ID 仍保留',
+                        evidenceIds: [id(20)],
+                    },
+                ],
+                evidence: [
+                    evidence(
+                        20,
+                        '上期招生公告',
+                        '截止日期为11月1日，申请费为100元。<script>字面引用<\/script>',
+                    ),
+                    evidence(21, '本期招生公告', '截止日期为12月1日，申请费为150元。'.repeat(20)),
+                    evidence(
+                        22,
+                        '比较专用补充引用',
+                        '这条引用只由变化记录使用，完整结论区未直接引用它。',
+                    ),
+                ],
+                changes: kinds.map((kind, index) => ({
+                    id: id(30 + index),
+                    sourceId: id(100),
+                    kind,
+                    factKey: `${kind === 'changed' ? '招生申请截止日期' : '资料对比维度'} ${index + 1}`,
+                    oldValue: ['baseline', 'new'].includes(kind)
+                        ? null
+                        : '原始旧值11月1日\n保留原文空格与换行',
+                    newValue: kind === 'uncertain' ? null : '本次观测12月1日\n申请费用150元',
+                    oldEvidenceIds: ['baseline', 'new', 'non_material'].includes(kind)
+                        ? []
+                        : [id(20)],
+                    newEvidenceIds:
+                        kind === 'uncertain' ? [] : index === 2 ? [id(22), id(21)] : [id(21)],
+                    important: kind === 'changed',
+                    reason: `受控分类 ${kind} 的完整原因\n不同侧引用保持原始有序集合，不借用另一侧证据。`,
+                })),
+                publishedAt: time,
+            };
+            const pinia = createPinia();
+            const appearance = useAppearanceStore(pinia);
+            const reading = useReadingStore(pinia);
+            appearance.setMode('light');
+            appearance.setAccent('blue');
+            reading.setFamily('serif');
+            let current = parseContract(ReportSchema, structuredClone(sample));
+            let view = 'comparison';
+            let app;
+            function mount() {
+                app?.unmount();
+                document.querySelector('#fixture').replaceChildren();
+                const component = view === 'brief' ? ReportBrief : ComparisonReport;
+                app = createApp({
+                    render: () =>
+                        h(
+                            AppThemeProvider,
+                            {},
+                            {
+                                default: () =>
+                                    h('main', { class: 'fixture-report' }, [
+                                        h(component, { report: current }),
+                                    ]),
+                            },
+                        ),
+                });
+                app.use(pinia).mount('#fixture');
+            }
+            function setReport(value) {
+                current = parseContract(ReportSchema, structuredClone(value));
+                mount();
+            }
+            function setView(value) {
+                if (!['brief', 'comparison'].includes(value))
+                    throw new TypeError('Unknown comparison fixture view');
+                view = value;
+                document.querySelector('#sample-view').value = value;
+                mount();
+            }
+            function sampleVariant() {
+                const value = structuredClone(sample);
+                value.mode = document.querySelector('#sample-mode').value;
+                value.coverage.completeness = document.querySelector('#sample-coverage').value;
+                if (value.coverage.completeness === 'complete') {
+                    value.coverage.gaps = [];
+                    value.coverage.exhausted = [];
+                    value.limitations = [];
+                }
+                setReport(value);
+            }
+            document
+                .querySelector('#sample-view')
+                .addEventListener('change', (event) => setView(event.target.value));
+            document.querySelector('#sample-coverage').addEventListener('change', sampleVariant);
+            document.querySelector('#sample-mode').addEventListener('change', sampleVariant);
+            document
+                .querySelector('#sample-scheme')
+                .addEventListener('change', (event) => appearance.setMode(event.target.value));
+            document
+                .querySelector('#sample-accent')
+                .addEventListener('change', (event) => appearance.setAccent(event.target.value));
+            document
+                .querySelector('#sample-family')
+                .addEventListener('change', (event) => reading.setFamily(event.target.value));
+            window.scovaComparisonFixture = {
+                setReport,
+                setView,
+                getReport: () => structuredClone(current),
+                getView: () => view,
+            };
+            mount();
+        </script>
+    </body>
+</html>

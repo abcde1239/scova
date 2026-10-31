@@ -15,6 +15,9 @@ export default defineConfig(({ mode }) => ({
                           reportTopicList: fileURLToPath(
                               new URL('./test-fixtures/report-topic-list.html', import.meta.url),
                           ),
+                          reportComparison: fileURLToPath(
+                              new URL('./test-fixtures/report-comparison.html', import.meta.url),
+                          ),
                       },
                   },
               },
