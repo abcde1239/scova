@@ -1,6 +1,6 @@
 <template>
     <n-button
-        attr-type="button"
+        :attr-type="attrType"
         :disabled="disabled"
         v-bind="accessibility"
         :class="{ 'scova-action--disabled': disabled, 'scova-action--busy': busy && !disabled }"
@@ -14,10 +14,14 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { NButton } from 'naive-ui';
-const props = withDefaults(defineProps<{ disabled?: boolean; busy?: boolean }>(), {
-    disabled: false,
-    busy: false,
-});
+const props = withDefaults(
+    defineProps<{ disabled?: boolean; busy?: boolean; attrType?: 'button' | 'submit' | 'reset' }>(),
+    {
+        disabled: false,
+        busy: false,
+        attrType: 'button',
+    },
+);
 const emit = defineEmits<{ click: [event: MouseEvent] }>();
 const accessibility = computed(() => ({
     'aria-disabled': props.disabled || props.busy ? 'true' : undefined,
