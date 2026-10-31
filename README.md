@@ -2,7 +2,7 @@
 
 任务驱动的 AI 信息查阅与研究工作台。围绕主题搜索、阅读和查证资料，生成带引用的报告，并持续追踪新增与变化。
 
-项目开发中：已实现账号会话、用户隔离、任务配置、执行控制、搜索/模型/安全阅读适配器、有预算的持久化 Agent、证据报告交付和报告/收件箱 API，以及连续运行的基线与变化比较。当前优先完善后端，前端暂缓。
+项目开发中：已实现账号会话、用户隔离、任务配置、执行控制、搜索/模型/安全阅读适配器、有预算的持久化 Agent、证据报告交付和报告/收件箱 API，以及连续运行的基线与变化比较。Vue 工作台外壳已接入同源 Compose 部署，业务页面仍在开发。
 
 ## 技术与目录
 
@@ -60,4 +60,4 @@ vp run test:integration  # 需专用 PostgreSQL / Redis
 - [交付计划](docs/public/guides/delivery-plan.md) · [两次执行验收](docs/public/examples/two-run-scenarios.md)
 - [前端与通信约定](docs/public/reference/frontend-conventions.md)
 
-单机后端启动、迁移、备份恢复与数据保留见 [部署指南](docs/public/guides/deployment.md)。
+单机 Web/API 启动、迁移、备份恢复与数据保留见 [部署指南](docs/public/guides/deployment.md)。

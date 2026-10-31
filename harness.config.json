@@ -231,6 +231,16 @@
             "covers": ["apps-server", "apps-worker", "packages-db"],
             "timeoutMs": 900000,
             "kind": "test"
+        },
+        {
+            "id": "web-deployment",
+            "workspace": "root",
+            "argv": ["vp", "run", "test:deployment"],
+            "covers": ["root"],
+            "timeoutMs": 900000,
+            "kind": "test",
+            "required": false,
+            "enabled": false
         }
     ],
     "publicationTargets": [],

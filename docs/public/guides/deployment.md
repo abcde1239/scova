@@ -1,6 +1,6 @@
-# 单机后端部署与维护
+# 单机 Web 部署与维护
 
-当前提供 API、Worker、同源反向代理、PostgreSQL 17 和 Redis 7 的 Docker Compose 部署。Web 页面尚未交付；以下登录、任务与报告验收使用 API。主运行时为 Bun 1.3.4，镜像内安装 Node 24.22.1、Vite+ 1.4.0 和 PostgreSQL 17 客户端。
+当前提供 Vue 工作台外壳、API、Worker、同源静态资源/反向代理、PostgreSQL 17 和 Redis 7 的 Docker Compose 部署。工作台路由可刷新访问；登录、任务与报告等业务页面尚待接入，业务验收仍使用真实 API。Web 镜像只包含构建后的静态资源与 Nginx 配置，浏览器不需要 Node/Bun。后端主运行时为 Bun 1.3.4，后端镜像内安装 Node 24.22.1、Vite+ 1.4.0 和 PostgreSQL 17 客户端。这是单机 Web 部署，不是桌面端或本地一体化应用。
 
 ## 启动
 
@@ -8,7 +8,9 @@
 
 1. 复制 `.env.example` 为 `.env`，把数据库密码和搜索密钥替换为随机值。数据库密码使用随机十六进制文本，避免连接 URL 的转义歧义；不要提交 `.env`。
 2. 执行 `docker compose up --build -d`，再用 `docker compose ps` 查看健康状态。
-3. 默认只绑定 `127.0.0.1:8080`。`GET http://localhost:8080/health` 是存活检查；容器健康检查另外核验 PostgreSQL、Redis、全部业务迁移和 saver 版本。Worker 还必须持续更新就绪心跳。
+3. 默认只绑定 `127.0.0.1:8080`。打开 `http://localhost:8080/tasks` 访问工作台。`GET /health` 是 API 存活检查；API/Worker 容器健康检查另外核验 PostgreSQL、Redis、全部业务迁移和 saver 版本，代理健康检查验证 Web 入口可读。Worker 还必须持续更新就绪心跳。
+
+`Dockerfile` 的 `build` 阶段在 Linux 内安装锁定依赖并运行全部工作区构建；`web` 目标从 `apps/web/dist` 复制静态产物，Compose 的 `proxy` 服务使用该目标，`runtime` 目标保留 API/Worker/维护工具。构建不从宿主机复制 dist 或 node_modules，也不将后端模型凭据作为前端构建参数。更新源码后执行 `docker compose up --build -d` 才会重新构建 Web 资源。
 
 启动先执行一次性 `migrate` 服务。Drizzle 业务迁移和 LangGraph saver 迁移均成功后，API/Worker 才启动。迁移服务再次运行时若核验当前全部版本已齐，仅返回只读的 current 结果；需要 DDL 时仍要求 API/Worker 已停止。容器中的 `AGENT_CHECKPOINT_MIGRATION=external` 禁止 Worker 自动建表；本地开发默认保留启动时初始化 saver 的行为。升级前先使用旧版本镜像完成备份并验证恢复；保持应用停止，再构建新镜像、执行迁移并启动：
 
@@ -21,15 +23,17 @@ docker compose up -d
 
 从 Prisma 版本首次升级时，新镜像的备份命令要求原生迁移账本已经存在，因此升级前备份须由旧镜像执行。迁移会核验旧账本与完整物理结构后接管，保留业务数据和历史账本。失败时保持应用停止并检查原因。仅在新版本尚未写入且旧版本结构兼容时才考虑回退镜像；恢复备份会丢弃恢复点后的数据，必须先评估并保存新增数据。
 
-应用镜像由非 root 用户运行，只读根文件系统和临时 `/tmp`；PostgreSQL 与 Redis 使用独立持久卷，Redis 开启 AOF/everysec。仅代理发布端口，数据库、队列和搜索均在 Compose 网络内部。正常 `docker compose down` 保留数据；不要使用 `down -v` 作为升级或恢复步骤。
+API/Worker 与 Web 代理均由非 root 用户运行，只读根文件系统和临时 `/tmp`；PostgreSQL 与 Redis 使用独立持久卷，Redis 开启 AOF/everysec。仅代理发布端口，数据库、队列和搜索均在 Compose 网络内部。正常 `docker compose down` 保留数据；不要使用 `down -v` 作为升级或恢复步骤。
 
 默认演示任务不会联网采集或调用模型。通过 `POST /api/v1/auth/register` 或 `/auth/login` 获取会话与 `csrfToken`，后续写请求携带同源 `Origin`、Cookie 和 `x-csrf-token`；先保存完整配置，再显式创建 `mode=demo` 的 Run。轮询 Run/报告 API 验证成果，演示报告明确标识固定资料。草稿缺模型时返回手工模式。完整配置及接口见 [契约](../reference/contracts.md) 与 [API](../reference/api.md)。
 
 ## 同源、TLS 与 SSE
 
-`APP_ORIGIN` 必须是客户端实际使用的完整源。默认 HTTP localhost 用于本机访问；面向其他机器部署时，在代理前配置 TLS，并设置相同的 HTTPS `APP_ORIGIN`。生产 Cookie 保持 Secure/HttpOnly；不要通过取消 Secure 解决域名或 TLS 配置错误。
+`APP_ORIGIN` 必须是客户端实际使用的完整源。默认 HTTP localhost 用于支持本机 Secure Cookie 例外的浏览器；不要改用 HTTP IP 地址来访问，浏览器可能拒绝保存 Secure Cookie。面向其他机器部署或浏览器不支持该例外时，在代理前配置 TLS，并设置相同的 HTTPS `APP_ORIGIN`。生产 Cookie 保持 Secure/HttpOnly；不要通过取消 Secure 解决域名或 TLS 配置错误。
 
-代理关闭 SSE 缓冲、缓存和压缩，透传 Cookie、Origin、Last-Event-ID，75 秒上游读取超时大于 15 秒心跳；客户端断开会关闭上游。`GET /api/v1/runs/:runId/events` 在同一认证会话下持续推送持久化事件；断连后传入上一事件的 `Last-Event-ID` 按顺序续传，终态事件读尽后关闭连接。不同账号访问返回 404。前端仍需自行桥接 Fetch transport 与重连游标。根路径可能返回 404，因为这里没有登录页面或前端构建。
+`/api`、`/health`、`/swagger` 及其子路径转发真实后端响应，不进入 SPA 回退或静态缓存。代理关闭 SSE 缓冲、缓存和压缩，透传 Cookie、Origin、Last-Event-ID，75 秒上游读取超时大于 15 秒心跳；客户端断开会关闭上游。`GET /api/v1/runs/:runId/events` 在同一认证会话下持续推送持久化事件；断连后传入上一事件的 `Last-Event-ID` 按顺序续传，终态事件读尽后关闭连接。不同账号访问返回 404。应用统一通信模块负责 Fetch transport 桥接与重连游标。
+
+`/tasks`、`/reports/:id` 等无文件路由回退到 `index.html`，由 Vue Router 处理；当前未接入业务的页面显示对应状态。`index.html` 和普通公共文件使用 `Cache-Control: no-cache`；Vite 的 `/assets/` 哈希产物使用一年 immutable 缓存。缺失 `/assets/*` 和含扩展名的静态文件保持 404，不返回工作台 HTML；未知 API 仍由后端返回 JSON/404。只将带内容哈希的构建资源放入 `/assets/`，不要把可变文件复制到该缓存目录。部署在源的根路径，不配置子目录 base。
 
 停止使用 `docker compose stop`：应用接收信号，停止领取与外部调用，等待在途领域写入，再关闭队列、数据库和 HTTP。应用预留 60 秒停止窗口；强杀后的 Run 由数据库租约恢复，不保证外部供应商只调用一次，但报告、Inbox 和通知不得重复。
 
@@ -94,4 +98,6 @@ docker compose up -d
 
 ## 验证
 
-`vp check`、`vp test`、`vp run -r build` 和 `vp run test:operations` 分别验证静态、纯逻辑、工作区构建和真实 PostgreSQL/Redis 维护。真实测试要求 PostgreSQL 17 的 `pg_dump`/`pg_restore` 在 PATH，并允许测试账号创建两个随机临时数据库；测试不清空共享 Redis。`vp run test:deployment` 为显式容器验收：构建镜像，在两个随机独立 Compose 项目中验证迁移、健康检查、代理会话、演示报告/证据、重启幂等和空库恢复，结束时移除自己创建的容器和卷。它不使用现有部署数据，不调用真实供应商；构建需要网络，运行需要 Docker。脚本还暂停专用 Worker 创建排队 Run，要求代理首事件在 2 秒内可读，再启动真实消费者，验证同一连接收到新增事件、主动断开后的 Last-Event-ID 有序续传、终态后 3 秒内 EOF 及跨账号 404。业务成果始终显式使用 demo；另建 mode=live 的 Run 仅验证缺凭据时失败并关闭流、不调用供应商、不回落 demo，不计为真实 live 服务成功。
+容器验收使用显式命令 `vp run test:deployment`。Harness 中的 `web-deployment` 仅登记根工程的独立部署检查，默认关闭且非必需，不扩大应用单测覆盖或让当前 `ready` 自动启动 Docker；浏览器 CI 与 ready 门禁接入由 #86 单独交付。
+
+`vp check`、`vp test`、`vp run -r build` 和 `vp run test:operations` 分别验证静态、纯逻辑、工作区构建和真实 PostgreSQL/Redis 维护。真实测试要求 PostgreSQL 17 的 `pg_dump`/`pg_restore` 在 PATH，并允许测试账号创建两个随机临时数据库；测试不清空共享 Redis。`vp run test:deployment` 为显式容器验收：构建后端/Web 镜像，在两个随机独立 Compose 项目中验证 Web SPA/静态缓存/缺失文件、真实 API 与 Swagger 路由、迁移、健康、代理会话、演示报告/证据、重启幂等和空库恢复，结束时移除自己创建的容器和卷。它不使用现有部署数据，不调用真实供应商；构建需要网络，运行需要 Docker。脚本还暂停专用 Worker 创建排队 Run，要求代理首事件在 2 秒内可读，再启动真实消费者，验证同一连接收到新增事件、主动断开后的 Last-Event-ID 有序续传、终态后 3 秒内 EOF 及跨账号 404。业务成果始终显式使用 demo；另建 mode=live 的 Run 仅验证缺凭据时失败并关闭流、不调用供应商、不回落 demo，不计为真实 live 服务成功。此脚本的会话检查是 HTTP 级验收；业务页面与真实浏览器 Cookie、渲染和操作另验，不能以 API 成功代替页面交付。
