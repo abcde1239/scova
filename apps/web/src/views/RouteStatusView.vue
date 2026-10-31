@@ -1,5 +1,8 @@
 <template>
-    <appearance-selector v-if="route.name === 'appearance'" />
+    <template v-if="route.name === 'appearance'">
+        <appearance-selector />
+        <reading-preferences />
+    </template>
     <div v-else class="route-status">
         <p v-if="route.name === 'not-found'">此页面不存在。</p>
         <p v-else>{{ route.meta.title }}功能尚未接入。</p>
@@ -13,6 +16,7 @@
 <script setup lang="ts">
 import { RouterLink, useRoute } from 'vue-router';
 import AppearanceSelector from '@/components/common/AppearanceSelector.vue';
+import ReadingPreferences from '@/components/common/ReadingPreferences.vue';
 
 const route = useRoute();
 </script>

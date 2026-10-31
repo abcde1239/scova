@@ -1,0 +1,84 @@
+.scova-reading,
+.scova-note {
+    font-family: var(--scova-reading-family, var(--scova-font-reading));
+    font-size: clamp(1rem, var(--scova-reading-size, 1rem), 1.1875rem);
+    font-weight: 400;
+    line-height: 2;
+    overflow-wrap: anywhere;
+}
+
+.scova-reading :where(p, li),
+.scova-note :where(p, li) {
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+}
+
+:where(.scova-reading, .scova-note) :where(h2, h3) {
+    font-family: inherit;
+    font-size: 1.25em;
+    font-weight: 600;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+}
+
+.scova-interface,
+.scova-ui {
+    font-family: var(--scova-font-interface);
+    font-size: 1rem;
+    font-weight: 400;
+    line-height: 1.75;
+}
+
+.scova-action {
+    font-family: var(--scova-font-interface);
+    font-size: 1rem;
+    font-weight: 500;
+}
+
+.scova-heading {
+    font-family: var(--scova-font-interface);
+    font-size: 1.5rem;
+    font-weight: 600;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
+.scova-content-title,
+.scova-report-title {
+    font-family: var(--scova-font-reading);
+    font-weight: 600;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+}
+
+.scova-content-title {
+    font-size: clamp(1.25rem, 1.125rem + 0.5vw, 1.5rem);
+}
+
+.scova-report-title {
+    font-size: clamp(1.75rem, 1.5rem + 1vw, 2.25rem);
+}
+
+.scova-table,
+.scova-warning,
+.scova-caption,
+.scova-citation-tools,
+.scova-question-tools,
+.scova-reading :where(table, button, input, select, textarea),
+.scova-note :where(table, button, input, select, textarea) {
+    font-family: var(--scova-font-interface);
+    font-size: 1rem;
+    font-weight: 400;
+    line-height: 1.75;
+}
+
+.scova-reading :where(button),
+.scova-note :where(button) {
+    font-weight: 500;
+}
+
+.scova-caption {
+    font-size: 0.875rem;
+    line-height: 1.6;
+}
