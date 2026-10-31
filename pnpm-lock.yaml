@@ -197,6 +197,9 @@ catalogs:
     '@types/pg':
       specifier: ^8.23.1
       version: 8.23.1
+    '@vicons/ionicons5':
+      specifier: 0.13.0
+      version: 0.13.0
     '@vitejs/plugin-vue':
       specifier: 6.0.10
       version: 6.0.10
@@ -352,6 +355,9 @@ importers:
       '@tanstack/vue-query':
         specifier: 'catalog:'
         version: 5.105.0(vue@3.5.44(typescript@6.0.3))
+      '@vicons/ionicons5':
+        specifier: 'catalog:'
+        version: 0.13.0
       naive-ui:
         specifier: 'catalog:'
         version: 2.45.3(vue@3.5.44(typescript@6.0.3))
@@ -1994,6 +2000,9 @@ packages:
     resolution: {integrity: sha512-Wd3HYIxaGrXo9sm2dCLxvjSJlttQAVhsGdxNFeALQlu4QfVXid7m8hfW+X7ma+W3Vla+52RnddDhZkoB2jLvVw==}
     peerDependencies:
       vite: ^5.0.0-0 || ^6.0.0-0 || ^7.0.0-0 || ^8.0.0-0
+
+  '@vicons/ionicons5@0.13.0':
+    resolution: {integrity: sha512-zvZKBPjEXKN7AXNo2Na2uy+nvuv6SP4KAMQxpKL2vfHMj0fSvuw7JZcOPCjQC3e7ayssKnaoFVAhbYcW6v41qQ==}
 
   '@vitejs/plugin-vue@6.0.10':
     resolution: {integrity: sha512-b80aUQh3n+qEzzZm5oQp3rT2QImeCx58K6eFl/RkJ3d65KW0kTuv5lNsLRVAjbW9YRUpo/wzmvzMgV34bTAItA==}
@@ -4737,6 +4746,8 @@ snapshots:
       - cac
       - ocache
       - srvx
+
+  '@vicons/ionicons5@0.13.0': {}
 
   '@vitejs/plugin-vue@6.0.10(@voidzero-dev/vite-plus-core@1.4.0(@types/node@26.6.5)(@volar/typescript@2.4.28(typescript@6.0.3))(@vue/language-core@3.3.13)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(typescript@6.0.3)(vue-tsc@3.3.13(typescript@6.0.3))(yaml@2.9.1))(vue@3.5.44(typescript@6.0.3))':
     dependencies:

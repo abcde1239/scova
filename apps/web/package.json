@@ -11,6 +11,7 @@
     "dependencies": {
         "@scova/models": "workspace:*",
         "@tanstack/vue-query": "catalog:",
+        "@vicons/ionicons5": "catalog:",
         "naive-ui": "catalog:",
         "pinia": "catalog:",
         "requestlane": "catalog:",
