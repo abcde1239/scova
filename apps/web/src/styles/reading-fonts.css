@@ -1,0 +1,2 @@
+/* Import only in the reading entry; declaration alone does not preload all shards. */
+@import '@fontsource-variable/noto-serif-sc/wght.css';
