@@ -14,5 +14,11 @@ export default (import.meta.env.MODE === 'test'
               component: () => import('@/views/examples/SourceImagesExample.vue'),
               meta: { title: '来源图片样例' },
           },
+          {
+              path: '/__examples/visual-foundation',
+              name: 'visual-foundation-example',
+              component: () => import('@/views/examples/VisualFoundationExample.vue'),
+              meta: { title: '基础视觉样例' },
+          },
       ]
     : []) satisfies RouteRecordRaw[];
