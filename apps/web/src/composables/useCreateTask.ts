@@ -1,8 +1,9 @@
-import { computed, reactive, ref } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import {
     ContractValidationError,
     CreateTaskInputSchema,
     TimeRangeSchema,
+    TaskConfigSchema,
     parseContract,
     type TaskConfig,
     type TaskDetailResponse,
@@ -49,6 +50,42 @@ export function initialTaskDraft(preferences?: SessionResponse['user']['preferen
 }
 export type TaskDraft = ReturnType<typeof initialTaskDraft>;
 export type TaskDraftField = keyof TaskDraft;
+export function taskDraftFromConfig(config: TaskConfig): TaskDraft {
+    const local = (instant: string) => {
+        const date = new Date(instant);
+        const pad = (value: number, length = 2) => String(value).padStart(length, '0');
+        return `${pad(date.getFullYear(), 4)}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${pad(date.getMilliseconds(), 3)}`;
+    };
+    return {
+        title: config.title,
+        topic: config.topic,
+        goal: config.goal,
+        focusPoints: config.focusPoints.join('\n'),
+        exclusions: config.exclusions.join('\n'),
+        preferredUrls: config.sourcePreferences.preferredUrls.join('\n'),
+        excludedUrls: config.sourcePreferences.excludedUrls.join('\n'),
+        officialOnly: config.sourcePreferences.officialOnly,
+        rangeKind: config.timeRange.kind,
+        days: config.timeRange.kind === 'rolling' ? String(config.timeRange.days) : '7',
+        start: config.timeRange.kind === 'fixed' ? local(config.timeRange.start) : '',
+        end: config.timeRange.kind === 'fixed' ? local(config.timeRange.end) : '',
+        timezone: config.timezone,
+        outputFormat: config.outputFormat,
+        ...(Object.fromEntries(
+            budgetFields.map(({ key }) => [key, String(config.budget[key])]),
+        ) as Pick<TaskDraft, (typeof budgetFields)[number]['key']>),
+        notificationMode: config.notificationPreference.mode,
+        runIssues: config.notificationPreference.runIssues,
+    };
+}
+export function taskScheduleDescription(config: TaskConfig) {
+    const schedule = config.schedule;
+    return schedule.frequency === 'manual'
+        ? '仅手动执行'
+        : schedule.frequency === 'daily'
+          ? `每日 ${schedule.localTime}（${config.timezone}）`
+          : `每周${['一', '二', '三', '四', '五', '六', '日'][schedule.weekday - 1]} ${schedule.localTime}（${config.timezone}）`;
+}
 const lines = (value: string) =>
     value
         .split(/\r?\n/)
@@ -56,10 +93,15 @@ const lines = (value: string) =>
         .filter(Boolean);
 
 /** 表单值转为公开契约；固定日期由明确标注的浏览器当地时间转成 UTC。 */
-export function taskInput(draft: TaskDraft) {
+export function taskInput(draft: TaskDraft, original?: TaskConfig, keepSchedule = true) {
+    const initial = original ? taskDraftFromConfig(original) : undefined;
+    const preserve = <T>(field: TaskDraftField, previous: T, next: T): T =>
+        initial && draft[field] === initial[field] ? previous : next;
     const instant = (value: string) => {
         const date = new Date(value);
-        const parts = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(value);
+        const parts = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?$/.exec(
+            value,
+        );
         if (!parts || !Number.isFinite(date.getTime())) return '';
         const local = [
             date.getFullYear(),
@@ -72,10 +114,31 @@ export function taskInput(draft: TaskDraft) {
         if (local.some((part, index) => part !== Number(parts[index + 1] ?? 0))) return '';
         return date.toISOString();
     };
-    const range =
+    const editedRange =
         draft.rangeKind === 'fixed'
-            ? { kind: 'fixed', start: instant(draft.start), end: instant(draft.end) }
+            ? {
+                  kind: 'fixed',
+                  start: preserve(
+                      'start',
+                      original?.timeRange.kind === 'fixed' ? original.timeRange.start : '',
+                      instant(draft.start),
+                  ),
+                  end: preserve(
+                      'end',
+                      original?.timeRange.kind === 'fixed' ? original.timeRange.end : '',
+                      instant(draft.end),
+                  ),
+              }
             : { kind: 'rolling', days: Number(draft.days) };
+    const range =
+        original &&
+        initial &&
+        draft.rangeKind === initial.rangeKind &&
+        (draft.rangeKind === 'fixed'
+            ? draft.start === initial.start && draft.end === initial.end
+            : draft.days === initial.days)
+            ? original.timeRange
+            : editedRange;
     // 先校验用户选中的共享分支，避免 Union 的另一分支错误误指向正确日期。
     try {
         parseContract(TimeRangeSchema.anyOf[draft.rangeKind === 'fixed' ? 1 : 0]!, range);
@@ -91,19 +154,31 @@ export function taskInput(draft: TaskDraft) {
     }
     return parseContract(CreateTaskInputSchema, {
         config: {
-            title: draft.title.trim(),
-            topic: draft.topic.trim(),
-            goal: draft.goal.trim(),
-            focusPoints: lines(draft.focusPoints),
-            exclusions: lines(draft.exclusions),
+            title: preserve('title', original?.title ?? '', draft.title.trim()),
+            topic: preserve('topic', original?.topic ?? '', draft.topic.trim()),
+            goal: preserve('goal', original?.goal ?? '', draft.goal.trim()),
+            focusPoints: preserve(
+                'focusPoints',
+                original?.focusPoints ?? [],
+                lines(draft.focusPoints),
+            ),
+            exclusions: preserve('exclusions', original?.exclusions ?? [], lines(draft.exclusions)),
             sourcePreferences: {
-                preferredUrls: lines(draft.preferredUrls),
-                excludedUrls: lines(draft.excludedUrls),
+                preferredUrls: preserve(
+                    'preferredUrls',
+                    original?.sourcePreferences.preferredUrls ?? [],
+                    lines(draft.preferredUrls),
+                ),
+                excludedUrls: preserve(
+                    'excludedUrls',
+                    original?.sourcePreferences.excludedUrls ?? [],
+                    lines(draft.excludedUrls),
+                ),
                 officialOnly: draft.officialOnly,
             },
             timeRange: range,
-            timezone: draft.timezone.trim(),
-            schedule: { frequency: 'manual' },
+            timezone: preserve('timezone', original?.timezone ?? '', draft.timezone.trim()),
+            schedule: keepSchedule && original ? original.schedule : { frequency: 'manual' },
             outputFormat: draft.outputFormat,
             budget: Object.fromEntries(budgetFields.map(({ key }) => [key, Number(draft[key])])),
             notificationPreference: { mode: draft.notificationMode, runIssues: draft.runIssues },
@@ -137,6 +212,17 @@ export function taskField(path: string): TaskDraftField | undefined {
 export function createTaskController(lifecycle: SessionLifecycle) {
     const owner = lifecycle.capture();
     const draft = reactive(initialTaskDraft(lifecycle.session.user?.preferences));
+    const inputText = ref('');
+    const keepSuggestedSchedule = ref(true);
+    const parsedConfig = ref<TaskConfig>();
+    const editRevision = ref(0);
+    const stopEdits = watch(
+        [() => JSON.stringify(draft), inputText, keepSuggestedSchedule],
+        () => {
+            editRevision.value++;
+        },
+        { flush: 'sync' },
+    );
     const initial = JSON.stringify(draft);
     const command = useCommand();
     const mutation = useSessionMutation(createTaskEndpoint, lifecycle);
@@ -148,11 +234,15 @@ export function createTaskController(lifecycle: SessionLifecycle) {
     const controller = new AbortController();
     let disposed = false;
     let attempt: { body: string; key: string } | undefined;
-    const dirty = computed(() => !saved.value && JSON.stringify(draft) !== initial);
+    const dirty = computed(
+        () => !saved.value && (JSON.stringify(draft) !== initial || inputText.value.length > 0),
+    );
     const unregister = owner.registerCleanup(() => {
         expired.value = true;
         controller.abort();
         Object.assign(draft, initialTaskDraft());
+        inputText.value = '';
+        parsedConfig.value = undefined;
         fields.value = {};
         message.value = '';
     });
@@ -165,7 +255,10 @@ export function createTaskController(lifecycle: SessionLifecycle) {
             message.value = '';
             let config: TaskConfig | undefined;
             try {
-                const input = taskInput(draft);
+                const input = {
+                    ...taskInput(draft, parsedConfig.value, keepSuggestedSchedule.value),
+                    ...(inputText.value.trim() ? { inputText: inputText.value } : {}),
+                };
                 config = input.config;
                 const body = JSON.stringify(input);
                 if (!attempt || attempt.body !== body) attempt = { body, key: crypto.randomUUID() };
@@ -224,16 +317,41 @@ export function createTaskController(lifecycle: SessionLifecycle) {
         });
     }
     function canLeave(confirm: () => boolean) {
+        if (expired.value || !owner.isCurrent()) return true;
         if (command.pending.value) return false;
-        return !dirty.value || expired.value || confirm();
+        return !dirty.value || confirm();
+    }
+    function applyParsed(config: TaskConfig) {
+        if (
+            disposed ||
+            !owner.isCurrent() ||
+            command.pending.value ||
+            uncertain.value ||
+            expired.value ||
+            saved.value
+        )
+            return false;
+        const valid = parseContract(TaskConfigSchema, config);
+        parsedConfig.value = JSON.parse(JSON.stringify(valid)) as TaskConfig;
+        Object.assign(draft, taskDraftFromConfig(valid));
+        keepSuggestedSchedule.value = true;
+        fields.value = {};
+        message.value = '';
+        return true;
     }
     function dispose() {
         disposed = true;
         controller.abort();
+        stopEdits();
         unregister();
     }
     return {
         draft,
+        inputText,
+        keepSuggestedSchedule,
+        parsedConfig,
+        editRevision,
+        applyParsed,
         dirty,
         pending: command.pending,
         fields,

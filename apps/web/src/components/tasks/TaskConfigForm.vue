@@ -6,6 +6,11 @@
         :aria-busy="task.pending.value"
         @submit.prevent="save"
     >
+        <natural-language-draft
+            :task="task"
+            @applied="focusConfiguration"
+            @manual="focusConfiguration"
+        />
         <fieldset :disabled="locked">
             <legend>查阅任务</legend>
             <task-config-field
@@ -100,7 +105,22 @@
         </details>
         <fieldset :disabled="locked" class="schedule-fields">
             <legend>执行计划</legend>
-            <p>仅手动执行</p>
+            <template
+                v-if="
+                    task.parsedConfig.value &&
+                    task.parsedConfig.value.schedule.frequency !== 'manual'
+                "
+            >
+                <p>解析建议：{{ suggestedSchedule }}。只有确认保存后才会安排周期执行。</p>
+                <task-config-field
+                    v-model:checked="task.keepSuggestedSchedule.value"
+                    label="保留解析建议的周期计划"
+                    kind="checkbox"
+                    :disabled="locked"
+                />
+                <p v-if="!task.keepSuggestedSchedule.value">本次保存将明确改为仅手动执行。</p>
+            </template>
+            <p v-else>仅手动执行</p>
             <task-config-field
                 v-model="task.draft.timezone"
                 label="任务时区（IANA）"
@@ -154,15 +174,22 @@ import { onBeforeRouteLeave, RouterLink } from 'vue-router';
 import type { TaskDetailResponse } from '@scova/models';
 import {
     createTaskController,
+    taskScheduleDescription,
     budgetFields,
     type TaskDraftField,
 } from '@/composables/useCreateTask';
 import { useSessionLifecycle } from '@/composables/useSessionQuery';
 import TaskConfigField from '@/components/tasks/TaskConfigField.vue';
 import ActionButton from '@/components/common/ActionButton.vue';
+import NaturalLanguageDraft from '@/components/tasks/NaturalLanguageDraft.vue';
 const emit = defineEmits<{ saved: [result: TaskDetailResponse] }>();
 const task = createTaskController(useSessionLifecycle());
 const locked = computed(() => task.pending.value || task.uncertain.value || task.expired.value);
+const suggestedSchedule = computed(() =>
+    task.parsedConfig.value
+        ? taskScheduleDescription({ ...task.parsedConfig.value, timezone: task.draft.timezone })
+        : '',
+);
 const form = ref<HTMLFormElement>();
 const errorMessage = ref<HTMLParagraphElement>();
 const sources = ref<HTMLDetailsElement>();
@@ -194,6 +221,10 @@ const notifications = [
     { value: 'off', label: '关闭结果提醒' },
 ];
 const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+async function focusConfiguration() {
+    await nextTick();
+    form.value?.querySelector<HTMLElement>('fieldset input')?.focus();
+}
 async function save() {
     const result = await task.submit();
     if (result) emit('saved', result);
