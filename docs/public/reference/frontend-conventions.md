@@ -47,6 +47,16 @@ native 会跳过 Client 的 endpoint、session、cache 和错误 hook，必须�
 
 会话变更立刻中断流；以 epoch 校验迟到事件。断线以持久化游标续传，事件使相关 query 失效，最终 Run 状态从 API 读取。库升级若提供正式 SSE API，必须先验证语义，再替换这一集中桥接点。
 
+### 增量解析器
+
+`apps/web/src/api/sse-parser.ts` 提供无 Vue 依赖的 `createSseParser({ runId, maxFrameBytes? })`。
+将原始 `Uint8Array` 逐块传入 `push`，读取该次完成的 `SseMessage[]`；流结束后调用 `finish`。
+默认单帧上限 65,536 字节，包含字段、注释和换行。UTF-8、CRLF、中文和 emoji 可跨 chunk；多行 data 按换行连接，注释和未知字段不输出业务消息。
+
+解析器复用 `SseMessageSchema` 并验证目标 Run、wire event/type 与 id/eventId；reset 不允许 id、eventId 或 seq，且快照必须属于同一 Run。
+`SseParseError.code` 区分超限、UTF-8、JSON、schema、信封及不完整尾帧错误；失败调用在错误前已完成的消息位于 `completedMessages`，调用方仍须按顺序处理这些消息，再处理错误。
+EOF 不代替空行，不输出部分消息；错误或 finish 后不能复用实例。连接、重连、去重、游标推进和 Query 失效由订阅层实现，reset 不推进 Last-Event-ID。
+
 ## 5. 验收
 
 新增的 apps/web 配置、示例页面和通信测试应通过 `vp check`、`vp test` 与 `vp run -r build`。重点测试 Cookie、CSRF/幂等头、校验失败、401/403、取消、Query 失效、换号迟到响应，以及 SSE 分片/重连；Playwright 检查页面状态、键盘操作与两账号隔离。
