@@ -9,6 +9,12 @@ export default [
         meta: { title: '新建任务', section: 'tasks' },
     },
     {
+        name: 'task-edit',
+        path: '/tasks/:taskId/edit',
+        component: () => import('@/views/EditTaskView.vue'),
+        meta: { title: '编辑任务', section: 'tasks' },
+    },
+    {
         name: 'task-summary',
         path: '/tasks/:taskId',
         component,

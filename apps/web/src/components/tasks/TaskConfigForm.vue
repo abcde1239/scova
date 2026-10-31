@@ -6,6 +6,52 @@
         :aria-busy="task.pending.value"
         @submit.prevent="save"
     >
+        <template v-if="editor">
+            <p>配置版本 {{ editor.revision.value }}。保存创建新版本，不开始执行，历史保持原样。</p>
+            <p>查阅范围变化后，下次完整执行将建立新基线，以保存结果为准。</p>
+            <p
+                v-if="editor.result.value && task.saved.value"
+                role="status"
+                class="save-success"
+                tabindex="-1"
+                ref="successMessage"
+            >
+                修改已保存。{{
+                    editor.result.value.baselineResetRequired
+                        ? '语义查阅范围已变化，下一次完整执行将建立新基线。'
+                        : '本次保存无需重置比较基线。'
+                }}历史执行与报告保持原样。
+            </p>
+            <section
+                class="reload-panel"
+                :class="{ 'reload-panel--confirm': editor.reloadRequested.value }"
+                aria-label="重新读取任务"
+            >
+                <template v-if="editor.reloadRequested.value">
+                    <p>
+                        确认后会丢弃当前未保存草稿，读取服务器最新配置与修订依据。可以先复制需要手动合并的内容。
+                    </p>
+                    <div class="save-actions">
+                        <action-button
+                            ref="reloadConfirm"
+                            :busy="task.pending.value"
+                            @click="reload"
+                            >确认丢弃草稿并重新读取</action-button
+                        >
+                        <action-button :disabled="task.pending.value" @click="cancelReload"
+                            >取消重新读取</action-button
+                        >
+                    </div>
+                </template>
+                <action-button
+                    v-else
+                    ref="reloadStart"
+                    :disabled="task.pending.value || task.expired.value"
+                    @click="requestReload"
+                    >重新读取最新版本</action-button
+                >
+            </section>
+        </template>
         <fieldset :disabled="locked">
             <legend>查阅任务</legend>
             <task-config-field
@@ -100,7 +146,8 @@
         </details>
         <fieldset :disabled="locked" class="schedule-fields">
             <legend>执行计划</legend>
-            <p>仅手动执行</p>
+            <p>{{ editor ? editor.scheduleDescription.value : '仅手动执行' }}</p>
+            <p v-if="editor">保存保留原执行计划；本页不修改计划频率、星期或执行时刻。</p>
             <task-config-field
                 v-model="task.draft.timezone"
                 label="任务时区（IANA）"
@@ -130,6 +177,7 @@
             v-if="task.message.value"
             ref="errorMessage"
             class="save-error"
+            :class="{ 'edit-warning': !!editor }"
             role="alert"
             tabindex="-1"
         >
@@ -139,32 +187,79 @@
             <action-button
                 attr-type="submit"
                 :busy="task.pending.value"
-                :disabled="task.uncertain.value || task.expired.value"
-                >{{ task.pending.value ? '正在保存' : '确认保存任务' }}</action-button
+                :disabled="
+                    task.uncertain.value ||
+                    task.expired.value ||
+                    (editor &&
+                        (editor.conflict.value ||
+                            editor.blocked.value ||
+                            !task.dirty.value ||
+                            editor.reloadRequested.value))
+                "
+                >{{
+                    task.pending.value ? '正在保存' : editor ? '确认保存修改' : '确认保存任务'
+                }}</action-button
+            >
+            <router-link
+                v-if="initialResponse"
+                :to="{ name: 'task-summary', params: { taskId: initialResponse.data.task.id } }"
+                >返回任务摘要</router-link
             >
             <router-link :to="{ name: 'tasks' }">返回任务列表</router-link>
         </div>
-        <p>保存仅创建任务，不会开始执行。</p>
+        <p v-if="!editor">保存仅创建任务，不会开始执行。</p>
     </form>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
-import { onBeforeRouteLeave, RouterLink } from 'vue-router';
+import { onBeforeRouteLeave, onBeforeRouteUpdate, RouterLink } from 'vue-router';
 import type { TaskDetailResponse } from '@scova/models';
 import {
     createTaskController,
+    editTaskController,
     budgetFields,
     type TaskDraftField,
 } from '@/composables/useCreateTask';
 import { useSessionLifecycle } from '@/composables/useSessionQuery';
 import TaskConfigField from '@/components/tasks/TaskConfigField.vue';
 import ActionButton from '@/components/common/ActionButton.vue';
+import type { ApiResponse } from '@/api/client';
+const props = defineProps<{ initialResponse?: ApiResponse<TaskDetailResponse> }>();
 const emit = defineEmits<{ saved: [result: TaskDetailResponse] }>();
-const task = createTaskController(useSessionLifecycle());
+const lifecycle = useSessionLifecycle();
+const editor = props.initialResponse
+    ? editTaskController(lifecycle, props.initialResponse)
+    : undefined;
+const task = editor ?? createTaskController(lifecycle);
 const locked = computed(() => task.pending.value || task.uncertain.value || task.expired.value);
 const form = ref<HTMLFormElement>();
 const errorMessage = ref<HTMLParagraphElement>();
+const successMessage = ref<HTMLParagraphElement>();
+const reloadStart = ref<InstanceType<typeof ActionButton>>();
+const reloadConfirm = ref<InstanceType<typeof ActionButton>>();
+function focusButton(button: InstanceType<typeof ActionButton> | undefined) {
+    (button?.$el as HTMLElement | undefined)?.focus();
+}
+async function requestReload() {
+    if (!editor || task.pending.value) return;
+    editor.reloadRequested.value = true;
+    await nextTick();
+    focusButton(reloadConfirm.value);
+}
+async function cancelReload() {
+    if (!editor || task.pending.value) return;
+    editor.reloadRequested.value = false;
+    await nextTick();
+    focusButton(reloadStart.value);
+}
+async function reload() {
+    if (!editor) return;
+    await editor.reload();
+    await nextTick();
+    if (editor.reloadRequested.value) errorMessage.value?.focus();
+    else form.value?.querySelector<HTMLElement>('fieldset input')?.focus();
+}
 const sources = ref<HTMLDetailsElement>();
 const budget = ref<HTMLDetailsElement>();
 const mainFields = [
@@ -196,8 +291,13 @@ const notifications = [
 const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 async function save() {
     const result = await task.submit();
-    if (result) emit('saved', result);
-    else if (task.message.value) {
+    if (result) {
+        emit('saved', result);
+        if (editor) {
+            await nextTick();
+            successMessage.value?.focus();
+        }
+    } else if (task.message.value) {
         const invalid = Object.keys(task.fields.value) as TaskDraftField[];
         if (invalid.some((key) => sourceFields.some((field) => field.key === key)) && sources.value)
             sources.value.open = true;
@@ -213,9 +313,12 @@ async function save() {
 onBeforeRouteLeave(() =>
     task.canLeave(() => window.confirm('任务尚未保存，确定离开并放弃填写内容？')),
 );
+onBeforeRouteUpdate(() =>
+    task.canLeave(() => window.confirm('任务尚未保存，确定离开并放弃填写内容？')),
+);
 function beforeUnload(event: BeforeUnloadEvent) {
-    if (task.expired.value || task.saved.value) return;
-    if (!task.dirty.value && !task.pending.value) return;
+    if (task.expired.value || (!editor && task.saved.value)) return;
+    if (!task.dirty.value && !task.pending.value && !task.uncertain.value) return;
     event.preventDefault();
     event.returnValue = '';
 }
@@ -288,6 +391,37 @@ a {
 }
 .save-error {
     color: var(--scova-danger);
+}
+.edit-warning {
+    padding: 1.25rem;
+    border: 0.0625rem solid var(--scova-danger);
+    border-inline-start: 0.25rem solid var(--scova-danger);
+    border-radius: 0.375rem;
+    background: var(--scova-selected);
+}
+.reload-panel {
+    display: grid;
+    gap: 1rem;
+    min-inline-size: 0;
+}
+.reload-panel--confirm {
+    padding: 1.25rem;
+    border: 0.0625rem solid var(--scova-border);
+    border-radius: 0.375rem;
+    background: var(--scova-surface);
+}
+.reload-panel > :deep(button) {
+    justify-self: start;
+}
+.save-success {
+    color: var(--scova-text);
+    padding: 1rem;
+    border-inline-start: 0.25rem solid var(--scova-primary);
+    background: var(--scova-surface);
+}
+.save-success:focus-visible {
+    outline: 0.125rem solid var(--scova-primary);
+    outline-offset: 0.1875rem;
 }
 a:focus-visible,
 summary:focus-visible,

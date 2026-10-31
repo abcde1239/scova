@@ -66,6 +66,9 @@
                 @retry="detail.refetch()"
             />
             <template v-else-if="detail.data.value">
+                <router-link class="back-link" :to="{ name: 'task-edit', params: { taskId } }"
+                    >编辑任务配置</router-link
+                >
                 <p class="scope-note">时间按 {{ timezone }} 显示</p>
                 <task-card
                     :task="detail.data.value.data.task"
