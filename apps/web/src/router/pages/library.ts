@@ -1,6 +1,12 @@
 import type { RouteRecordRaw } from 'vue-router';
 export default [
     {
+        path: '/library/search',
+        name: 'library-search',
+        component: () => import('@/views/LibrarySearchView.vue'),
+        meta: { title: '搜索已存资料', section: 'library' },
+    },
+    {
         path: '/library/sources/:sourceId/snapshots/:snapshotId?',
         name: 'source-history',
         component: () => import('@/views/SourceHistoryView.vue'),

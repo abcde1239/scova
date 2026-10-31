@@ -21,6 +21,7 @@
                 >
                     笔记
                 </button>
+                <router-link to="/library/search">搜索已存资料</router-link>
             </nav>
         </header>
         <div v-show="section === 'bookmarks'" class="bookmark-content">
@@ -273,6 +274,9 @@ h2 {
 }
 header nav {
     display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
     border-block-end: 0.0625rem solid var(--scova-border);
 }
 header nav button {
