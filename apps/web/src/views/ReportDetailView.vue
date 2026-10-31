@@ -1,6 +1,12 @@
 <template>
     <div ref="detail" class="report-detail">
         <nav class="report-tools scova-glass scova-glass--report" aria-label="报告阅读工具">
+            <router-link
+                v-if="returnTo"
+                :to="{ path: returnTo.path, state: { inboxRestore: { ...returnTo } } }"
+            >
+                <app-icon name="back" />返回收件箱
+            </router-link>
             <router-link to="/account/appearance"
                 ><app-icon name="appearance" />阅读外观</router-link
             >
@@ -23,10 +29,15 @@ import AppIcon from '@/components/common/AppIcon.vue';
 import ReportBrief from '@/components/reports/ReportBrief.vue';
 import StatePanel from '@/components/common/StatePanel.vue';
 import { useReport } from '@/composables/useReport';
+import { inboxReturn } from '@/composables/useInbox';
 import { useSessionLifecycle } from '@/composables/useSessionQuery';
 const route = useRoute();
 const lifecycle = useSessionLifecycle();
 const accountId = computed(() => lifecycle.session.user?.id);
+const returnTo = computed(() => {
+    void route.fullPath;
+    return inboxReturn(window.history.state?.inboxReturn, accountId.value);
+});
 const { query, report, valid, error } = useReport(() => route.params.reportId, lifecycle);
 const detail = ref<HTMLElement>();
 async function retry() {
