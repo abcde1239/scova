@@ -16,8 +16,8 @@ describe('自托管字体交付契约', () => {
         const metadata = JSON.parse(read(path.join(root, 'metadata.json')));
         expect(metadata.license.type).toBe('OFL-1.1');
         expect(metadata.weights).toEqual(expect.arrayContaining([400, 500, 600]));
-        expect(read(path.join(web, 'public/fonts/LICENSES.txt'))).toContain(
-            read(path.join(root, 'LICENSE')).trim(),
+        expect(read(path.join(web, 'public/fonts/LICENSES.txt')).replace(/\r\n/g, '\n')).toContain(
+            read(path.join(root, 'LICENSE')).replace(/\r\n/g, '\n').trim(),
         );
     });
 
