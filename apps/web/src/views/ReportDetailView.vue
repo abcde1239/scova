@@ -6,6 +6,11 @@
             >
         </nav>
         <report-brief v-if="report" :key="`${accountId}-${report.id}`" :report="report" />
+        <feedback-effects
+            v-if="report"
+            :key="`effects-${accountId}-${report.id}`"
+            :report="report"
+        />
         <feedback-actions
             v-if="report"
             :key="`feedback-${accountId}-${report.id}`"
@@ -27,6 +32,7 @@ import { RouterLink, useRoute } from 'vue-router';
 import AppIcon from '@/components/common/AppIcon.vue';
 import ReportBrief from '@/components/reports/ReportBrief.vue';
 import FeedbackActions from '@/components/reports/FeedbackActions.vue';
+import FeedbackEffects from '@/components/reports/FeedbackEffects.vue';
 import StatePanel from '@/components/common/StatePanel.vue';
 import { useReport } from '@/composables/useReport';
 import { useSessionLifecycle } from '@/composables/useSessionQuery';
