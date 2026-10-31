@@ -2,7 +2,7 @@
 
 先运行 `vp install`，再运行 `vp run test:e2e:install` 安装锁定 Playwright 所需的 Chromium。Linux CI 需额外安装浏览器系统依赖（例如 `vp exec playwright install --with-deps chromium`）。浏览器安装与项目 npm 依赖是两步，不能仅安装 npm 包就认定浏览器可运行。
 
-执行 `vp run test:e2e tests/e2e/shell.spec.ts`。配置会先构建真实 Web，再启动仅绑定回环地址的生产预览；测试结束清理该服务，不复用未知的已运行端口。失败截图及 trace 保存在忽略的 `artifacts/e2e/results`；每次运行的 JSON 报告（包括成功用例的来源与清理附件）保存到 `artifacts/e2e/report.json`，下一次运行前应复制需要保留的报告。输出打印实际 Chromium 版本。
+`vp run test:e2e --list` 列出默认前端测试，`vp run test:e2e` 执行所有默认前端 spec（排除全栈 environment）；只跑壳冒烟可使用 `vp run test:e2e tests/e2e/shell.spec.ts`。默认配置先以 test 模式构建真实 Web，再由 `tests/e2e/serve.mjs` 在回环地址提供静态应用及受控会话样本，各 spec 按需提供接口样本。测试结束清理服务，不复用未知的已运行端口。失败截图及 trace 保存在忽略的 `artifacts/e2e/results`；每次运行的 JSON 报告（包括成功用例的来源与清理附件）保存到 `artifacts/e2e/report.json`，下一次运行前应复制需要保留的报告。输出打印实际 Chromium 版本。
 
 壳测试覆盖工作台路由、刷新、未知路径、390 视口导航和键盘主内容焦点，不代表账号、研究旅程或完整视觉验收。成功冒烟也在各自结果目录保存桌面和窄视口截图。Vite+ 单元扫描与 Playwright 隔离。
 
@@ -16,4 +16,4 @@
 
 测试结束及启动/中途失败均在 `finally` 中关闭浏览器上下文，并对本次项目执行 `down -v --remove-orphans`，断言自身容器、卷和网络已清空；仅移除本次生成的镜像标签。启动失败和中途失败都有持久化 spec。强制杀死进程或关闭 Docker 不能保证执行清理，可从失败附件取得项目名后，仅针对该项目检查和回收资源，不清理其他项目或用户卷。
 
-后续全栈领域 spec 使用 `SCOVA_E2E_FULL_STACK=1` 选择配置，再传具体 spec 路径；默认入口继续只运行壳测试。Harness 在非必需的 `web-shell-e2e` 范围登记默认关闭的 `web-shell-browser`、`web-environment-browser`。全栈浏览器实际连接后端与数据库，但这些可选任务不计入后端必需门禁，后端已有集成任务继续执行。当前 `ready` 不运行浏览器；CI 与门禁接入由后续专项交付。生产代理的 SPA 回退仍需部署检查，本地 preview 的刷新成功不能代替部署验收。
+全栈领域 spec 使用 `SCOVA_E2E_FULL_STACK=1` 选择配置并传具体 spec 路径；运行普通前端样本前移除此变量，避免关闭其静态服务。专用配置按各自 `testMatch` 执行：task-center 和 run-history 使用生产构建，execution 和 visual-foundation 使用 test 构建。各配置会重建同一份 `apps/web/dist`，须串行运行并在切换前停止上一预览；test 模式入口不表示生产已有对应功能。Harness 在非必需的 `web-shell-e2e` 范围登记默认关闭的 `web-shell-browser`、`web-environment-browser`。全栈浏览器实际连接后端与数据库，但这些可选任务不计入后端必需门禁，后端已有集成任务继续执行。当前 `ready` 不运行浏览器；CI 与门禁接入由后续专项交付。生产代理的 SPA 回退仍需部署检查，本地 preview 的刷新成功不能代替部署验收。

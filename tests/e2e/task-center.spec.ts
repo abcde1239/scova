@@ -152,11 +152,14 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
             expect(await card.evaluate((element) => getComputedStyle(element).cursor)).toBe(
                 'default',
             );
-            expect(
-                await card
-                    .getByRole('link')
-                    .evaluate((element) => getComputedStyle(element).cursor),
-            ).toBe('pointer');
+            await expect(card.getByRole('link')).toHaveCount(2);
+            for (const link of [
+                card.getByRole('link', { name: first[0]!.title, exact: true }),
+                card.getByRole('link', { name: '报告历史', exact: true }),
+            ])
+                expect(await link.evaluate((element) => getComputedStyle(element).cursor)).toBe(
+                    'pointer',
+                );
             await testInfo.attach(`${width}-${double ? 'double' : 'normal'}`, {
                 body: await page.screenshot({
                     path: testInfo.outputPath(`${double ? 'double' : 'normal'}.png`),
