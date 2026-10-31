@@ -213,12 +213,13 @@ async function noOverflow(page: Page) {
     }
 }
 for (const width of [320, 390, 768, 1024, 1440, 1920]) {
-    test(`反馈${width}：长资料/结论、200%重排、确认不改原报告`, async ({ page }, info) => {
+    test(`反馈${width}：长资料/结论、200%重排、确认不改原报告`, async ({ page, baseURL }, info) => {
         const { state, calls } = await samples(page.context());
         const external: string[] = [];
         const errors: string[] = [];
         page.on('request', (request) => {
-            if (!request.url().startsWith('http://127.0.0.1:5242/')) external.push(request.url());
+            if (new URL(request.url()).origin !== new URL(baseURL!).origin)
+                external.push(request.url());
         });
         page.on('pageerror', (error) => errors.push(error.message));
         await page.setViewportSize({ width, height: 1000 });

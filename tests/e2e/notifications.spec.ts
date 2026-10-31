@@ -221,12 +221,16 @@ async function noOverflow(page: Page) {
     }
 }
 for (const width of [320, 390, 768, 1024, 1440, 1920]) {
-    test(`本地通知${width}：类别文字、图标、200%文字与键盘筛选`, async ({ page }, info) => {
+    test(`本地通知${width}：类别文字、图标、200%文字与键盘筛选`, async ({
+        page,
+        baseURL,
+    }, info) => {
         const { calls } = await samples(page.context());
         const external: string[] = [];
         const errors: string[] = [];
         page.on('request', (request) => {
-            if (!request.url().startsWith('http://127.0.0.1:5239/')) external.push(request.url());
+            if (new URL(request.url()).origin !== new URL(baseURL!).origin)
+                external.push(request.url());
         });
         page.on('pageerror', (error) => errors.push(error.message));
         await page.setViewportSize({ width, height: 1000 });

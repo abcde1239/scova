@@ -228,7 +228,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         await expect(title(page)).toBeEditable();
         await expect(apply(page)).toBeDisabled();
         await expect(panel(page).getByText(/原文、解析时区或表单已变化/)).toHaveCount(0);
-        await expect(page.getByLabel('保留解析建议的周期计划', { exact: true })).toBeChecked();
+        await expect(page.getByLabel('计划频率', { exact: true })).toHaveValue('weekly');
         await expect(page.getByLabel('开始时间', { exact: true })).toHaveValue(
             '2026-10-01T12:04:05.123',
         );
@@ -242,8 +242,8 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
                 }),
                 contentType: 'image/png',
             });
-            await page.getByLabel('保留解析建议的周期计划', { exact: true }).uncheck();
-            await expect(schedule).toContainText('本次保存将明确改为仅手动执行');
+            await page.getByLabel('计划频率', { exact: true }).selectOption('manual');
+            await expect(schedule).toContainText('仅手动执行');
             await schedule.scrollIntoViewIfNeeded();
             await info.attach('320-explicit-manual-text-200', {
                 body: await page.screenshot({
@@ -251,10 +251,10 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
                 }),
                 contentType: 'image/png',
             });
-            await page.getByLabel('保留解析建议的周期计划', { exact: true }).check();
+            await page.getByLabel('计划频率', { exact: true }).selectOption('weekly');
         }
         if (width === 390)
-            await page.getByLabel('保留解析建议的周期计划', { exact: true }).uncheck();
+            await page.getByLabel('计划频率', { exact: true }).selectOption('manual');
         await title(page).fill('用户确认后的标题');
         await page.getByRole('button', { name: '确认保存任务', exact: true }).click();
         await expect(page).toHaveURL(new RegExp(`/tasks/${taskId}$`));
@@ -275,6 +275,34 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         );
     });
 }
+
+test('应用解析草稿后手改星期和当地时间，保存使用修改值且其余配置保真', async ({ page }) => {
+    const { state, calls } = await samples(page.context());
+    await page.goto('/tasks/new');
+    await original(page).fill(inputText);
+    await parse(page).click();
+    await expect(apply(page)).toBeEnabled();
+    await apply(page).click();
+    await expect(page.getByLabel('计划频率', { exact: true })).toHaveValue('weekly');
+    await expect(page.getByLabel('每周执行星期', { exact: true })).toHaveValue('3');
+    await expect(page.getByLabel('执行当地时间', { exact: true })).toHaveValue('09:15');
+    await page.getByLabel('每周执行星期', { exact: true }).selectOption('5');
+    await page.getByLabel('执行当地时间', { exact: true }).fill('18:40');
+    await expect(apply(page)).toBeDisabled();
+    expect(taskPosts(calls)).toHaveLength(0);
+    await page.getByRole('button', { name: '确认保存任务', exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/tasks/${taskId}$`));
+    expect(state.saved).toEqual({
+        inputText,
+        config: {
+            ...parsed,
+            schedule: { frequency: 'weekly', weekday: 5, localTime: '18:40' },
+        },
+    });
+    expect(taskPosts(calls)).toHaveLength(1);
+    expect(draftPosts(calls)).toHaveLength(1);
+    expect(calls.some((call) => call.method === 'POST' && call.path.includes('/runs'))).toBe(false);
+});
 
 for (const status of [429, 408]) {
     test(`${status}保留原文与手工内容、允许继续填写且不重试`, async ({ page }, info) => {

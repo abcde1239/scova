@@ -219,12 +219,16 @@ async function screenshot(page: Page, info: TestInfo, name: string, fullPage = f
     });
 }
 for (const width of [320, 390, 768, 1024, 1440, 1920]) {
-    test(`本地历史${width}：serif标题、200%文字、原游标与Back恢复`, async ({ page }, info) => {
+    test(`本地历史${width}：serif标题、200%文字、原游标与Back恢复`, async ({
+        page,
+        baseURL,
+    }, info) => {
         const { calls } = await samples(page.context());
         const external: string[] = [];
         const errors: string[] = [];
         page.on('request', (request) => {
-            if (!request.url().startsWith('http://127.0.0.1:5240/')) external.push(request.url());
+            if (new URL(request.url()).origin !== new URL(baseURL!).origin)
+                external.push(request.url());
         });
         page.on('pageerror', (error) => errors.push(error.message));
         await page.setViewportSize({ width, height: 1000 });
