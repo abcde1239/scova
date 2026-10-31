@@ -52,6 +52,12 @@
                 >
             </section>
         </template>
+        <natural-language-draft
+            v-if="creator"
+            :task="creator"
+            @applied="focusConfiguration"
+            @manual="focusConfiguration"
+        />
         <fieldset :disabled="locked">
             <legend>查阅任务</legend>
             <task-config-field
@@ -146,8 +152,30 @@
         </details>
         <fieldset :disabled="locked" class="schedule-fields">
             <legend>执行计划</legend>
-            <p>{{ editor ? editor.scheduleDescription.value : '仅手动执行' }}</p>
-            <p v-if="editor">保存保留原执行计划；本页不修改计划频率、星期或执行时刻。</p>
+            <template v-if="editor">
+                <p>{{ editor.scheduleDescription.value }}</p>
+                <p>保存保留原执行计划；本页不修改计划频率、星期或执行时刻。</p>
+            </template>
+            <template
+                v-else-if="
+                    creator?.parsedConfig.value &&
+                    creator.parsedConfig.value.schedule.frequency !== 'manual'
+                "
+            >
+                <p>
+                    解析建议：{{
+                        taskScheduleDescription(creator.parsedConfig.value)
+                    }}。只有确认保存后才会安排周期执行。
+                </p>
+                <task-config-field
+                    v-model:checked="creator.keepSuggestedSchedule.value"
+                    label="保留解析建议的周期计划"
+                    kind="checkbox"
+                    :disabled="locked"
+                />
+                <p v-if="!creator.keepSuggestedSchedule.value">本次保存将明确改为仅手动执行。</p>
+            </template>
+            <p v-else>仅手动执行</p>
             <task-config-field
                 v-model="task.draft.timezone"
                 label="任务时区（IANA）"
@@ -218,6 +246,7 @@ import type { TaskDetailResponse } from '@scova/models';
 import {
     createTaskController,
     editTaskController,
+    taskScheduleDescription,
     budgetFields,
     type TaskDraftField,
 } from '@/composables/useCreateTask';
@@ -226,12 +255,14 @@ import TaskConfigField from '@/components/tasks/TaskConfigField.vue';
 import ActionButton from '@/components/common/ActionButton.vue';
 import type { ApiResponse } from '@/api/client';
 const props = defineProps<{ initialResponse?: ApiResponse<TaskDetailResponse> }>();
+import NaturalLanguageDraft from '@/components/tasks/NaturalLanguageDraft.vue';
 const emit = defineEmits<{ saved: [result: TaskDetailResponse] }>();
 const lifecycle = useSessionLifecycle();
 const editor = props.initialResponse
     ? editTaskController(lifecycle, props.initialResponse)
     : undefined;
-const task = editor ?? createTaskController(lifecycle);
+const creator = editor ? undefined : createTaskController(lifecycle);
+const task = editor ?? creator!;
 const locked = computed(() => task.pending.value || task.uncertain.value || task.expired.value);
 const form = ref<HTMLFormElement>();
 const errorMessage = ref<HTMLParagraphElement>();
@@ -289,6 +320,10 @@ const notifications = [
     { value: 'off', label: '关闭结果提醒' },
 ];
 const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+async function focusConfiguration() {
+    await nextTick();
+    form.value?.querySelector<HTMLElement>('fieldset input')?.focus();
+}
 async function save() {
     const result = await task.submit();
     if (result) {

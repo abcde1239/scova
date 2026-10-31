@@ -5,6 +5,7 @@ import {
     TimeRangeSchema,
     TaskDetailResponseSchema,
     parseRevisionEtag,
+    TaskConfigSchema,
     parseContract,
     type TaskConfig,
     type TaskDetailResponse,
@@ -82,6 +83,14 @@ export function taskDraftFromConfig(config: TaskConfig): TaskDraft {
         runIssues: config.notificationPreference.runIssues,
     };
 }
+export function taskScheduleDescription(config: TaskConfig) {
+    const schedule = config.schedule;
+    return schedule.frequency === 'manual'
+        ? '仅手动执行'
+        : schedule.frequency === 'daily'
+          ? `每日 ${schedule.localTime}（${config.timezone}）`
+          : `每周${['一', '二', '三', '四', '五', '六', '日'][schedule.weekday - 1]} ${schedule.localTime}（${config.timezone}）`;
+}
 const lines = (value: string) =>
     value
         .split(/\r?\n/)
@@ -89,7 +98,7 @@ const lines = (value: string) =>
         .filter(Boolean);
 
 /** 表单值转为公开契约；固定日期由明确标注的浏览器当地时间转成 UTC。 */
-export function taskInput(draft: TaskDraft, original?: TaskConfig) {
+export function taskInput(draft: TaskDraft, original?: TaskConfig, keepSchedule = true) {
     const initial = original ? taskDraftFromConfig(original) : undefined;
     const preserve = <T>(field: TaskDraftField, previous: T, next: T): T =>
         initial && draft[field] === initial[field] ? previous : next;
@@ -174,7 +183,7 @@ export function taskInput(draft: TaskDraft, original?: TaskConfig) {
             },
             timeRange: range,
             timezone: preserve('timezone', original?.timezone ?? '', draft.timezone.trim()),
-            schedule: original?.schedule ?? { frequency: 'manual' },
+            schedule: keepSchedule && original ? original.schedule : { frequency: 'manual' },
             outputFormat: draft.outputFormat,
             budget: Object.fromEntries(budgetFields.map(({ key }) => [key, Number(draft[key])])),
             notificationPreference: { mode: draft.notificationMode, runIssues: draft.runIssues },
@@ -208,6 +217,17 @@ export function taskField(path: string): TaskDraftField | undefined {
 export function createTaskController(lifecycle: SessionLifecycle) {
     const owner = lifecycle.capture();
     const draft = reactive(initialTaskDraft(lifecycle.session.user?.preferences));
+    const inputText = ref('');
+    const keepSuggestedSchedule = ref(true);
+    const parsedConfig = ref<TaskConfig>();
+    const editRevision = ref(0);
+    const stopEdits = watch(
+        [() => JSON.stringify(draft), inputText, keepSuggestedSchedule],
+        () => {
+            editRevision.value++;
+        },
+        { flush: 'sync' },
+    );
     const initial = JSON.stringify(draft);
     const command = useCommand();
     const mutation = useSessionMutation(createTaskEndpoint, lifecycle);
@@ -219,11 +239,15 @@ export function createTaskController(lifecycle: SessionLifecycle) {
     const controller = new AbortController();
     let disposed = false;
     let attempt: { body: string; key: string } | undefined;
-    const dirty = computed(() => !saved.value && JSON.stringify(draft) !== initial);
+    const dirty = computed(
+        () => !saved.value && (JSON.stringify(draft) !== initial || inputText.value.length > 0),
+    );
     const unregister = owner.registerCleanup(() => {
         expired.value = true;
         controller.abort();
         Object.assign(draft, initialTaskDraft());
+        inputText.value = '';
+        parsedConfig.value = undefined;
         fields.value = {};
         message.value = '';
     });
@@ -236,7 +260,10 @@ export function createTaskController(lifecycle: SessionLifecycle) {
             message.value = '';
             let config: TaskConfig | undefined;
             try {
-                const input = taskInput(draft);
+                const input = {
+                    ...taskInput(draft, parsedConfig.value, keepSuggestedSchedule.value),
+                    ...(inputText.value.trim() ? { inputText: inputText.value } : {}),
+                };
                 config = input.config;
                 const body = JSON.stringify(input);
                 if (!attempt || attempt.body !== body) attempt = { body, key: crypto.randomUUID() };
@@ -295,16 +322,41 @@ export function createTaskController(lifecycle: SessionLifecycle) {
         });
     }
     function canLeave(confirm: () => boolean) {
+        if (expired.value || !owner.isCurrent()) return true;
         if (command.pending.value) return false;
-        return !dirty.value || expired.value || confirm();
+        return !dirty.value || confirm();
+    }
+    function applyParsed(config: TaskConfig) {
+        if (
+            disposed ||
+            !owner.isCurrent() ||
+            command.pending.value ||
+            uncertain.value ||
+            expired.value ||
+            saved.value
+        )
+            return false;
+        const valid = parseContract(TaskConfigSchema, config);
+        parsedConfig.value = JSON.parse(JSON.stringify(valid)) as TaskConfig;
+        Object.assign(draft, taskDraftFromConfig(valid));
+        keepSuggestedSchedule.value = true;
+        fields.value = {};
+        message.value = '';
+        return true;
     }
     function dispose() {
         disposed = true;
         controller.abort();
+        stopEdits();
         unregister();
     }
     return {
         draft,
+        inputText,
+        keepSuggestedSchedule,
+        parsedConfig,
+        editRevision,
+        applyParsed,
         dirty,
         pending: command.pending,
         fields,
