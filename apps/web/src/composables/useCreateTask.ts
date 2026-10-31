@@ -16,6 +16,7 @@ import type { SessionLifecycle } from '@/api/session';
 import { toApiError } from '@/api/errors';
 import { useCommand } from '@/composables/useCommand';
 import { useSessionMutation } from '@/composables/useSessionQuery';
+import { scheduleInput, type SavedSchedule } from '@/utils/schedule';
 
 export const budgetFields = [
     { key: 'maxSearches', label: '搜索次数上限' },
@@ -40,6 +41,9 @@ export function initialTaskDraft(preferences?: SessionResponse['user']['preferen
         start: '',
         end: '',
         timezone: preferences?.defaultTimezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+        scheduleFrequency: 'manual',
+        scheduleLocalTime: '',
+        scheduleWeekday: '',
         outputFormat: 'brief',
         maxSearches: '10',
         maxPages: '20',
@@ -74,6 +78,10 @@ export function taskDraftFromConfig(config: TaskConfig): TaskDraft {
         start: config.timeRange.kind === 'fixed' ? local(config.timeRange.start) : '',
         end: config.timeRange.kind === 'fixed' ? local(config.timeRange.end) : '',
         timezone: config.timezone,
+        scheduleFrequency: config.schedule.frequency,
+        scheduleLocalTime: config.schedule.frequency === 'manual' ? '' : config.schedule.localTime,
+        scheduleWeekday:
+            config.schedule.frequency === 'weekly' ? String(config.schedule.weekday) : '',
         outputFormat: config.outputFormat,
         ...(Object.fromEntries(
             budgetFields.map(({ key }) => [key, String(config.budget[key])]),
@@ -135,6 +143,14 @@ export function taskInput(draft: TaskDraft, original?: TaskConfig) {
             : draft.days === initial.days)
             ? original.timeRange
             : editedRange;
+    const schedule =
+        original &&
+        initial &&
+        draft.scheduleFrequency === initial.scheduleFrequency &&
+        draft.scheduleLocalTime === initial.scheduleLocalTime &&
+        draft.scheduleWeekday === initial.scheduleWeekday
+            ? original.schedule
+            : scheduleInput(draft);
     // 先校验用户选中的共享分支，避免 Union 的另一分支错误误指向正确日期。
     try {
         parseContract(TimeRangeSchema.anyOf[draft.rangeKind === 'fixed' ? 1 : 0]!, range);
@@ -174,7 +190,7 @@ export function taskInput(draft: TaskDraft, original?: TaskConfig) {
             },
             timeRange: range,
             timezone: preserve('timezone', original?.timezone ?? '', draft.timezone.trim()),
-            schedule: original?.schedule ?? { frequency: 'manual' },
+            schedule,
             outputFormat: draft.outputFormat,
             budget: Object.fromEntries(budgetFields.map(({ key }) => [key, Number(draft[key])])),
             notificationPreference: { mode: draft.notificationMode, runIssues: draft.runIssues },
@@ -195,6 +211,9 @@ const fieldPaths: Partial<Record<string, TaskDraftField>> = {
     'timeRange/start': 'start',
     'timeRange/end': 'end',
     timezone: 'timezone',
+    'schedule/frequency': 'scheduleFrequency',
+    'schedule/localTime': 'scheduleLocalTime',
+    'schedule/weekday': 'scheduleWeekday',
     outputFormat: 'outputFormat',
     'notificationPreference/mode': 'notificationMode',
     'notificationPreference/runIssues': 'runIssues',
@@ -376,6 +395,7 @@ export function editTaskController(
     const result = ref<TaskDetailResponse>();
     const revision = ref(initial.data.version.version);
     const scheduleDescription = ref('');
+    const serverPlan = ref<SavedSchedule>();
     const controller = new AbortController();
     let disposed = false;
     const baselineRevision = ref(0);
@@ -391,6 +411,12 @@ export function editTaskController(
         baseline = JSON.stringify(draft);
         baselineRevision.value++;
         revision.value = response.data.version.version;
+        serverPlan.value = {
+            schedule: response.data.version.config.schedule,
+            timezone: response.data.version.config.timezone,
+            nextRunAt: response.data.task.nextRunAt,
+            status: response.data.task.status,
+        };
         const schedule = original.schedule;
         scheduleDescription.value =
             schedule.frequency === 'manual'
@@ -422,6 +448,7 @@ export function editTaskController(
         message.value = '';
         result.value = undefined;
         scheduleDescription.value = '';
+        serverPlan.value = undefined;
         reloadRequested.value = false;
         saved.value = false;
     });
@@ -562,5 +589,6 @@ export function editTaskController(
         result,
         revision,
         scheduleDescription,
+        serverPlan,
     };
 }

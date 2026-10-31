@@ -144,17 +144,16 @@
             </div>
             <p>预算包含重试；填写正整数，服务端另有部署上限。</p>
         </details>
-        <fieldset :disabled="locked" class="schedule-fields">
-            <legend>执行计划</legend>
-            <p>{{ editor ? editor.scheduleDescription.value : '仅手动执行' }}</p>
-            <p v-if="editor">保存保留原执行计划；本页不修改计划频率、星期或执行时刻。</p>
-            <task-config-field
-                v-model="task.draft.timezone"
-                label="任务时区（IANA）"
-                :error="task.fields.value.timezone"
-                :disabled="locked"
-            />
-        </fieldset>
+        <schedule-fields
+            v-model:frequency="task.draft.scheduleFrequency"
+            v-model:timezone="task.draft.timezone"
+            v-model:local-time="task.draft.scheduleLocalTime"
+            v-model:weekday="task.draft.scheduleWeekday"
+            :errors="task.fields.value"
+            :disabled="locked"
+            :saved="editor?.serverPlan.value"
+            :dirty="task.dirty.value"
+        />
         <fieldset :disabled="locked">
             <legend>站内提醒</legend>
             <task-config-field
@@ -224,6 +223,7 @@ import {
 import { useSessionLifecycle } from '@/composables/useSessionQuery';
 import TaskConfigField from '@/components/tasks/TaskConfigField.vue';
 import ActionButton from '@/components/common/ActionButton.vue';
+import ScheduleFields from '@/components/tasks/ScheduleFields.vue';
 import type { ApiResponse } from '@/api/client';
 const props = defineProps<{ initialResponse?: ApiResponse<TaskDetailResponse> }>();
 const emit = defineEmits<{ saved: [result: TaskDetailResponse] }>();

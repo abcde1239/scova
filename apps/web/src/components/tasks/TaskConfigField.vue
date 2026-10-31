@@ -31,7 +31,8 @@
             placeholder=""
             :input-props="{
                 id,
-                type: kind === 'date' ? 'datetime-local' : 'text',
+                type: kind === 'date' ? 'datetime-local' : kind === 'time' ? 'time' : 'text',
+                step: kind === 'time' ? '60' : undefined,
                 inputmode: kind === 'number' ? 'numeric' : undefined,
                 'aria-invalid': error ? 'true' : undefined,
                 'aria-describedby': error ? `${id}-error` : undefined,
@@ -46,7 +47,7 @@ import { useId } from 'vue';
 import { NInput } from 'naive-ui';
 defineProps<{
     label: string;
-    kind?: 'text' | 'textarea' | 'select' | 'checkbox' | 'number' | 'date';
+    kind?: 'text' | 'textarea' | 'select' | 'checkbox' | 'number' | 'date' | 'time';
     options?: { value: string; label: string }[];
     error?: string;
     disabled?: boolean;
@@ -117,6 +118,13 @@ input[type='checkbox'] {
     min-block-size: 2.75rem;
     line-height: 1.5;
 }
+.config-field :deep(input[type='time']),
+.config-field :deep(input[type='datetime-local']) {
+    appearance: auto;
+    cursor: auto;
+    max-inline-size: 100%;
+    background: var(--scova-surface);
+}
 .config-field:has(input[type='checkbox']) label {
     min-block-size: 2.75rem;
     display: flex;
@@ -135,6 +143,12 @@ input:focus-visible {
 }
 select:disabled,
 input:disabled {
+    cursor: not-allowed;
+}
+.config-field :deep(input[type='time']:disabled),
+.config-field :deep(input[type='time'][readonly]),
+.config-field :deep(input[type='datetime-local']:disabled),
+.config-field :deep(input[type='datetime-local'][readonly]) {
     cursor: not-allowed;
 }
 </style>
