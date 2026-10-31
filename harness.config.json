@@ -10,7 +10,8 @@
         },
         {
             "root": "apps/web",
-            "id": "apps-web"
+            "id": "apps-web",
+            "tests": { "requireConfiguredTask": true }
         },
         {
             "root": "apps/server",
@@ -157,6 +158,7 @@
             "kind": "test",
             "argv": ["vp", "test"],
             "covers": [
+                "apps-web",
                 "apps-server",
                 "apps-worker",
                 "packages-shared",

@@ -1,0 +1,37 @@
+.scova-theme {
+    min-block-size: 100%;
+    color: var(--scova-text);
+    background: var(--scova-canvas);
+    font-family: Inter, 'Noto Sans SC', system-ui, sans-serif;
+    font-size: 1rem;
+    line-height: 1.6;
+    color-scheme: light;
+}
+
+.scova-theme--dark {
+    color-scheme: dark;
+}
+
+.scova-surface {
+    background: var(--scova-surface);
+    color: var(--scova-text);
+}
+
+.scova-selected {
+    background: var(--scova-selected);
+    color: var(--scova-primary);
+}
+
+.scova-reference {
+    color: var(--scova-primary);
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
+}
+
+.scova-partial {
+    color: var(--scova-partial);
+}
+
+.scova-failure {
+    color: var(--scova-danger);
+}
