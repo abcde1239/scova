@@ -17,7 +17,7 @@ export default defineConfig({
     projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
     webServer: {
         command:
-            'vp run web#build && vp run web#preview -- --host 127.0.0.1 --port 4189 --strictPort',
+            'vp run web#build:e2e && vp run web#preview -- --host 127.0.0.1 --port 4189 --strictPort',
         cwd: '../..',
         url: 'http://127.0.0.1:4189/tasks',
         reuseExistingServer: false,
