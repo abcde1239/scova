@@ -44,6 +44,12 @@
                 </dd>
             </div>
         </dl>
+        <router-link
+            v-if="link"
+            class="task-history-link"
+            :to="{ name: 'report-history', query: { taskId: task.id } }"
+            >报告历史</router-link
+        >
     </article>
 </template>
 
@@ -108,6 +114,14 @@ a:hover {
     color: var(--scova-primary);
     text-decoration: underline;
     text-underline-offset: 0.2em;
+}
+.task-history-link {
+    display: inline-flex;
+    align-items: center;
+    min-block-size: 2.75rem;
+    max-inline-size: 100%;
+    margin-block-start: 1rem;
+    color: var(--scova-primary);
 }
 a:focus-visible,
 button:focus-visible {
