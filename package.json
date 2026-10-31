@@ -57,6 +57,8 @@
     },
     "devDependencies": {
         "@playwright/test": "catalog:",
+        "@scova/models": "workspace:*",
+        "@types/node": "catalog:",
         "@types/pg": "catalog:",
         "vite-plus": "catalog:"
     },

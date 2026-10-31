@@ -1,5 +1,5 @@
 {
     "extends": "../../tsconfig.json",
-    "compilerOptions": { "strict": true },
+    "compilerOptions": { "strict": true, "types": ["node"] },
     "include": ["**/*.ts"]
 }

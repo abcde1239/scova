@@ -157,6 +157,17 @@
             "enabled": false
         },
         {
+            "id": "web-environment-browser",
+            "workspace": "web-shell-e2e",
+            "kind": "test",
+            "argv": ["vp", "run", "test:e2e", "tests/e2e/environment.spec.ts"],
+            "covers": ["web-shell-e2e", "apps-server", "apps-worker", "packages-db"],
+            "timeoutMs": 1800000,
+            "cwd": ".",
+            "required": false,
+            "enabled": false
+        },
+        {
             "id": "static-check",
             "workspace": "root",
             "kind": "lint",
