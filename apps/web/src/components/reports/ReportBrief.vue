@@ -71,6 +71,7 @@
             <h3 id="summary-title">简报概述</h3>
             <p>{{ report.summary }}</p>
         </section>
+        <report-changes :report="report" />
         <section
             v-for="section in sections"
             :key="section.kind"
@@ -100,6 +101,7 @@
 import { computed } from 'vue';
 import type { Report } from '@scova/models';
 import EvidenceCitation from '@/components/reports/EvidenceCitation.vue';
+import ReportChanges from '@/components/reports/ReportChanges.vue';
 import { claimEvidence, reportIntegrity, reportSections } from '@/composables/useReport';
 import { useReadingTypography } from '@/composables/useReadingTypography';
 const props = defineProps<{ report: Report }>();
