@@ -4,6 +4,8 @@ import {
     TaskDetailResponseSchema,
     RunListResponseSchema,
     UuidSchema,
+    CreateTaskInputSchema,
+    type CreateTaskInput,
     type PageQuery,
     type TaskListResponse,
     type TaskDetailResponse,
@@ -26,6 +28,16 @@ export const tasksEndpoint = defineApiEndpoint<{ query: PageQuery; data: TaskLis
     path: '/tasks',
     inputValidators: { query: modelValidator(PageQuerySchema) },
     validator: modelValidator(TaskListResponseSchema),
+});
+
+export const createTaskEndpoint = defineApiEndpoint<{
+    body: CreateTaskInput;
+    data: TaskDetailResponse;
+}>({
+    method: 'POST',
+    path: '/tasks',
+    inputValidators: { body: modelValidator(CreateTaskInputSchema) },
+    validator: modelValidator(TaskDetailResponseSchema),
 });
 
 export const taskEndpoint = defineApiEndpoint<{

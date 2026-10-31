@@ -3,6 +3,12 @@ const component = () => import('@/views/TaskCenterView.vue');
 export default [
     { name: 'tasks', path: '/tasks', component, meta: { title: '任务', section: 'tasks' } },
     {
+        name: 'task-create',
+        path: '/tasks/new',
+        component: () => import('@/views/CreateTaskView.vue'),
+        meta: { title: '新建任务', section: 'tasks' },
+    },
+    {
         name: 'task-summary',
         path: '/tasks/:taskId',
         component,

@@ -1,6 +1,7 @@
 <template>
     <div class="task-center">
         <template v-if="!taskId">
+            <router-link class="back-link" :to="{ name: 'task-create' }">新建任务</router-link>
             <task-filters :value="filter" @change="changeFilter" />
             <p class="scope-note">筛选已加载任务 · 时间按 {{ timezone }} 显示</p>
             <state-panel v-if="query.isPending.value" state="loading" />
