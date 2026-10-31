@@ -166,6 +166,12 @@ async function installApi(page: Page, state = newState()) {
             return route.fulfill({ status: 404, json: failure() });
         }
         if (path === '/api/v1/me') return route.fulfill({ json: account(state.owner) });
+        if (new URL(page.url()).pathname === `/reports/${reportId}`) {
+            if (path === `/api/v1/tasks/${taskId}/feedback`)
+                return route.fulfill({ json: { items: [] } });
+            if (path === '/api/v1/notes')
+                return route.fulfill({ json: { items: [], nextCursor: null } });
+        }
         if (path === '/api/v1/library/search') {
             const read = {
                 q: url.searchParams.get('q'),

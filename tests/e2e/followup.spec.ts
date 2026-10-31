@@ -194,6 +194,10 @@ async function installApi(page: Page, value = state()) {
         };
         value.calls.push(call);
         if (path === '/me') return route.fulfill({ json: account(value.owner) });
+        if (path === `/tasks/${value.report.taskId}/feedback` && method === 'GET')
+            return route.fulfill({ json: { items: [] } });
+        if (path === '/notes' && method === 'GET')
+            return route.fulfill({ json: { items: [], nextCursor: null } });
         if (path === '/auth/logout') return route.fulfill({ status: 204 });
         if (path === '/auth/login') {
             value.owner = 101;
@@ -394,7 +398,9 @@ for (const mode of ['demo', 'live'] as const) {
         expect(posts(value)).toHaveLength(1);
         expect(posts(value)[0]).toMatchObject({ body: '{"confirm":true}', csrf: 'followup-e2e' });
         expect(posts(value)[0]!.key).toMatch(/^[\w-]{16,128}$/);
-        expect(value.calls.filter((call) => /\/tasks\//.test(call.path))).toEqual([]);
+        expect(
+            value.calls.filter((call) => /^\/tasks\/[^/]+(?:\/config)?$/.test(call.path)),
+        ).toEqual([]);
         expect(await page.locator('.report-brief').textContent()).toBe(original);
         await expect(page.locator('.question-result')).not.toContainText('本次没有启动后续研究');
         await expect(followup(page)).toContainText('已完成');

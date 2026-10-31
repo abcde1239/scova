@@ -25,13 +25,13 @@ test('本地会话样本：直达刷新等待恢复，不闪受保护内容', as
     });
     await page.goto('/library', { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('status')).toContainText('正在恢复账号会话');
-    await expect(page.locator('.route-status')).toHaveCount(0);
+    await expect(page.locator('.library-view')).toHaveCount(0);
     release();
     await expect(page.getByRole('heading', { name: '资料库', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: '退出登录' })).toBeVisible();
     await page.reload();
     await expect(page.getByRole('heading', { name: '资料库', exact: true })).toBeVisible();
-    await expect(page.locator('.route-status')).toHaveCount(1);
+    await expect(page.locator('.library-view')).toBeVisible();
 });
 
 test('本地会话样本：401登录后回站内目标，拒绝外站目标', async ({ page }) => {
@@ -58,14 +58,14 @@ test('本地会话样本：503重试、文字放大与焦点', async ({ page }) 
     await page.setViewportSize({ width: 320, height: 844 });
     await page.goto('/library');
     await expect(page.getByRole('status')).toContainText('账号服务暂不可达');
-    await expect(page.locator('.route-status')).toHaveCount(0);
+    await expect(page.locator('.library-view')).toHaveCount(0);
     await page.evaluate(() => {
         document.documentElement.style.fontSize = '200%';
     });
     const retry = page.getByRole('button', { name: '重试', exact: true });
     await retry.focus();
     await retry.press('Enter');
-    await expect(page.locator('.route-status')).toHaveCount(1);
+    await expect(page.locator('.library-view')).toBeVisible();
     await expect(page.locator('#main-content')).toBeFocused();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
         true,

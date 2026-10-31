@@ -22,7 +22,7 @@ vp install
 vp run dev
 ```
 
-API/Worker、数据库、Redis 与搜索配置见[部署指南](deployment.md)。开发代理将 `/api/v1` 转发至本地 API；浏览器始终通过同源会话通信。缺少远程模型时草稿可手工编辑、报告问答明确提示不足；live 不自动切换为演示。
+API/Worker、数据库、Redis 与搜索配置见[部署指南](deployment.md)。`vp run dev` 仅启动 Vite；完整同源运行使用 Compose。自行配置开发代理时须同时保持 Origin、Cookie 与 CSRF 约束。缺少远程模型时草稿可手工编辑、报告问答明确提示不足；live 不自动切换为演示。
 
 ```sh
 vp check

@@ -1,10 +1,12 @@
 import { expect, test } from '@playwright/test';
 
 for (const width of [320, 390, 768, 1024, 1440, 1920]) {
-    test(`来源图片与纯文字回退：${width}`, async ({ page }, testInfo) => {
-        const requests: string[] = [];
+    test(`来源图片与纯文字回退：${width}`, async ({ page, baseURL }, testInfo) => {
+        const requests: { method: string; url: string }[] = [];
         const errors: string[] = [];
-        page.on('request', (request) => requests.push(request.url()));
+        page.on('request', (request) =>
+            requests.push({ method: request.method(), url: request.url() }),
+        );
         page.on('pageerror', (error) => errors.push(error.message));
         await page.setViewportSize({ width, height: 1000 });
         await page.goto('/__examples/source-images');
@@ -68,8 +70,14 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         await expect(replacement.locator('img')).toBeVisible();
         await replacement.getByRole('button', { name: '移除图片', exact: true }).click();
         await expect(replacement.locator('figure')).toHaveCount(0);
-        expect(requests.every((url) => new URL(url).origin === 'http://127.0.0.1:4189')).toBe(true);
-        expect(requests.some((url) => new URL(url).pathname.startsWith('/api/'))).toBe(false);
+        expect(requests.every(({ url }) => new URL(url).origin === new URL(baseURL!).origin)).toBe(
+            true,
+        );
+        expect(
+            requests
+                .filter(({ url }) => new URL(url).pathname.startsWith('/api/'))
+                .map(({ method, url }) => ({ method, path: new URL(url).pathname })),
+        ).toEqual([{ method: 'GET', path: '/api/v1/me' }]);
         expect(errors).toEqual([]);
     });
 }

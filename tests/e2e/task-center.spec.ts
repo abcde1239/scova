@@ -129,7 +129,12 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         await expect(page.getByText('本地契约样例主题', { exact: true })).toBeVisible();
         await expect(page.locator('dd').filter({ hasText: '失败' })).toContainText('2026');
         await expect(page.getByText('UTC', { exact: true })).toBeVisible();
-        expect(calls.filter((url) => url.includes('/runs'))).toHaveLength(1);
+        expect(calls.filter((url) => url.includes('/runs')).sort()).toEqual(
+            [
+                `/api/v1/tasks/${more.id}/runs?limit=1`,
+                `/api/v1/tasks/${more.id}/runs?limit=20`,
+            ].sort(),
+        );
         await page.goBack();
         await expect(page.locator('.task-card')).toHaveCount(4);
         await expect(page.getByRole('main')).toBeFocused();
@@ -166,9 +171,12 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
             page.getByRole('heading', { name: first[1]!.title, exact: true }),
         ).toBeVisible();
         expect(calls.every((url) => !url.includes('status='))).toBe(true);
-        expect(
-            calls.filter((url) => url.includes('/runs')).every((url) => url.includes('limit=1')),
-        ).toBe(true);
+        expect(calls.filter((url) => url.includes('/runs')).sort()).toEqual(
+            [
+                `/api/v1/tasks/${more.id}/runs?limit=1`,
+                `/api/v1/tasks/${more.id}/runs?limit=20`,
+            ].sort(),
+        );
         expect(errors).toEqual([]);
     });
 }
@@ -202,15 +210,23 @@ test('本地任务样本：加载、失败重试与空态', async ({ page }) => 
 
 test('本地任务样本：摘要直接打开与刷新、历史失败重试', async ({ page }, testInfo) => {
     const calls = await samples(page);
-    let attempts = 0;
+    let summaryAttempts = 0;
+    let historyAttempts = 0;
     await page.route('**/api/v1/tasks/*/runs?**', (route) => {
-        attempts++;
-        return attempts === 1
-            ? route.fulfill({
-                  status: 503,
-                  json: { code: 'SAMPLE', message: '样例失败', requestId: 'sample' },
-              })
-            : route.fulfill({ json: { items: [], nextCursor: null } });
+        const url = new URL(route.request().url());
+        if (url.searchParams.get('limit') === '1') {
+            summaryAttempts++;
+            if (summaryAttempts === 1)
+                return route.fulfill({
+                    status: 503,
+                    json: { code: 'SAMPLE', message: '样例失败', requestId: 'sample' },
+                });
+        } else if (url.searchParams.get('limit') === '20') {
+            historyAttempts++;
+        } else {
+            return route.fulfill({ status: 501, json: { message: 'Unexpected runs query' } });
+        }
+        return route.fulfill({ json: { items: [], nextCursor: null } });
     });
     await page.setViewportSize({ width: 390, height: 1000 });
     await page.goto(`/tasks/${more.id}?status=paused`);
@@ -218,7 +234,8 @@ test('本地任务样本：摘要直接打开与刷新、历史失败重试', as
     await expect(page.locator('dd').filter({ hasText: '暂不可用' })).toBeVisible();
     await page.getByRole('button', { name: '重试', exact: true }).click();
     await expect(page.getByText('尚无执行', { exact: true })).toBeVisible();
-    expect(attempts).toBe(2);
+    expect(summaryAttempts).toBe(2);
+    expect(historyAttempts).toBe(1);
     expect(calls.filter((url) => url.startsWith('/api/v1/tasks?'))).toHaveLength(0);
     await page.reload();
     await expect(page.getByText('本地契约样例主题', { exact: true })).toBeVisible();

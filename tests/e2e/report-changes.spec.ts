@@ -128,6 +128,13 @@ async function samples(context: BrowserContext) {
                 },
             });
         calls.push({ method: request.method(), path: url.pathname });
+        if (
+            url.pathname === `/api/v1/tasks/${state.report.taskId}/feedback` &&
+            request.method() === 'GET'
+        )
+            return route.fulfill({ json: { items: [] } });
+        if (url.pathname === '/api/v1/notes' && request.method() === 'GET')
+            return route.fulfill({ json: { items: [], nextCursor: null } });
         if (state.failure === 'protocol')
             return route.fulfill({ contentType: 'application/json', body: '{"broken"' });
         if (typeof state.failure === 'number')
@@ -255,7 +262,11 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
                 true,
             );
         }
-        expect(calls).toEqual([{ method: 'GET', path: `/api/v1/reports/${id(1)}` }]);
+        expect(calls).toEqual([
+            { method: 'GET', path: `/api/v1/reports/${id(1)}` },
+            { method: 'GET', path: `/api/v1/tasks/${id(3)}/feedback` },
+            { method: 'GET', path: '/api/v1/notes' },
+        ]);
         expect(external).toEqual([]);
         expect(errors).toEqual([]);
     });
@@ -397,7 +408,9 @@ for (const side of ['old', 'new']) {
         await page.clock.setFixedTime(new Date((await page.evaluate(() => Date.now())) + 31000));
         await page.goBack();
         await expect(page).toHaveURL(new RegExp(`${path}$`));
-        await expect(page.getByRole('status')).toContainText('报告证据校验未通过');
+        await expect(
+            page.locator('.report-detail > .state-panel').getByRole('status'),
+        ).toContainText('报告证据校验未通过');
         await expect(page.locator('article.report-brief, .report-changes, blockquote')).toHaveCount(
             0,
         );
@@ -432,5 +445,9 @@ test('live模式与配置、基线标识仍按真实报告展示', async ({ page
     await expect(panel(page).locator('.comparison-context dd').first()).toHaveText('真实查阅');
     await expect(panel(page).locator('.comparison-context dd').last()).toHaveText(id(5));
     await expect(page.locator('.metadata')).toContainText(id(4));
-    expect(calls).toHaveLength(1);
+    expect(calls).toEqual([
+        { method: 'GET', path: `/api/v1/reports/${id(1)}` },
+        { method: 'GET', path: `/api/v1/tasks/${id(3)}/feedback` },
+        { method: 'GET', path: '/api/v1/notes' },
+    ]);
 });

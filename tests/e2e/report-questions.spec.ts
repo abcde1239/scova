@@ -155,6 +155,10 @@ async function samples(context: BrowserContext) {
             csrf: headers['x-csrf-token'],
         });
         if (pathname === '/me') return route.fulfill({ json: account(state.switched) });
+        if (pathname === `/tasks/${state.report.taskId}/feedback` && method === 'GET')
+            return route.fulfill({ json: { items: [] } });
+        if (pathname === '/notes' && method === 'GET')
+            return route.fulfill({ json: { items: [], nextCursor: null } });
         if (pathname === '/auth/logout') return route.fulfill({ status: 204 });
         if (pathname === '/auth/login') {
             state.switched = true;

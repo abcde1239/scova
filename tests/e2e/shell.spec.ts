@@ -39,13 +39,13 @@ test('有效路径与未知路径均可刷新直达，标题、导航和焦点�
             await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
             await expect(page.getByRole('main')).toBeFocused();
             expect(new URL(page.url()).pathname + new URL(page.url()).search).toBe(url);
-            const active = page.locator('nav [aria-current="page"]');
+            const active = page.getByRole('banner').locator('nav [aria-current="page"]');
             await expect(active).toHaveCount(selected ? 1 : 0);
             if (selected) await expect(active).toHaveText(selected);
         }
     }
     await expect(page.getByText('此页面不存在。', { exact: true })).toBeVisible();
-    await expect(page.locator('nav [aria-current="page"]')).toHaveCount(0);
+    await expect(page.getByRole('banner').locator('nav [aria-current="page"]')).toHaveCount(0);
     await page.getByRole('link', { name: '返回任务', exact: true }).click();
     await expect(page).toHaveURL(/\/tasks$/);
     await expect(page.getByRole('main')).toBeFocused();

@@ -192,6 +192,8 @@ async function samples(context: BrowserContext) {
                 },
             });
         if (url.pathname === '/api/v1/me') return route.fulfill({ json: account() });
+        if (url.pathname === '/api/v1/notes' && request.method() === 'GET')
+            return route.fulfill({ json: { items: [], nextCursor: null } });
         if (url.pathname === '/api/v1/auth/logout') return route.fulfill({ status: 204 });
         if (url.pathname === '/api/v1/auth/login') {
             state.owner++;
@@ -304,6 +306,7 @@ test('saved effects: all nine states and identical duplicates preserve array ord
         ['GET', '/api/v1/me'],
         ['GET', `/api/v1/reports/${id(1)}`],
         ['GET', `/api/v1/tasks/${id(2)}/feedback`],
+        ['GET', '/api/v1/notes'],
     ]);
     await expect(panel(page).locator('button, img, input, select')).toHaveCount(0);
 });
@@ -490,7 +493,9 @@ for (const fault of [403, 404, 409, 503, 'protocol', 'invalid'] as const) {
         await records(page).first().locator('summary').click();
         state.failure = fault;
         await staleBack(page);
-        await expect(page.getByRole('status')).toContainText(
+        await expect(
+            page.locator('.report-detail > .state-panel').getByRole('status'),
+        ).toContainText(
             fault === 403
                 ? '无权'
                 : fault === 404
