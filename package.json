@@ -38,6 +38,8 @@
         "test:sse": "vp test --config tests/sse.vite.config.ts",
         "test:questions": "vp test --config tests/report-questions.vite.config.ts",
         "test:e2e:backend": "vp test --config tests/acceptance.vite.config.ts",
+        "test:e2e": "playwright test --config tests/e2e/playwright.config.ts",
+        "test:e2e:install": "playwright install chromium",
         "operations": "node scripts/operations.mjs",
         "test:operations": "vp test --config tests/operations.vite.config.ts",
         "test:deployment": "node scripts/smoke-deployment.mjs"
@@ -54,6 +56,7 @@
         "pg": "catalog:"
     },
     "devDependencies": {
+        "@playwright/test": "catalog:",
         "@types/pg": "catalog:",
         "vite-plus": "catalog:"
     },
