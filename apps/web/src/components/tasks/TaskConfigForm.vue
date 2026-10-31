@@ -150,39 +150,16 @@
             </div>
             <p>预算包含重试；填写正整数，服务端另有部署上限。</p>
         </details>
-        <fieldset :disabled="locked" class="schedule-fields">
-            <legend>执行计划</legend>
-            <template v-if="editor">
-                <p>{{ editor.scheduleDescription.value }}</p>
-                <p>保存保留原执行计划；本页不修改计划频率、星期或执行时刻。</p>
-            </template>
-            <template
-                v-else-if="
-                    creator?.parsedConfig.value &&
-                    creator.parsedConfig.value.schedule.frequency !== 'manual'
-                "
-            >
-                <p>
-                    解析建议：{{
-                        taskScheduleDescription(creator.parsedConfig.value)
-                    }}。只有确认保存后才会安排周期执行。
-                </p>
-                <task-config-field
-                    v-model:checked="creator.keepSuggestedSchedule.value"
-                    label="保留解析建议的周期计划"
-                    kind="checkbox"
-                    :disabled="locked"
-                />
-                <p v-if="!creator.keepSuggestedSchedule.value">本次保存将明确改为仅手动执行。</p>
-            </template>
-            <p v-else>仅手动执行</p>
-            <task-config-field
-                v-model="task.draft.timezone"
-                label="任务时区（IANA）"
-                :error="task.fields.value.timezone"
-                :disabled="locked"
-            />
-        </fieldset>
+        <schedule-fields
+            v-model:frequency="task.draft.scheduleFrequency"
+            v-model:timezone="task.draft.timezone"
+            v-model:local-time="task.draft.scheduleLocalTime"
+            v-model:weekday="task.draft.scheduleWeekday"
+            :errors="task.fields.value"
+            :disabled="locked"
+            :saved="editor?.serverPlan.value"
+            :dirty="task.dirty.value"
+        />
         <fieldset :disabled="locked">
             <legend>站内提醒</legend>
             <task-config-field
@@ -246,13 +223,13 @@ import type { TaskDetailResponse } from '@scova/models';
 import {
     createTaskController,
     editTaskController,
-    taskScheduleDescription,
     budgetFields,
     type TaskDraftField,
 } from '@/composables/useCreateTask';
 import { useSessionLifecycle } from '@/composables/useSessionQuery';
 import TaskConfigField from '@/components/tasks/TaskConfigField.vue';
 import ActionButton from '@/components/common/ActionButton.vue';
+import ScheduleFields from '@/components/tasks/ScheduleFields.vue';
 import type { ApiResponse } from '@/api/client';
 const props = defineProps<{ initialResponse?: ApiResponse<TaskDetailResponse> }>();
 import NaturalLanguageDraft from '@/components/tasks/NaturalLanguageDraft.vue';
