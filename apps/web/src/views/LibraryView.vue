@@ -8,87 +8,122 @@
         tabindex="-1"
     >
         <header>
-            <nav aria-label="资料库分区"><span aria-current="page">收藏</span></nav>
+            <nav aria-label="资料库分区" class="library-tabs scova-interface">
+                <button
+                    :aria-current="section === 'bookmarks' ? 'page' : undefined"
+                    @click="showBookmarks"
+                >
+                    收藏
+                </button>
+                <button
+                    :aria-current="section === 'notes' ? 'page' : undefined"
+                    @click="showNotes()"
+                >
+                    笔记
+                </button>
+            </nav>
         </header>
-        <p>保存报告中已有的来源；取消收藏不会删除来源、报告或引用证据。</p>
-        <div class="library-toolbar scova-interface">
-            <action-button :disabled="pending || query.isFetching.value" @click="reload"
-                ><app-icon name="retry" />重新读取本页</action-button
-            >
-            <action-button :disabled="pending || query.isFetching.value" @click="first"
-                ><app-icon name="retry" />从第一页重新读取</action-button
-            >
+        <div v-show="section === 'bookmarks'" class="bookmark-content">
+            <p>保存报告中已有的来源；取消收藏不会删除来源、报告或引用证据。</p>
+            <div class="library-toolbar scova-interface">
+                <action-button :disabled="pending || query.isFetching.value" @click="reload"
+                    ><app-icon name="retry" />重新读取本页</action-button
+                >
+                <action-button :disabled="pending || query.isFetching.value" @click="first"
+                    ><app-icon name="retry" />从第一页重新读取</action-button
+                >
+            </div>
+            <p v-if="query.isPending.value" role="status">正在读取收藏。</p>
+            <p v-if="notice" role="status">{{ notice }}</p>
+            <p v-if="query.isError.value" role="alert">
+                {{ bookmarkReadError(query.error.value) }}
+            </p>
+            <p v-if="query.isError.value && items.length">
+                以下保留上次读取值，请重新读取以确认当前状态。
+            </p>
+            <p v-if="query.isSuccess.value && !items.length">
+                这一页没有收藏。可以从报告选择来源收藏。
+            </p>
+            <p v-if="paginationError" role="alert">{{ paginationError }}</p>
+            <ul class="bookmark-list">
+                <li v-for="item in items" :key="item.id" class="bookmark-entry">
+                    <h2 class="scova-content-title">
+                        {{ item.source.title ?? item.source.canonicalUrl }}
+                    </h2>
+                    <p v-if="item.source.title" class="scova-interface">
+                        {{ item.source.canonicalUrl }}
+                    </p>
+                    <dl class="scova-interface">
+                        <div>
+                            <dt>收藏时间</dt>
+                            <dd>
+                                <time :datetime="item.createdAt">{{ item.createdAt }}</time>
+                            </dd>
+                        </div>
+                        <div>
+                            <dt>最近查阅</dt>
+                            <dd>
+                                <time
+                                    v-if="item.source.lastObservedAt"
+                                    :datetime="item.source.lastObservedAt"
+                                    >{{ item.source.lastObservedAt }}</time
+                                ><span v-else>未记录</span>
+                            </dd>
+                        </div>
+                    </dl>
+                    <a
+                        v-if="sourceLink(item.source.canonicalUrl)"
+                        :href="sourceLink(item.source.canonicalUrl)"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="scova-interface"
+                        ><app-icon name="source" />打开原始来源（新窗口）</a
+                    >
+                    <router-link
+                        v-if="origin?.sourceId === item.sourceId.toLowerCase()"
+                        :to="origin.path"
+                        class="scova-interface"
+                        >返回刚才的报告</router-link
+                    >
+                    <bookmark-action
+                        :key="`${accountId}-${item.id}`"
+                        :source-id="item.sourceId"
+                        :bookmark="item"
+                        @started="bookmarkFocus = true"
+                        @settled="bookmarkSettled"
+                    />
+                    <action-button
+                        @click="
+                            showNotes({
+                                kind: 'source',
+                                id: item.sourceId,
+                                label: item.source.title ?? item.source.canonicalUrl,
+                            })
+                        "
+                        >为此来源记笔记</action-button
+                    >
+                </li>
+            </ul>
+            <nav class="pagination scova-interface" aria-label="收藏分页">
+                <action-button v-if="previous.length" :disabled="!canPage" @click="turn('back')"
+                    >上一页</action-button
+                >
+                <action-button
+                    v-if="query.data.value?.data.nextCursor"
+                    :disabled="!canPage || !!paginationError"
+                    @click="turn('next')"
+                    >下一页</action-button
+                >
+            </nav>
         </div>
-        <p v-if="query.isPending.value" role="status">正在读取收藏。</p>
-        <p v-if="notice" role="status">{{ notice }}</p>
-        <p v-if="query.isError.value" role="alert">{{ bookmarkReadError(query.error.value) }}</p>
-        <p v-if="query.isError.value && items.length">
-            以下保留上次读取值，请重新读取以确认当前状态。
-        </p>
-        <p v-if="query.isSuccess.value && !items.length">
-            这一页没有收藏。可以从报告选择来源收藏。
-        </p>
-        <p v-if="paginationError" role="alert">{{ paginationError }}</p>
-        <ul class="bookmark-list">
-            <li v-for="item in items" :key="item.id" class="bookmark-entry">
-                <h2 class="scova-content-title">
-                    {{ item.source.title ?? item.source.canonicalUrl }}
-                </h2>
-                <p v-if="item.source.title" class="scova-interface">
-                    {{ item.source.canonicalUrl }}
-                </p>
-                <dl class="scova-interface">
-                    <div>
-                        <dt>收藏时间</dt>
-                        <dd>
-                            <time :datetime="item.createdAt">{{ item.createdAt }}</time>
-                        </dd>
-                    </div>
-                    <div>
-                        <dt>最近查阅</dt>
-                        <dd>
-                            <time
-                                v-if="item.source.lastObservedAt"
-                                :datetime="item.source.lastObservedAt"
-                                >{{ item.source.lastObservedAt }}</time
-                            ><span v-else>未记录</span>
-                        </dd>
-                    </div>
-                </dl>
-                <a
-                    v-if="sourceLink(item.source.canonicalUrl)"
-                    :href="sourceLink(item.source.canonicalUrl)"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="scova-interface"
-                    ><app-icon name="source" />打开原始来源（新窗口）</a
-                >
-                <router-link
-                    v-if="origin?.sourceId === item.sourceId.toLowerCase()"
-                    :to="origin.path"
-                    class="scova-interface"
-                    >返回刚才的报告</router-link
-                >
-                <bookmark-action
-                    :key="`${accountId}-${item.id}`"
-                    :source-id="item.sourceId"
-                    :bookmark="item"
-                    @started="bookmarkFocus = true"
-                    @settled="bookmarkSettled"
-                />
-            </li>
-        </ul>
-        <nav class="pagination scova-interface" aria-label="收藏分页">
-            <action-button v-if="previous.length" :disabled="!canPage" @click="turn('back')"
-                >上一页</action-button
-            >
-            <action-button
-                v-if="query.data.value?.data.nextCursor"
-                :disabled="!canPage || !!paginationError"
-                @click="turn('next')"
-                >下一页</action-button
-            >
-        </nav>
+        <notes-panel
+            v-show="section === 'notes'"
+            ref="notes"
+            :targets="noteTargets"
+            :initial-target="noteTarget"
+            :active="section === 'notes'"
+            allow-all
+        />
     </section>
 </template>
 
@@ -102,11 +137,17 @@ import { bookmarkReadError, readBookmarkOrigin, useBookmarks } from '@/composabl
 import { useReadingTypography } from '@/composables/useReadingTypography';
 import { useSessionLifecycle } from '@/composables/useSessionQuery';
 import { sourceLink } from '@/composables/useReport';
+import NotesPanel from '@/components/library/NotesPanel.vue';
+import type { NoteTarget } from '@/api/notes';
+import { noteTargetKey } from '@/utils/notes';
 const lifecycle = useSessionLifecycle();
 const root = ref<HTMLElement>();
 const route = useRoute();
 const accountId = computed(() => lifecycle.session.user?.id);
 const { reading } = useReadingTypography();
+const section = ref<'bookmarks' | 'notes'>('bookmarks');
+const notes = ref<InstanceType<typeof NotesPanel>>();
+const noteTarget = ref<NoteTarget>();
 const {
     query,
     items,
@@ -120,6 +161,34 @@ const {
     first,
     reload,
 } = useBookmarks(lifecycle);
+const noteTargets = computed(() => [
+    ...new Map(
+        [
+            ...items.value.map((item) => ({
+                kind: 'source' as const,
+                id: item.sourceId,
+                label: item.source.title ?? item.source.canonicalUrl,
+            })),
+            ...(noteTarget.value ? [noteTarget.value] : []),
+        ].map((item) => [noteTargetKey(item), item]),
+    ).values(),
+]);
+function showBookmarks() {
+    if (section.value === 'notes' && !notes.value?.leave()) return;
+    section.value = 'bookmarks';
+}
+function showNotes(target?: NoteTarget) {
+    if (target && !notes.value?.selectTarget(target)) return;
+    if (target) noteTarget.value = target;
+    section.value = 'notes';
+}
+watch(
+    () => lifecycle.session.epoch,
+    () => {
+        noteTarget.value = undefined;
+        section.value = 'bookmarks';
+    },
+);
 const origin = computed(() => {
     void route.fullPath;
     return readBookmarkOrigin(lifecycle, window.history.state?.bookmarkOrigin);
@@ -158,6 +227,7 @@ watch(
 
 <style scoped>
 .library-view,
+.bookmark-content,
 header,
 .bookmark-entry {
     display: grid;
@@ -180,9 +250,21 @@ header nav {
     display: flex;
     border-block-end: 0.0625rem solid var(--scova-border);
 }
-header nav span {
-    padding-block: 0.75rem;
+header nav button {
+    min-block-size: 2.75rem;
+    padding: 0.75rem 1rem;
+    font: inherit;
+    background: transparent;
+    color: var(--scova-text);
+    border: 0;
+    cursor: pointer;
+}
+header nav button[aria-current='page'] {
     border-block-end: 0.1875rem solid var(--scova-primary);
+}
+header nav button:focus-visible {
+    outline: 0.125rem solid var(--scova-primary);
+    outline-offset: 0.25rem;
 }
 .bookmark-list {
     list-style: none;

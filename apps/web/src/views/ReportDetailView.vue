@@ -6,6 +6,13 @@
             >
         </nav>
         <report-brief v-if="report" :key="`${accountId}-${report.id}`" :report="report" />
+        <notes-panel
+            v-if="notesSession === notesIdentity"
+            :key="`notes-${notesIdentity}`"
+            :targets="noteTargets"
+            :initial-target="{ kind: 'report', id: String(route.params.reportId) }"
+            :available="!!report"
+        />
         <section
             v-if="report"
             class="report-bookmarks scova-interface"
@@ -43,6 +50,7 @@ import { RouterLink, useRoute } from 'vue-router';
 import AppIcon from '@/components/common/AppIcon.vue';
 import ReportBrief from '@/components/reports/ReportBrief.vue';
 import BookmarkAction from '@/components/library/BookmarkAction.vue';
+import NotesPanel from '@/components/library/NotesPanel.vue';
 import { bookmarksPending, reportBookmarkSources } from '@/composables/useBookmarks';
 import StatePanel from '@/components/common/StatePanel.vue';
 import { useReport } from '@/composables/useReport';
@@ -51,9 +59,37 @@ const route = useRoute();
 const lifecycle = useSessionLifecycle();
 const accountId = computed(() => lifecycle.session.user?.id);
 const { query, report, valid, error } = useReport(() => route.params.reportId, lifecycle);
+const notesIdentity = computed(
+    () => `${lifecycle.session.epoch}:${accountId.value}:${route.params.reportId}`,
+);
+const notesSession = ref('');
+watch(
+    () => report.value,
+    (value) => {
+        if (value && lifecycle.session.user && valid.value)
+            notesSession.value = notesIdentity.value;
+    },
+    { immediate: true, flush: 'sync' },
+);
 const selectedSource = ref('');
 const bookmarkBusy = computed(() => bookmarksPending(lifecycle));
 const sources = computed(() => (report.value ? reportBookmarkSources(report.value) : []));
+const noteTargets = computed(() =>
+    report.value
+        ? [
+              {
+                  kind: 'report' as const,
+                  id: report.value.id,
+                  label: `本报告：${report.value.title}`,
+              },
+              ...sources.value.map((source) => ({
+                  kind: 'source' as const,
+                  id: source.id,
+                  label: source.title,
+              })),
+          ]
+        : [],
+);
 const chosenSource = computed(() =>
     sources.value.find((source) => source.id === selectedSource.value),
 );
