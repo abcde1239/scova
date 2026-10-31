@@ -20,6 +20,10 @@ RUN VP_GIT_HOOKS=0 vp install --frozen-lockfile
 COPY . .
 RUN vp run -r build
 
+FROM nginxinc/nginx-unprivileged:1.28-alpine AS web
+COPY --from=build /app/apps/web/dist /usr/share/nginx/html
+COPY ops/proxy/default.conf /etc/nginx/conf.d/default.conf
+
 FROM oven/bun:1.3.4-debian@sha256:9d9504d425a8b85c5cf162c1c354f9403e15583e0f3e1de3750ce3723d3e89ac AS runtime
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
 # The pinned Bun Debian image uses Trixie, which ships the required PostgreSQL 17 client.

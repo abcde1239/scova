@@ -43,6 +43,12 @@ for (const name of [project, restoreProject]) {
     await writeFile(
         path,
         JSON.stringify({
+            services: Object.fromEntries(
+                ['api', 'worker', 'migrate', 'operations', 'proxy'].map((service) => [
+                    service,
+                    { image: `${project}-${service === 'proxy' ? 'web' : 'backend'}:test` },
+                ]),
+            ),
             volumes: {
                 backups: {
                     name: `${project}-backups`,
@@ -104,6 +110,54 @@ async function account() {
     const cookie = login.headers.get('set-cookie');
     assert(cookie?.includes('HttpOnly') && cookie.includes('Secure'));
     return { cookie: cookie.split(';')[0], csrf: (await login.json()).csrfToken };
+}
+async function webRouting() {
+    let index;
+    for (const path of ['/', '/tasks', '/reports/00000000-0000-4000-8000-000000000001']) {
+        const response = await request(path);
+        assert(response.headers.get('content-type')?.includes('text/html'));
+        assert.equal(response.headers.get('cache-control'), 'no-cache');
+        const html = await response.text();
+        assert(html.includes('<div id="app"></div>'));
+        if (index === undefined) index = html;
+        else assert.equal(html, index, `${path} must return the same SPA entry`);
+    }
+    const assets = [...index.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)].map(
+        (match) => match[1],
+    );
+    assert(assets.some((path) => path.endsWith('.js')));
+    assert(assets.some((path) => path.endsWith('.css')));
+    for (const path of assets) {
+        const response = await request(path);
+        assert.equal(response.headers.get('cache-control'), 'public, max-age=31536000, immutable');
+        assert(!response.headers.get('content-type')?.includes('text/html'));
+        assert((await response.arrayBuffer()).byteLength > 0);
+    }
+    for (const path of ['/assets/missing-file.js', '/assets/missing-file', '/missing-file.css']) {
+        const response = await fetch(origin + path, { signal: AbortSignal.timeout(5000) });
+        assert.equal(response.status, 404, path);
+        assert(!(await response.text()).includes('<div id="app"></div>'), path);
+    }
+    for (const path of ['/api', '/api/v1/unknown', '/api/v1/missing.json']) {
+        const response = await fetch(origin + path, { signal: AbortSignal.timeout(5000) });
+        assert.equal(response.status, 404, path);
+        assert(response.headers.get('content-type')?.includes('application/json'), path);
+        assert(!response.headers.get('cache-control')?.includes('immutable'));
+        assert.equal((await response.json()).code, 'NOT_FOUND');
+    }
+    assert((await (await request('/health')).json()).status === 'ok');
+    assert((await (await request('/swagger')).text()).includes('html'));
+    assert((await (await request('/swagger/json')).json()).openapi);
+    console.log(
+        JSON.stringify({
+            check: 'web-routing',
+            spaRoutes: 3,
+            staticAssets: assets.length,
+            missingAssets: 3,
+            unknownApi: 3,
+            metadata: ['health', 'swagger', 'swagger/json'],
+        }),
+    );
 }
 const streams = new Set();
 async function openEvents(runId, auth, lastEventId, controller = new AbortController()) {
@@ -256,7 +310,7 @@ const config = {
 };
 try {
     console.log('构建隔离项目并等待迁移、API、Worker、代理健康。');
-    await compose(project, ['build', 'api']);
+    await compose(project, ['build', 'api', 'proxy']);
     await compose(project, [
         'up',
         '-d',
@@ -268,6 +322,7 @@ try {
         'proxy',
     ]);
     await request('/health');
+    await webRouting();
     session = await account();
     const other = await account();
     const task = (await (await request('/api/v1/tasks', 'POST', { config })).json()).task;
