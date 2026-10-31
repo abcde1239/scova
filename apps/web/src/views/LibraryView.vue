@@ -8,7 +8,10 @@
         tabindex="-1"
     >
         <header>
-            <nav aria-label="资料库分区"><span aria-current="page">收藏</span></nav>
+            <nav aria-label="资料库分区">
+                <span aria-current="page">收藏</span
+                ><router-link to="/library/search">搜索已存资料</router-link>
+            </nav>
         </header>
         <p>保存报告中已有的来源；取消收藏不会删除来源、报告或引用证据。</p>
         <div class="library-toolbar scova-interface">
@@ -203,6 +206,9 @@ h2 {
 }
 header nav {
     display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
     border-block-end: 0.0625rem solid var(--scova-border);
 }
 header nav span {
