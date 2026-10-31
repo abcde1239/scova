@@ -2,7 +2,7 @@
 
 任务驱动的 AI 信息查阅与研究工作台。围绕主题搜索、阅读和查证资料，生成带引用的报告，并持续追踪新增与变化。
 
-项目开发中：已实现账号会话、用户隔离、任务配置、执行控制、搜索/模型/安全阅读适配器、有预算的持久化 Agent、证据报告交付和报告/收件箱 API，以及连续运行的基线与变化比较。Vue 工作台外壳已接入同源 Compose 部署，业务页面仍在开发。
+项目开发中：Vue 工作台已接入账号、任务创建与编辑、执行进度与控制、简报引用、收件箱/通知及资料库等业务。后端提供有预算的持久化 Agent、搜索/模型/安全阅读、证据交付和连续运行比较，同源 Compose 可部署 Web/API/Worker。生产四种报告视图的统一切换和完整浏览器发布门禁仍在推进，见[工作台说明](docs/public/guides/web-workbench.md)。
 
 ## 技术与目录
 
@@ -58,6 +58,6 @@ vp run test:integration  # 需专用 PostgreSQL / Redis
 - [本机 SearxNG 部署](docs/public/guides/search.md) · [搜索、模型与安全阅读](packages/connectors/README.md)
 - [Swagger / OpenAPI JSON](swagger.json)（`vp run api:openapi` 重新生成）
 - [交付计划](docs/public/guides/delivery-plan.md) · [两次执行验收](docs/public/examples/two-run-scenarios.md)
-- [前端与通信约定](docs/public/reference/frontend-conventions.md)
+- [Web 工作台](docs/public/guides/web-workbench.md) · [前端与通信约定](docs/public/reference/frontend-conventions.md) · [浏览器测试](docs/public/reference/browser-testing.md)
 
 单机 Web/API 启动、迁移、备份恢复与数据保留见 [部署指南](docs/public/guides/deployment.md)。

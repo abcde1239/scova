@@ -1,6 +1,6 @@
 # 单机 Web 部署与维护
 
-当前提供 Vue 工作台外壳、API、Worker、同源静态资源/反向代理、PostgreSQL 17 和 Redis 7 的 Docker Compose 部署。工作台路由可刷新访问；登录、任务与报告等业务页面尚待接入，业务验收仍使用真实 API。Web 镜像只包含构建后的静态资源与 Nginx 配置，浏览器不需要 Node/Bun。后端主运行时为 Bun 1.3.4，后端镜像内安装 Node 24.22.1、Vite+ 1.4.0 和 PostgreSQL 17 客户端。这是单机 Web 部署，不是桌面端或本地一体化应用。
+当前提供 Vue 工作台、API、Worker、同源静态资源/反向代理、PostgreSQL 17 和 Redis 7 的 Docker Compose 部署。登录、任务、执行、简报及资料库等页面已接入，路由可刷新访问；功能与剩余范围见[工作台说明](web-workbench.md)。Web 镜像只包含构建后的静态资源与 Nginx 配置，浏览器不需要 Node/Bun。后端主运行时为 Bun 1.3.4，后端镜像内安装 Node 24.22.1、Vite+ 1.4.0 和 PostgreSQL 17 客户端。这是单机 Web 部署，不是桌面端或本地一体化应用。
 
 ## 启动
 
