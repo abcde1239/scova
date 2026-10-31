@@ -14,4 +14,4 @@
 
 测试结束及启动/中途失败均在 `finally` 中关闭浏览器上下文，并对本次项目执行 `down -v --remove-orphans`，断言自身容器、卷和网络已清空；仅移除本次生成的镜像标签。启动失败和中途失败都有持久化 spec。强制杀死进程或关闭 Docker 不能保证执行清理，可从失败附件取得项目名后，仅针对该项目检查和回收资源，不清理其他项目或用户卷。
 
-后续全栈领域 spec 使用 `SCOVA_E2E_FULL_STACK=1` 选择配置，再传具体 spec 路径；默认入口继续只运行壳测试。Harness 保留 `web-shell-e2e` 范围，分别登记默认关闭且非必需的 `web-shell-browser`、`web-environment-browser`，全栈任务只登记当前实际涉及的后端与数据库范围。当前 `ready` 不运行浏览器；CI 与门禁接入由后续专项交付。生产代理的 SPA 回退仍需部署检查，本地 preview 的刷新成功不能代替部署验收。
+后续全栈领域 spec 使用 `SCOVA_E2E_FULL_STACK=1` 选择配置，再传具体 spec 路径；默认入口继续只运行壳测试。Harness 在非必需的 `web-shell-e2e` 范围登记默认关闭的 `web-shell-browser`、`web-environment-browser`。全栈浏览器实际连接后端与数据库，但这些可选任务不计入后端必需门禁，后端已有集成任务继续执行。当前 `ready` 不运行浏览器；CI 与门禁接入由后续专项交付。生产代理的 SPA 回退仍需部署检查，本地 preview 的刷新成功不能代替部署验收。
