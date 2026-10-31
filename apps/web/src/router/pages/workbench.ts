@@ -30,8 +30,8 @@ export default [
     {
         path: '/account',
         name: 'account',
-        component: statusView,
-        meta: { title: '账号', section: 'account', navigation: 'tool', pending: true },
+        component: () => import('@/views/SettingsView.vue'),
+        meta: { title: '账号', section: 'account', navigation: 'tool' },
     },
     {
         path: '/account/appearance',

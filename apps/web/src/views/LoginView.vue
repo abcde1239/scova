@@ -1,12 +1,14 @@
 <template>
-    <login-form @success="router.replace('/tasks')" />
+    <login-form @success="router.replace(sessionReturnTarget(router, route.query.redirect))" />
     <router-link class="register-link" to="/register">注册账号</router-link>
 </template>
 
 <script setup lang="ts">
-import { RouterLink, useRouter } from 'vue-router';
+import { RouterLink, useRoute, useRouter } from 'vue-router';
 import LoginForm from '@/components/auth/LoginForm.vue';
+import { sessionReturnTarget } from '@/composables/useSession';
 const router = useRouter();
+const route = useRoute();
 </script>
 
 <style scoped>

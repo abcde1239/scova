@@ -8,8 +8,8 @@ if (fullStack) process.env.SCOVA_E2E_FULL_STACK = '1';
 
 export default defineConfig({
     testDir: '.',
-    testMatch: fullStack ? '**/*.spec.ts' : '**/shell.spec.ts',
-    testIgnore: fullStack ? '**/shell.spec.ts' : undefined,
+    testMatch: '**/*.spec.ts',
+    testIgnore: fullStack ? '**/shell.spec.ts' : '**/environment.spec.ts',
     timeout: fullStack ? 600_000 : 30_000,
     outputDir: '../../artifacts/e2e/results',
     fullyParallel: false,
@@ -26,8 +26,7 @@ export default defineConfig({
     webServer: fullStack
         ? undefined
         : {
-              command:
-                  'vp run web#build:e2e && vp run web#preview -- --host 127.0.0.1 --port 4189 --strictPort',
+              command: 'vp run web#build:e2e && vpx tests/e2e/serve.mjs',
               cwd: '../..',
               url: 'http://127.0.0.1:4189/tasks',
               reuseExistingServer: false,

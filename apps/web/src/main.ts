@@ -5,14 +5,26 @@ import App from '@/App.vue';
 import { createSessionLifecycle, sessionLifecycleKey } from '@/api/session';
 import '@/style.css';
 import { createWorkbenchRouter } from '@/router';
+import {
+    createSessionController,
+    installSessionRouting,
+    sessionControllerKey,
+} from '@/composables/useSession';
 
 const router = createWorkbenchRouter();
 const lifecycle = createSessionLifecycle();
+const session = createSessionController(lifecycle);
+const disposeRouting = installSessionRouting(router, session);
 const app = createApp(App)
     .use(lifecycle.pinia)
     .use(VueQueryPlugin, { queryClient: lifecycle.queryClient })
     .provide(sessionLifecycleKey, lifecycle)
+    .provide(sessionControllerKey, session)
     .use(router);
-void router.isReady().then(() => app.mount('#app'));
+app.mount('#app');
 
-if (import.meta.hot) import.meta.hot.dispose(() => lifecycle.dispose());
+if (import.meta.hot)
+    import.meta.hot.dispose(() => {
+        disposeRouting();
+        lifecycle.dispose();
+    });
