@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="zh-CN">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>报告清单组件样本 · 仅测试</title>
+        <style>
+            .fixture-controls {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: 1rem;
+                padding: 1.25rem;
+                font-family: system-ui, sans-serif;
+            }
+            .fixture-controls h1 {
+                flex-basis: 100%;
+                margin: 0;
+                font-size: 1.5rem;
+            }
+            .fixture-controls label {
+                display: grid;
+                gap: 0.5rem;
+            }
+            .fixture-controls select {
+                min-block-size: 2.75rem;
+                font: inherit;
+                cursor: pointer;
+            }
+            .fixture-report {
+                max-inline-size: 68.75rem;
+                margin-inline: auto;
+                padding: 2rem clamp(1rem, 5vw, 3rem);
+                min-inline-size: 0;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="fixture-controls" aria-label="仅测试的样本控制">
+            <h1>报告清单组件样本（仅测试）</h1>
+            <label
+                >样本布局<select id="sample-view">
+                    <option value="topic-list">主题清单</option>
+                    <option value="brief">简报</option>
+                </select></label
+            >
+            <label
+                >样本完整性<select id="sample-coverage">
+                    <option value="partial">部分交付</option>
+                    <option value="complete">完整交付</option>
+                </select></label
+            >
+            <label
+                >样本模式<select id="sample-mode">
+                    <option value="demo">演示</option>
+                    <option value="live">真实查阅模式样本</option>
+                </select></label
+            >
+            <label
+                >测试明暗<select id="sample-scheme">
+                    <option value="light">浅色</option>
+                    <option value="dark">深色</option>
+                </select></label
+            >
+            <label
+                >测试主色<select id="sample-accent">
+                    <option value="blue">蓝色</option>
+                    <option value="pine">松绿</option>
+                    <option value="iris">鸢尾</option>
+                    <option value="amber">琥珀</option>
+                </select></label
+            >
+            <label
+                >阅读字体<select id="sample-family">
+                    <option value="serif">衬线</option>
+                    <option value="sans">无衬线</option>
+                </select></label
+            >
+        </div>
+        <div id="fixture"></div>
+        <script type="module">
+            import { createApp, h } from 'vue';
+            import { createPinia } from 'pinia';
+            import { ReportSchema, parseContract } from '@scova/models';
+            import AppThemeProvider from '/src/theme/AppThemeProvider.vue';
+            import ReportBrief from '/src/components/reports/ReportBrief.vue';
+            import TopicListReport from '/src/components/reports/TopicListReport.vue';
+            import { useAppearanceStore } from '/src/store/appearance';
+            import { useReadingStore } from '/src/store/reading';
+            import '/src/style.css';
+
+            const id = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+            const time = '2026-10-31T01:00:00Z';
+            const evidence = (n, quote) => ({
+                id: id(n),
+                sourceId: id(n + 100),
+                snapshotId: id(n + 200),
+                title: `招生来源 ${n}`,
+                url: `https://example.test/${'long-source-path-'.repeat(12)}${n}`,
+                quote,
+                location: '已保存原文第 2 段',
+                observedAt: time,
+            });
+            const sample = {
+                id: id(1),
+                taskId: id(2),
+                runId: id(3),
+                taskVersionId: id(4),
+                baselineRunId: null,
+                schemaVersion: 1,
+                title: '招生资料的申请期限、费用与尚待核验的跨学期安排：同一报告的完整结论清单',
+                summary:
+                    '这是一份受控组件样本，按原始结论类型阅读，部分查阅存在缺口，不能据此认定没有重要变化。',
+                format: 'brief',
+                mode: 'demo',
+                outcome: 'inconclusive',
+                coverage: {
+                    completeness: 'partial',
+                    searchedQueries: ['招生截止日期与申请费用', '跨学期安排核验'],
+                    gaps: ['一个来源未能完成查阅'],
+                    exhausted: ['pages'],
+                },
+                limitations: ['仅代表已保存的证据，不穷尽互联网资料。', '一个来源未能完成查阅'],
+                claims: [
+                    {
+                        id: id(10),
+                        kind: 'fact',
+                        text: '申请截止日期为12月1日，费用为150元；原文对不同阶段申请的说明仍需逐项阅读。'.repeat(
+                            5,
+                        ),
+                        confidenceLabel: '已保存逐字引用',
+                        evidenceIds: [id(21), id(20)],
+                    },
+                    {
+                        id: id(11),
+                        kind: 'inference',
+                        text: '跨学期安排可能影响部分申请人，这是一项推断，需要结合来源范围核验。',
+                        confidenceLabel: '推断不等于已确认事实',
+                        evidenceIds: [id(20)],
+                    },
+                    {
+                        id: id(12),
+                        kind: 'conflict',
+                        text: '来源对补交资料的日期描述不同，目前未能解释差异。',
+                        confidenceLabel: '冲突仍待核对',
+                        evidenceIds: [id(21)],
+                    },
+                    {
+                        id: id(13),
+                        kind: 'insufficient',
+                        text: '尚无直接证据确认延期是否适用于所有申请人。',
+                        confidenceLabel: '不能据此下结论',
+                        evidenceIds: [],
+                    },
+                    {
+                        id: id(14),
+                        kind: 'inference',
+                        text: '跨学期安排可能影响部分申请人，这是一项推断，需要结合来源范围核验。',
+                        confidenceLabel: '同文不同标识仍保留',
+                        evidenceIds: [id(21)],
+                    },
+                ],
+                evidence: [
+                    evidence(
+                        20,
+                        '申请截止日期为12月1日，费用为150元。<script>纯文字引用不会执行<\/script>',
+                    ),
+                    evidence(21, '补交资料的安排仍需核对，以下为较长的原文上下文。'.repeat(15)),
+                    evidence(22, '这条引用只用于变化记录，不是结论块的直接引用。'),
+                ],
+                changes: [
+                    {
+                        id: id(30),
+                        sourceId: id(122),
+                        kind: 'new',
+                        factKey: '新增查阅线索',
+                        oldValue: null,
+                        newValue: '变化记录的独立线索',
+                        oldEvidenceIds: [],
+                        newEvidenceIds: [id(22)],
+                        important: false,
+                        reason: '只展示已有结构，不改变比较分类',
+                    },
+                ],
+                publishedAt: time,
+            };
+            const pinia = createPinia();
+            const appearance = useAppearanceStore(pinia);
+            const reading = useReadingStore(pinia);
+            appearance.setMode('light');
+            appearance.setAccent('blue');
+            reading.setFamily('serif');
+            let current = parseContract(ReportSchema, structuredClone(sample));
+            let view = 'topic-list';
+            let app;
+            function mount() {
+                app?.unmount();
+                document.querySelector('#fixture').replaceChildren();
+                const component = view === 'brief' ? ReportBrief : TopicListReport;
+                app = createApp({
+                    render: () =>
+                        h(
+                            AppThemeProvider,
+                            {},
+                            {
+                                default: () =>
+                                    h('main', { class: 'fixture-report' }, [
+                                        h(component, { report: current }),
+                                    ]),
+                            },
+                        ),
+                });
+                app.use(pinia).mount('#fixture');
+            }
+            function setView(value) {
+                if (!['brief', 'topic-list'].includes(value))
+                    throw new TypeError('Unknown fixture view');
+                view = value;
+                document.querySelector('#sample-view').value = value;
+                mount();
+            }
+            function setReport(value) {
+                current = parseContract(ReportSchema, structuredClone(value));
+                mount();
+            }
+            function sampleVariant() {
+                const value = structuredClone(sample);
+                value.mode = document.querySelector('#sample-mode').value;
+                value.coverage.completeness = document.querySelector('#sample-coverage').value;
+                if (value.coverage.completeness === 'complete') {
+                    value.coverage.gaps = [];
+                    value.coverage.exhausted = [];
+                    value.limitations = [];
+                    value.summary = '完整交付样本仍保持原始结论和引用，完整不代表穷尽互联网资料。';
+                }
+                setReport(value);
+            }
+            document
+                .querySelector('#sample-view')
+                .addEventListener('change', (event) => setView(event.target.value));
+            document.querySelector('#sample-coverage').addEventListener('change', sampleVariant);
+            document.querySelector('#sample-mode').addEventListener('change', sampleVariant);
+            document
+                .querySelector('#sample-scheme')
+                .addEventListener('change', (event) => appearance.setMode(event.target.value));
+            document
+                .querySelector('#sample-accent')
+                .addEventListener('change', (event) => appearance.setAccent(event.target.value));
+            document
+                .querySelector('#sample-family')
+                .addEventListener('change', (event) => reading.setFamily(event.target.value));
+            window.scovaReportFixture = {
+                setReport,
+                setView,
+                getReport: () => structuredClone(current),
+                getView: () => view,
+            };
+            mount();
+        </script>
+    </body>
+</html>

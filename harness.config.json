@@ -11,12 +11,17 @@
         {
             "root": "apps/web",
             "id": "apps-web",
-            "tests": { "requireConfiguredTask": true }
+            "tests": {
+                "requireConfiguredTask": true
+            }
         },
         {
             "root": "tests/e2e",
             "id": "web-shell-e2e",
-            "tests": { "include": ["**/*.spec.ts"], "requireConfiguredTask": false }
+            "tests": {
+                "include": ["**/*.spec.ts"],
+                "requireConfiguredTask": false
+            }
         },
         {
             "root": "apps/server",
@@ -42,7 +47,9 @@
         {
             "root": "packages/db",
             "id": "packages-db",
-            "tests": { "requireConfiguredTask": true }
+            "tests": {
+                "requireConfiguredTask": true
+            }
         },
         {
             "root": "packages/agent-core",
@@ -328,6 +335,39 @@
             "covers": ["root"],
             "timeoutMs": 900000,
             "kind": "test",
+            "required": false,
+            "enabled": false
+        },
+        {
+            "id": "web-report-research-browser",
+            "workspace": "web-shell-e2e",
+            "kind": "test",
+            "argv": ["vp", "run", "test:e2e", "tests/e2e/report-research.spec.ts"],
+            "covers": ["web-shell-e2e"],
+            "timeoutMs": 180000,
+            "cwd": ".",
+            "required": false,
+            "enabled": false
+        },
+        {
+            "id": "web-report-comparison-browser",
+            "workspace": "web-shell-e2e",
+            "kind": "test",
+            "argv": ["vp", "run", "test:e2e", "tests/e2e/report-comparison-table.spec.ts"],
+            "covers": ["web-shell-e2e"],
+            "timeoutMs": 180000,
+            "cwd": ".",
+            "required": false,
+            "enabled": false
+        },
+        {
+            "id": "web-report-topic-list-browser",
+            "workspace": "web-shell-e2e",
+            "kind": "test",
+            "argv": ["vp", "run", "test:e2e", "tests/e2e/report-topic-list.spec.ts"],
+            "covers": ["web-shell-e2e"],
+            "timeoutMs": 180000,
+            "cwd": ".",
             "required": false,
             "enabled": false
         }
