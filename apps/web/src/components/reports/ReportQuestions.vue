@@ -104,7 +104,13 @@
                     </li>
                 </ol>
                 <p v-if="state.answer.value.answer.needsResearch">
-                    仍需更多资料。本次没有启动后续研究。
+                    仍需更多资料。{{
+                        followupLinked
+                            ? '这个问题已有关联后续执行，见下方操作。'
+                            : followupProtected
+                              ? '后续执行结果尚未确认，请保留原请求。'
+                              : '本次没有启动后续研究。'
+                    }}
                 </p>
                 <dl class="question-usage" aria-label="本次独立问答用量">
                     <div>
@@ -129,6 +135,16 @@
                 </p>
             </article>
         </template>
+        <followup-action
+            v-if="state.selectedId.value && !state.address.value.error"
+            :key="state.selectedId.value"
+            :report-id="reportId"
+            :question-id="state.selectedId.value"
+            :report="report"
+            :question="state.answer.value"
+            @protected-change="followupProtected = $event"
+            @linked-change="followupLinked = $event"
+        />
         <action-button
             v-if="state.selectedId.value || state.address.value.error"
             :disabled="state.pending.value"
@@ -139,11 +155,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router';
 import type { Report } from '@scova/models';
 import ActionButton from '@/components/common/ActionButton.vue';
 import EvidenceCitation from '@/components/reports/EvidenceCitation.vue';
+import FollowupAction from '@/components/reports/FollowupAction.vue';
 import { useReportQuestions } from '@/composables/useReportQuestions';
 import { useSessionLifecycle } from '@/composables/useSessionQuery';
 import { questionReasons, questionTextError } from '@/utils/report-questions';
@@ -158,6 +175,17 @@ const state = useReportQuestions(
     lifecycle,
 );
 const panel = ref<HTMLElement>();
+const followupProtected = ref(false);
+const followupLinked = ref(false);
+const protectedState = computed(() => state.protectedState.value || followupProtected.value);
+watch(
+    () => `${lifecycle.session.epoch}:${props.reportId}:${state.selectedId.value}`,
+    () => {
+        followupProtected.value = false;
+        followupLinked.value = false;
+    },
+    { flush: 'sync' },
+);
 const textError = computed(() => questionTextError(state.draft.value));
 let internalDestination = '';
 let mounted = true;
@@ -192,11 +220,13 @@ function recover() {
     return perform(state.recover);
 }
 function confirmDiscard() {
-    if (!lifecycle.session.user || !state.protectedState.value) return true;
+    if (!lifecycle.session.user || !protectedState.value) return true;
     return window.confirm(
-        state.attempt.value
-            ? '本次结果尚未确认，服务端可能仍在处理或已经保存回答。请先复制问题。结束或离开后无法凭此页面恢复未知请求；再次提问可能另计用量。仍要继续吗？'
-            : '尚有本地问题未提交，请先复制需要保留的内容。仍要清空或离开吗？',
+        followupProtected.value
+            ? '后续执行结果尚未确认，服务端可能已经创建执行。离开或提出新问题会清除此页面的原请求标识，无法在此使用同一请求恢复；取消客户端读取不代表回滚。仍要继续吗？'
+            : state.attempt.value
+              ? '本次结果尚未确认，服务端可能仍在处理或已经保存回答。请先复制问题。结束或离开后无法凭此页面恢复未知请求；再次提问可能另计用量。仍要继续吗？'
+              : '尚有本地问题未提交，请先复制需要保留的内容。仍要清空或离开吗？',
     );
 }
 async function startNew() {
@@ -209,7 +239,7 @@ async function startNew() {
 onBeforeRouteLeave(confirmDiscard);
 onBeforeRouteUpdate((to) => to.fullPath === internalDestination || confirmDiscard());
 function beforeUnload(event: BeforeUnloadEvent) {
-    if (state.protectedState.value) {
+    if (protectedState.value) {
         event.preventDefault();
         event.returnValue = '';
     }
