@@ -11,12 +11,17 @@
         {
             "root": "apps/web",
             "id": "apps-web",
-            "tests": { "requireConfiguredTask": true }
+            "tests": {
+                "requireConfiguredTask": true
+            }
         },
         {
             "root": "tests/e2e",
             "id": "web-shell-e2e",
-            "tests": { "include": ["**/*.spec.ts"], "requireConfiguredTask": false }
+            "tests": {
+                "include": ["**/*.spec.ts"],
+                "requireConfiguredTask": false
+            }
         },
         {
             "root": "apps/server",
@@ -42,7 +47,9 @@
         {
             "root": "packages/db",
             "id": "packages-db",
-            "tests": { "requireConfiguredTask": true }
+            "tests": {
+                "requireConfiguredTask": true
+            }
         },
         {
             "root": "packages/agent-core",
@@ -269,6 +276,24 @@
             "covers": ["apps-server", "apps-worker", "packages-db"],
             "timeoutMs": 900000,
             "kind": "test"
+        },
+        {
+            "id": "web-execution-browser",
+            "workspace": "web-shell-e2e",
+            "kind": "test",
+            "argv": [
+                "vp",
+                "exec",
+                "playwright",
+                "test",
+                "--config",
+                "tests/e2e/execution.config.ts"
+            ],
+            "covers": ["web-shell-e2e"],
+            "timeoutMs": 180000,
+            "cwd": ".",
+            "required": false,
+            "enabled": false
         }
     ],
     "publicationTargets": [],
