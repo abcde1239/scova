@@ -33,7 +33,7 @@ API/Worker 与 Web 代理均由非 root 用户运行，只读根文件系统和�
 
 `/api`、`/health`、`/swagger` 及其子路径转发真实后端响应，不进入 SPA 回退或静态缓存。代理关闭 SSE 缓冲、缓存和压缩，透传 Cookie、Origin、Last-Event-ID，75 秒上游读取超时大于 15 秒心跳；客户端断开会关闭上游。`GET /api/v1/runs/:runId/events` 在同一认证会话下持续推送持久化事件；断连后传入上一事件的 `Last-Event-ID` 按顺序续传，终态事件读尽后关闭连接。不同账号访问返回 404。应用统一通信模块负责 Fetch transport 桥接与重连游标。
 
-`/tasks`、`/reports/:id` 等无文件路由回退到 `index.html`，由 Vue Router 处理；当前未接入业务的页面显示对应状态。`index.html` 和普通公共文件使用 `Cache-Control: no-cache`；Vite 的 `/assets/` 哈希产物使用一年 immutable 缓存。缺失 `/assets/*` 和含扩展名的静态文件保持 404，不返回工作台 HTML；未知 API 仍由后端返回 JSON/404。只将带内容哈希的构建资源放入 `/assets/`，不要把可变文件复制到该缓存目录。部署在源的根路径，不配置子目录 base。
+`/tasks`、`/reports/:id` 等无文件路由回退到 `index.html`，由 Vue Router 处理；页面可用范围见[Web 工作台](web-workbench.md)；未知页面由应用显示未找到页面状态。`index.html` 和普通公共文件使用 `Cache-Control: no-cache`；Vite 的 `/assets/` 哈希产物使用一年 immutable 缓存。缺失 `/assets/*` 和含扩展名的静态文件保持 404，不返回工作台 HTML；未知 API 仍由后端返回 JSON/404。只将带内容哈希的构建资源放入 `/assets/`，不要把可变文件复制到该缓存目录。部署在源的根路径，不配置子目录 base。
 
 停止使用 `docker compose stop`：应用接收信号，停止领取与外部调用，等待在途领域写入，再关闭队列、数据库和 HTTP。应用预留 60 秒停止窗口；强杀后的 Run 由数据库租约恢复，不保证外部供应商只调用一次，但报告、Inbox 和通知不得重复。
 

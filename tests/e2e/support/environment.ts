@@ -51,6 +51,7 @@ export class BrowserEnvironment {
                 )
             )
                 throw new Error('E2E browser did not accept Secure/HttpOnly Cookie on localhost');
+            await page.goto('/tasks');
             this.owners.push(owner);
             return owner;
         } catch (error) {
