@@ -50,6 +50,8 @@
             </dl>
         </section>
 
+        <run-actions :task-id="run.taskId" :run="run" />
+
         <section class="connection scova-glass scova-glass--tools" aria-label="执行连接">
             <p role="status" aria-live="polite">{{ connectionText }}</p>
             <p v-if="execution.query.isError.value">
@@ -205,6 +207,7 @@ import { computed } from 'vue';
 import { RouterLink } from 'vue-router';
 import ActionButton from '@/components/common/ActionButton.vue';
 import AppIcon from '@/components/common/AppIcon.vue';
+import RunActions from '@/components/run/RunActions.vue';
 import {
     executionStates,
     executionOutcome,

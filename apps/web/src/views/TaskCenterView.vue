@@ -81,6 +81,10 @@
                     <dd>{{ detail.data.value.data.version.config.timezone }}</dd>
                 </dl>
                 <task-run-history :task-id="detail.data.value.data.task.id" />
+                <run-actions
+                    :task-id="detail.data.value.data.task.id"
+                    :task-status="detail.data.value.data.task.status"
+                />
             </template>
         </template>
     </div>
@@ -98,6 +102,7 @@ import TaskFilters from '@/components/tasks/TaskFilters.vue';
 import TaskRunHistory from '@/components/tasks/TaskRunHistory.vue';
 import StatePanel from '@/components/common/StatePanel.vue';
 import ActionButton from '@/components/common/ActionButton.vue';
+import RunActions from '@/components/run/RunActions.vue';
 const route = useRoute();
 const router = useRouter();
 const lifecycle = useSessionLifecycle();
