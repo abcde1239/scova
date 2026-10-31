@@ -146,6 +146,24 @@
     },
     "tasks": [
         {
+            "id": "web-execution-browser",
+            "workspace": "web-shell-e2e",
+            "kind": "test",
+            "argv": [
+                "vp",
+                "exec",
+                "playwright",
+                "test",
+                "--config",
+                "tests/e2e/execution.config.ts"
+            ],
+            "covers": ["web-shell-e2e"],
+            "timeoutMs": 180000,
+            "cwd": ".",
+            "required": false,
+            "enabled": false
+        },
+        {
             "id": "web-shell-browser",
             "workspace": "web-shell-e2e",
             "kind": "test",
