@@ -63,6 +63,9 @@
                     class="scova-interface"
                     ><app-icon name="source" />打开原始来源（新窗口）</a
                 >
+                <router-link :to="historyLink(item.sourceId)" class="scova-interface"
+                    >查看来源历史</router-link
+                >
                 <router-link
                     v-if="origin?.sourceId === item.sourceId.toLowerCase()"
                     :to="origin.path"
@@ -98,7 +101,12 @@ import { RouterLink, useRoute } from 'vue-router';
 import BookmarkAction from '@/components/library/BookmarkAction.vue';
 import ActionButton from '@/components/common/ActionButton.vue';
 import AppIcon from '@/components/common/AppIcon.vue';
-import { bookmarkReadError, readBookmarkOrigin, useBookmarks } from '@/composables/useBookmarks';
+import {
+    bookmarkOrigin,
+    bookmarkReadError,
+    readBookmarkOrigin,
+    useBookmarks,
+} from '@/composables/useBookmarks';
 import { useReadingTypography } from '@/composables/useReadingTypography';
 import { useSessionLifecycle } from '@/composables/useSessionQuery';
 import { sourceLink } from '@/composables/useReport';
@@ -124,6 +132,23 @@ const origin = computed(() => {
     void route.fullPath;
     return readBookmarkOrigin(lifecycle, window.history.state?.bookmarkOrigin);
 });
+function historyLink(sourceId: string) {
+    const current = origin.value;
+    return {
+        path: `/library/sources/${sourceId}/snapshots`,
+        ...(current?.sourceId === sourceId.toLowerCase()
+            ? {
+                  state: {
+                      bookmarkOrigin: bookmarkOrigin(
+                          lifecycle,
+                          current.path.slice('/reports/'.length),
+                          sourceId,
+                      ),
+                  },
+              }
+            : {}),
+    };
+}
 let pageFocus = false;
 let bookmarkFocus = false;
 async function restoreFocus() {
