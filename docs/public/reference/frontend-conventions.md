@@ -1,6 +1,6 @@
 # 前端代码风格与通信约定
 
-状态：待 apps/web 实现时落实的工程契约，2026-10-24。代码风格以用户指定的 community 项目为主要参照，工具链继续使用 Scova 的 Vite+，通信统一采用 requestlane。参考项目的业务、资源和认证方式不作为需要复制的实现。
+代码风格以用户指定的 community 项目为主要参照，工具链继续使用 Scova 的 Vite+，通信统一采用 requestlane。参考项目的业务、资源和认证方式不作为需要复制的实现。
 
 ## 1. 目录与组件
 
@@ -51,4 +51,8 @@ native 会跳过 Client 的 endpoint、session、cache 和错误 hook，必须�
 
 新增的 apps/web 配置、示例页面和通信测试应通过 `vp check`、`vp test` 与 `vp run -r build`。重点测试 Cookie、CSRF/幂等头、校验失败、401/403、取消、Query 失效、换号迟到响应，以及 SSE 分片/重连；Playwright 检查页面状态、键盘操作与两账号隔离。
 
-本轮只确立约定与实现 Issue，尚未安装 requestlane、创建 apps/web 或运行其业务测试。
+当前 `apps/web/src/api` 已提供最小 HTTP 通信入口，端点由 `defineApiEndpoint` 在模块作用域声明，输入/输出使用 `modelValidator` 适配共享 schema。`api.request(endpoint, input, options)` 返回 `{ data, status, headers, url }`，编辑时读取 `headers.etag`，在下一次调用的 `ifMatch` 中原样传回；内部使用 requestlane 的 `requestRaw` 保留真实状态和响应头，并统一执行端点校验。`options` 接收 `signal`、`timeout`、`csrfToken`、`idempotencyKey` 与 `ifMatch`，认证写请求必须提供当前 CSRF，同一动作重发复用调用方持有的幂等键，不自动重试。
+
+`ApiRequestError` 保留错误分类及可用的状态、错误码、追踪 ID 和字段定位；取消可由 `kind === 'cancelled'` 识别。`createApi({ fetcher })` 用于注入测试 transport；`dispose()` 取消整个 HTTP 调用（含异步校验）。默认实例与 `transport` 共用同一 Fetch transport。原生 `transport.native` 是后续 SSE 桥接入口，跳过 HTTP 客户端校验、凭据配置和 dispose，调用方必须自行传入 credentials/signal 并管理清理。
+
+运行 `vp test apps/web/tests/requestlane.test.ts` 验证通信契约。Query 会话 epoch、真实登录页面、SSE 解析与续传及完整浏览器旅程仍由后续功能接入，不属于这些单元测试的覆盖范围。
