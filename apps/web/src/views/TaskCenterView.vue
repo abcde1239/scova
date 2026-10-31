@@ -80,6 +80,7 @@
                     <dt>任务计划时区</dt>
                     <dd>{{ detail.data.value.data.version.config.timezone }}</dd>
                 </dl>
+                <task-run-history :task-id="detail.data.value.data.task.id" />
             </template>
         </template>
     </div>
@@ -94,6 +95,7 @@ import { useSessionLifecycle } from '@/composables/useSessionQuery';
 import { useTasks, readTaskFilter, type TaskFilter } from '@/composables/useTasks';
 import TaskCard from '@/components/tasks/TaskCard.vue';
 import TaskFilters from '@/components/tasks/TaskFilters.vue';
+import TaskRunHistory from '@/components/tasks/TaskRunHistory.vue';
 import StatePanel from '@/components/common/StatePanel.vue';
 import ActionButton from '@/components/common/ActionButton.vue';
 const route = useRoute();
