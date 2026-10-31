@@ -4,6 +4,10 @@ import {
     TaskDetailResponseSchema,
     RunListResponseSchema,
     UuidSchema,
+    CreateTaskInputSchema,
+    UpdateTaskInputSchema,
+    type CreateTaskInput,
+    type UpdateTaskInput,
     type PageQuery,
     type TaskListResponse,
     type TaskDetailResponse,
@@ -28,6 +32,16 @@ export const tasksEndpoint = defineApiEndpoint<{ query: PageQuery; data: TaskLis
     validator: modelValidator(TaskListResponseSchema),
 });
 
+export const createTaskEndpoint = defineApiEndpoint<{
+    body: CreateTaskInput;
+    data: TaskDetailResponse;
+}>({
+    method: 'POST',
+    path: '/tasks',
+    inputValidators: { body: modelValidator(CreateTaskInputSchema) },
+    validator: modelValidator(TaskDetailResponseSchema),
+});
+
 export const taskEndpoint = defineApiEndpoint<{
     params: { taskId: string };
     data: TaskDetailResponse;
@@ -37,6 +51,17 @@ export const taskEndpoint = defineApiEndpoint<{
     inputValidators: {
         params: taskParamsValidator,
     },
+    validator: modelValidator(TaskDetailResponseSchema),
+});
+
+export const updateTaskEndpoint = defineApiEndpoint<{
+    params: { taskId: string };
+    body: UpdateTaskInput;
+    data: TaskDetailResponse;
+}>({
+    method: 'PATCH',
+    path: '/tasks/:taskId',
+    inputValidators: { params: taskParamsValidator, body: modelValidator(UpdateTaskInputSchema) },
     validator: modelValidator(TaskDetailResponseSchema),
 });
 

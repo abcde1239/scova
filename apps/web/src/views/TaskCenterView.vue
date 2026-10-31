@@ -1,6 +1,7 @@
 <template>
     <div class="task-center">
         <template v-if="!taskId">
+            <router-link class="back-link" :to="{ name: 'task-create' }">新建任务</router-link>
             <task-filters :value="filter" @change="changeFilter" />
             <p class="scope-note">筛选已加载任务 · 时间按 {{ timezone }} 显示</p>
             <state-panel v-if="query.isPending.value" state="loading" />
@@ -58,13 +59,23 @@
             >
             <state-panel v-if="detail.isPending.value" state="loading" />
             <state-panel
-                v-else-if="detail.isError.value"
+                v-else-if="detail.isError.value && (!detail.data.value || detailUnavailable)"
                 state="error"
                 message="任务不可用，请检查权限或稍后重试"
                 retryable
                 @retry="detail.refetch()"
             />
             <template v-else-if="detail.data.value">
+                <state-panel
+                    v-if="detail.isError.value"
+                    state="error"
+                    message="任务摘要刷新失败，当前显示上次读取的内容"
+                    retryable
+                    @retry="detail.refetch()"
+                />
+                <router-link class="back-link" :to="{ name: 'task-edit', params: { taskId } }"
+                    >编辑任务配置</router-link
+                >
                 <p class="scope-note">时间按 {{ timezone }} 显示</p>
                 <task-card
                     :task="detail.data.value.data.task"
@@ -85,6 +96,7 @@
                     :task-id="detail.data.value.data.task.id"
                     :task-status="detail.data.value.data.task.status"
                 />
+                <task-lifecycle-actions :task-id="detail.data.value.data.task.id" />
             </template>
         </template>
     </div>
@@ -95,6 +107,7 @@ import { computed } from 'vue';
 import { useQuery } from '@tanstack/vue-query';
 import { RouterLink, useRoute, useRouter } from 'vue-router';
 import { taskEndpoint, taskKeys } from '@/api/tasks';
+import { toApiError } from '@/api/errors';
 import { useSessionLifecycle } from '@/composables/useSessionQuery';
 import { useTasks, readTaskFilter, type TaskFilter } from '@/composables/useTasks';
 import TaskCard from '@/components/tasks/TaskCard.vue';
@@ -103,6 +116,7 @@ import TaskRunHistory from '@/components/tasks/TaskRunHistory.vue';
 import StatePanel from '@/components/common/StatePanel.vue';
 import ActionButton from '@/components/common/ActionButton.vue';
 import RunActions from '@/components/run/RunActions.vue';
+import TaskLifecycleActions from '@/components/tasks/TaskLifecycleActions.vue';
 const route = useRoute();
 const router = useRouter();
 const lifecycle = useSessionLifecycle();
@@ -120,6 +134,14 @@ const detail = useQuery(
     })),
     lifecycle.queryClient,
 );
+const detailUnavailable = computed(() => {
+    const error = detail.error.value ? toApiError(detail.error.value) : undefined;
+    return (
+        [401, 403, 404].includes(error?.status ?? 0) ||
+        error?.kind === 'validation' ||
+        error?.kind === 'protocol'
+    );
+});
 const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 function changeFilter(value: TaskFilter) {
     void router.push({ name: 'tasks', query: { status: value } });
