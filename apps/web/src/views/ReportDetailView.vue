@@ -13,14 +13,21 @@
             :retryable="error.retryable && valid && query.isError.value"
             @retry="retry"
         />
+        <report-questions
+            v-if="questionIdentity"
+            :key="questionIdentity"
+            :report-id="String(route.params.reportId)"
+            :report="report"
+        />
     </div>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import { RouterLink, useRoute } from 'vue-router';
 import AppIcon from '@/components/common/AppIcon.vue';
 import ReportBrief from '@/components/reports/ReportBrief.vue';
+import ReportQuestions from '@/components/reports/ReportQuestions.vue';
 import StatePanel from '@/components/common/StatePanel.vue';
 import { useReport } from '@/composables/useReport';
 import { useSessionLifecycle } from '@/composables/useSessionQuery';
@@ -28,6 +35,25 @@ const route = useRoute();
 const lifecycle = useSessionLifecycle();
 const accountId = computed(() => lifecycle.session.user?.id);
 const { query, report, valid, error } = useReport(() => route.params.reportId, lifecycle);
+// Keep only the editor identity, never a second Report cache, across same-owner read failures.
+const questionIdentity = ref('');
+const routeIdentity = computed(
+    () => `${lifecycle.session.epoch}:${accountId.value ?? ''}:${route.params.reportId}`,
+);
+watch(
+    routeIdentity,
+    () => {
+        questionIdentity.value = '';
+    },
+    { flush: 'sync' },
+);
+watch(
+    report,
+    (value) => {
+        if (value) questionIdentity.value = routeIdentity.value;
+    },
+    { immediate: true, flush: 'sync' },
+);
 const detail = ref<HTMLElement>();
 async function retry() {
     const restoreFocus = detail.value?.contains(document.activeElement);
