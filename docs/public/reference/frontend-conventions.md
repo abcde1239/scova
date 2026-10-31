@@ -1,6 +1,6 @@
 # 前端代码风格与通信约定
 
-代码风格以用户指定的 community 项目为主要参照，工具链继续使用 Scova 的 Vite+，通信统一采用 requestlane。参考项目的业务、资源和认证方式不作为需要复制的实现。
+状态：当前工程约定，2026-10-31。代码风格以用户指定的 community 项目为主要参照，工具链继续使用 Scova 的 Vite+，通信统一采用 requestlane。参考项目的业务、资源和认证方式不作为需要复制的实现。
 
 ## 1. 目录与组件
 
@@ -21,6 +21,7 @@ apps/web/src/
 - 页面保持薄层，把独立展示单元移入按功能组织的 components，把复用交互放 composables，远程调用放 api。Props/emits、路由参数使用明确类型，不照搬参考项目中的 any 或弱类型 Props。
 - 采用 naive-ui 显式组件导入，UnoCSS 维护 page-container、卡片、表单和空态等语义 shortcut；集中处理主题，不在页面复制大段全局 CSS。
 - 全仓格式统一由根 Vite+ fmt 管理：4 空格缩进、单引号、100 字符行宽，分号沿用工具默认规则；前端不另设格式覆盖。Vue/TS 使用 import type 分离类型。
+- 字号、间距、圆角、控件尺寸与响应式断点默认使用 `rem`，保留浏览器默认根字号，行高使用无单位值。容器结合百分比、弹性布局和 `min/max/clamp` 自适应；局部图标等需要随当前文字缩放时可使用 `em`。`px` 仅用于确有需要的特殊情况，并在代码或变更说明中解释用途；测试视口和图片原始分辨率的像素不属于页面布局尺寸。避免固定高度裁切放大后的文字，并验证窄屏及 200% 文字放大。
 - 保持 loading/empty/error/success 状态、可重试错误、键盘焦点和移动端基础适配。异步读取可取消，卸载/换参数时终止旧请求，防止迟到响应覆盖新状态。
 
 ## 2. 数据与状态责任
@@ -63,18 +64,18 @@ EOF 不代替空行，不输出部分消息；错误或 finish 后不能复用�
 
 当前 `apps/web/src/api` 已提供最小 HTTP 通信入口，端点由 `defineApiEndpoint` 在模块作用域声明，输入/输出使用 `modelValidator` 适配共享 schema。`api.request(endpoint, input, options)` 返回 `{ data, status, headers, url }`，编辑时读取 `headers.etag`，在下一次调用的 `ifMatch` 中原样传回；内部使用 requestlane 的 `requestRaw` 保留真实状态和响应头，并统一执行端点校验。`options` 接收 `signal`、`timeout`、`csrfToken`、`idempotencyKey` 与 `ifMatch`，认证写请求必须提供当前 CSRF，同一动作重发复用调用方持有的幂等键，不自动重试。
 
-`ApiRequestError` 保留错误分类及可用的状态、错误码、追踪 ID 和字段定位；取消可由 `kind === 'cancelled'` 识别。`createApi({ fetcher })` 用于注入测试 transport；`dispose()` 取消整个 HTTP 调用（含异步校验）。默认实例与 `transport` 共用同一 Fetch transport。原生 `transport.native` 是后续 SSE 桥接入口，跳过 HTTP 客户端校验、凭据配置和 dispose，调用方必须自行传入 credentials/signal 并管理清理。
+`ApiRequestError` 保留错误分类及可用的状态、错误码、追踪 ID 和字段定位；取消可由 `kind === 'cancelled'` 识别。`createApi({ fetcher })` 用于注入测试 transport；`dispose()` 取消整个 HTTP 调用（含异步校验）。默认实例与 `transport` 共用同一 Fetch transport。原生 `transport.native` 是 SSE 桥接入口，跳过 HTTP 客户端校验、凭据配置和 dispose，调用方必须自行传入 credentials/signal 并管理清理。
 
-运行 `vp test apps/web/tests/requestlane.test.ts` 验证通信契约。真实登录页面、SSE 解析与续传及完整浏览器旅程仍由后续功能接入，不属于这些单元测试的覆盖范围。
+运行 `vp test apps/web/tests/requestlane.test.ts` 验证通信契约。登录页面、SSE 解析与续传已分别接入；这些 HTTP 单元测试本身不覆盖完整浏览器旅程，具体能力与限制见[Web 工作台使用说明](../guides/web-workbench.md)。
 
 ## 6. Query 与会话作用域
 
-应用入口安装一个 `createSessionLifecycle()`，共享它的 Pinia、QueryClient 与注入键。业务读取使用 `useSessionQuery(endpoint, input, key)`，写命令使用 `useSessionMutation(endpoint)`；Query 是唯一服务端缓存，Mutation 默认不重试。查询 key 自动包含账号、epoch、端点和输入，查询卸载时的 signal 传到同一 HTTP 入口。`queryOptions` 可供非组件调用 `queryClient.fetchQuery`；当前未安装账号时组件查询保持禁用，恢复会话由后续流程显式请求。
+应用入口安装一个 `createSessionLifecycle()`，共享它的 Pinia、QueryClient 与注入键。业务读取使用 `useSessionQuery(endpoint, input, key)`，写命令使用 `useSessionMutation(endpoint)`；Query 是唯一服务端缓存，Mutation 默认不重试。查询 key 自动包含账号、epoch、端点和输入，查询卸载时的 signal 传到同一 HTTP 入口。`queryOptions` 可供非组件调用 `queryClient.fetchQuery`；当前未安装账号时组件查询保持禁用，由应用会话流程显式请求恢复。
 
 登录、恢复和退出流程在动作开始时保存 `const scope = lifecycle.capture()`，经 `scope.request(...)` 请求，再以 `scope.replaceSession(result.data)` 或 `scope.replaceSession(null)` 完成交接。作用域过期时交接被拒绝，不能在迟到回调中直接安装旧会话。生命周期内的当前认证请求 401 会清空当前会话；匿名登录失败不会清掉已安装账号。`replaceSession` 是统一安装入口，不执行登录、注销 HTTP 或路由跳转。
 
 切换动作先推进 epoch、中止旧 scope signal、取消 Query 和 HTTP、释放注册清理回调并清缓存，再创建新 HTTP client、安装新用户摘要；CSRF 只在内存闭包中保留，不进入 Pinia 或持久化存储。全局 Query/Mutation 错误观察过滤取消错误，UI 采用相同的 `shouldReportQueryError`，不为取消/卸载提示失败。普通错误仍由页面展示，失效按实际资源 key 定向执行，不默认轮询或窗口焦点刷新。
 
-后续流模块从捕获的 scope 取得同一 `transport` 与 `signal`，通过 `scope.registerCleanup(close)` 注册关闭回调，主动关闭时调用返回的注销函数。接收数据前检查 `scope.isCurrent()`；native 请求仍须显式设置同源凭据并连接该 signal。此接口只管理流生命周期，不解析或重连 SSE。
+流模块从捕获的 scope 取得同一 `transport` 与 `signal`，通过 `scope.registerCleanup(close)` 注册关闭回调，主动关闭时调用返回的注销函数。接收数据前检查 `scope.isCurrent()`；native 请求仍须显式设置同源凭据并连接该 signal。此接口只管理流生命周期，不解析或重连 SSE。
 
 运行 `vp test apps/web/tests/query-lifecycle.test.ts` 验证会话切换、迟到结果隔离、取消和定向刷新。该测试使用受控响应，不代表真实后端登录或 SSE 联调。
