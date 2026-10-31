@@ -8,5 +8,11 @@ export default (import.meta.env.MODE === 'test'
               component: () => import('@/views/examples/StatesExample.vue'),
               meta: { title: '状态与交互样例' },
           },
+          {
+              path: '/__examples/source-images',
+              name: 'source-images-example',
+              component: () => import('@/views/examples/SourceImagesExample.vue'),
+              meta: { title: '来源图片样例' },
+          },
       ]
     : []) satisfies RouteRecordRaw[];
