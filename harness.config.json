@@ -146,6 +146,17 @@
     },
     "tasks": [
         {
+            "id": "web-preferences-browser",
+            "workspace": "web-shell-e2e",
+            "kind": "test",
+            "argv": ["vp", "run", "test:e2e", "tests/e2e/preferences.spec.ts"],
+            "covers": ["web-shell-e2e"],
+            "timeoutMs": 180000,
+            "cwd": ".",
+            "required": false,
+            "enabled": false
+        },
+        {
             "id": "web-shell-browser",
             "workspace": "web-shell-e2e",
             "kind": "test",
