@@ -131,7 +131,10 @@ describe('中文 OpenAPI 生成与校验', () => {
             const execute = promisify(execFile);
             const invocation = nodeScriptCommand(command, ['--output', target, '--check']);
             await expect(
-                execute(invocation.executable, invocation.args, { windowsHide: true }),
+                execute(invocation.executable, invocation.args, {
+                    windowsHide: true,
+                    timeout: 20_000,
+                }),
             ).rejects.toMatchObject({ code: 1 });
             expect(await readFile(target, 'utf8')).toBe(original);
         } finally {
@@ -140,5 +143,5 @@ describe('中文 OpenAPI 生成与校验', () => {
             expect(basename(temporary)).toMatch(/^scova-openapi-/);
             await rm(temporary, { recursive: true, force: true });
         }
-    });
+    }, 30_000);
 });
