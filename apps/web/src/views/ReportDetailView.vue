@@ -43,6 +43,15 @@
                 </option>
             </select>
             <p v-if="chosenSource">{{ chosenSource.title }}</p>
+            <nav v-if="chosenSource" class="report-source-history" aria-label="所选来源历史与快照">
+                <router-link :to="sourceHistoryLink(chosenSource.id)">查看来源历史</router-link>
+                <router-link
+                    v-for="evidence in chosenSnapshots"
+                    :key="evidence.snapshotId"
+                    :to="sourceHistoryLink(evidence.sourceId, evidence.snapshotId)"
+                    >查看保存快照（{{ evidence.observedAt }}）</router-link
+                >
+            </nav>
             <bookmark-action
                 v-if="chosenSource"
                 :key="`${accountId}-${report.id}-${chosenSource.id}`"
@@ -75,8 +84,12 @@ import FeedbackActions from '@/components/reports/FeedbackActions.vue';
 import FeedbackEffects from '@/components/reports/FeedbackEffects.vue';
 import BookmarkAction from '@/components/library/BookmarkAction.vue';
 import NotesPanel from '@/components/library/NotesPanel.vue';
-import { bookmarksPending, reportBookmarkSources } from '@/composables/useBookmarks';
 import ReportQuestions from '@/components/reports/ReportQuestions.vue';
+import {
+    bookmarkOrigin,
+    bookmarksPending,
+    reportBookmarkSources,
+} from '@/composables/useBookmarks';
 import StatePanel from '@/components/common/StatePanel.vue';
 import { useReport } from '@/composables/useReport';
 import { inboxReturn } from '@/composables/useInbox';
@@ -123,6 +136,21 @@ const noteTargets = computed(() =>
 const chosenSource = computed(() =>
     sources.value.find((source) => source.id === selectedSource.value),
 );
+const chosenSnapshots = computed(() => [
+    ...new Map(
+        (report.value?.evidence ?? [])
+            .filter((entry) => entry.sourceId.toLowerCase() === chosenSource.value?.id)
+            .map((entry) => [entry.snapshotId.toLowerCase(), entry]),
+    ).values(),
+]);
+function sourceHistoryLink(sourceId: string, snapshotId?: string) {
+    return {
+        path: `/library/sources/${sourceId}/snapshots${snapshotId ? `/${snapshotId}` : ''}`,
+        ...(report.value
+            ? { state: { bookmarkOrigin: bookmarkOrigin(lifecycle, report.value.id, sourceId) } }
+            : {}),
+    };
+}
 watch(
     () => `${accountId.value}-${report.value?.id}`,
     () => {
@@ -172,6 +200,11 @@ async function retry() {
     overflow-wrap: anywhere;
     border-block-start: 0.0625rem solid var(--scova-border);
     padding-block: 2rem;
+}
+.report-source-history {
+    display: grid;
+    gap: 0.75rem;
+    min-inline-size: 0;
 }
 .report-bookmarks h2 {
     margin: 0;
