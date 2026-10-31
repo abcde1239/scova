@@ -14,6 +14,11 @@
             "tests": { "requireConfiguredTask": true }
         },
         {
+            "root": "tests/e2e",
+            "id": "web-shell-e2e",
+            "tests": { "include": ["**/*.spec.ts"], "requireConfiguredTask": false }
+        },
+        {
             "root": "apps/server",
             "tests": {
                 "requireConfiguredTask": true
@@ -140,6 +145,17 @@
         "requireConfiguredTask": false
     },
     "tasks": [
+        {
+            "id": "web-shell-browser",
+            "workspace": "web-shell-e2e",
+            "kind": "test",
+            "argv": ["vp", "run", "test:e2e", "--", "tests/e2e/shell.spec.ts"],
+            "covers": ["web-shell-e2e"],
+            "timeoutMs": 180000,
+            "cwd": ".",
+            "required": false,
+            "enabled": false
+        },
         {
             "id": "static-check",
             "workspace": "root",
