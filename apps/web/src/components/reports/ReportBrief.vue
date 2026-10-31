@@ -5,6 +5,7 @@
                 当前按基础简报展示结构化结论与引用；尚不提供原报告格式的专属布局。
             </p>
         </template>
+        <report-changes :report="report" />
         <section
             v-for="section in sections"
             :key="section.kind"
@@ -27,6 +28,7 @@ import { computed } from 'vue';
 import type { Report } from '@scova/models';
 import ReportFrame from '@/components/reports/ReportFrame.vue';
 import ReportClaim from '@/components/reports/ReportClaim.vue';
+import ReportChanges from '@/components/reports/ReportChanges.vue';
 import { reportSections } from '@/composables/useReport';
 const props = defineProps<{ report: Report }>();
 const sections = computed(() => reportSections(props.report));
