@@ -24,7 +24,7 @@ vp run harness-verify
 
 Worker 的配置与生命周期、Agent 有限图与原文校验单元纳入根测试；`backend-integration` 通过 `vp run test:integration` 串行验证数据库约束、认证、任务与执行接口、实际 Agent/报告交付、调度/反馈/通知与资料库，以及 Outbox/Run 故障恢复、租约 fencing、取消和 Bun/Node 进程。
 
-`web-browser-gate` 是必需任务，依赖 `static-check`、`unit-tests`、`workspace-build` 和 `backend-integration`，通过 `vp run verify:web:browser` 覆盖 `web-shell-e2e`。该工作区要求配置测试；原有单项浏览器任务保持关闭，避免重复运行。浏览器子入口不调用 `ready` 或完整 `verify:web`，因此同一任务图只运行一次静态/单元门禁。它串行切换必要构建模式，所有预览停止后恢复生产构建；运行条件、诊断和人工验收边界见[浏览器测试](browser-testing.md)。
+`web-browser-gate` 是必需任务，依赖 `static-check`、`unit-tests`、`workspace-build` 和 `backend-integration`，通过 `vp run verify:web:browser` 覆盖 `web-shell-e2e`。该工作区要求配置测试；聚合门禁替代原有单项浏览器任务登记，避免重复运行；专项命令仍可直接运行。浏览器子入口不调用 `ready` 或完整 `verify:web`，因此同一任务图只运行一次静态/单元门禁。它串行切换必要构建模式，所有预览停止后恢复生产构建；运行条件、诊断和人工验收边界见[浏览器测试](browser-testing.md)。
 
 `vp run test:agent-recovery` 定向运行真实 PostgreSQL checkpointer/工具账本集成：Node/Bun 在工具结果提交、checkpoint 保存前强杀并接管，验证用尽预算后仍复用成功结果、unknown 保留费用、旧 epoch checkpoint/pending writes 隔离和持久化操作 drain。根 `vp test` 排除集成文件，不能用直接传入集成文件路径代替显式的测试配置。上述集成需要专用 PostgreSQL 和独立 Bun，完整后端门禁另需 Redis。
 
