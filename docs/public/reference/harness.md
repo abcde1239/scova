@@ -22,6 +22,8 @@ vp run harness-verify
 
 根聚合测试只声明实际覆盖的工作区，没有额外配置相同的子任务，避免重复执行。暂无测试的工作区保持 `not-configured`；这不代表业务验收通过。新建工作区或接入真实业务测试后须同时更新 `harness.config.json`、框架扫描配置和真实测试任务；`covers` 只记录覆盖关系，不创建测试。
 
+根 TypeScript 配置排除 `artifacts`、`.pnpm-store`、构建和覆盖率产物，避免本地历史工作树与包缓存进入源码类型检查；应用源码和测试仍按各工作区配置检查。
+
 Worker 的配置与生命周期、Agent 有限图与原文校验单元纳入根测试；`backend-integration` 通过 `vp run test:integration` 串行验证数据库约束、认证、任务与执行接口、实际 Agent/报告交付、调度/反馈/通知与资料库，以及 Outbox/Run 故障恢复、租约 fencing、取消和 Bun/Node 进程。
 
 `web-browser-gate` 是必需任务，依赖 `static-check`、`unit-tests`、`workspace-build` 和 `backend-integration`，通过 `vp run verify:web:browser` 覆盖 `web-shell-e2e`。该工作区要求配置测试；聚合门禁替代原有单项浏览器任务登记，避免重复运行；专项命令仍可直接运行。浏览器子入口不调用 `ready` 或完整 `verify:web`，因此同一任务图只运行一次静态/单元门禁。它串行切换必要构建模式，所有预览停止后恢复生产构建；运行条件、诊断和人工验收边界见[浏览器测试](browser-testing.md)。
