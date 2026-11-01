@@ -441,7 +441,9 @@ for (const location of ['initial', 'next', 'refresh'] as const) {
                     await more(page).click();
                 } else await refresh(page).click();
             }
-            await expect(region(page).getByRole('status')).toContainText('加载失败');
+            await expect(
+                region(page).getByRole('status').filter({ hasText: '加载失败' }),
+            ).toBeVisible();
             await expect(entries(page)).toHaveCount(
                 (status === 503 || status === 'cursor') && location !== 'initial' ? 3 : 0,
             );
