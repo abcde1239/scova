@@ -4,18 +4,17 @@
 
 ## 环境与命令
 
-安装依赖并生成数据库客户端：
+安装依赖并启动专用测试服务：
 
 ```sh
 vp install
-vp run models#generate
 # 启动专用测试 PostgreSQL 17 / Redis 7
 # 使用 55432 / 56379，不复用生产数据库
 docker compose -p scova-runtime-test -f compose.test.yaml up -d
 vp run ready
 ```
 
-`ready` 包含格式、类型、lint、单元测试、工作区构建、Bun/Node 运行时、OpenAPI 漂移、HTTP 进程，以及串行后端集成与验收。数据库账号需允许建立临时 schema 和维护测试的独立临时数据库。备份恢复测试还要求 PATH 中有 PostgreSQL 17 或更新版本的 `pg_dump`、`pg_restore`。自定义连接使用 `SCOVA_TEST_DATABASE_URL`、`SCOVA_TEST_REDIS_URL`；运行时检查另读取 `RUNTIME_DATABASE_URL`、`RUNTIME_REDIS_URL`，见测试运行时说明。
+`ready` 包含格式、类型、lint、单元测试、工作区构建、Bun/Node 运行时、OpenAPI 漂移、HTTP 进程，以及串行后端集成与验收，并追加[基础浏览器](../reference/browser-testing.md)和[完整工作台](../reference/workbench-verification.md)门禁；后两者另需锁定 Chromium、浏览器系统依赖和 Docker Compose。数据库账号需允许建立临时 schema 和维护测试的独立临时数据库。备份恢复测试还要求 PATH 中有 PostgreSQL 17 或更新版本的 `pg_dump`、`pg_restore`。自定义连接使用 `SCOVA_TEST_DATABASE_URL`、`SCOVA_TEST_REDIS_URL`；运行时检查另读取 `RUNTIME_DATABASE_URL`、`RUNTIME_REDIS_URL`，见测试运行时说明。
 
 共享测试 Redis 的套件必须串行运行。`vp run test:integration` 已负责顺序执行，不同时在其他工作区启动集成测试。
 
@@ -38,4 +37,4 @@ vp run test:search:read
 - 真实 socket 的事件回放、续传和新事件可见性；慢读、关闭及 Bun/Node 差异由专门 SSE 集成套件覆盖。
 - 十个真实会话并发读取四类列表。每账号 20 个任务、400 个 Run/Report/Inbox；每接口预热 3 轮，采样 20 轮，每轮 10 并发，完整 HTTP 响应与 JSON 解析 p95 要求低于 500ms。测试输出数据规模、运行时、平台和实测值；这是本机 Node loopback 基准。
 
-前端页面、四种报告视图和浏览器用户旅程不包含在本后端门禁中。固定供应商响应不能证明远程模型或公网网站可用；来源验证码、抓取失败、官方身份未核验等情况仍须如实报告不足。
+上述后端集成用例不证明前端页面或浏览器用户旅程；`ready` 的浏览器任务提供独立证据。固定供应商响应不能证明远程模型或公网网站可用；来源验证码、抓取失败、官方身份未核验等情况仍须如实报告不足。
