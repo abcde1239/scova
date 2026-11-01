@@ -54,7 +54,10 @@
 
         <section class="connection scova-glass scova-glass--tools" aria-label="执行连接">
             <p role="status" aria-live="polite">{{ connectionText }}</p>
-            <p v-if="execution.query.isError.value">
+            <p v-if="execution.query.isPaused.value">
+                快照更新已暂停，当前展示上次成功读取的状态；恢复网络后将继续更新。
+            </p>
+            <p v-else-if="execution.query.isError.value">
                 快照更新暂不可用，当前展示上次成功读取的状态。
             </p>
             <action-button
@@ -203,7 +206,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onScopeDispose, shallowRef } from 'vue';
+import { onlineManager } from '@tanstack/vue-query';
 import { RouterLink } from 'vue-router';
 import ActionButton from '@/components/common/ActionButton.vue';
 import AppIcon from '@/components/common/AppIcon.vue';
@@ -216,11 +220,18 @@ import {
 } from '@/composables/useExecution';
 import '@/theme/glass.css';
 const props = defineProps<{ execution: ReturnType<typeof useExecution> }>();
+// Use the same browser connectivity signal as Query. An existing SSE connection
+// can retain its last open state while the browser pauses new network requests.
+const online = shallowRef(onlineManager.isOnline());
+onScopeDispose(onlineManager.subscribe((value) => (online.value = value)));
 const run = computed(() => props.execution.run.value);
 const terminal = computed(
     () => !!run.value && ['succeeded', 'partial', 'failed', 'canceled'].includes(run.value.status),
 );
 const connectionText = computed(() => {
+    if (!online.value) return '浏览器网络已断开，实时更新暂停；后台执行状态需恢复连接后确认。';
+    if (props.execution.query.isPaused.value)
+        return '快照更新已暂停；后台执行状态仍需读取快照确认。';
     const state = props.execution.subscription.value?.state.value;
     if (state === 'error') return '实时连接已停止，执行结果尚需读取快照确认。';
     if (state === 'reconnecting') return '实时连接中断，正在有限重连；后台执行不会因此判为失败。';
