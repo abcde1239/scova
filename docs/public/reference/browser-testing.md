@@ -16,4 +16,23 @@
 
 测试结束及启动/中途失败均在 `finally` 中关闭浏览器上下文，并对本次项目执行 `down -v --remove-orphans`，断言自身容器、卷和网络已清空；仅移除本次生成的镜像标签。启动失败和中途失败都有持久化 spec。强制杀死进程或关闭 Docker 不能保证执行清理，可从失败附件取得项目名后，仅针对该项目检查和回收资源，不清理其他项目或用户卷。
 
-全栈领域 spec 使用 `SCOVA_E2E_FULL_STACK=1` 选择配置并传具体 spec 路径；运行普通前端样本前移除此变量，避免关闭其静态服务。专用配置按各自 `testMatch` 执行：task-center 和 run-history 使用生产构建，execution 和 visual-foundation 使用 test 构建。各配置会重建同一份 `apps/web/dist`，须串行运行并在切换前停止上一预览；test 模式入口不表示生产已有对应功能。Harness 在非必需的 `web-shell-e2e` 范围登记默认关闭的 `web-shell-browser`、`web-environment-browser`。全栈浏览器实际连接后端与数据库，但这些可选任务不计入后端必需门禁，后端已有集成任务继续执行。当前 `ready` 不运行浏览器；CI 与门禁接入由后续专项交付。生产代理的 SPA 回退仍需部署检查，本地 preview 的刷新成功不能代替部署验收。
+全栈领域 spec 使用 `SCOVA_E2E_FULL_STACK=1` 选择配置并传具体 spec 路径；运行普通前端样本前移除此变量，避免关闭其静态服务。专用配置按各自 `testMatch` 执行：task-center 和 run-history 使用生产构建，execution 和 visual-foundation 使用 test 构建。各配置会重建同一份 `apps/web/dist`，须串行运行并在切换前停止上一预览。生产代理的 SPA 回退仍需部署检查，本地 preview 的刷新成功不能代替部署验收。
+
+## 统一 Web 门禁
+
+```sh
+vp run verify:web
+vp run verify:web:browser
+vp run verify:web:failure
+vp node scripts/verify-web.mjs --plan
+```
+
+`verify:web` 串行执行全仓静态检查、单元测试、工作区构建，再执行浏览器门禁。浏览器阶段先执行普通样本 spec，再分别执行四个专用配置，避免同一 spec 在默认和专用配置中重复；最后运行隔离环境、英语/招生/研究两轮、账号及故障恢复、基础页面六宽与键盘 spec。基础主题/字体/透明层矩阵也包含在专用配置中。全部进程退出、服务 teardown 后恢复生产 Web 构建。
+
+`verify:web:browser` 只执行同一浏览器阶段，供 `ready` 的任务图复用，不重复静态检查和单元测试，也不调用 `ready`。Harness 将 `web-shell-e2e` 设为必须配置真实任务，由必需的 `web-browser-gate` 覆盖；原有单项可选任务保留关闭。
+
+`verify:web:failure` 执行真实隔离环境 spec，包含依赖启动和测试中途注入失败的清理断言；确认每项报告记录本项目空资源后，主动以非零退出测试外层失败传播。它预期失败，不能作为成功验收。CI 独立任务要求收到对应失败标记，并核环境阶段和恢复生产构建均成功；其他原因失败也会使 CI 失败。
+
+每次聚合运行使用独立的 `artifacts/verify-web/<时间与进程标识>/`，包含每阶段日志、JSON、失败截图/trace 和 summary。退出码非零、零测试、跳过、flaky、全栈清理附件缺失或资源非空都阻断门禁；控制台及 summary 记录实际 Chromium 版本。GitHub Actions 上传该目录作为短期诊断，不上传私有开发文档或生产凭据。不要同时运行多个聚合入口消费同一 `dist`。
+
+这些门禁运行受控浏览器样本和真实隔离服务，未调用生产远程模型；实际读屏输出、实体设备、整页缩放和远程供应商研究仍分别验收。操作系统终止进程或停止 Docker 可能使 teardown 无法执行，此时按失败附件中的本次项目名检查资源，不清理其他项目。

@@ -20,7 +20,7 @@
             "id": "web-shell-e2e",
             "tests": {
                 "include": ["**/*.spec.ts"],
-                "requireConfiguredTask": false
+                "requireConfiguredTask": true
             }
         },
         {
@@ -370,6 +370,18 @@
             "cwd": ".",
             "required": false,
             "enabled": false
+        },
+        {
+            "id": "web-browser-gate",
+            "workspace": "root",
+            "kind": "test",
+            "argv": ["vp", "run", "verify:web:browser"],
+            "covers": ["web-shell-e2e"],
+            "timeoutMs": 7200000,
+            "cwd": ".",
+            "dependsOn": ["static-check", "unit-tests", "workspace-build", "backend-integration"],
+            "required": true,
+            "enabled": true
         }
     ],
     "publicationTargets": [],

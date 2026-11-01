@@ -39,5 +39,7 @@ jobs:
                   sudo apt-get install --yes postgresql-client
                   pg_dump --version
             - run: pg_dump --version && pg_restore --version
+            - name: Install locked Chromium and browser system dependencies
+              run: vp exec playwright install --with-deps chromium
             - name: Verify backend and contracts
               run: vp run ready

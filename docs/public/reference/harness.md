@@ -22,7 +22,9 @@ vp run harness-verify
 
 根聚合测试只声明实际覆盖的工作区，没有额外配置相同的子任务，避免重复执行。暂无测试的工作区保持 `not-configured`；这不代表业务验收通过。新建工作区或接入真实业务测试后须同时更新 `harness.config.json`、框架扫描配置和真实测试任务；`covers` 只记录覆盖关系，不创建测试。
 
-Worker 的配置与生命周期、Agent 有限图与原文校验单元纳入根测试；`backend-integration` 通过 `vp run test:integration` 串行验证数据库约束、认证、任务与执行接口、实际 Agent/报告交付、调度/反馈/通知与资料库，以及 Outbox/Run 故障恢复、租约 fencing、取消和 Bun/Node 进程。Web 浏览器任务目前为显式可选任务，不计入默认 `ready` 的完整浏览器验收；运行方式见[浏览器测试](browser-testing.md)。
+Worker 的配置与生命周期、Agent 有限图与原文校验单元纳入根测试；`backend-integration` 通过 `vp run test:integration` 串行验证数据库约束、认证、任务与执行接口、实际 Agent/报告交付、调度/反馈/通知与资料库，以及 Outbox/Run 故障恢复、租约 fencing、取消和 Bun/Node 进程。
+
+`web-browser-gate` 是必需任务，依赖 `static-check`、`unit-tests`、`workspace-build` 和 `backend-integration`，通过 `vp run verify:web:browser` 覆盖 `web-shell-e2e`。该工作区要求配置测试；原有单项浏览器任务保持关闭，避免重复运行。浏览器子入口不调用 `ready` 或完整 `verify:web`，因此同一任务图只运行一次静态/单元门禁。它串行切换必要构建模式，所有预览停止后恢复生产构建；运行条件、诊断和人工验收边界见[浏览器测试](browser-testing.md)。
 
 `vp run test:agent-recovery` 定向运行真实 PostgreSQL checkpointer/工具账本集成：Node/Bun 在工具结果提交、checkpoint 保存前强杀并接管，验证用尽预算后仍复用成功结果、unknown 保留费用、旧 epoch checkpoint/pending writes 隔离和持久化操作 drain。根 `vp test` 排除集成文件，不能用直接传入集成文件路径代替显式的测试配置。上述集成需要专用 PostgreSQL 和独立 Bun，完整后端门禁另需 Redis。
 
@@ -48,4 +50,4 @@ Windows 上包装器会从 PATH 定位原生 `vp.exe` 并放到子进程 PATH �
 
 公开模式的 lint 会检查已暂存/跟踪内容。仓库尚无提交、文件未暂存时，index 为空，因此通过不意味着全部工作文件已接受发布检查；新增文件应核对 `git status --short` 和 `git check-ignore -v <path>`。私有源仓库的普通 lint 不执行公开 index 审计；可在独立测试快照中显式模拟公开模式验证文档保护。`.gitignore` 无法清除已经跟踪的内容或历史。日常治理检查不包含完整 Git 历史、托管平台资料或发布产物审计。
 
-GitHub Actions 已配置中文 OpenAPI、契约测试、API 进程启停，以及独立 PostgreSQL/Redis 下的静态检查、单元测试、构建、后端集成和 Bun/Node 持久化恢复实验。完整部署与研究报告端到端门禁按交付计划补齐。
+GitHub Actions 保留中文 OpenAPI、契约测试、API 进程启停及后端持久化恢复门禁，并提供独立 Web 浏览器任务和预期失败传播任务。执行完整 `ready` 的环境还需安装锁定 Chromium 与系统依赖、提供 Docker Engine/Compose 和既有后端测试服务。CI 通过状态须核对实际提交；配置存在不表示该提交已运行成功，自动化也不替代人工读屏或实体设备验收。
