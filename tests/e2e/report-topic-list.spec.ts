@@ -215,7 +215,7 @@ test('real SFCs: complete/live sample and saved format remain distinct from view
         const notice = page.getByText(
             '当前按基础简报展示结构化结论与引用；尚不提供原报告格式的专属布局。',
         );
-        await expect(notice).toHaveCount(view === 'brief' ? 1 : 0);
+        await expect(notice).toHaveCount(0);
         expect(await page.evaluate(() => window.scovaReportFixture.getReport())).toEqual(report);
     }
 });

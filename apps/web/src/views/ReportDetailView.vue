@@ -11,7 +11,33 @@
                 ><app-icon name="appearance" />阅读外观</router-link
             >
         </nav>
-        <report-brief v-if="report" :key="`${accountId}-${report.id}`" :report="report" />
+        <div v-if="report" class="report-presentation scova-interface">
+            <label for="report-format">报告形式</label>
+            <select
+                id="report-format"
+                v-model="selectedFormat"
+                aria-describedby="report-format-help"
+            >
+                <option value="brief">简报</option>
+                <option value="list">主题清单</option>
+                <option value="comparison">对比表</option>
+                <option value="research_report">研究报告</option>
+            </select>
+            <p id="report-format-help">仅改变本次阅读形式，刷新恢复报告保存的形式。</p>
+            <nav class="report-sections" aria-label="报告内容导航">
+                <a href="#summary-title" @click="jump($event, 'summary-title')">正文</a>
+                <a :href="`#${changesTarget}`" @click="jump($event, changesTarget)">变化</a>
+                <a href="#saved-evidence-title" @click="jump($event, 'saved-evidence-title')"
+                    >来源</a
+                >
+            </nav>
+        </div>
+        <component
+            :is="renderer"
+            v-if="report"
+            :key="`${routeIdentity}-${selectedFormat}`"
+            :report="report"
+        />
         <feedback-effects
             v-if="report"
             :key="`effects-${accountId}-${report.id}`"
@@ -76,10 +102,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, nextTick, ref, toRaw, watch } from 'vue';
 import { RouterLink, useRoute } from 'vue-router';
+import type { Report } from '@scova/models';
 import AppIcon from '@/components/common/AppIcon.vue';
 import ReportBrief from '@/components/reports/ReportBrief.vue';
+import TopicListReport from '@/components/reports/TopicListReport.vue';
+import ComparisonReport from '@/components/reports/ComparisonReport.vue';
+import ResearchReport from '@/components/reports/ResearchReport.vue';
 import FeedbackActions from '@/components/reports/FeedbackActions.vue';
 import FeedbackEffects from '@/components/reports/FeedbackEffects.vue';
 import BookmarkAction from '@/components/library/BookmarkAction.vue';
@@ -92,6 +122,7 @@ import {
 } from '@/composables/useBookmarks';
 import StatePanel from '@/components/common/StatePanel.vue';
 import { useReport } from '@/composables/useReport';
+import { reportEndpoint } from '@/api/reports';
 import { inboxReturn } from '@/composables/useInbox';
 import { useSessionLifecycle } from '@/composables/useSessionQuery';
 const route = useRoute();
@@ -101,7 +132,24 @@ const returnTo = computed(() => {
     void route.fullPath;
     return inboxReturn(window.history.state?.inboxReturn, accountId.value);
 });
-const { query, report, valid, error } = useReport(() => route.params.reportId, lifecycle);
+const {
+    query,
+    report: queryReport,
+    valid,
+    error,
+} = useReport(() => route.params.reportId, lifecycle);
+const report = computed(() => {
+    const value = queryReport.value;
+    const reportId = route.params.reportId;
+    if (!value || !valid.value || value.id !== reportId) return undefined;
+    const current = lifecycle.queryClient.getQueryData(
+        lifecycle.queryOptions(reportEndpoint, { params: { reportId } }, ['reports', reportId])
+            .queryKey,
+    );
+    // Vue Query updates its observer in a pre-flush watcher. A synchronous identity change
+    // must not initialize a new reading selection or editor from the old observer's result.
+    return toRaw(current) === toRaw(query.data.value) ? value : undefined;
+});
 const notesIdentity = computed(
     () => `${lifecycle.session.epoch}:${accountId.value}:${route.params.reportId}`,
 );
@@ -162,6 +210,29 @@ const questionIdentity = ref('');
 const routeIdentity = computed(
     () => `${lifecycle.session.epoch}:${accountId.value ?? ''}:${route.params.reportId}`,
 );
+const selectedFormat = ref<Report['format']>();
+let formatIdentity = '';
+watch(
+    [routeIdentity, report],
+    ([identity, value]) => {
+        if (formatIdentity !== identity) {
+            formatIdentity = identity;
+            selectedFormat.value = undefined;
+        }
+        if (value && selectedFormat.value === undefined) selectedFormat.value = value.format;
+    },
+    { immediate: true, flush: 'sync' },
+);
+const renderers = {
+    brief: ReportBrief,
+    list: TopicListReport,
+    comparison: ComparisonReport,
+    research_report: ResearchReport,
+};
+const renderer = computed(() => renderers[selectedFormat.value ?? 'brief']);
+const changesTarget = computed(() =>
+    selectedFormat.value === 'comparison' ? 'comparison-title' : 'report-changes-title',
+);
 watch(
     routeIdentity,
     () => {
@@ -177,6 +248,15 @@ watch(
     { immediate: true, flush: 'sync' },
 );
 const detail = ref<HTMLElement>();
+function jump(event: MouseEvent, id: string) {
+    event.preventDefault();
+    const target = detail.value?.querySelector<HTMLElement>(`#${CSS.escape(id)}`);
+    if (!target) return;
+    target.tabIndex = -1;
+    target.style.scrollMarginBlockStart = '6rem';
+    target.focus({ preventScroll: true });
+    target.scrollIntoView({ block: 'start' });
+}
 async function retry() {
     const restoreFocus = detail.value?.contains(document.activeElement);
     await query.refetch();
@@ -200,6 +280,21 @@ async function retry() {
     overflow-wrap: anywhere;
     border-block-start: 0.0625rem solid var(--scova-border);
     padding-block: 2rem;
+}
+.report-presentation {
+    display: grid;
+    gap: 0.75rem;
+    inline-size: min(100%, 45rem);
+    min-inline-size: 0;
+}
+.report-presentation p {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+.report-sections {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 1.5rem;
 }
 .report-source-history {
     display: grid;
