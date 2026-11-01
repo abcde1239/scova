@@ -272,16 +272,19 @@ test('补充入口六宽/文字放大、四主题浅暗与四报告形式（真�
                     await feedback
                         .getByLabel('选择反馈资料或结论', { exact: true })
                         .selectOption(`source:${report.evidence[0]!.sourceId}`);
-                    await feedback
-                        .getByRole('button', { name: '已了解', exact: true })
-                        .press('Enter');
+                    const known = feedback.getByRole('button', { name: '已了解', exact: true });
+                    await expect(known).toBeEnabled();
+                    await known.press('Enter');
                     await expect(feedback.locator('.selected-target')).toContainText(
                         '当前反馈：已了解',
                     );
                     await layout(page, scale);
-                    await feedback
-                        .getByRole('button', { name: '撤销所选反馈', exact: true })
-                        .press('Enter');
+                    const undo = feedback.getByRole('button', {
+                        name: '撤销所选反馈',
+                        exact: true,
+                    });
+                    await expect(undo).toBeEnabled();
+                    await undo.press('Enter');
                     await expect(feedback.locator('.selected-target')).toContainText(
                         '当前反馈：未设置',
                     );
@@ -289,6 +292,7 @@ test('补充入口六宽/文字放大、四主题浅暗与四报告形式（真�
                         name: '确认后建立独立后续执行',
                         exact: true,
                     });
+                    await expect(open).toBeEnabled();
                     await open.press('Enter');
                     const dialog = page.getByRole('dialog', { name: '确认建立独立后续执行' });
                     await expect(dialog).toBeVisible();

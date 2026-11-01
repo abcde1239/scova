@@ -222,7 +222,14 @@ test('取消只作用于本次Run，未来周期计划保持；晚到真实401�
         await owner.page.getByLabel('邮箱', { exact: true }).fill(`${randomUUID()}@example.test`);
         await owner.page.getByLabel('密码', { exact: true }).fill(`Fixture-${randomUUID()}`);
         await owner.page.getByLabel('默认时区', { exact: true }).fill('UTC');
+        const registered = owner.page.waitForResponse(
+            (response) =>
+                response.request().method() === 'POST' &&
+                new URL(response.url()).pathname === '/api/v1/auth/register',
+            { timeout: 15_000 },
+        );
         await owner.page.getByRole('button', { name: '注册', exact: true }).click();
+        expect((await registered).status()).toBe(201);
         await expect(owner.page).toHaveURL(/\/tasks$/);
         releaseReply();
         await expect(
