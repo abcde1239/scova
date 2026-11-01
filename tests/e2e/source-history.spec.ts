@@ -306,14 +306,22 @@ test('切换账号后迟到的旧账号响应不能恢复旧快照', async ({ pa
     let release!: () => void;
     state.detailDelay = new Promise<void>((resolve) => (release = resolve));
     await installApi(page, state);
+    const detailRequested = page.waitForRequest(
+        (request) =>
+            request.method() === 'GET' &&
+            new URL(request.url()).pathname ===
+                `/api/v1/library/sources/${sourceId}/snapshots/${snapshotId}`,
+    );
     await page.goto(`/library/sources/${sourceId}/snapshots/${snapshotId}`, {
         waitUntil: 'domcontentloaded',
     });
-    await expect(page.getByRole('status').filter({ hasText: '正在读取来源历史' })).toBeVisible();
+    await detailRequested;
+    await expect(page.getByRole('status').filter({ hasText: '正在读取保存快照' })).toBeVisible();
     await page.getByRole('button', { name: '退出登录' }).click();
     await page.getByLabel('邮箱', { exact: true }).fill('reader-101@example.test');
     await page.getByLabel('密码', { exact: true }).fill('local-only-password');
     await page.getByRole('button', { name: '登录', exact: true }).click();
+    await expect(page.getByRole('button', { name: '退出登录' })).toBeVisible();
     release();
     await expect(page.getByText(body, { exact: true })).toHaveCount(0);
     await expect(page.locator('article.snapshot-detail')).toHaveCount(0);
