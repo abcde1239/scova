@@ -45,6 +45,7 @@ const agent = createAgentRuntime({
     env: process.env,
     bundle: scenarioConnectors(scenario, phase, {
         queryForGoal: process.env.SCOVA_ACCEPTANCE_QUERY_FOR_GOAL === '1',
+        browserScenarios: true,
     }),
     enableDelivery: true,
 });

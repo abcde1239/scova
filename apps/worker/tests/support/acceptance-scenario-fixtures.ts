@@ -8,14 +8,25 @@ import {
 export const scenarioNames = ['english', 'admissions', 'research'] as const;
 export type ScenarioName = (typeof scenarioNames)[number];
 export type ScenarioPhase = 'A' | 'B' | 'C';
-type Fact = { subject: string; predicate: string; value: string; quote: string };
+type Fact = {
+    subject: string;
+    predicate: string;
+    value: string;
+    quote: string;
+    relevance?: 'relevant' | 'excluded';
+    relation?: { kind: 'secondary' | 'revision' | 'contrasting'; url: string; quote: string };
+};
 const fact = (subject: string, predicate: string, value: string): Fact => ({
     subject,
     predicate,
     value,
     quote: subject + ': ' + predicate + ' = ' + value + '.',
 });
-export function scenarioData(name: ScenarioName, phase: ScenarioPhase) {
+export function scenarioData(
+    name: ScenarioName,
+    phase: ScenarioPhase,
+    options: { browserScenarios?: boolean } = {},
+) {
     const base = 'https://acceptance.example.org/' + name;
     const revised = phase !== 'A';
     const stable = {
@@ -51,6 +62,34 @@ export function scenarioData(name: ScenarioName, phase: ScenarioPhase) {
         [base + '/changed', changed],
         ...(revised ? ([[base + '/new', added]] as [string, Fact[]][]) : []),
     ]);
+    // Browser acceptance adds independently inspectable discovery cases without changing
+    // the established backend acceptance fixtures or any production provider behavior.
+    if (options.browserScenarios && revised && name === 'english') {
+        changed[0]!.relevance = 'excluded';
+        pages.set(
+            base + '/mirror',
+            stable.map((entry) => ({ ...entry })),
+        );
+        pages.set(base + '/advanced', [
+            {
+                ...fact('Advanced Lesson', 'availability', 'C1 audio without subtitles'),
+                relevance: 'excluded',
+            },
+        ]);
+    }
+    if (options.browserScenarios && revised && name === 'research') {
+        const related = (
+            entry: Fact,
+            kind: 'secondary' | 'revision' | 'contrasting',
+            url: string,
+        ) => {
+            const quote = `${entry.quote} This source explicitly links ${url}.`;
+            return { ...entry, quote, relation: { kind, url, quote } };
+        };
+        pages.set(base + '/news', [related(stable[0]!, 'secondary', base + '/stable')]);
+        pages.set(base + '/revision', [related(changed[0]!, 'revision', base + '/changed')]);
+        pages.set(base + '/new', [related(added[0]!, 'contrasting', base + '/stable')]);
+    }
     return { base, pages, changed, stableUrl: base + '/stable', changedUrl: base + '/changed' };
 }
 
@@ -62,16 +101,18 @@ export function scenarioData(name: ScenarioName, phase: ScenarioPhase) {
 export function scenarioConnectors(
     name: ScenarioName,
     phase: ScenarioPhase,
-    options: { queryForGoal?: boolean } = {},
+    options: { queryForGoal?: boolean; browserScenarios?: boolean } = {},
 ): ConnectorBundle {
-    const data = scenarioData(name, phase);
+    const data = scenarioData(name, phase, options);
     const publication = new Date(Date.now() - 60_000).toISOString();
     const reader = createPageReader({
         http: {
             async request(url) {
                 if (phase === 'C' && url === data.changedUrl)
                     throw new Error('Acceptance fixture: source temporarily unavailable');
-                const facts = data.pages.get(url);
+                const canonical = new URL(url);
+                canonical.search = '';
+                const facts = data.pages.get(canonical.href);
                 if (!facts) throw new Error('Unexpected fixture URL');
                 return {
                     url,
@@ -93,7 +134,14 @@ export function scenarioConnectors(
         search: {
             async search(query, context) {
                 await context?.beforeAttempt?.('search');
-                const urls = [...data.pages.keys()];
+                const urls = [...data.pages.keys()].map((url) =>
+                    options.browserScenarios &&
+                    name === 'english' &&
+                    phase !== 'A' &&
+                    url === data.stableUrl
+                        ? `${url}?utm_source=browser-acceptance`
+                        : url,
+                );
                 return {
                     kind: 'search_results',
                     mode: 'live',
@@ -140,6 +188,37 @@ export function scenarioConnectors(
                     };
                     query = (task.questions[0]!.text + ' acceptance sources').slice(0, 2000);
                 }
+                const claims = pages.flatMap((page) =>
+                    (data.pages.get(page.url) ?? [])
+                        .filter((entry) => entry.relevance !== 'excluded')
+                        .map((entry) => ({
+                            kind: 'fact',
+                            text: entry.quote,
+                            questionIds: ['q0'],
+                            citations: [{ pageId: page.pageId, quote: entry.quote }],
+                        })),
+                );
+                if (options.browserScenarios && name === 'research' && phase !== 'A') {
+                    const original = pages.find((page) => page.url === data.stableUrl);
+                    const contrasting = pages.find((page) => page.url === data.base + '/new');
+                    if (original && contrasting) {
+                        claims.push({
+                            kind: 'conflict',
+                            text: '原文分别讨论条件A与条件B下的不同结果，保留观点差异，不能断定原论文被推翻。',
+                            questionIds: ['q0'],
+                            citations: [original, contrasting].map((page) => ({
+                                pageId: page.pageId,
+                                quote: data.pages.get(page.url)![0]!.quote,
+                            })),
+                        });
+                        claims.push({
+                            kind: 'insufficient',
+                            text: '现有来源不足以将不同实验条件下的结论推广到所有研究。',
+                            questionIds: [],
+                            citations: [],
+                        });
+                    }
+                }
                 const payload = Object.hasOwn(properties, 'queries')
                     ? { queries: [{ query, questionIds: ['q0'] }] }
                     : Object.hasOwn(properties, 'pages')
@@ -148,21 +227,12 @@ export function scenarioConnectors(
                                 pageId: page.pageId,
                                 facts: (data.pages.get(page.url) ?? []).map((entry) => ({
                                     ...entry,
-                                    relevance: 'relevant',
+                                    relevance: entry.relevance ?? 'relevant',
                                     importance: 'important',
                                 })),
                             })),
                         }
-                      : {
-                            claims: pages.flatMap((page) =>
-                                (data.pages.get(page.url) ?? []).map((entry) => ({
-                                    kind: 'fact',
-                                    text: entry.quote,
-                                    questionIds: ['q0'],
-                                    citations: [{ pageId: page.pageId, quote: entry.quote }],
-                                })),
-                            ),
-                        };
+                      : { claims };
                 return {
                     mode: 'live',
                     usage: { inputTokens: 1, outputTokens: 1, estimated: false },
