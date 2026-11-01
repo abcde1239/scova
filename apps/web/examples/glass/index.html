@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="zh-CN">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>局部透明层样例 · Scova</title>
+        <style>
+            :root {
+                font-family: system-ui, sans-serif;
+                line-height: 1.75;
+            }
+            * {
+                box-sizing: border-box;
+            }
+            body {
+                margin: 0;
+            }
+            h1,
+            h2,
+            p {
+                margin: 0;
+            }
+            h1 {
+                font-size: clamp(1.5rem, 1.25rem + 1vw, 2rem);
+            }
+            h2 {
+                font-size: 1.25rem;
+            }
+            .demo {
+                min-block-size: 100dvh;
+                padding: clamp(1rem, 4%, 3rem);
+            }
+            main {
+                max-inline-size: 68.75rem;
+                margin-inline: auto;
+                display: grid;
+                gap: 2rem;
+            }
+            .controls,
+            .controls label {
+                display: flex;
+                align-items: center;
+                flex-wrap: wrap;
+                gap: 0.5rem 1rem;
+            }
+            .controls {
+                gap: 1rem 1.5rem;
+            }
+            select,
+            input,
+            button,
+            a {
+                font: inherit;
+            }
+            select,
+            button,
+            a {
+                min-block-size: 2.75rem;
+            }
+            select,
+            input {
+                color: var(--scova-text);
+                background: var(--scova-surface);
+            }
+            select {
+                max-inline-size: 100%;
+                border: 0.0625rem solid var(--scova-border);
+                border-radius: 0.375rem;
+                padding: 0.375rem 0.625rem;
+            }
+            input[type='checkbox'] {
+                inline-size: 1.125em;
+                block-size: 1.125em;
+                accent-color: var(--scova-primary);
+            }
+            button,
+            a,
+            select,
+            label:has(input[type='checkbox']) {
+                cursor: pointer;
+            }
+            :is(a, select, input, button):focus-visible {
+                outline: 0.125rem solid var(--scova-primary);
+                outline-offset: 0.25rem;
+            }
+            .stage {
+                position: relative;
+                isolation: isolate;
+                padding: clamp(0.5rem, 2%, 1.5rem);
+                background: var(--demo-backdrop, #000);
+            }
+            .underlay {
+                position: absolute;
+                inset: 0;
+                overflow: hidden;
+                z-index: -1;
+                display: none;
+                background: repeating-linear-gradient(
+                    135deg,
+                    #f4cf7e 0 5rem,
+                    #14263a 5rem 10rem,
+                    #c34f44 10rem 15rem,
+                    #f8fafc 15rem 20rem
+                );
+            }
+            .underlay svg {
+                display: block;
+                inline-size: 100%;
+                block-size: 100%;
+            }
+            .stage[data-background='pattern'] .underlay {
+                display: block;
+            }
+            .glass-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
+                gap: 2rem;
+            }
+            .sample {
+                padding: clamp(0.75rem, 2%, 1.25rem);
+                min-inline-size: 0;
+                min-block-size: 10rem;
+                display: flex;
+                flex-direction: column;
+                align-items: start;
+                gap: 1rem;
+                overflow-wrap: anywhere;
+            }
+            .actions {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: 0.75rem 1rem;
+            }
+            a {
+                color: var(--scova-primary);
+                display: inline-flex;
+                align-items: center;
+                gap: 0.5rem;
+                text-underline-offset: 0.2em;
+            }
+            a:hover {
+                color: var(--scova-primary-hover);
+            }
+            a:active {
+                color: var(--scova-primary-pressed);
+            }
+            .icon {
+                inline-size: 1.25em;
+                block-size: 1.25em;
+                flex-shrink: 0;
+            }
+            .muted {
+                color: var(--scova-muted);
+            }
+            .opaque-grid {
+                display: grid;
+                gap: 1rem;
+            }
+            .opaque {
+                padding: 1.25rem;
+                border: 0.0625rem solid var(--scova-border);
+                border-radius: 0.5rem;
+            }
+            .opaque input {
+                max-inline-size: 100%;
+                inline-size: 100%;
+                padding: 0.625rem;
+                border: 0.0625rem solid var(--scova-border);
+                border-radius: 0.375rem;
+            }
+            .opaque.warning {
+                color: var(--scova-partial);
+            }
+            .thumbnail {
+                display: block;
+                inline-size: min(100%, 20rem);
+                block-size: auto;
+                aspect-ratio: 2 / 1;
+                background: var(--scova-surface);
+            }
+        </style>
+    </head>
+    <body>
+        <div id="demo" class="scova-theme demo">
+            <main>
+                <h1>局部透明层样例</h1>
+                <form class="controls" aria-label="样例设置" onsubmit="return false;">
+                    <label
+                        >明暗<select id="scheme">
+                            <option value="light">浅色</option>
+                            <option value="dark">深色</option>
+                        </select></label
+                    >
+                    <label
+                        >主色<select id="accent">
+                            <option value="blue">蓝色</option>
+                            <option value="pine">松绿</option>
+                            <option value="iris">鸢尾</option>
+                            <option value="amber">琥珀</option>
+                        </select></label
+                    >
+                    <label
+                        >下层内容<select id="background">
+                            <option value="black">黑色</option>
+                            <option value="white">白色</option>
+                            <option value="blue">蓝色</option>
+                            <option value="pattern">图形与文字</option>
+                        </select></label
+                    >
+                    <label><input id="solid" type="checkbox" />使用实色</label>
+                </form>
+                <section
+                    class="stage"
+                    id="stage"
+                    data-background="black"
+                    aria-label="四处局部透明样例"
+                >
+                    <div class="underlay" aria-hidden="true">
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 800 600"
+                            preserveAspectRatio="xMidYMid slice"
+                        >
+                            <circle cx="600" cy="180" r="160" fill="#76b2df" />
+                            <path d="M0 500 200 220 430 510 620 330 800 600H0" fill="#183a2a" />
+                            <text x="30" y="150" fill="white" font-size="60">
+                                资料 Reading 2026
+                            </text>
+                            <text x="170" y="440" fill="black" font-size="52">内容与证据</text>
+                        </svg>
+                    </div>
+                    <div class="glass-grid">
+                        <header id="navigation" class="sample scova-glass scova-glass--navigation">
+                            <h2>顶部导航</h2>
+                            <nav class="actions" aria-label="顶部导航样例">
+                                <a href="#content">任务</a><a href="#content">收件箱</a
+                                ><a href="#content">资料库</a>
+                            </nav>
+                            <p class="muted">资料与研究 Reading 2026</p>
+                        </header>
+                        <section
+                            id="tools"
+                            class="sample scova-glass scova-glass--tools"
+                            aria-label="全局工具样例"
+                        >
+                            <h2>全局工具</h2>
+                            <div class="actions">
+                                <a href="#content"
+                                    ><svg
+                                        class="icon"
+                                        aria-hidden="true"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        stroke-width="2"
+                                    >
+                                        <circle cx="10" cy="10" r="6" />
+                                        <path d="m15 15 6 6" /></svg
+                                    >搜索资料</a
+                                ><a href="#content">设置</a>
+                            </div>
+                            <p class="muted">中英文与图标保持清晰</p>
+                        </section>
+                        <section
+                            id="report"
+                            class="sample scova-glass scova-glass--report"
+                            aria-label="报告操作条样例"
+                        >
+                            <h2>报告操作条</h2>
+                            <div class="actions">
+                                <a href="#content">打开来源</a><a href="#content">复制引用</a>
+                            </div>
+                            <p class="muted">研究资料与来源证据</p>
+                        </section>
+                        <nav
+                            id="menu"
+                            class="sample scova-glass scova-glass--menu"
+                            aria-label="手机菜单样例"
+                        >
+                            <h2>手机菜单</h2>
+                            <div class="actions">
+                                <a href="#content">任务</a><a href="#content">收件箱</a
+                                ><a href="#content">资料库</a>
+                            </div>
+                            <p class="muted">仅展示视觉，无菜单交互逻辑</p>
+                        </nav>
+                    </div>
+                </section>
+                <section id="content" class="opaque-grid" aria-label="实色内容样例">
+                    <article class="opaque scova-surface">
+                        <h2>正文与笔记</h2>
+                        <p>内容表面保持实色；透明效果只用于导航与工具层。</p>
+                    </article>
+                    <label class="opaque scova-surface"
+                        >资料名称<input id="content-input" value="本地研究资料"
+                    /></label>
+                    <blockquote class="opaque scova-surface" style="margin: 0">
+                        来源证据保留清晰底色。
+                    </blockquote>
+                    <aside class="opaque scova-surface warning" role="note">
+                        证据不足时保留警告，警告不使用透明背景。
+                    </aside>
+                    <div class="opaque scova-surface">
+                        <svg
+                            class="thumbnail"
+                            xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 400 200"
+                            role="img"
+                            aria-label="不透明的内容缩略图样例"
+                        >
+                            <rect width="400" height="200" fill="#294d61" />
+                            <circle cx="310" cy="55" r="32" fill="#e9cc8c" />
+                            <path d="M0 200 130 60 250 200 330 100 400 200" fill="#6b9b80" />
+                        </svg>
+                    </div>
+                </section>
+            </main>
+        </div>
+        <script type="module" src="../../src/examples/glass.ts"></script>
+    </body>
+</html>

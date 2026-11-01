@@ -5,17 +5,30 @@
     "type": "module",
     "scripts": {
         "dev": "vp dev",
-        "build": "tsc && vp build",
+        "build": "vue-tsc --noEmit && vp build",
+        "build:e2e": "vue-tsc --noEmit && vp build --mode test",
         "preview": "vp preview"
     },
     "dependencies": {
+        "@fontsource-variable/inter": "catalog:",
+        "@fontsource-variable/noto-sans-sc": "catalog:",
+        "@fontsource-variable/noto-serif-sc": "catalog:",
         "@scova/models": "workspace:*",
-        "vue": "catalog:"
+        "@tanstack/vue-query": "catalog:",
+        "@vicons/ionicons5": "catalog:",
+        "naive-ui": "catalog:",
+        "pinia": "catalog:",
+        "requestlane": "catalog:",
+        "vue": "catalog:",
+        "vue-router": "catalog:"
     },
     "devDependencies": {
+        "@types/node": "catalog:",
         "@vitejs/plugin-vue": "catalog:",
-        "typescript": "^7.0.2",
+        "typescript": "catalog:vue-sfc",
+        "unocss": "catalog:",
         "vite": "catalog:",
-        "vite-plus": "catalog:"
+        "vite-plus": "catalog:",
+        "vue-tsc": "catalog:"
     }
 }

@@ -1,12 +1,30 @@
-import { createApp, h } from 'vue';
+import { createApp } from 'vue';
+import { VueQueryPlugin } from '@tanstack/vue-query';
+import 'virtual:uno.css';
+import App from '@/App.vue';
+import { createSessionLifecycle, sessionLifecycleKey } from '@/api/session';
 import '@/style.css';
+import { createWorkbenchRouter } from '@/router';
+import {
+    createSessionController,
+    installSessionRouting,
+    sessionControllerKey,
+} from '@/composables/useSession';
 
-// M1 仅建立可启动的 Vue 入口，业务工作台由后续 Issue 实现。
-createApp({
-    render: () =>
-        h('main', { id: 'center' }, [
-            h('h1', '知巡 Scova'),
-            h('p', '任务驱动的 AI 信息查阅与研究工作台'),
-            h('p', '工程入口已建立，业务页面正在开发。'),
-        ]),
-}).mount('#app');
+const router = createWorkbenchRouter();
+const lifecycle = createSessionLifecycle();
+const session = createSessionController(lifecycle);
+const disposeRouting = installSessionRouting(router, session);
+const app = createApp(App)
+    .use(lifecycle.pinia)
+    .use(VueQueryPlugin, { queryClient: lifecycle.queryClient })
+    .provide(sessionLifecycleKey, lifecycle)
+    .provide(sessionControllerKey, session)
+    .use(router);
+app.mount('#app');
+
+if (import.meta.hot)
+    import.meta.hot.dispose(() => {
+        disposeRouting();
+        lifecycle.dispose();
+    });

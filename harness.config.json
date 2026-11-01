@@ -10,7 +10,18 @@
         },
         {
             "root": "apps/web",
-            "id": "apps-web"
+            "id": "apps-web",
+            "tests": {
+                "requireConfiguredTask": true
+            }
+        },
+        {
+            "root": "tests/e2e",
+            "id": "web-shell-e2e",
+            "tests": {
+                "include": ["**/*.spec.ts"],
+                "requireConfiguredTask": false
+            }
         },
         {
             "root": "apps/server",
@@ -36,7 +47,9 @@
         {
             "root": "packages/db",
             "id": "packages-db",
-            "tests": { "requireConfiguredTask": true }
+            "tests": {
+                "requireConfiguredTask": true
+            }
         },
         {
             "root": "packages/agent-core",
@@ -140,6 +153,90 @@
     },
     "tasks": [
         {
+            "id": "web-preferences-browser",
+            "workspace": "web-shell-e2e",
+            "kind": "test",
+            "argv": ["vp", "run", "test:e2e", "tests/e2e/preferences.spec.ts"],
+            "covers": ["web-shell-e2e"],
+            "timeoutMs": 180000,
+            "cwd": ".",
+            "required": false,
+            "enabled": false
+        },
+        {
+            "id": "web-run-history-browser",
+            "workspace": "web-shell-e2e",
+            "kind": "test",
+            "argv": ["vp", "run", "test:e2e", "--config", "tests/e2e/run-history.config.ts"],
+            "covers": ["web-shell-e2e"],
+            "timeoutMs": 180000,
+            "cwd": ".",
+            "required": false,
+            "enabled": false
+        },
+        {
+            "id": "web-execution-browser",
+            "workspace": "web-shell-e2e",
+            "kind": "test",
+            "argv": [
+                "vp",
+                "exec",
+                "playwright",
+                "test",
+                "--config",
+                "tests/e2e/execution.config.ts"
+            ],
+            "covers": ["web-shell-e2e"],
+            "timeoutMs": 180000,
+            "cwd": ".",
+            "required": false,
+            "enabled": false
+        },
+        {
+            "id": "web-report-questions-browser",
+            "workspace": "web-shell-e2e",
+            "kind": "test",
+            "argv": ["vp", "run", "test:e2e", "tests/e2e/report-questions.spec.ts"],
+            "covers": ["web-shell-e2e"],
+            "timeoutMs": 180000,
+            "cwd": ".",
+            "required": false,
+            "enabled": false
+        },
+        {
+            "id": "web-report-browser",
+            "workspace": "web-shell-e2e",
+            "kind": "test",
+            "argv": ["vp", "run", "test:e2e", "tests/e2e/report.spec.ts"],
+            "covers": ["web-shell-e2e"],
+            "timeoutMs": 180000,
+            "cwd": ".",
+            "required": false,
+            "enabled": false
+        },
+        {
+            "id": "web-shell-browser",
+            "workspace": "web-shell-e2e",
+            "kind": "test",
+            "argv": ["vp", "run", "test:e2e", "--", "tests/e2e/shell.spec.ts"],
+            "covers": ["web-shell-e2e"],
+            "timeoutMs": 180000,
+            "cwd": ".",
+            "required": false,
+            "enabled": false
+        },
+        {
+            "id": "web-environment-browser",
+            "workspace": "web-shell-e2e",
+            "kind": "test",
+            "argv": ["vp", "run", "test:e2e", "tests/e2e/environment.spec.ts"],
+            "covers": ["web-shell-e2e"],
+            "timeoutMs": 1800000,
+            "cwd": ".",
+            "required": false,
+            "enabled": false
+        },
+        {
             "id": "static-check",
             "workspace": "root",
             "kind": "lint",
@@ -157,6 +254,7 @@
             "kind": "test",
             "argv": ["vp", "test"],
             "covers": [
+                "apps-web",
                 "apps-server",
                 "apps-worker",
                 "packages-shared",
@@ -229,6 +327,49 @@
             "covers": ["apps-server", "apps-worker", "packages-db"],
             "timeoutMs": 900000,
             "kind": "test"
+        },
+        {
+            "id": "web-deployment",
+            "workspace": "root",
+            "argv": ["vp", "run", "test:deployment"],
+            "covers": ["root"],
+            "timeoutMs": 900000,
+            "kind": "test",
+            "required": false,
+            "enabled": false
+        },
+        {
+            "id": "web-report-research-browser",
+            "workspace": "web-shell-e2e",
+            "kind": "test",
+            "argv": ["vp", "run", "test:e2e", "tests/e2e/report-research.spec.ts"],
+            "covers": ["web-shell-e2e"],
+            "timeoutMs": 180000,
+            "cwd": ".",
+            "required": false,
+            "enabled": false
+        },
+        {
+            "id": "web-report-comparison-browser",
+            "workspace": "web-shell-e2e",
+            "kind": "test",
+            "argv": ["vp", "run", "test:e2e", "tests/e2e/report-comparison-table.spec.ts"],
+            "covers": ["web-shell-e2e"],
+            "timeoutMs": 180000,
+            "cwd": ".",
+            "required": false,
+            "enabled": false
+        },
+        {
+            "id": "web-report-topic-list-browser",
+            "workspace": "web-shell-e2e",
+            "kind": "test",
+            "argv": ["vp", "run", "test:e2e", "tests/e2e/report-topic-list.spec.ts"],
+            "covers": ["web-shell-e2e"],
+            "timeoutMs": 180000,
+            "cwd": ".",
+            "required": false,
+            "enabled": false
         }
     ],
     "publicationTargets": [],

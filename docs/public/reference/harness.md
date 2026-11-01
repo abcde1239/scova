@@ -14,15 +14,15 @@ vp run harness-verify
 
 `harness-lint` 检查工作区测试布局、任务依赖和验收文档链接，不运行测试；repository.visibility=public 时还检查 Git index 文件边界。仓库当前先采用 private，内部文档仍按约定仅保留本地；未来公开前需切换治理配置并重新验证边界。`harness-verify` 先执行同一治理检查，再逐项运行以下任务；`vp run ready` 是它的别名。
 
-| 任务            | 命令              | 当前覆盖范围                                         |
-| --------------- | ----------------- | ---------------------------------------------------- |
-| static-check    | `vp check`        | 格式、lint、TypeScript 静态检查                      |
-| unit-tests      | `vp test`         | contracts、别名隔离、API 健康检查、OpenAPI 与 shared |
-| workspace-build | `vp run -r build` | 所有已登记工作区构建/类型检查                        |
+| 任务            | 命令              | 当前覆盖范围                                                     |
+| --------------- | ----------------- | ---------------------------------------------------------------- |
+| static-check    | `vp check`        | 格式、lint、TypeScript 静态检查                                  |
+| unit-tests      | `vp test`         | Web/会话/通信/领域逻辑、contracts、别名隔离、API、Agent 与共享包 |
+| workspace-build | `vp run -r build` | 所有已登记工作区构建/类型检查                                    |
 
 根聚合测试只声明实际覆盖的工作区，没有额外配置相同的子任务，避免重复执行。暂无测试的工作区保持 `not-configured`；这不代表业务验收通过。新建工作区或接入真实业务测试后须同时更新 `harness.config.json`、框架扫描配置和真实测试任务；`covers` 只记录覆盖关系，不创建测试。
 
-Worker 的配置与生命周期、Agent 有限图与原文校验单元纳入根测试；`backend-integration` 通过 `vp run test:integration` 串行验证数据库约束、认证、任务与执行接口、API 到 Agent 候选的跨进程链路，以及 Outbox/Run 故障恢复、租约 fencing、取消和 Bun/Node 进程。报告交付仍待接入。
+Worker 的配置与生命周期、Agent 有限图与原文校验单元纳入根测试；`backend-integration` 通过 `vp run test:integration` 串行验证数据库约束、认证、任务与执行接口、实际 Agent/报告交付、调度/反馈/通知与资料库，以及 Outbox/Run 故障恢复、租约 fencing、取消和 Bun/Node 进程。Web 浏览器任务目前为显式可选任务，不计入默认 `ready` 的完整浏览器验收；运行方式见[浏览器测试](browser-testing.md)。
 
 `vp run test:agent-recovery` 定向运行真实 PostgreSQL checkpointer/工具账本集成：Node/Bun 在工具结果提交、checkpoint 保存前强杀并接管，验证用尽预算后仍复用成功结果、unknown 保留费用、旧 epoch checkpoint/pending writes 隔离和持久化操作 drain。根 `vp test` 排除集成文件，不能用直接传入集成文件路径代替显式的测试配置。上述集成需要专用 PostgreSQL 和独立 Bun，完整后端门禁另需 Redis。
 

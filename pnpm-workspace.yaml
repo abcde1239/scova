@@ -9,6 +9,8 @@ catalogMode: prefer
 allowBuilds:
     esbuild: false
     msgpackr-extract: false
+    # Select the installed Vue major for Vue Query's compatibility bridge.
+    vue-demi: true
 
 catalog:
     '@langchain/core': ^1.3.0
@@ -21,7 +23,8 @@ catalog:
     '@types/node': ^24
     '@types/jsdom': ^30.0.0
     '@types/pg': ^8.23.1
-    '@vitejs/plugin-vue': ^6.0.10
+    '@tanstack/vue-query': 5.105.0
+    '@vitejs/plugin-vue': 6.0.10
     bullmq: ^6.4.0
     drizzle-orm: 0.45.4
     drizzle-kit: 0.31.11
@@ -29,12 +32,30 @@ catalog:
     ioredis: ^6.0.0
     jsdom: ^26.1.0
     pg: ^8.23.1
+    naive-ui: 2.45.3
+    pinia: 4.1.0
+    requestlane: 0.1.3
     typescript: ^7.0.2
+    unocss: 66.12.0
     vite: npm:@voidzero-dev/vite-plus-core@1.4.0
     vite-plus: 1.4.0
-    vue: ^3.5.44
+    vue: 3.5.44
+    vue-router: 5.4.0
+    vue-tsc: 3.3.13
+    '@vicons/ionicons5': 0.13.0
+    '@playwright/test': 1.64.1
+    '@fontsource-variable/inter': 5.3.0
+    '@fontsource-variable/noto-sans-sc': 5.3.1
+    '@fontsource-variable/noto-serif-sc': 5.3.1
+
+catalogs:
+    # vue-tsc still consumes the legacy compiler API removed in TypeScript 7.
+    vue-sfc:
+        typescript: 6.0.3
 overrides:
     vite@*: 'catalog:'
+    # Keep the backend's existing peer resolution when requestlane adds Zod 4.
+    '@langchain/langgraph>zod': 3.25.76
     # Keep Drizzle's optional Prisma peers excluded from dependency installation.
     'drizzle-orm>@prisma/client': '-'
     'drizzle-orm>prisma': '-'

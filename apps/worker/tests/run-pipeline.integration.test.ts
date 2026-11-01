@@ -23,7 +23,7 @@ import { fileURLToPath } from 'node:url';
 import { Queue } from 'bullmq';
 import { Redis } from 'ioredis';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
-import { createDefaultServices } from '../../server/src/app/context.ts';
+import { createDefaultServices } from '../../server/src/app/services.ts';
 import { createRunService as createCommandService } from '../../server/src/service/runs.ts';
 import { eventMessage } from '../../server/src/service/run-events.ts';
 import { nodeScriptCommand } from '../../../scripts/process-runtime.mjs';

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" role="img" aria-labelledby="title desc">
+  <title id="title">流域分区概念图</title>
+  <desc id="desc">自制几何示意，非真实地理数据。左侧蓝色流域、右侧绿色观测区、底部图例和零到十公里比例尺。</desc>
+  <rect width="900" height="600" fill="#eef3f6"/>
+  <path d="M60 80 440 45 500 190 390 330 180 400 60 270Z" fill="#bfdbfe" stroke="#1e40af" stroke-width="3"/>
+  <path d="M500 75 820 110 855 350 650 430 455 300 540 205Z" fill="#a7f3d0" stroke="#065f46" stroke-width="3"/>
+  <path d="M180 100Q330 180 310 260T540 390" fill="none" stroke="#1d4ed8" stroke-width="10"/>
+  <g font-family="sans-serif" fill="#17212f" font-size="26">
+    <text x="60" y="465">概念图 / Concept only</text>
+    <rect x="60" y="495" width="25" height="25" fill="#bfdbfe" stroke="#1e40af"/>
+    <text x="100" y="517">流域示意 Basin</text>
+    <rect x="360" y="495" width="25" height="25" fill="#a7f3d0" stroke="#065f46"/>
+    <text x="400" y="517">观测区 Zone</text>
+    <path d="M650 535V550H830V535M740 550V540" fill="none" stroke="#17212f" stroke-width="4"/>
+    <text x="645" y="585">0</text><text x="725" y="585">5</text><text x="790" y="585">10 km</text>
+  </g>
+</svg>
