@@ -2,7 +2,7 @@
 
 任务驱动的 AI 信息查阅与研究工作台。围绕主题搜索、阅读和查证资料，生成带引用的报告，并持续追踪新增与变化。
 
-项目开发中：Vue 工作台已接入账号、任务创建与编辑、执行进度与控制、简报引用、收件箱/通知及资料库等业务。后端提供有预算的持久化 Agent、搜索/模型/安全阅读、证据交付和连续运行比较，同源 Compose 可部署 Web/API/Worker。生产四种报告视图的统一切换和完整浏览器发布门禁仍在推进，见[工作台说明](docs/public/guides/web-workbench.md)。
+项目开发中：Vue 工作台提供账号、任务与计划、执行进度与控制、四种报告形式、引用、收件箱/通知、反馈、资料库和证据问答。后端提供有预算的持久化 Agent、搜索/模型/安全阅读、证据交付和连续运行比较，同源 Compose 可部署 Web/API/Worker。浏览器与完整工作台门禁见[工作台说明](docs/public/guides/web-workbench.md)；受控供应商测试和真实远程研究分别验证。
 
 ## 技术与目录
 
@@ -47,9 +47,11 @@ vp test
 vp run -r build
 vp run api:openapi:check
 vp run test:integration  # 需专用 PostgreSQL / Redis
+vp run verify:web       # 需 Chromium 和 Docker，基础 Web 门禁
+vp run verify:mvp-full  # 追加补充页面与完整工作台联合旅程
 ```
 
-`vp test` 运行单元与契约测试；数据库、队列和运行时集成需启动专用服务，参见[验证说明](docs/public/reference/harness.md)。完整门禁：`vp run ready`。
+`vp test` 运行单元与契约测试；数据库、队列和运行时集成需启动专用服务。先运行 `vp run test:e2e:install` 安装锁定 Chromium（Linux 另需浏览器系统依赖），参见[验证说明](docs/public/reference/harness.md)。完整门禁 `vp run ready` 同时包含后端、基础浏览器与补充工作台验证。
 
 ## 文档
 
