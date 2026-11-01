@@ -4,6 +4,8 @@
     "private": true,
     "type": "module",
     "scripts": {
+        "verify:mvp-full": "vpx scripts/verify-mvp-full.mjs",
+        "verify:mvp:browser": "vpx scripts/verify-mvp-full.mjs --supplementary-only",
         "db:migrate": "vpx scripts/migrate-database.mjs",
         "search:up": "vpx scripts/searxng.ts up",
         "search:down": "vpx scripts/searxng.ts down",

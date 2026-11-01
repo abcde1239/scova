@@ -18,13 +18,15 @@ jobs:
             - run: vp install --frozen-lockfile
             - name: Install locked Chromium and system dependencies
               run: vp exec playwright install --with-deps chromium
-            - name: Verify base Web with isolated real services
-              run: vp run verify:web
+            - name: Verify base Web and complete workbench with isolated real services
+              run: vp run verify:mvp-full
             - uses: actions/upload-artifact@v4
               if: always()
               with:
                   name: web-verification
-                  path: artifacts/verify-web/
+                  path: |
+                      artifacts/verify-web/
+                      artifacts/verify-mvp-full/
                   retention-days: 7
                   if-no-files-found: warn
     controlled-failure:

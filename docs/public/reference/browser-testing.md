@@ -29,7 +29,7 @@ vp node scripts/verify-web.mjs --plan
 
 `verify:web` 串行执行全仓静态检查、单元测试、工作区构建，再执行浏览器门禁。浏览器阶段先执行普通样本 spec，再分别执行四个专用配置，避免同一 spec 在默认和专用配置中重复；最后运行隔离环境、英语/招生/研究两轮、账号及故障恢复、基础页面六宽与键盘 spec。基础主题/字体/透明层矩阵也包含在专用配置中。全部进程退出、服务 teardown 后恢复生产 Web 构建。
 
-`verify:web:browser` 只执行同一浏览器阶段，供 `ready` 的任务图复用，不重复静态检查和单元测试，也不调用 `ready`。Harness 将 `web-shell-e2e` 设为必须配置真实任务，由必需的 `web-browser-gate` 覆盖；原有单项可选任务保留关闭。
+`verify:web:browser` 只执行同一浏览器阶段，供 `ready` 的任务图复用，不重复静态检查和单元测试，也不调用 `ready`。Harness 将 `web-shell-e2e` 设为必须配置真实任务，由必需的 `web-browser-gate` 覆盖；原有单项可选任务保留关闭。[完整工作台门禁](workbench-verification.md)使用 `vp run verify:mvp-full` 复用基础检查并串行追加补充矩阵和联合旅程；`ready` 由后续 `web-workbench-gate` 追加同样的补充阶段。
 
 `verify:web:failure` 执行真实隔离环境 spec，包含依赖启动和测试中途注入失败的清理断言；确认每项报告记录本项目空资源后，主动以非零退出测试外层失败传播。它预期失败，不能作为成功验收。CI 独立任务要求收到对应失败标记，并核环境阶段和恢复生产构建均成功；其他原因失败也会使 CI 失败。
 

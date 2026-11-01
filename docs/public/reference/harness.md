@@ -26,6 +26,8 @@ Worker 的配置与生命周期、Agent 有限图与原文校验单元纳入根�
 
 `web-browser-gate` 是必需任务，依赖 `static-check`、`unit-tests`、`workspace-build` 和 `backend-integration`，通过 `vp run verify:web:browser` 覆盖 `web-shell-e2e`。该工作区要求配置测试；原有单项浏览器任务保持关闭，避免重复运行。浏览器子入口不调用 `ready` 或完整 `verify:web`，因此同一任务图只运行一次静态/单元门禁。它串行切换必要构建模式，所有预览停止后恢复生产构建；运行条件、诊断和人工验收边界见[浏览器测试](browser-testing.md)。
 
+`web-workbench-gate` 依赖基础浏览器门禁，通过 `vp run verify:mvp:browser` 追加[补充页面矩阵与完整用户旅程](workbench-verification.md)，不重复基础阶段。独立 `vp run verify:mvp-full` 则先执行完整 `verify:web` 再追加同一阶段，供 Web CI 与单独验收使用。
+
 `vp run test:agent-recovery` 定向运行真实 PostgreSQL checkpointer/工具账本集成：Node/Bun 在工具结果提交、checkpoint 保存前强杀并接管，验证用尽预算后仍复用成功结果、unknown 保留费用、旧 epoch checkpoint/pending writes 隔离和持久化操作 drain。根 `vp test` 排除集成文件，不能用直接传入集成文件路径代替显式的测试配置。上述集成需要专用 PostgreSQL 和独立 Bun，完整后端门禁另需 Redis。
 
 任务图中不包含 `ready`、`harness-lint` 或 `harness-verify`，避免递归。检查退出码：0 表示所请求门禁通过，1 表示规则或任务失败，2 表示配置或执行条件错误。查看 JSON 中每个工作区和任务的状态，不以外层命令成功替代测试覆盖判断。
