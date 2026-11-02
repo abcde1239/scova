@@ -51,6 +51,7 @@ export class ComposeEnvironment {
     private env: NodeJS.ProcessEnv = {};
     private cleanup: Promise<void> | undefined;
     private scenario: { name: Scenario; phase: Phase } | undefined;
+    private questionModel = false;
 
     constructor(images?: Images) {
         this.images = images ?? {
@@ -122,6 +123,9 @@ export class ComposeEnvironment {
                         ? {
                               command: ['bun', 'run', '/app/tests/e2e/support/worker.ts'],
                           }
+                        : {}),
+                    ...(service === 'api' && this.questionModel
+                        ? { command: ['bun', 'run', '/app/tests/e2e/support/api.ts'] }
                         : {}),
                 },
             ]),
@@ -229,6 +233,24 @@ export class ComposeEnvironment {
             '-At',
             '-c',
             statement,
+        ]);
+    }
+
+    /** Switch only this test project's API to an explicit, local evidence supplier. */
+    async useQuestionModel(enabled: boolean) {
+        await this.compose(['stop', '-t', '30', 'api']);
+        this.questionModel = enabled;
+        await this.writeOverride();
+        await this.compose([
+            'up',
+            '-d',
+            '--no-build',
+            '--no-deps',
+            '--force-recreate',
+            '--wait',
+            '--wait-timeout',
+            '90',
+            'api',
         ]);
     }
 

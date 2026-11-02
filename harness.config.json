@@ -265,6 +265,18 @@
             "dependsOn": ["static-check", "unit-tests", "workspace-build", "backend-integration"],
             "required": true,
             "enabled": true
+        },
+        {
+            "id": "web-workbench-gate",
+            "workspace": "root",
+            "kind": "test",
+            "argv": ["vp", "run", "verify:mvp:browser"],
+            "covers": ["web-shell-e2e"],
+            "timeoutMs": 3600000,
+            "cwd": ".",
+            "dependsOn": ["web-browser-gate"],
+            "required": true,
+            "enabled": true
         }
     ],
     "publicationTargets": [],
