@@ -405,6 +405,7 @@ export const comparisonSchema: Record<string, unknown> = {
                                 'quote',
                                 'relevance',
                                 'importance',
+                                'relation',
                             ],
                             properties: {
                                 subject: { type: 'string', minLength: 1, maxLength: 200 },
@@ -420,7 +421,7 @@ export const comparisonSchema: Record<string, unknown> = {
                                     enum: ['important', 'non_material', 'unknown'],
                                 },
                                 relation: {
-                                    type: 'object',
+                                    type: ['object', 'null'],
                                     additionalProperties: false,
                                     required: ['kind', 'url', 'quote'],
                                     properties: {
@@ -463,13 +464,15 @@ export function manifestFromModel(
             url: canonical(page.url),
             contentHash: page.contentHash,
             extractorVersion: page.extractionVersion,
-            facts: entry.facts.map(
-                (fact, factIndex) =>
-                    ({
-                        ...(object(fact) ? fact : {}),
-                        id: `fact-${index}-${factIndex}`,
-                    }) as ComparisonFact,
-            ),
+            facts: entry.facts.map((fact, factIndex) => {
+                const normalized = object(fact) ? { ...fact } : {};
+                // Strict model output requires this key; domain manifests omit absent relations.
+                if (normalized.relation === null) delete normalized.relation;
+                return {
+                    ...normalized,
+                    id: `fact-${index}-${factIndex}`,
+                } as ComparisonFact;
+            }),
         });
     }
     return validateComparisonManifest(manifest, context, pages);
