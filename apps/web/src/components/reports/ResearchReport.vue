@@ -31,11 +31,6 @@
             </ol>
         </nav>
         <report-frame :report="report" summary-title="报告概述">
-            <template #format-notice>
-                <p v-if="report.format !== 'brief'" class="format-notice scova-interface">
-                    当前以研究报告阅读结构展示已保存内容；报告格式选择属于后续能力。
-                </p>
-            </template>
             <report-changes :report="report" />
             <section
                 v-for="section in sections"
@@ -54,24 +49,6 @@
                     :claim="claim"
                 />
             </section>
-            <section
-                id="saved-evidence"
-                class="evidence-appendix"
-                aria-labelledby="saved-evidence-title"
-            >
-                <h3 id="saved-evidence-title" class="scova-content-title">来源与保存引用</h3>
-                <p class="scova-interface">
-                    以下按报告保存顺序列出可访问证据；孤立来源不会被猜测归入某条结论。
-                </p>
-                <div
-                    v-for="evidence in report.evidence"
-                    :id="`evidence-${evidence.id}`"
-                    :key="evidence.id"
-                    class="evidence-entry"
-                >
-                    <evidence-citation :evidence="evidence" />
-                </div>
-            </section>
         </report-frame>
     </article>
 </template>
@@ -82,7 +59,6 @@ import type { Report } from '@scova/models';
 import ReportFrame from '@/components/reports/ReportFrame.vue';
 import ReportClaim from '@/components/reports/ReportClaim.vue';
 import ReportChanges from '@/components/reports/ReportChanges.vue';
-import EvidenceCitation from '@/components/reports/EvidenceCitation.vue';
 import { reportSections } from '@/composables/useReport';
 const props = defineProps<{ report: Report }>();
 const sections = computed(() => reportSections(props.report));
@@ -113,8 +89,7 @@ onMounted(() => {
 <style scoped>
 .research-report,
 .report-directory,
-.claim-section,
-.evidence-appendix {
+.claim-section {
     display: grid;
     gap: 1.5rem;
     min-inline-size: 0;
@@ -150,34 +125,14 @@ onMounted(() => {
     outline: 0.125rem solid var(--scova-primary);
     outline-offset: 0.25rem;
 }
-.format-notice {
-    margin: 0;
-}
-.claim-section,
-.evidence-appendix {
+.claim-section {
     scroll-margin-block-start: 6rem;
 }
-.claim-section > h3,
-.evidence-appendix > h3 {
-    scroll-margin-block-start: 6rem;
-}
-.evidence-appendix {
-    padding-block: 2rem;
-    border-block-start: 0.0625rem solid var(--scova-border);
-}
-.evidence-entry {
-    min-inline-size: 0;
+.claim-section > h3 {
     scroll-margin-block-start: 6rem;
 }
 h3:focus-visible {
     outline: 0.125rem solid var(--scova-primary);
     outline-offset: 0.25rem;
-}
-@media (max-width: 40rem) {
-    .evidence-entry :deep(summary),
-    .evidence-entry :deep(.evidence-body),
-    .evidence-entry :deep(blockquote) {
-        padding-inline: 0.5rem;
-    }
 }
 </style>

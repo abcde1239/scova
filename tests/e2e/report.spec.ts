@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import type { Report } from '@scova/models';
 
 // Local HTTP samples exercise the real Web bundle; database delivery is verified separately.
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -211,7 +212,9 @@ test('本地 HTTP 样本：无效 UUID、非法引用及非简报布局边界', 
     await expect(article(page)).toBeVisible();
     await expect(
         page.getByText('当前按基础简报展示结构化结论与引用；尚不提供原报告格式的专属布局。'),
-    ).toBeVisible();
+    ).toHaveCount(0);
+    await expect(page.locator('.report-comparison')).toBeVisible();
+    await expect(page.getByLabel('报告形式', { exact: true })).toHaveValue('comparison');
     await expect(page.getByText('本次计划范围内查阅完成，不代表穷尽互联网资料。')).toBeVisible();
     await expect(page.getByRole('note', { name: '部分交付警告' })).toHaveCount(0);
 });
@@ -274,13 +277,17 @@ test('本地 HTTP 样本：断网可键盘重试，已展开报告退出换号�
     await expect(article(page)).toBeVisible();
     await page.locator('details.evidence summary').first().click();
     await expect(page.locator('blockquote').first()).toBeVisible();
+    await page.getByLabel('报告形式', { exact: true }).selectOption('list');
+    await expect(page.locator('.report-topic-list')).toBeVisible();
     await page.getByRole('button', { name: '退出登录' }).click();
     await expect(page.locator('article, blockquote')).toHaveCount(0);
+    await expect(page.getByLabel('报告形式', { exact: true })).toHaveCount(0);
     await page.getByLabel('邮箱', { exact: true }).fill('reader@example.test');
     await page.getByLabel('密码', { exact: true }).fill('local-only-password');
     await page.getByRole('button', { name: '登录', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('报告不存在或当前账号无法访问');
     await expect(page.locator('article, blockquote')).toHaveCount(0);
+    await expect(page.getByLabel('报告形式', { exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: '退出登录' })).toBeVisible();
 });
 
@@ -316,5 +323,307 @@ for (const width of [320, 390, 768, 1024, 1280, 1440]) {
             });
         }
         expect(errors).toEqual([]);
+    });
+}
+
+const formats = [
+    ['brief', '.report-brief'],
+    ['list', '.report-topic-list'],
+    ['comparison', '.report-comparison'],
+    ['research_report', '.research-report'],
+] as const;
+const claimKinds = ['fact', 'inference', 'conflict', 'insufficient'] as const;
+
+function formatReport(): Report {
+    const value = report() as Report;
+    value.baselineRunId = id(5);
+    value.claims.push({ ...value.claims[1]!, id: id(14) });
+    // These sources are intentionally absent from every claim; one is change-only, one isolated.
+    for (const n of [30, 40])
+        value.evidence.push({
+            ...structuredClone(value.evidence[0]!),
+            id: id(n),
+            sourceId: n === 30 ? id(21) : id(n + 1),
+            snapshotId: id(n + 2),
+            title: `来源 ${n}`,
+            quote: `完整保存原文 ${n}\n  第二段保留空格与换行。`,
+        });
+    value.changes = (
+        [
+            'baseline',
+            'new',
+            'duplicate',
+            'duplicate_candidate',
+            'changed',
+            'non_material',
+            'uncertain',
+        ] as const
+    ).map((kind, index) => ({
+        id: id(50 + index),
+        sourceId: id(21),
+        kind,
+        factKey: `事实维度 ${kind}`,
+        oldValue: kind === 'new' || kind === 'baseline' ? null : `旧值 ${kind}`,
+        newValue: `新值 ${kind}`,
+        oldEvidenceIds: kind === 'new' || kind === 'baseline' ? [] : [id(20)],
+        newEvidenceIds: [id(30)],
+        important: kind === 'changed',
+        reason: `原始原因 ${kind}`,
+    }));
+    return value;
+}
+
+async function formatSamples(page: Page, initial = formatReport()) {
+    const state = {
+        report: initial,
+        account: 100,
+        beforeReport: undefined as (() => Promise<void>) | undefined,
+        calls: [] as { method: string; path: string }[],
+        unexpected: [] as string[],
+    };
+    await page.route('**/api/v1/**', async (route) => {
+        const request = route.request();
+        const path = new URL(request.url()).pathname;
+        state.calls.push({ method: request.method(), path });
+        if (request.method() === 'GET') {
+            if (path === '/api/v1/me') return route.fulfill({ json: account(state.account) });
+            if (path === `/api/v1/reports/${state.report.id}`) {
+                await state.beforeReport?.();
+                return route.fulfill({ json: state.report });
+            }
+            if (path === `/api/v1/tasks/${state.report.taskId}/feedback`)
+                return route.fulfill({ json: { items: [] } });
+            if (path === '/api/v1/notes')
+                return route.fulfill({ json: { items: [], nextCursor: null } });
+            if (/^\/api\/v1\/reports\/[^/]+\/questions\/[^/]+$/.test(path))
+                return route.fulfill({ status: 404, json: failure() });
+        }
+        state.unexpected.push(`${request.method()} ${path}`);
+        return route.fulfill({ status: 501, json: failure('UNCONFIGURED_SAMPLE_REQUEST') });
+    });
+    return state;
+}
+
+async function assertFormatContent(page: Page, expected: Report) {
+    const frame = page.locator('.report-frame');
+    await expect(frame).toHaveCount(1);
+    await expect(frame.locator('#report-title')).toHaveText(expected.title);
+    await expect(frame.locator('.metadata')).toContainText(expected.taskVersionId);
+    await expect(frame.locator('.metadata time')).toHaveAttribute('datetime', expected.publishedAt);
+    const orderedClaims = claimKinds.flatMap((kind) =>
+        expected.claims.filter((entry) => entry.kind === kind),
+    );
+    expect(
+        await frame.locator('.claim').evaluateAll((elements) =>
+            elements.map((element) => ({
+                id: element.id.slice('claim-'.length),
+                text: element.querySelector('.claim-text')!.textContent,
+                confidence: element.querySelector('.confidence')!.textContent,
+                evidenceIds: [...element.querySelectorAll('.citation')].map(
+                    (entry) => entry.id.split('-evidence-')[1],
+                ),
+            })),
+        ),
+    ).toEqual(
+        orderedClaims.map((entry) => ({
+            id: entry.id,
+            text: entry.text,
+            confidence: `证据说明：${entry.confidenceLabel}`,
+            evidenceIds: entry.evidenceIds,
+        })),
+    );
+    expect(
+        await frame.locator('.evidence-entry').evaluateAll((elements) =>
+            elements.map((element) => ({
+                id: element.id.slice('evidence-'.length),
+                quote: element.querySelector('blockquote')!.textContent,
+            })),
+        ),
+    ).toEqual(expected.evidence.map((entry) => ({ id: entry.id, quote: entry.quote })));
+    for (const entry of expected.changes) {
+        const comparison = await page.locator('.report-comparison').count();
+        const row = comparison
+            ? page.locator(`#comparison-change-${entry.id}`)
+            : page.locator(`.change-record[aria-labelledby="change-${entry.id}"]`);
+        await expect(row).toHaveCount(1);
+        await expect(row).toContainText(entry.factKey);
+        await expect(row).toContainText(entry.reason);
+        for (const side of ['old', 'new'] as const) {
+            const section = row.locator(`.${side}-side`);
+            await expect(section).toContainText(
+                entry[`${side}Value`] ?? `未提供${side === 'old' ? '旧' : '新'}值`,
+            );
+            expect(await section.locator('blockquote').allTextContents()).toEqual(
+                entry[`${side}EvidenceIds`].map(
+                    (evidenceId) =>
+                        expected.evidence.find((evidence) => evidence.id === evidenceId)!.quote,
+                ),
+            );
+        }
+    }
+    expect(
+        await page.evaluate(() => {
+            const ids = [...document.querySelectorAll('[id]')].map((element) => element.id);
+            return ids.filter((value, index) => ids.indexOf(value) !== index);
+        }),
+    ).toEqual([]);
+    await expect(page.getByRole('note', { name: '部分交付警告' })).toHaveCount(
+        expected.coverage.completeness === 'partial' ? 1 : 0,
+    );
+    expect(await page.evaluate(() => 'sourceExecuted' in window)).toBe(false);
+}
+
+for (const [savedFormat, renderer] of formats) {
+    test(`生产四视图：保存 ${savedFormat} 默认布局、全量集合、URL 与刷新恢复`, async ({ page }) => {
+        const saved = formatReport();
+        saved.format = savedFormat;
+        const state = await formatSamples(page, saved);
+        const url = `${reportPath}?questionId=${id(90)}&unknown=a&unknown=b&view=list&view=invalid#preserved`;
+        await page.goto(url);
+        await expect(page.locator(renderer)).toBeVisible();
+        const selector = page.getByLabel('报告形式', { exact: true });
+        await expect(selector).toHaveValue(savedFormat);
+        const originalUrl = page.url();
+        const reportReads = () =>
+            state.calls.filter((entry) => entry.path === `/api/v1/reports/${saved.id}`).length;
+        const reads = reportReads();
+        for (const [format, active] of [...formats, ...formats].reverse()) {
+            await selector.focus();
+            await selector.selectOption(format);
+            await expect(selector).toBeFocused();
+            await expect(page.locator(active)).toBeVisible();
+            await assertFormatContent(page, saved);
+            const navigation = page.getByRole('navigation', { name: '报告内容导航', exact: true });
+            for (const [label, target] of [
+                ['正文', 'summary-title'],
+                ['变化', format === 'comparison' ? 'comparison-title' : 'report-changes-title'],
+                ['来源', 'saved-evidence-title'],
+            ]) {
+                await navigation.getByRole('link', { name: label!, exact: true }).focus();
+                await navigation.getByRole('link', { name: label!, exact: true }).press('Enter');
+                await expect(page.locator(`#${target}`)).toBeFocused();
+                expect(page.url()).toBe(originalUrl);
+            }
+            expect(page.url()).toBe(originalUrl);
+            expect(reportReads()).toBe(reads);
+        }
+        expect(state.calls.filter((entry) => entry.method !== 'GET')).toEqual([]);
+        expect(state.unexpected).toEqual([]);
+        await page.reload();
+        await expect(selector).toHaveValue(savedFormat);
+        await expect(page.locator(renderer)).toBeVisible();
+        expect(page.url()).toBe(originalUrl);
+        expect(reportReads()).toBe(reads + 1);
+        expect(state.report).toEqual(saved);
+    });
+}
+
+test('生产四视图：格式切换保留未提交问题和同页笔记编辑器，换报告重置', async ({ page }) => {
+    const state = await formatSamples(page);
+    await page.goto(reportPath);
+    const selector = page.getByLabel('报告形式', { exact: true });
+    await expect(selector).toBeVisible();
+    await page.getByLabel('问题', { exact: true }).fill('保留的未提交问题');
+    const questions = await page.locator('.questions').elementHandle();
+    const notes = await page.locator('.notes-panel').elementHandle();
+    expect(notes).not.toBeNull();
+    for (const [format] of formats) {
+        await selector.selectOption(format);
+        await expect(page.getByLabel('问题', { exact: true })).toHaveValue('保留的未提交问题');
+        expect(await questions!.evaluate((element) => element.isConnected)).toBe(true);
+        expect(await notes!.evaluate((element) => element.isConnected)).toBe(true);
+    }
+    page.once('dialog', (dialog) => dialog.accept());
+    await page.getByRole('button', { name: '清空问题', exact: true }).click();
+    await expect(page.getByLabel('问题', { exact: true })).toHaveValue('');
+    const navigateWithinApp = async (target: string) =>
+        page.evaluate((target) => {
+            // Browser history events exercise the real router without adding a test API to the app.
+            window.history.pushState({ ...window.history.state, current: target }, '', target);
+            window.dispatchEvent(new PopStateEvent('popstate', { state: window.history.state }));
+        }, target);
+    await navigateWithinApp(`${reportPath}?sameReport=1`);
+    await expect(selector).toHaveValue('research_report');
+    expect(await notes!.evaluate((element) => element.isConnected)).toBe(true);
+    state.report = { ...state.report, id: id(70), format: 'list', title: '另一份保存报告' };
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let waiting = false;
+    state.beforeReport = async () => {
+        waiting = true;
+        await gate;
+    };
+    try {
+        await navigateWithinApp(`/reports/${id(70)}`);
+        await expect.poll(() => waiting).toBe(true);
+        await expect(page.locator('.report-frame')).toHaveCount(0);
+        await expect(selector).toHaveCount(0);
+        release();
+        await expect(selector).toHaveValue('list');
+        await expect(page.locator('#report-title')).toHaveText('另一份保存报告');
+    } finally {
+        release();
+    }
+    await expect(page.getByLabel('问题', { exact: true })).toHaveValue('');
+    expect(state.calls.filter((entry) => entry.method !== 'GET')).toEqual([]);
+    expect(state.unexpected).toEqual([]);
+});
+
+for (const width of [320, 360, 390, 768, 1024, 1440]) {
+    test(`生产四视图：${width} 六宽与200%根文字、引用及局部表格滚动`, async ({ page }, info) => {
+        const state = await formatSamples(page);
+        await page.setViewportSize({ width, height: 1000 });
+        await page.goto(reportPath);
+        const selector = page.getByLabel('报告形式', { exact: true });
+        for (const enlarged of [false, true]) {
+            await page.evaluate(
+                (value) => (document.documentElement.style.fontSize = value ? '200%' : ''),
+                enlarged,
+            );
+            for (const [format, renderer] of formats) {
+                await selector.focus();
+                await selector.selectOption(format);
+                await expect(selector).toBeFocused();
+                await expect(page.locator(renderer)).toBeVisible();
+                await expect(page.locator('#report-title')).toBeVisible();
+                await expect(page.getByRole('note', { name: '部分交付警告' })).toBeVisible();
+                const source = page.locator('.evidence-entry').first();
+                await source.locator('summary').focus();
+                await source.locator('summary').press('Enter');
+                await expect(source.locator('blockquote')).toBeVisible();
+                expect(
+                    await source.locator('blockquote').evaluate((element) => {
+                        const css = getComputedStyle(element);
+                        return (
+                            (element.clientWidth -
+                                parseFloat(css.paddingLeft) -
+                                parseFloat(css.paddingRight)) /
+                            parseFloat(css.fontSize)
+                        );
+                    }),
+                ).toBeGreaterThanOrEqual(4);
+                expect(
+                    await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+                ).toBe(true);
+                if (format === 'comparison') {
+                    const scroll = page.locator('.comparison-scroll');
+                    expect(
+                        await scroll.evaluate((element) => getComputedStyle(element).overflowX),
+                    ).toBe('auto');
+                    if (width <= 390 || enlarged)
+                        expect(
+                            await scroll.evaluate(
+                                (element) => element.scrollWidth > element.clientWidth,
+                            ),
+                        ).toBe(true);
+                }
+                await info.attach(`${format}-${width}${enlarged ? '-text200' : ''}`, {
+                    body: await page.screenshot({ fullPage: true }),
+                    contentType: 'image/png',
+                });
+            }
+        }
+        expect(state.calls.filter((entry) => entry.method !== 'GET')).toEqual([]);
+        expect(state.unexpected).toEqual([]);
     });
 }

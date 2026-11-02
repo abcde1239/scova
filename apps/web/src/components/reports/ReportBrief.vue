@@ -1,10 +1,5 @@
 <template>
     <report-frame :report="report" summary-title="简报概述" class="report-brief">
-        <template #format-notice>
-            <p v-if="report.format !== 'brief'" class="scova-interface">
-                当前按基础简报展示结构化结论与引用；尚不提供原报告格式的专属布局。
-            </p>
-        </template>
         <report-changes :report="report" />
         <section
             v-for="section in sections"

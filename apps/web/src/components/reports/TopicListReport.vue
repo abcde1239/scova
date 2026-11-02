@@ -1,5 +1,6 @@
 <template>
     <report-frame :report="report" class="report-topic-list">
+        <report-changes :report="report" />
         <section
             v-for="section in sections"
             :key="section.kind"
@@ -21,6 +22,7 @@ import { computed } from 'vue';
 import type { Report } from '@scova/models';
 import ReportFrame from '@/components/reports/ReportFrame.vue';
 import ReportClaim from '@/components/reports/ReportClaim.vue';
+import ReportChanges from '@/components/reports/ReportChanges.vue';
 import { reportSections } from '@/composables/useReport';
 const props = defineProps<{ report: Report }>();
 const sections = computed(() => reportSections(props.report));

@@ -74,6 +74,7 @@
             <p>{{ report.summary }}</p>
         </section>
         <slot />
+        <report-sources :report="report" />
     </article>
 </template>
 
@@ -82,6 +83,7 @@ import { computed } from 'vue';
 import type { Report } from '@scova/models';
 import { reportIntegrity } from '@/composables/useReport';
 import { useReadingTypography } from '@/composables/useReadingTypography';
+import ReportSources from '@/components/reports/ReportSources.vue';
 const props = withDefaults(defineProps<{ report: Report; summaryTitle?: string }>(), {
     summaryTitle: '报告概述',
 });
