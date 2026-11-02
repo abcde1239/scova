@@ -1,15 +1,25 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const fullStackSpecs = [
+    'environment.spec.ts',
+    'two-rounds-english.spec.ts',
+    'two-rounds-admission.spec.ts',
+    'two-rounds-research.spec.ts',
+    'browser-resilience.spec.ts',
+    'base-pages-accessibility.spec.ts',
+    'supplementary-visual.spec.ts',
+    'full-workbench.spec.ts',
+];
 const fullStack =
     process.env.SCOVA_E2E_FULL_STACK === '1' ||
-    process.argv.some((argument) => argument.includes('environment.spec.ts'));
+    process.argv.some((argument) => fullStackSpecs.some((name) => argument.includes(name)));
 // Playwright reevaluates config in workers, whose argv no longer contains the spec path.
 if (fullStack) process.env.SCOVA_E2E_FULL_STACK = '1';
 
 export default defineConfig({
     testDir: '.',
     testMatch: '**/*.spec.ts',
-    testIgnore: fullStack ? '**/shell.spec.ts' : '**/environment.spec.ts',
+    testIgnore: fullStack ? '**/shell.spec.ts' : fullStackSpecs.map((name) => `**/${name}`),
     timeout: fullStack ? 600_000 : 30_000,
     outputDir: '../../artifacts/e2e/results',
     fullyParallel: false,
