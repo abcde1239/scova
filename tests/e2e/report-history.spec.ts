@@ -310,7 +310,9 @@ test('任务选项初次403不阻断合法报告，保留当前筛选值', async
     state.taskFailure = 403;
     await page.setViewportSize({ width: 390, height: 1000 });
     await page.goto(`/tasks/reports?taskId=${taskA}`);
-    await expect(region(page).getByRole('status')).toContainText('任务选项暂时无法读取');
+    await expect(
+        region(page).getByRole('status').filter({ hasText: '任务选项暂时无法读取' }),
+    ).toBeVisible();
     await expect(entries(page)).toHaveCount(3);
     await expect(select(page).locator('option:checked')).toHaveText('当前筛选任务');
     expect(reportCalls(calls)[0]!.taskId).toBe(taskA);
@@ -354,7 +356,7 @@ test('任务选项分页与键盘筛选重置目的缓存，空态保留留白',
     expect(reportCalls(calls).at(-1)!.cursor).toBeNull();
     await select(page).selectOption(taskC);
     await expect(entries(page)).toHaveCount(0);
-    await expect(region(page).getByRole('status')).toContainText('尚无报告');
+    await expect(region(page).getByRole('status').filter({ hasText: '尚无报告' })).toBeVisible();
     await screenshot(page, info, 'empty-viewport');
     await page.evaluate(() => (document.documentElement.style.fontSize = '200%'));
     await noOverflow(page);
@@ -366,7 +368,9 @@ test('合法大写UUID规范请求；非法UUID不派发历史且可重新选择
     await expect(entries(page)).toHaveCount(3);
     expect(reportCalls(calls)[0]!.taskId).toBe(taskA);
     await page.goto('/tasks/reports?taskId=bad');
-    await expect(region(page).getByRole('status')).toContainText('任务筛选地址无效');
+    await expect(
+        region(page).getByRole('status').filter({ hasText: '任务筛选地址无效' }),
+    ).toBeVisible();
     await expect(entries(page)).toHaveCount(0);
     expect(reportCalls(calls)).toHaveLength(1);
     await screenshot(page, info, 'invalid-filter-viewport');
@@ -410,7 +414,9 @@ for (const status of [403, 404, 'protocol', 503] as const) {
         state.taskFailure = status;
         state.taskFailureScope = 'next';
         await region(page).getByRole('button', { name: '加载更多任务选项', exact: true }).click();
-        await expect(region(page).getByRole('status')).toContainText('任务选项暂时无法读取');
+        await expect(
+            region(page).getByRole('status').filter({ hasText: '任务选项暂时无法读取' }),
+        ).toBeVisible();
         await expect(select(page).locator('option:checked')).toHaveText(
             status === 503 ? state.tasks[0]!.title : '当前筛选任务',
         );
@@ -441,7 +447,9 @@ for (const location of ['initial', 'next', 'refresh'] as const) {
                     await more(page).click();
                 } else await refresh(page).click();
             }
-            await expect(region(page).getByRole('status')).toContainText('加载失败');
+            await expect(
+                region(page).getByRole('status').filter({ hasText: '加载失败' }),
+            ).toBeVisible();
             await expect(entries(page)).toHaveCount(
                 (status === 503 || status === 'cursor') && location !== 'initial' ? 3 : 0,
             );

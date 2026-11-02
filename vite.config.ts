@@ -5,9 +5,14 @@ export default defineConfig({
     staged: {
         '*': 'vp check --fix',
     },
-    fmt: { ignorePatterns: ['scripts/vendor/**'], singleQuote: true, tabWidth: 4, printWidth: 100 },
+    fmt: {
+        ignorePatterns: ['scripts/vendor/**', '.pnpm-store/**'],
+        singleQuote: true,
+        tabWidth: 4,
+        printWidth: 100,
+    },
     lint: {
-        ignorePatterns: ['scripts/vendor/**'],
+        ignorePatterns: ['scripts/vendor/**', '.pnpm-store/**'],
         jsPlugins: [{ name: 'vite-plus', specifier: 'vite-plus/oxlint-plugin' }],
         rules: { 'vite-plus/prefer-vite-plus-imports': 'error' },
         options: { typeAware: true, typeCheck: true },

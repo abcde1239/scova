@@ -295,6 +295,7 @@ test('选每日后明确改为仅手动创建，只保存配置且不启动Run',
 test('ISO星期1到7映射，0或8没有选项；切换manual清除周期payload', async ({ page }) => {
     const { calls, state } = await samples(page.context());
     await page.goto(`/tasks/${taskId}/edit`);
+    await expect(weekday(page).locator('option')).toHaveCount(8);
     const options = await weekday(page)
         .locator('option')
         .evaluateAll((elements) =>

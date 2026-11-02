@@ -1,0 +1,68 @@
+name: Web 浏览器门禁
+on:
+    pull_request:
+    push:
+        branches: [main]
+    workflow_dispatch:
+permissions:
+    contents: read
+jobs:
+    web:
+        runs-on: ubuntu-latest
+        timeout-minutes: 180
+        steps:
+            - uses: actions/checkout@v4
+            - uses: voidzero-dev/setup-vp@v1.22.0
+              with:
+                  node-version: '24.22.1'
+            - run: vp install --frozen-lockfile
+            - name: Install locked Chromium and system dependencies
+              run: vp exec playwright install --with-deps chromium
+            - name: Verify base Web with isolated real services
+              run: vp run verify:web
+            - uses: actions/upload-artifact@v4
+              if: always()
+              with:
+                  name: web-verification
+                  path: artifacts/verify-web/
+                  retention-days: 7
+                  if-no-files-found: warn
+    controlled-failure:
+        runs-on: ubuntu-latest
+        timeout-minutes: 60
+        steps:
+            - uses: actions/checkout@v4
+            - uses: voidzero-dev/setup-vp@v1.22.0
+              with:
+                  node-version: '24.22.1'
+            - run: vp install --frozen-lockfile
+            - run: vp exec playwright install --with-deps chromium
+            - name: Inject gate failure after real environment cleanup
+              id: failure
+              continue-on-error: true
+              run: vp run verify:web:failure
+            - name: Require the expected nonzero result and completed cleanup
+              env:
+                  FAILURE_OUTCOME: ${{ steps.failure.outcome }}
+              run: |
+                  node --input-type=module <<'JS'
+                  import { readdirSync, readFileSync } from 'node:fs';
+                  import assert from 'node:assert/strict';
+                  const root = 'artifacts/verify-web';
+                  const runs = readdirSync(root);
+                  assert.equal(runs.length, 1);
+                  const summary = JSON.parse(readFileSync(`${root}/${runs[0]}/summary.json`));
+                  assert.equal(process.env.FAILURE_OUTCOME, 'failure');
+                  assert.equal(summary.controlledFailure, true);
+                  assert.equal(summary.passed, false);
+                  assert.equal(summary.error, 'SCOVA_CONTROLLED_WEB_GATE_FAILURE_AFTER_CLEANUP');
+                  assert.equal(summary.stages.find(stage => stage.id === 'full-stack')?.exitCode, 0);
+                  assert.equal(summary.stages.find(stage => stage.id === 'restore-production')?.exitCode, 0);
+                  JS
+            - uses: actions/upload-artifact@v4
+              if: always()
+              with:
+                  name: web-controlled-failure
+                  path: artifacts/verify-web/
+                  retention-days: 7
+                  if-no-files-found: warn
