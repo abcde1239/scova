@@ -44,16 +44,18 @@
                 </dd>
             </div>
         </dl>
-        <router-link
+        <navigation-button
             v-if="link"
             class="task-history-link"
+            icon="report"
             :to="{ name: 'report-history', query: { taskId: task.id } }"
-            >报告历史</router-link
+            >报告历史</navigation-button
         >
     </article>
 </template>
 
 <script setup lang="ts">
+import NavigationButton from '@/components/common/NavigationButton.vue';
 import { computed, useId } from 'vue';
 import { useQuery } from '@tanstack/vue-query';
 import { RouterLink } from 'vue-router';
@@ -94,13 +96,14 @@ const runLabels: Record<RunStatus, string> = {
 
 <style scoped>
 .task-card {
-    padding-block: 1.75rem;
+    padding: 1rem;
+    border-block-start: 0.0625rem solid color-mix(in srgb, var(--scova-border) 30%, transparent);
     min-inline-size: 0;
     overflow-wrap: anywhere;
     cursor: default;
 }
 h2 {
-    margin: 0 0 1.25rem;
+    margin: 0 0 0.75rem;
     font-size: 1.25rem;
     line-height: 1.5;
     font-weight: 600;

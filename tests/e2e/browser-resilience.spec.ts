@@ -1,3 +1,4 @@
+import { logoutFromAccount, expectAccountReady } from './support/account-menu.ts';
 import { randomUUID } from 'node:crypto';
 import type { Run, TaskDetailResponse } from '@scova/models';
 import { expect, test } from './support/environment.ts';
@@ -215,7 +216,7 @@ test('取消只作用于本次Run，未来周期计划保持；晚到真实401�
     try {
         await owner.page.reload({ waitUntil: 'domcontentloaded' });
         await expect.poll(() => intercepted).toBe(true);
-        await owner.page.getByRole('button', { name: '退出登录', exact: true }).click();
+        await logoutFromAccount(owner.page);
         releaseFetch();
         await expect.poll(() => actualStatus).toBe(401);
         await owner.page.getByRole('link', { name: '注册账号', exact: true }).click();
@@ -232,16 +233,12 @@ test('取消只作用于本次Run，未来周期计划保持；晚到真实401�
         expect((await registered).status()).toBe(201);
         await expect(owner.page).toHaveURL(/\/tasks$/);
         releaseReply();
-        await expect(
-            owner.page.getByRole('button', { name: '退出登录', exact: true }),
-        ).toBeVisible();
+        await expectAccountReady(owner.page);
         await expect(owner.page.locator('.task-card')).toHaveCount(0);
         await owner.page.goto(`/runs/${run.id}`);
         await expect(owner.page.getByRole('status')).toContainText('执行不存在或无权访问');
         await expect(owner.page.locator('.execution-detail')).toHaveCount(0);
-        await expect(
-            owner.page.getByRole('button', { name: '退出登录', exact: true }),
-        ).toBeVisible();
+        await expectAccountReady(owner.page);
     } finally {
         releaseFetch();
         releaseReply();

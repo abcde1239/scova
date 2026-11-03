@@ -48,20 +48,19 @@ const link = computed(() => sourceLink(props.evidence.snapshot?.originalUrl ?? p
 <style scoped>
 .evidence {
     min-inline-size: 0;
-    border: 0.0625rem solid var(--scova-border);
-    border-radius: 0.5rem;
-    background: var(--scova-surface);
+    border-block-end: 0.0625rem solid color-mix(in srgb, var(--scova-border) 30%, transparent);
     overflow-wrap: anywhere;
 }
 summary {
-    padding: 0.875rem 1rem;
+    min-block-size: 2.75rem;
+    padding: 0.5rem 0;
     cursor: pointer;
     font-weight: 500;
 }
 .evidence-body {
     display: grid;
     gap: 1rem;
-    padding: 0 1rem 1rem;
+    padding-block-end: 0.75rem;
 }
 blockquote {
     margin: 0;

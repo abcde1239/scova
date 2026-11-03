@@ -1,3 +1,4 @@
+import { logoutFromAccount, expectAccountReady } from './support/account-menu.ts';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import type { Report } from '@scova/models';
@@ -106,8 +107,65 @@ async function samples(page: Page) {
 const article = (page: Page) =>
     page.getByRole('article', { name: '开放研究资料：可追溯的基础简报' });
 
+test('报告桌面并列辅助区，手机紧凑分区，快捷跳转仍聚焦正文', async ({ page }) => {
+    await samples(page);
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto(reportPath);
+    await expect(article(page)).toBeVisible();
+    const main = await page.getByRole('main').boundingBox();
+    expect(main!.width).toBeGreaterThan(1300);
+    const content = await page.locator('.report-content').boundingBox();
+    const companion = await page.locator('.report-companion').boundingBox();
+    expect(companion!.x).toBeGreaterThan(content!.x + content!.width);
+    expect(Math.abs(companion!.y - content!.y)).toBeLessThan(2);
+    for (const width of [390, 320]) {
+        await page.setViewportSize({ width, height: 844 });
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+            true,
+        );
+        const tools = page.getByRole('navigation', { name: '报告内容导航' });
+        const jump = tools.getByRole('link', { name: '正文', exact: true });
+        await expect(jump).toHaveClass(/n-button/);
+        expect((await jump.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+        await jump.focus();
+        await jump.press('Enter');
+        await expect(page.locator('#summary-title')).toBeFocused();
+        const section = page.locator('.bookmarks-tool');
+        await expect(section.locator('.report-bookmarks')).toBeHidden();
+        expect((await section.boundingBox())!.width).toBeLessThanOrEqual(width);
+    }
+});
+
 test.beforeAll(async ({ browser }) => {
     console.log(`Browser: Chromium ${browser.version()}`);
+});
+
+test('报告默认只展开问答，辅助工具按需打开且折叠保留笔记草稿', async ({ page }) => {
+    const state = await formatSamples(page);
+    await page.goto(reportPath);
+    await expect(page.getByLabel('问题', { exact: true })).toBeVisible();
+    for (const tool of ['notes', 'bookmarks', 'feedback']) {
+        const section = page.locator(`.${tool}-tool`);
+        await expect(section).toBeVisible();
+        expect(await section.evaluate((element) => (element as HTMLDetailsElement).open)).toBe(
+            false,
+        );
+    }
+    await expect(page.locator('.report-companion select:visible')).toHaveCount(0);
+    const summary = page.locator('.notes-tool > summary');
+    await summary.focus();
+    await summary.press('Enter');
+    await page.getByRole('button', { name: '新建笔记', exact: true }).click();
+    const draft = page.getByLabel('本地笔记正文', { exact: true });
+    await draft.fill('折叠工具仍保留的本地稿');
+    const editor = await page.locator('.note-editor').elementHandle();
+    await summary.click();
+    await expect(draft).toBeHidden();
+    await summary.press('Space');
+    await expect(draft).toHaveValue('折叠工具仍保留的本地稿');
+    expect(await editor!.evaluate((element) => element.isConnected)).toBe(true);
+    expect(state.calls.filter((entry) => entry.method !== 'GET')).toEqual([]);
+    expect(state.unexpected).toEqual([]);
 });
 
 test('本地 HTTP 样本：partial 在正文前、四类结论、保存引用与安全原始链接', async ({ page }) => {
@@ -243,14 +301,14 @@ test('本地 HTTP 样本：切换账号后迟到旧请求不能恢复旧内容',
     });
     await page.goto(reportPath, { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('status')).toContainText('正在读取报告');
-    await page.getByRole('button', { name: '退出登录' }).click();
+    await logoutFromAccount(page);
     await page.getByLabel('邮箱', { exact: true }).fill('reader@example.test');
     await page.getByLabel('密码', { exact: true }).fill('local-only-password');
     await page.getByRole('button', { name: '登录', exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`${reportPath}$`));
     release();
     await expect(page.getByRole('status')).toContainText('报告不存在或当前账号无法访问');
-    await expect(page.getByRole('button', { name: '退出登录' })).toBeVisible();
+    await expectAccountReady(page);
     await expect(page.locator('article')).toHaveCount(0);
 });
 
@@ -279,7 +337,7 @@ test('本地 HTTP 样本：断网可键盘重试，已展开报告退出换号�
     await expect(page.locator('blockquote').first()).toBeVisible();
     await page.getByLabel('报告形式', { exact: true }).selectOption('list');
     await expect(page.locator('.report-topic-list')).toBeVisible();
-    await page.getByRole('button', { name: '退出登录' }).click();
+    await logoutFromAccount(page);
     await expect(page.locator('article, blockquote')).toHaveCount(0);
     await expect(page.getByLabel('报告形式', { exact: true })).toHaveCount(0);
     await page.getByLabel('邮箱', { exact: true }).fill('reader@example.test');
@@ -288,7 +346,7 @@ test('本地 HTTP 样本：断网可键盘重试，已展开报告退出换号�
     await expect(page.getByRole('status')).toContainText('报告不存在或当前账号无法访问');
     await expect(page.locator('article, blockquote')).toHaveCount(0);
     await expect(page.getByLabel('报告形式', { exact: true })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: '退出登录' })).toBeVisible();
+    await expectAccountReady(page);
 });
 
 for (const width of [320, 390, 768, 1024, 1280, 1440]) {

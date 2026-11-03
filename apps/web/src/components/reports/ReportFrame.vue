@@ -101,8 +101,8 @@ const budgetLabels = {
 <style scoped>
 .report-frame {
     display: grid;
-    gap: 2.5rem;
-    inline-size: min(100%, 45rem);
+    gap: 1.25rem;
+    inline-size: 100%;
     max-inline-size: 100%;
     min-inline-size: 0;
     overflow-wrap: anywhere;
@@ -110,7 +110,7 @@ const budgetLabels = {
 .report-header,
 .coverage {
     display: grid;
-    gap: 1.25rem;
+    gap: 0.625rem;
     min-inline-size: 0;
 }
 h2,
@@ -132,7 +132,8 @@ h4 {
 }
 .metadata {
     display: grid;
-    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+    gap: 0.5rem 1.25rem;
     margin: 0;
 }
 dt {
@@ -143,8 +144,8 @@ dd {
 }
 .report-warning {
     display: grid;
-    gap: 1rem;
-    padding: 1.25rem;
+    gap: 0.5rem;
+    padding: 0.875rem 1rem;
     border-inline-start: 0.25rem solid var(--scova-partial);
     background: var(--scova-surface);
 }
@@ -153,8 +154,8 @@ ul {
     padding-inline-start: 1.5rem;
 }
 .coverage {
-    padding-block: 1.5rem;
-    border-block: 0.0625rem solid var(--scova-border);
+    padding-block: 0.75rem;
+    border-block: 0.0625rem solid color-mix(in srgb, var(--scova-border) 30%, transparent);
 }
 summary {
     min-block-size: 2.75rem;

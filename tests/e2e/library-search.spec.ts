@@ -1,3 +1,4 @@
+import { logoutFromAccount } from './support/account-menu.ts';
 import { expect, test, type Page } from '@playwright/test';
 
 const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -306,7 +307,7 @@ async function done(page: Page, count = 4) {
 async function loginB(page: Page) {
     const menu = page.getByRole('button', { name: '打开导航菜单' });
     if (await menu.isVisible()) await menu.click();
-    await page.getByRole('button', { name: '退出登录' }).click();
+    await logoutFromAccount(page);
     await page.getByLabel('邮箱', { exact: true }).fill('reader-101@example.test');
     await page.getByLabel('密码', { exact: true }).fill('local-only-password');
     await page.getByRole('button', { name: '登录', exact: true }).click();

@@ -1,3 +1,4 @@
+import { openReportTool } from './support/report-tools.ts';
 import { expect, test } from './support/environment.ts';
 import { deliveryCounts } from './support/two-rounds.ts';
 
@@ -29,11 +30,13 @@ test('补充入口六宽/文字放大、四主题浅暗与四报告形式（真�
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
     await page.goto(`/reports/${report.id}`);
+    await openReportTool(page, 'bookmarks');
     await page
         .getByLabel('选择收藏来源', { exact: true })
         .selectOption(report.evidence[0]!.sourceId);
     await page.getByRole('button', { name: '收藏来源', exact: true }).click();
     await expect(page.getByRole('button', { name: '取消收藏', exact: true })).toBeVisible();
+    await openReportTool(page, 'notes');
     await page.getByRole('button', { name: '新建笔记', exact: true }).press('Enter');
     await page
         .getByLabel('本地笔记正文', { exact: true })
@@ -268,6 +271,7 @@ test('补充入口六宽/文字放大、四主题浅暗与四报告形式（真�
                     }
                     await page.goto(questionUrl);
                     await layout(page, scale);
+                    await openReportTool(page, 'feedback');
                     const feedback = page.locator('.feedback-actions');
                     await feedback
                         .getByLabel('选择反馈资料或结论', { exact: true })

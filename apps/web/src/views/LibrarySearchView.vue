@@ -1,7 +1,7 @@
 <template>
     <section class="library-search" :style="reading.variables" aria-labelledby="page-title">
         <nav class="search-actions scova-interface" aria-label="资料库分区">
-            <router-link to="/library">收藏</router-link>
+            <navigation-button to="/library">收藏</navigation-button>
             <span aria-current="page">搜索已存资料</span>
         </nav>
         <p>只检索当前账号已保存的来源快照与纯文本笔记，不进行联网搜索。</p>
@@ -97,8 +97,8 @@
 </template>
 
 <script setup lang="ts">
+import NavigationButton from '@/components/common/NavigationButton.vue';
 import { nextTick, ref, watch } from 'vue';
-import { RouterLink } from 'vue-router';
 import ActionButton from '@/components/common/ActionButton.vue';
 import LibrarySearchResults from '@/components/library/LibrarySearchResults.vue';
 import { librarySearchError, useLibrarySearch } from '@/composables/useLibrarySearch';

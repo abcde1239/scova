@@ -1,6 +1,6 @@
 <template>
     <section ref="panel" class="questions scova-question-tools" aria-labelledby="questions-title">
-        <h2 id="questions-title">报告内问答</h2>
+        <h2 id="questions-title"><app-icon name="question" />报告内问答</h2>
         <p>仅查阅这份报告已保存的证据；提问不会搜索网页或启动新的研究。</p>
         <p v-if="!state.available.value" role="status">
             报告当前无法读取。本地问题仍可复制；报告恢复后才能提问或读取回答。
@@ -155,6 +155,7 @@
 </template>
 
 <script setup lang="ts">
+import AppIcon from '@/components/common/AppIcon.vue';
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router';
 import type { Report } from '@scova/models';
@@ -252,6 +253,11 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+h2 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
 .questions,
 .question-form,
 .question-result,
@@ -343,5 +349,11 @@ dd {
 }
 .question-citation :deep(.evidence-body) {
     padding-inline: 0.75rem;
+}
+@media (max-width: 40rem) {
+    .question-citation :deep(.evidence-body),
+    .question-citation :deep(blockquote) {
+        padding-inline: 0.5rem;
+    }
 }
 </style>

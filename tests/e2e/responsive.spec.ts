@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { openAccountMenu } from './support/account-menu.ts';
 
 for (const width of [1440, 1024, 768, 390, 360, 320]) {
     for (const scale of [100, 200]) {
@@ -19,6 +20,11 @@ for (const width of [1440, 1024, 768, 390, 360, 320]) {
                     await expect(trigger).toHaveAttribute('aria-expanded', 'true');
                     link = page
                         .getByRole('navigation', { name: '工作台菜单', exact: true })
+                        .getByRole('link', { name, exact: true });
+                } else if (['账号', '外观'].includes(name)) {
+                    await openAccountMenu(page);
+                    link = page
+                        .getByRole('navigation', { name: '账号操作' })
                         .getByRole('link', { name, exact: true });
                 } else {
                     link = page

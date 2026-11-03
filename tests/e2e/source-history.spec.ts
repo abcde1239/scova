@@ -1,3 +1,4 @@
+import { logoutFromAccount, expectAccountReady } from './support/account-menu.ts';
 import { expect, test, type Page } from '@playwright/test';
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -317,11 +318,11 @@ test('切换账号后迟到的旧账号响应不能恢复旧快照', async ({ pa
     });
     await detailRequested;
     await expect(page.getByRole('status').filter({ hasText: '正在读取保存快照' })).toBeVisible();
-    await page.getByRole('button', { name: '退出登录' }).click();
+    await logoutFromAccount(page);
     await page.getByLabel('邮箱', { exact: true }).fill('reader-101@example.test');
     await page.getByLabel('密码', { exact: true }).fill('local-only-password');
     await page.getByRole('button', { name: '登录', exact: true }).click();
-    await expect(page.getByRole('button', { name: '退出登录' })).toBeVisible();
+    await expectAccountReady(page);
     release();
     await expect(page.getByText(body, { exact: true })).toHaveCount(0);
     await expect(page.locator('article.snapshot-detail')).toHaveCount(0);

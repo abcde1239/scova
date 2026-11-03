@@ -1,3 +1,4 @@
+import { logoutFromAccount, expectAccountReady } from './support/account-menu.ts';
 import { expect, test } from '@playwright/test';
 import type { BrowserContext, Page } from '@playwright/test';
 import type { Report } from '../../packages/models/src/reports.ts';
@@ -249,11 +250,11 @@ async function dismissClick(page: Page, name: string, accept: boolean) {
     await button(page, name).click();
 }
 async function switchAccount(page: Page) {
-    await page.getByRole('button', { name: '退出登录', exact: true }).click();
+    await logoutFromAccount(page);
     await page.getByRole('textbox', { name: '邮箱', exact: true }).fill('next@example.test');
     await page.getByLabel('密码', { exact: true }).fill('another-password-123');
     await page.getByRole('button', { name: '登录', exact: true }).click();
-    await expect(page.getByRole('button', { name: '退出登录', exact: true })).toBeVisible();
+    await expectAccountReady(page);
 }
 async function staleReturn(page: Page, state: State) {
     const now = await page.evaluate(() => Date.now());
@@ -644,7 +645,7 @@ for (const late of [201, 401]) {
         await expect(panel(page)).toHaveCount(0);
         await expect(page.locator('.report-brief')).toHaveCount(0);
         await expect(page.getByText('旧账号私密问题', { exact: true })).toHaveCount(0);
-        await expect(page.getByRole('button', { name: '退出登录', exact: true })).toBeVisible();
+        await expectAccountReady(page);
         expect(state.switched).toBe(true);
     });
 }

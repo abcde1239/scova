@@ -1,3 +1,5 @@
+import { logoutFromAccount, expectAccountReady } from './support/account-menu.ts';
+import { openReportTool } from './support/report-tools.ts';
 import { expect, test } from '@playwright/test';
 import type { BrowserContext, Page, TestInfo } from '@playwright/test';
 import type {
@@ -257,6 +259,7 @@ const actions = (page: Page) => page.getByRole('region', { name: '调整后续�
 async function open(page: Page) {
     await page.goto(path);
     await expect(panel(page)).toBeVisible();
+    await openReportTool(page, 'feedback');
 }
 async function staleBack(page: Page) {
     await page.getByRole('link', { name: '阅读外观', exact: true }).click();
@@ -347,6 +350,7 @@ for (const empty of ['absent', 'empty'] as const) {
         else state.reports[path]!.feedbackEffects = [];
         await page.goto(path);
         await expect(page.locator('.report-brief')).toBeVisible();
+        await openReportTool(page, 'feedback');
         await expect(panel(page)).toHaveCount(0);
         await expect(actions(page)).toBeVisible();
         await actions(page)
@@ -494,7 +498,7 @@ for (const fault of [403, 404, 409, 503, 'protocol', 'invalid'] as const) {
         state.failure = fault;
         await staleBack(page);
         await expect(
-            page.locator('.report-detail > .state-panel').getByRole('status'),
+            page.locator('.report-content > .state-panel').getByRole('status'),
         ).toContainText(
             fault === 403
                 ? '无权'
@@ -553,7 +557,7 @@ for (const late of [200, 401]) {
         await expect
             .poll(() => calls.filter((call) => call.path === `/api/v1/reports/${id(1)}`).length)
             .toBe(2);
-        await page.getByRole('button', { name: '退出登录' }).click();
+        await logoutFromAccount(page);
         await page.getByLabel('邮箱', { exact: true }).fill('other@example.test');
         await page.getByLabel('密码', { exact: true }).fill('local-only-password');
         await page.getByRole('button', { name: '登录', exact: true }).click();
@@ -562,7 +566,7 @@ for (const late of [200, 401]) {
         await expect(
             page.locator('.report-brief, .feedback-effects, .feedback-actions'),
         ).toHaveCount(0);
-        await expect(page.getByRole('button', { name: '退出登录' })).toBeVisible();
+        await expectAccountReady(page);
         expect(state.owner).toBe(901);
     });
 }

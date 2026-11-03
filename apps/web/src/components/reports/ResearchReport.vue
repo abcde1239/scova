@@ -4,28 +4,53 @@
             <h2>报告目录</h2>
             <ol>
                 <li>
-                    <a href="#summary-title" @click="jump($event, 'summary-title')">报告概述</a>
-                </li>
-                <li>
-                    <a href="#coverage-title" @click="jump($event, 'coverage-title')"
-                        >查阅范围与限制</a
+                    <n-button
+                        tag="a"
+                        quaternary
+                        type="primary"
+                        v-bind="{ href: '#summary-title' }"
+                        @click="jump($event, 'summary-title')"
+                        >报告概述</n-button
                     >
                 </li>
                 <li>
-                    <a href="#report-changes-title" @click="jump($event, 'report-changes-title')"
-                        >变化与基线</a
+                    <n-button
+                        tag="a"
+                        quaternary
+                        type="primary"
+                        v-bind="{ href: '#coverage-title' }"
+                        @click="jump($event, 'coverage-title')"
+                        >查阅范围与限制</n-button
+                    >
+                </li>
+                <li>
+                    <n-button
+                        tag="a"
+                        quaternary
+                        type="primary"
+                        v-bind="{ href: '#report-changes-title' }"
+                        @click="jump($event, 'report-changes-title')"
+                        >变化与基线</n-button
                     >
                 </li>
                 <li v-for="section in sections" :key="section.kind">
-                    <a
-                        :href="`#claims-${section.kind}`"
+                    <n-button
+                        tag="a"
+                        quaternary
+                        type="primary"
+                        v-bind="{ href: `#claims-${section.kind}` }"
                         @click="jump($event, `claims-${section.kind}`)"
-                        >{{ section.title }}</a
+                        >{{ section.title }}</n-button
                     >
                 </li>
                 <li>
-                    <a href="#saved-evidence-title" @click="jump($event, 'saved-evidence-title')"
-                        >来源与保存引用</a
+                    <n-button
+                        tag="a"
+                        quaternary
+                        type="primary"
+                        v-bind="{ href: '#saved-evidence-title' }"
+                        @click="jump($event, 'saved-evidence-title')"
+                        >来源与保存引用</n-button
                     >
                 </li>
             </ol>
@@ -54,6 +79,7 @@
 </template>
 
 <script setup lang="ts">
+import { NButton } from 'naive-ui';
 import { computed, onMounted, ref } from 'vue';
 import type { Report } from '@scova/models';
 import ReportFrame from '@/components/reports/ReportFrame.vue';
@@ -91,13 +117,13 @@ onMounted(() => {
 .report-directory,
 .claim-section {
     display: grid;
-    gap: 1.5rem;
+    gap: 0.875rem;
     min-inline-size: 0;
     overflow-wrap: anywhere;
 }
 .research-report {
     inline-size: min(100%, 68.75rem);
-    gap: 2rem;
+    gap: 1rem;
 }
 .report-directory {
     padding: 1rem 1.25rem;
@@ -114,12 +140,19 @@ onMounted(() => {
     flex-wrap: wrap;
     gap: 0.5rem 1.5rem;
     margin: 0;
-    padding-inline-start: 1.25rem;
+    padding: 0;
+    list-style: none;
 }
-.report-directory a {
+.report-directory :deep(.n-button) {
+    min-block-size: 2.75rem;
+    height: auto;
+    font-size: 1rem;
     color: var(--scova-primary);
     cursor: pointer;
     text-underline-offset: 0.2em;
+}
+.report-directory :deep(.n-button__content) {
+    white-space: normal;
 }
 .report-directory a:focus-visible {
     outline: 0.125rem solid var(--scova-primary);

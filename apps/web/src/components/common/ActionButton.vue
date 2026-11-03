@@ -2,6 +2,7 @@
     <n-button
         :attr-type="attrType"
         :disabled="disabled"
+        :quaternary="quaternary"
         v-bind="accessibility"
         :class="{ 'scova-action--disabled': disabled, 'scova-action--busy': busy && !disabled }"
         class="scova-action-button"
@@ -15,10 +16,16 @@
 import { computed } from 'vue';
 import { NButton } from 'naive-ui';
 const props = withDefaults(
-    defineProps<{ disabled?: boolean; busy?: boolean; attrType?: 'button' | 'submit' | 'reset' }>(),
+    defineProps<{
+        disabled?: boolean;
+        busy?: boolean;
+        quaternary?: boolean;
+        attrType?: 'button' | 'submit' | 'reset';
+    }>(),
     {
         disabled: false,
         busy: false,
+        quaternary: false,
         attrType: 'button',
     },
 );

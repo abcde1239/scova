@@ -1,3 +1,4 @@
+import { logoutFromAccount, expectAccountReady } from './support/account-menu.ts';
 import { expect, test, type Page } from '@playwright/test';
 type Status =
     | 'queued'
@@ -366,7 +367,7 @@ test('本地HTTP样本：卸载取消等待请求，退出换号不展示旧流�
     });
     await page.goto(`/runs/${runId}`);
     await expect(page.getByRole('heading', { name: '正在查阅', exact: true })).toBeVisible();
-    await page.getByRole('button', { name: '退出登录' }).click();
+    await logoutFromAccount(page);
     await expect.poll(() => canceled.some((reason) => reason.includes('ERR_ABORTED'))).toBe(true);
     await page.getByLabel('邮箱', { exact: true }).fill('second@example.test');
     await page.getByLabel('密码', { exact: true }).fill('local-only-password');
@@ -375,7 +376,10 @@ test('本地HTTP样本：卸载取消等待请求，退出换号不展示旧流�
     release();
     await expect(page.getByText('搜索来源', { exact: true })).toHaveCount(0);
     await expect(page.getByRole('link', { name: '查看已发布报告' })).toHaveCount(0);
-    await page.getByRole('link', { name: '任务', exact: true }).click();
+    await page
+        .getByRole('navigation', { name: '主导航', exact: true })
+        .getByRole('link', { name: '任务', exact: true })
+        .click();
     await expect(page.locator('.execution-detail')).toHaveCount(0);
 });
 test('本地HTTP样本：离开页面取消在途快照，不显示迟到旧执行', async ({ page }) => {
@@ -395,7 +399,10 @@ test('本地HTTP样本：离开页面取消在途快照，不显示迟到旧执�
     });
     await page.goto(`/runs/${runId}`);
     await expect(page.getByRole('status')).toContainText('正在读取执行快照');
-    await page.getByRole('link', { name: '任务', exact: true }).click();
+    await page
+        .getByRole('navigation', { name: '主导航', exact: true })
+        .getByRole('link', { name: '任务', exact: true })
+        .click();
     await expect.poll(() => canceled.some((reason) => reason.includes('ERR_ABORTED'))).toBe(true);
     release();
     await expect(page.locator('.execution-detail')).toHaveCount(0);
@@ -408,7 +415,7 @@ test('本地HTTP样本：连接403只停止实时更新，不退出或改变运�
     await page.goto(`/runs/${runId}`);
     await expect(page.getByText('实时连接已停止，执行结果尚需读取快照确认。')).toBeVisible();
     await expect(page.getByRole('heading', { name: '正在查阅', exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: '退出登录' })).toBeVisible();
+    await expectAccountReady(page);
 });
 test('本地HTTP样本：深色主题和减少透明度保持内容可读', async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 1440, height: 1000 });

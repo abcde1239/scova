@@ -1,3 +1,4 @@
+import { openReportTool } from './support/report-tools.ts';
 import type { Report, ReportQuestion, Run, TaskDetailResponse } from '@scova/models';
 import { expect, test } from './support/environment.ts';
 import {
@@ -28,6 +29,7 @@ test('完整工作台：反馈后的重要变化、收藏笔记真实冲突、�
         phase: 'A',
     });
     await openReport(page, first.report);
+    await openReportTool(page, 'feedback');
     const source = first.report.evidence.find((evidence) => evidence.quote.includes('free access'));
     expect(source).toBeTruthy();
     await page
@@ -35,11 +37,13 @@ test('完整工作台：反馈后的重要变化、收藏笔记真实冲突、�
         .selectOption(`source:${source!.sourceId}`);
     await page.getByRole('button', { name: '已了解', exact: true }).press('Enter');
     await expect(page.locator('.selected-target')).toContainText('当前反馈：已了解');
+    await openReportTool(page, 'bookmarks');
     await page.getByLabel('选择收藏来源', { exact: true }).selectOption(source!.sourceId);
     await page.getByRole('button', { name: '收藏来源', exact: true }).press('Enter');
     await expect(page.getByRole('button', { name: '取消收藏', exact: true })).toBeVisible();
 
     const noteText = '联合旅程核验笔记：费用变化需要保留双方原文。';
+    await openReportTool(page, 'notes');
     await page.getByRole('button', { name: '新建笔记', exact: true }).press('Enter');
     await page.getByLabel('本地笔记正文', { exact: true }).fill(noteText);
     const created = page.waitForResponse(

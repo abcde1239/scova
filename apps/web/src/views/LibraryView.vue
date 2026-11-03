@@ -21,7 +21,9 @@
                 >
                     笔记
                 </button>
-                <router-link to="/library/search">搜索已存资料</router-link>
+                <navigation-button to="/library/search" icon="search"
+                    >搜索已存资料</navigation-button
+                >
             </nav>
         </header>
         <div v-show="section === 'bookmarks'" class="bookmark-content">
@@ -80,14 +82,14 @@
                         class="scova-interface"
                         ><app-icon name="source" />打开原始来源（新窗口）</a
                     >
-                    <router-link :to="historyLink(item.sourceId)" class="scova-interface"
-                        >查看来源历史</router-link
+                    <navigation-button :to="historyLink(item.sourceId)" class="scova-interface"
+                        >查看来源历史</navigation-button
                     >
-                    <router-link
+                    <navigation-button
                         v-if="origin?.sourceId === item.sourceId.toLowerCase()"
                         :to="origin.path"
                         class="scova-interface"
-                        >返回刚才的报告</router-link
+                        >返回刚才的报告</navigation-button
                     >
                     <bookmark-action
                         :key="`${accountId}-${item.id}`"
@@ -132,8 +134,9 @@
 </template>
 
 <script setup lang="ts">
+import NavigationButton from '@/components/common/NavigationButton.vue';
 import { computed, nextTick, ref, watch } from 'vue';
-import { RouterLink, useRoute } from 'vue-router';
+import { useRoute } from 'vue-router';
 import BookmarkAction from '@/components/library/BookmarkAction.vue';
 import ActionButton from '@/components/common/ActionButton.vue';
 import AppIcon from '@/components/common/AppIcon.vue';

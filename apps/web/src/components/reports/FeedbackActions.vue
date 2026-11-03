@@ -1,6 +1,6 @@
 <template>
     <section class="feedback-actions scova-interface" aria-labelledby="feedback-title">
-        <h2 id="feedback-title">调整后续研究</h2>
+        <h2 id="feedback-title"><app-icon name="settings" />调整后续研究</h2>
         <p>反馈仅供后续新执行捕获；不追溯在途执行或历史报告，也不修改配置版本与比较基线。</p>
         <div class="feedback-selector">
             <label for="feedback-target">选择反馈资料或结论</label>
@@ -128,6 +128,11 @@ function describe(item: Feedback) {
 </script>
 
 <style scoped>
+h2 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
 .feedback-actions,
 .feedback-selector,
 .selected-target,

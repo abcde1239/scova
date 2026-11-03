@@ -6,7 +6,7 @@
         :aria-labelledby="`${id}-title`"
         tabindex="-1"
     >
-        <h2 :id="`${id}-title`" class="scova-interface">纯文本笔记</h2>
+        <h2 :id="`${id}-title`" class="scova-interface"><app-icon name="edit" />纯文本笔记</h2>
         <p v-if="!available" class="scova-interface" role="status">
             报告暂时不可用；本地稿仍保留，可复制。恢复读取前不能新建、保存、删除或重放。
         </p>
@@ -107,6 +107,7 @@
 </template>
 
 <script setup lang="ts">
+import AppIcon from '@/components/common/AppIcon.vue';
 import { computed, nextTick, onMounted, onUnmounted, ref, useId, watch } from 'vue';
 import { RouterLink, onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router';
 import type { LibraryTarget } from '@scova/models';
@@ -224,6 +225,11 @@ onBeforeRouteUpdate(canLeave);
 </script>
 
 <style scoped>
+h2 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
 .notes-panel,
 .notes-tools,
 .note-entry {

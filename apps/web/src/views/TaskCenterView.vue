@@ -1,7 +1,9 @@
 <template>
     <div class="task-center">
         <template v-if="!taskId">
-            <router-link class="back-link" :to="{ name: 'task-create' }">新建任务</router-link>
+            <navigation-button class="back-link" icon="create" :to="{ name: 'task-create' }"
+                >新建任务</navigation-button
+            >
             <task-filters :value="filter" @change="changeFilter" />
             <p class="scope-note">筛选已加载任务 · 时间按 {{ timezone }} 显示</p>
             <state-panel v-if="query.isPending.value" state="loading" />
@@ -54,8 +56,11 @@
             </template>
         </template>
         <template v-else>
-            <router-link class="back-link" :to="{ name: 'tasks', query: { status: filter } }"
-                >返回任务</router-link
+            <navigation-button
+                class="back-link"
+                icon="back"
+                :to="{ name: 'tasks', query: { status: filter } }"
+                >返回任务</navigation-button
             >
             <state-panel v-if="detail.isPending.value" state="loading" />
             <state-panel
@@ -73,8 +78,11 @@
                     retryable
                     @retry="detail.refetch()"
                 />
-                <router-link class="back-link" :to="{ name: 'task-edit', params: { taskId } }"
-                    >编辑任务配置</router-link
+                <navigation-button
+                    class="back-link"
+                    icon="edit"
+                    :to="{ name: 'task-edit', params: { taskId } }"
+                    >编辑任务配置</navigation-button
                 >
                 <p class="scope-note">时间按 {{ timezone }} 显示</p>
                 <task-card
@@ -103,9 +111,10 @@
 </template>
 
 <script setup lang="ts">
+import NavigationButton from '@/components/common/NavigationButton.vue';
 import { computed } from 'vue';
 import { useQuery } from '@tanstack/vue-query';
-import { RouterLink, useRoute, useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { taskEndpoint, taskKeys } from '@/api/tasks';
 import { toApiError } from '@/api/errors';
 import { useSessionLifecycle } from '@/composables/useSessionQuery';
@@ -152,7 +161,7 @@ function changeFilter(value: TaskFilter) {
 .task-center {
     display: grid;
     justify-items: stretch;
-    gap: 1.5rem;
+    gap: 1rem;
     min-inline-size: 0;
     cursor: default;
 }
@@ -161,10 +170,9 @@ function changeFilter(value: TaskFilter) {
 }
 .task-list {
     display: grid;
-    gap: 0.5rem;
-}
-.task-list :deep(.task-card + .task-card) {
-    border-block-start: 0.0625rem solid var(--scova-border);
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
+    align-items: start;
 }
 .task-center > :deep(.scova-action-button) {
     justify-self: start;

@@ -21,6 +21,26 @@ test.beforeAll(async ({ browser }) => {
     console.log(`Browser: Chromium ${browser.version()}`);
 });
 
+test('Scova 品牌与面包屑保留真实层级，快捷入口可键盘导航', async ({ page }) => {
+    await page.goto('/account/appearance');
+    await expect(
+        page.getByRole('banner').getByRole('link', { name: 'Scova，任务首页' }),
+    ).toHaveText('Scova');
+    const breadcrumbs = page.getByRole('navigation', { name: '面包屑导航' });
+    await expect(breadcrumbs.locator('[aria-current="page"]')).toHaveText('外观');
+    const parent = breadcrumbs.getByRole('link', { name: '账号', exact: true });
+    await parent.focus();
+    await parent.press('Enter');
+    await expect(page).toHaveURL(/\/account$/);
+    await expect(breadcrumbs.locator('[aria-current="page"]')).toHaveText('账号');
+    const shortcut = page.getByRole('link', { name: '外观与阅读设置' });
+    await expect(shortcut).toHaveClass(/n-button/);
+    await shortcut.focus();
+    await shortcut.press('Enter');
+    await expect(page).toHaveURL(/\/account\/appearance$/);
+    await expect(page.locator('a button, button a')).toHaveCount(0);
+});
+
 test('有效路径与未知路径均可刷新直达，标题、导航和焦点正确', async ({ page }, testInfo) => {
     const errors = recordErrors(page);
     for (const [url, title, selected] of [
@@ -39,9 +59,15 @@ test('有效路径与未知路径均可刷新直达，标题、导航和焦点�
             await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
             await expect(page.getByRole('main')).toBeFocused();
             expect(new URL(page.url()).pathname + new URL(page.url()).search).toBe(url);
-            const active = page.getByRole('banner').locator('nav [aria-current="page"]');
-            await expect(active).toHaveCount(selected ? 1 : 0);
-            if (selected) await expect(active).toHaveText(selected);
+            const active = page.getByRole('banner').locator('nav [aria-current="page"]:visible');
+            const accountPage = selected === '账号' || selected === '外观';
+            await expect(active).toHaveCount(selected && !accountPage ? 1 : 0);
+            if (selected && !accountPage) await expect(active).toHaveText(selected);
+            if (accountPage)
+                await expect(page.getByRole('button', { name: '账号菜单' })).toHaveAttribute(
+                    'aria-current',
+                    'true',
+                );
         }
     }
     await expect(page.getByText('此页面不存在。', { exact: true })).toBeVisible();
@@ -73,7 +99,7 @@ test('导航可用且 390 视口没有整页横溢出，跳到主内容可键盘
     await expect(
         (await openPrimaryNavigation(page)).getByRole('link', { name: '收件箱', exact: true }),
     ).toHaveAttribute('aria-current', 'page');
-    const closeNavigation = page.getByRole('button', { name: '菜单', expanded: true });
+    const closeNavigation = page.getByRole('button', { name: '关闭侧边栏', exact: true });
     if (await closeNavigation.isVisible()) await closeNavigation.click();
     expect(
         await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),

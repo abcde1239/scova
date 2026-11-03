@@ -191,6 +191,8 @@ test('键盘注册、登录、创建、执行、报告引用及菜单返回；�
             return response.json() as Promise<{ user: { id: string }; csrfToken: string }>;
         });
         const owner: Owner = { context, page, id: me.user.id, csrf: me.csrfToken };
+        await tabTo(page, page.getByRole('button', { name: '账号菜单', exact: true }));
+        await page.keyboard.press('Enter');
         await tabTo(page, page.getByRole('button', { name: '退出登录', exact: true }));
         await page.keyboard.press('Enter');
         await expect(page).toHaveURL(/\/login(?:\?|$)/);

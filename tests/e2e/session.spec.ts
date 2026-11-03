@@ -1,3 +1,4 @@
+import { logoutFromAccount, expectAccountReady } from './support/account-menu.ts';
 import { expect, test } from '@playwright/test';
 
 const account = {
@@ -28,7 +29,7 @@ test('本地会话样本：直达刷新等待恢复，不闪受保护内容', as
     await expect(page.locator('.library-view')).toHaveCount(0);
     release();
     await expect(page.getByRole('heading', { name: '资料库', exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: '退出登录' })).toBeVisible();
+    await expectAccountReady(page);
     await page.reload();
     await expect(page.getByRole('heading', { name: '资料库', exact: true })).toBeVisible();
     await expect(page.locator('.library-view')).toBeVisible();
@@ -86,10 +87,10 @@ test('本地会话样本：退出失败可重试，成功后退不可恢复旧�
     });
     await page.goto('/library');
     await page.getByRole('link', { name: '任务', exact: true }).click();
-    await page.getByRole('button', { name: '退出登录' }).click();
+    await logoutFromAccount(page);
     await expect(page.getByRole('alert')).toHaveText('退出未成功，请检查连接后重试');
     await expect(page).toHaveURL(/\/tasks$/);
-    await page.getByRole('button', { name: '退出登录' }).click();
+    await logoutFromAccount(page);
     await expect(page).toHaveURL(/\/login\?redirect=/);
     await expect(page.getByRole('button', { name: '退出登录' })).toHaveCount(0);
     await page.goBack();
