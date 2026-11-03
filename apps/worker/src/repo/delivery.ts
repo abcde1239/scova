@@ -27,6 +27,7 @@ import { isDeepStrictEqual } from 'node:util';
 import {
     candidateFromCheckpoint,
     deterministicPartial,
+    manifestFromModel,
     type AgentCandidate,
     type AgentContext,
 } from '@scova/agent-core';
@@ -209,26 +210,16 @@ export function createDeliveryRepository(db: DatabaseClient) {
                                     call.tool === 'model' &&
                                     call.operationKey.startsWith('compare-facts-v1:'),
                             );
-                            const modelPages = extraction
-                                ? (
-                                      output(extraction) as {
-                                          data?: { pages?: { pageId: string; facts: unknown[] }[] };
-                                      }
-                                  ).data?.pages
-                                : undefined;
-                            if (
-                                !Array.isArray(modelPages) ||
-                                modelPages.length !== candidate.manifest.pages.length
-                            )
+                            // Decode the immutable wire output with the same domain rules as the Agent.
+                            const manifest = extraction
+                                ? manifestFromModel(
+                                      (output(extraction) as { data?: unknown }).data,
+                                      context,
+                                      candidate.pages,
+                                  )
+                                : null;
+                            if (!manifest || !isDeepStrictEqual(candidate.manifest, manifest))
                                 invalid();
-                            for (const page of candidate.manifest.pages) {
-                                const extracted = modelPages!.find(
-                                    (entry) => entry.pageId === page.pageId,
-                                );
-                                const facts = page.facts.map(({ id: _id, ...fact }) => fact);
-                                if (!extracted || !isDeepStrictEqual(facts, extracted.facts))
-                                    invalid();
-                            }
                         }
                         const gaps = [...candidate.coverage.gaps];
                         // These checks are independent of a model/caller's completeness flag.

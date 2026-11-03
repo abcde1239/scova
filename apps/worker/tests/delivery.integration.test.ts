@@ -135,6 +135,7 @@ async function liveResearch(
         failUrls?: string[];
         skipExecute?: boolean;
         notificationPreference?: NotificationPreference;
+        nullableRelation?: boolean;
     } = {},
 ) {
     const initial = options.previous ?? (await seedRun(fixture.db, { mode: 'live' }));
@@ -248,6 +249,9 @@ async function liveResearch(
                                                   quote: page.text,
                                                   relevance: 'relevant',
                                                   importance: options.importance ?? 'important',
+                                                  ...(options.nullableRelation
+                                                      ? { relation: null }
+                                                      : {}),
                                               },
                                           ],
                             })),
@@ -753,6 +757,42 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
             .then((row) => requiredDatabaseValue(row));
         expect(immutableFirst.comparisonJson).toEqual(first.candidate.manifest);
         expect(JSON.stringify(immutableFirst.comparisonJson)).not.toContain('"text":');
+    });
+
+    it('strict模型的null关系经账本校验后交付且保留原始输出，重放不重复报告', async () => {
+        const seed = await liveResearch({ nullableRelation: true });
+        const extraction = await fixture.db.query.toolCalls.findFirst({
+            where: and(
+                eq(dbToolCalls.runId, seed.run.id),
+                sql`${dbToolCalls.operationKey} LIKE 'compare-facts-v1:%'`,
+            ),
+        });
+        expect(extraction?.outputRef).toMatchObject({
+            result: { data: { pages: [{ facts: [{ relation: null }] }] } },
+        });
+        expect(seed.candidate.manifest!.pages[0]!.facts[0]).not.toHaveProperty('relation');
+        const result = await delivery.deliver(seed.claimed.token, seed.candidate);
+        const report = await fixture.db.query.reports.findFirst({
+            where: eq(dbReports.id, result.reportId),
+        });
+        expect(report?.comparisonJson).toEqual(seed.candidate.manifest);
+        expect(await delivery.deliver(seed.claimed.token, seed.candidate)).toEqual({
+            reportId: result.reportId,
+            reused: true,
+        });
+        expect(
+            await fixture.db.query.reports.findMany({ where: eq(dbReports.runId, seed.run.id) }),
+        ).toHaveLength(1);
+        expect(
+            await fixture.db.query.inboxItems.findMany({
+                where: eq(dbInboxItems.reportId, result.reportId),
+            }),
+        ).toHaveLength(1);
+        expect(
+            await fixture.db.query.toolCalls.findFirst({
+                where: eq(dbToolCalls.id, extraction!.id),
+            }),
+        ).toEqual(extraction);
     });
 
     it('正文噪声变化但稳定事实未变为non_material，完整无重要变化', async () => {
