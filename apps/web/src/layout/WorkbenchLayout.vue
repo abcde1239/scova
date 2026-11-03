@@ -2,8 +2,8 @@
     <div class="workbench">
         <a class="skip-link" href="#main-content">跳到主内容</a>
         <header class="workbench-header">
-            <router-link class="brand" to="/tasks" aria-label="知巡 Scova，任务首页">
-                知巡 <span lang="en">Scova</span>
+            <router-link class="brand" to="/tasks" aria-label="Scova，任务首页">
+                <span lang="en">Scova</span>
             </router-link>
             <nav class="primary-navigation" aria-label="主导航">
                 <router-link
@@ -28,13 +28,12 @@
                     <app-icon :name="navigationIcon(item.meta.section)" />
                     {{ item.meta.title }}
                 </router-link>
-                <router-link to="/account/appearance">
-                    <app-icon name="appearance" />外观
-                </router-link>
             </nav>
+            <account-menu />
             <mobile-navigation :items="mobileItems" />
         </header>
         <main id="main-content" class="workbench-main" tabindex="-1" aria-labelledby="page-title">
+            <page-breadcrumbs />
             <div class="page-heading">
                 <h1 id="page-title">{{ title }}</h1>
                 <div class="page-tools"><slot name="tools" /></div>
@@ -53,6 +52,8 @@ import type { RouteRecordNormalized } from 'vue-router';
 import AppIcon from '@/components/common/AppIcon.vue';
 import type { IconName } from '@/components/common/icons';
 import MobileNavigation from '@/layout/MobileNavigation.vue';
+import PageBreadcrumbs from '@/layout/PageBreadcrumbs.vue';
+import AccountMenu from '@/layout/AccountMenu.vue';
 
 const props = defineProps<{ title: string; navigation: RouteRecordNormalized[] }>();
 defineSlots<{ default(): unknown; context(): unknown; tools(): unknown; reading(): unknown }>();
@@ -60,7 +61,11 @@ const route = useRoute();
 const primary = computed(() =>
     props.navigation.filter((item) => item.meta.navigation === 'primary'),
 );
-const tools = computed(() => props.navigation.filter((item) => item.meta.navigation === 'tool'));
+const tools = computed(() =>
+    props.navigation.filter(
+        (item) => item.meta.navigation === 'tool' && item.meta.section !== 'account',
+    ),
+);
 const isSelected = (item: RouteRecordNormalized) => route.meta.section === item.meta.section;
 function navigationIcon(section: unknown): IconName {
     if (
@@ -78,6 +83,7 @@ const mobileItems = computed(() => [
         label: String(item.meta.title),
         icon: navigationIcon(item.meta.section),
     })),
+    { path: '/account', label: '账号', icon: 'account' as const },
     { path: '/account/appearance', label: '外观', icon: 'appearance' as const },
 ]);
 </script>
@@ -89,9 +95,9 @@ const mobileItems = computed(() => [
 
 .workbench-header,
 .workbench-main {
-    width: min(100%, 68.75rem);
+    width: min(100%, 88rem);
     margin-inline: auto;
-    padding-inline: clamp(1rem, 4%, 3rem);
+    padding-inline: clamp(1rem, 2.5vw, 2rem);
     min-inline-size: 0;
 }
 
@@ -99,19 +105,16 @@ const mobileItems = computed(() => [
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 1rem 2rem;
-    min-block-size: 5rem;
-    padding-block: 1rem;
+    gap: 0.5rem 1.5rem;
+    min-block-size: 4.5rem;
+    padding-block: 0.5rem;
+    border-block-end: 0.0625rem solid color-mix(in srgb, var(--scova-border) 30%, transparent);
 }
 
 .brand {
     font-size: 1.25rem;
     font-weight: 650;
     white-space: nowrap;
-}
-
-.brand span {
-    margin-inline-start: 0.3em;
 }
 
 nav {
@@ -161,16 +164,16 @@ a:focus-visible {
 }
 
 .workbench-main {
-    padding-block: clamp(2rem, 5%, 3rem) 4rem;
+    padding-block: 0.75rem 2rem;
 }
 
 .page-heading {
     display: flex;
     flex-wrap: wrap;
-    align-items: start;
+    align-items: center;
     justify-content: space-between;
     gap: 1rem;
-    margin-block-end: 2rem;
+    margin-block-end: 1rem;
 }
 
 .page-heading > *,
@@ -190,8 +193,8 @@ a:focus-visible {
 
     .workbench-header {
         gap: 0.5rem 1rem;
-        min-block-size: 4.5rem;
-        padding-block: 0.75rem;
+        min-block-size: 3.75rem;
+        padding-block: 0.375rem;
     }
 }
 
@@ -201,7 +204,7 @@ h1 {
 
 .page-context:not(:empty),
 .reading-tools:not(:empty) {
-    margin-block: 1.5rem;
+    margin-block: 1rem;
 }
 
 .skip-link {

@@ -24,10 +24,10 @@ defineProps<{ report: Report }>();
 <style scoped>
 .evidence-appendix {
     display: grid;
-    gap: 1.5rem;
+    gap: 0.875rem;
     min-inline-size: 0;
     overflow-wrap: anywhere;
-    padding-block: 2rem;
+    padding-block: 1rem 0;
     border-block-start: 0.0625rem solid var(--scova-border);
 }
 h3,

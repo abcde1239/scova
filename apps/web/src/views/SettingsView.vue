@@ -12,15 +12,15 @@
         <section aria-labelledby="account-local-title">
             <h2 id="account-local-title">本机外观与阅读</h2>
             <p>主题、字体与阅读字号只保存在当前浏览器。</p>
-            <router-link to="/account/appearance"
-                ><app-icon name="appearance" />外观与阅读设置</router-link
+            <navigation-button to="/account/appearance"
+                ><app-icon name="appearance" />外观与阅读设置</navigation-button
             >
         </section>
     </div>
 </template>
 
 <script setup lang="ts">
-import { RouterLink } from 'vue-router';
+import NavigationButton from '@/components/common/NavigationButton.vue';
 import PreferencesForm from '@/components/account/PreferencesForm.vue';
 import AppIcon from '@/components/common/AppIcon.vue';
 import { useSession } from '@/composables/useSession';

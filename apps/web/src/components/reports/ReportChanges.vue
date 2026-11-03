@@ -111,7 +111,7 @@ const summary = computed(() => changeSummary(props.report));
     min-inline-size: 0;
 }
 .report-changes {
-    padding-block: 2rem;
+    padding-block: 1rem;
     border-block: 0.0625rem solid var(--scova-border);
     overflow-wrap: anywhere;
 }

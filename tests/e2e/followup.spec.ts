@@ -1,3 +1,4 @@
+import { logoutFromAccount, expectAccountReady } from './support/account-menu.ts';
 import { expect, test, type Page } from '@playwright/test';
 import type { Report, ReportQuestion, Run } from '../../packages/models/src/index.ts';
 
@@ -305,11 +306,11 @@ async function uncertain(page: Page) {
     await expect(followup(page)).toContainText('原问题、模式、预算和请求标识已保留');
 }
 async function switchOwner(page: Page) {
-    await page.getByRole('button', { name: '退出登录', exact: true }).click();
+    await logoutFromAccount(page);
     await page.getByLabel('邮箱', { exact: true }).fill('reader-101@example.test');
     await page.getByLabel('密码', { exact: true }).fill('local-only-password');
     await page.getByRole('button', { name: '登录', exact: true }).click();
-    await expect(page.getByRole('button', { name: '退出登录', exact: true })).toBeVisible();
+    await expectAccountReady(page);
 }
 test.beforeAll(async ({ browser }) => console.log(`Browser: Chromium ${browser.version()}`));
 test.afterEach(async ({ page }) => {
@@ -717,8 +718,7 @@ for (const change of ['question', 'route', 'owner'] as const) {
         if (change === 'question')
             await expect(page.getByRole('textbox', { name: '问题', exact: true })).toBeEditable();
         if (change === 'route') expect(new URL(page.url()).pathname).toBe('/account/appearance');
-        if (change === 'owner')
-            await expect(page.getByRole('button', { name: '退出登录', exact: true })).toBeVisible();
+        if (change === 'owner') await expectAccountReady(page);
     });
 }
 

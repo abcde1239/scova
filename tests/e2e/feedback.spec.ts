@@ -1,3 +1,5 @@
+import { logoutFromAccount, expectAccountReady } from './support/account-menu.ts';
+import { openReportTool } from './support/report-tools.ts';
 import { expect, test, type BrowserContext, type Page, type TestInfo } from '@playwright/test';
 import type { Feedback, FeedbackInput } from '../../packages/models/src/feedback.ts';
 import type { Report } from '../../packages/models/src/reports.ts';
@@ -187,6 +189,7 @@ const writes = (calls: Awaited<ReturnType<typeof samples>>['calls']) =>
 const reads = (calls: Awaited<ReturnType<typeof samples>>['calls']) =>
     calls.filter((entry) => entry.path.endsWith('/feedback') && entry.method === 'GET');
 async function ready(page: Page, target = source) {
+    await openReportTool(page, 'feedback');
     await expect(panel(page)).toBeVisible();
     await select(page).selectOption(target);
     await expect(action(page, '希望深入')).toBeEnabled();
@@ -224,6 +227,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         page.on('pageerror', (error) => errors.push(error.message));
         await page.setViewportSize({ width, height: 1000 });
         await page.goto(path);
+        await openReportTool(page, 'feedback');
         await ready(page);
         const original = await page.locator('.report-brief').innerText();
         await expect(select(page).locator(`option[value="${source}"]`)).toHaveCount(1);
@@ -273,6 +277,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
 test('三kind切换复用ID、同kind不重发、DELETE200false撤销且刷新一致', async ({ page }) => {
     const { state, calls } = await samples(page.context());
     await page.goto(path);
+    await openReportTool(page, 'feedback');
     await ready(page);
     for (const label of ['不相关', '已了解', '希望深入']) {
         await expect(action(page, label)).toBeEnabled();
@@ -288,6 +293,7 @@ test('三kind切换复用ID、同kind不重发、DELETE200false撤销且刷新�
         await expect(reread(page)).toBeEnabled();
     }
     await page.reload();
+    await openReportTool(page, 'feedback');
     await select(page).selectOption(source);
     await expect(current(page)).toHaveText('当前反馈：希望深入');
     await expect(action(page, '撤销所选反馈')).toBeEnabled();
@@ -301,6 +307,7 @@ test('三kind切换复用ID、同kind不重发、DELETE200false撤销且刷新�
     expect(state.stored[900]![0]!.active).toBe(false);
     expect(writes(calls).every((entry) => entry.csrf === 'sample-csrf')).toBe(true);
     await page.reload();
+    await openReportTool(page, 'feedback');
     await ready(page);
     await expect(current(page)).toHaveText('当前反馈：未设置');
 });
@@ -313,6 +320,7 @@ test('pending保原反馈，禁重复鼠标键盘与目标选择', async ({ page
     });
     await page.setViewportSize({ width: 390, height: 1000 });
     await page.goto(path);
+    await openReportTool(page, 'feedback');
     await ready(page);
     await action(page, '希望深入').dblclick();
     await expect(select(page)).toBeDisabled();
@@ -340,6 +348,7 @@ test('未知写可能已保存：失败重读继续锁，只有新验证GET解�
     state.writeFailure = 503;
     await page.setViewportSize({ width: 320, height: 1000 });
     await page.goto(path);
+    await openReportTool(page, 'feedback');
     await ready(page);
     await action(page, '希望深入').click();
     await expect(panel(page)).toContainText('提交结果尚未确认');
@@ -371,6 +380,7 @@ test('未知写面板卸载重挂使旧缓存stale并实际GET，成功前不能
     state.acceptUnknown = true;
     state.writeFailure = 503;
     await page.goto(path);
+    await openReportTool(page, 'feedback');
     await ready(page);
     await action(page, '希望深入').click();
     await expect(select(page)).toBeDisabled();
@@ -381,6 +391,7 @@ test('未知写面板卸载重挂使旧缓存stale并实际GET，成功前不能
         release = resolve;
     });
     await page.goBack();
+    await openReportTool(page, 'feedback');
     await expect(panel(page)).toBeVisible();
     await select(page).selectOption(source);
     await expect.poll(() => reads(calls).length).toBe(2);
@@ -400,6 +411,7 @@ test('满200允许同目标切换，新增第201返回409并保原列表', async
         ),
     ];
     await page.goto(path);
+    await openReportTool(page, 'feedback');
     await ready(page);
     await expect(summary(page)).toContainText('200 / 200');
     await action(page, '希望深入').click();
@@ -420,6 +432,7 @@ test('确认写后精确GET包含其他目标并发变更，局部列表可单�
     const { state, calls } = await samples(page.context());
     state.concurrent = true;
     await page.goto(path);
+    await openReportTool(page, 'feedback');
     await ready(page);
     const report = await page.locator('.report-brief').innerText();
     await action(page, '已了解').click();
@@ -442,6 +455,7 @@ for (const status of [404, 403, 409]) {
         state.stored[900] = [feedback()];
         state.writeFailure = status;
         await page.goto(path);
+        await openReportTool(page, 'feedback');
         await ready(page);
         await action(page, '希望深入').click();
         await expect(panel(page).getByRole('status')).toContainText(
@@ -463,6 +477,7 @@ for (const phase of ['initial', 'refresh'] as const) {
             if (phase === 'initial') state.readFailure = status;
             await page.setViewportSize({ width: 390, height: 1000 });
             await page.goto(path);
+            await openReportTool(page, 'feedback');
             if (phase === 'refresh') {
                 await ready(page);
                 state.readFailure = status;
@@ -496,10 +511,11 @@ for (const status of [200, 401]) {
             release = resolve;
         });
         await page.goto(path);
+        await openReportTool(page, 'feedback');
         await ready(page);
         await action(page, '希望深入').click();
         await expect.poll(() => writes(calls).length).toBe(1);
-        await page.getByRole('button', { name: '退出登录', exact: true }).click();
+        await logoutFromAccount(page);
         await page.getByLabel('邮箱', { exact: true }).fill('new@example.test');
         await page.getByLabel('密码', { exact: true }).fill('local-only-password');
         await page.getByRole('button', { name: '登录', exact: true }).click();
@@ -508,7 +524,7 @@ for (const status of [200, 401]) {
         state.writeFailure = status === 401 ? 401 : null;
         release();
         await expect(current(page)).toHaveText('当前反馈：未设置');
-        await expect(page.getByRole('button', { name: '退出登录', exact: true })).toBeVisible();
+        await expectAccountReady(page);
         await expect(action(page, '希望深入')).toBeEnabled();
         expect(state.owner).toBe(901);
     });

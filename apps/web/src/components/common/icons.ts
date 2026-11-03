@@ -6,6 +6,7 @@ import {
     ChatbubbleEllipsesOutline,
     CheckmarkOutline,
     ChevronDownOutline,
+    ChevronForwardOutline,
     CloseOutline,
     ColorPaletteOutline,
     CreateOutline,
@@ -55,6 +56,7 @@ export const icons = {
     back: ArrowBackOutline,
     expand: ChevronDownOutline,
     confirm: CheckmarkOutline,
+    chevron: ChevronForwardOutline,
 } as const;
 
 export type IconName = keyof typeof icons;

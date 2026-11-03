@@ -1,3 +1,5 @@
+import { logoutFromAccount, expectAccountReady } from './support/account-menu.ts';
+import { openReportTool } from './support/report-tools.ts';
 import { expect, test } from '@playwright/test';
 import type { Page, Route, TestInfo } from '@playwright/test';
 
@@ -201,6 +203,7 @@ const verify = (page: Page) => action(page).getByRole('button', { name: '核对�
 const entries = (page: Page) => page.locator('.bookmark-entry');
 async function openReport(page: Page) {
     await page.goto(reportPath);
+    await openReportTool(page, 'bookmarks');
     const selector = page.getByRole('combobox', { name: '选择收藏来源', exact: true });
     await expect(selector.locator('option')).toHaveCount(2);
     await selector.focus();
@@ -209,11 +212,11 @@ async function openReport(page: Page) {
     await expect(action(page)).toBeVisible();
 }
 async function switchAccount(page: Page) {
-    await page.getByRole('button', { name: '退出登录' }).click();
+    await logoutFromAccount(page);
     await page.getByLabel('邮箱', { exact: true }).fill('other@example.test');
     await page.getByLabel('密码', { exact: true }).fill('local-only-password');
     await page.getByRole('button', { name: '登录', exact: true }).click();
-    await expect(page.getByRole('button', { name: '退出登录' })).toBeVisible();
+    await expectAccountReady(page);
 }
 async function screenshot(page: Page, info: TestInfo, name: string) {
     await info.attach(name, {
@@ -274,6 +277,8 @@ test('HTTP sample: existing source on a later page is not absent and POST200 reu
     await page.goto('/library');
     await expect(entries(page)).toHaveCount(1);
     await page.goto(reportPath);
+    await openReportTool(page, 'bookmarks');
+    await openReportTool(page, 'bookmarks');
     await page.getByLabel('选择收藏来源').selectOption(sourceId);
     await expect(create(page)).toBeEnabled();
     await expect(action(page)).not.toContainText('未收藏');
@@ -378,6 +383,7 @@ test('HTTP sample: canceled verification and ordinary list seed cannot unlock af
     release();
     await page.unroute('**/api/v1/bookmarks**', held);
     await entries(page).getByRole('link', { name: '返回刚才的报告' }).click();
+    await openReportTool(page, 'bookmarks');
     await page.getByLabel('选择收藏来源').selectOption(sourceId);
     await expect(action(page)).toContainText('结果尚待核对');
     await expect(
@@ -445,6 +451,7 @@ test('HTTP sample: unknown pending write survives unmount; late result does not 
     release();
     await expect.poll(() => state.writes.length).toBe(1);
     await page.goBack();
+    await openReportTool(page, 'bookmarks');
     await page.getByLabel('选择收藏来源').selectOption(sourceId);
     await expect(action(page)).toContainText('结果尚待核对');
     await expect(create(page)).toBeDisabled();
@@ -503,7 +510,7 @@ test('HTTP sample: delete completion does not steal focus moved by the user', as
     await expect.poll(() => deleting).toBe(true);
     const appearance = page
         .getByRole('navigation', { name: '全局工具' })
-        .getByRole('link', { name: '外观', exact: true });
+        .getByRole('link', { name: '通知', exact: true });
     await appearance.focus();
     release();
     await expect(entries(page)).toHaveCount(0);
@@ -604,7 +611,7 @@ for (const late of [201, 401]) {
         await expect(entries(page)).toHaveCount(0);
         await expect(page.getByRole('link', { name: '返回刚才的报告' })).toHaveCount(0);
         expect(state.switched).toBe(true);
-        await expect(page.getByRole('button', { name: '退出登录' })).toBeVisible();
+        await expectAccountReady(page);
     });
 }
 

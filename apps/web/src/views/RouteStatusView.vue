@@ -6,15 +6,18 @@
     <div v-else class="route-status">
         <p v-if="route.name === 'not-found'">此页面不存在。</p>
         <p v-else>{{ route.meta.title }}功能尚未接入。</p>
-        <router-link v-if="route.name === 'account'" to="/account/appearance">
+        <navigation-button v-if="route.name === 'account'" to="/account/appearance">
             外观设置
-        </router-link>
-        <router-link v-if="route.name === 'not-found'" to="/tasks">返回任务</router-link>
+        </navigation-button>
+        <navigation-button v-if="route.name === 'not-found'" to="/tasks"
+            >返回任务</navigation-button
+        >
     </div>
 </template>
 
 <script setup lang="ts">
-import { RouterLink, useRoute } from 'vue-router';
+import NavigationButton from '@/components/common/NavigationButton.vue';
+import { useRoute } from 'vue-router';
 import AppearanceSelector from '@/components/common/AppearanceSelector.vue';
 import ReadingPreferences from '@/components/common/ReadingPreferences.vue';
 
