@@ -100,11 +100,11 @@ export const RunCommandResponseSchema = Type.Object(
 );
 export const RunCommandInputSchema = Type.Object(
     {
-        mode: Type.Optional(ModeSchema),
+        mode: Type.Optional(Type.Literal('live')),
     },
     {
         additionalProperties: false,
-        description: '手动启动执行的模式；未提供时使用演示模式，避免未配置服务时伪装真实检索',
+        description: '启动真实研究；可省略 mode，缺少必要服务配置时明确失败',
     },
 );
 for (const schema of [

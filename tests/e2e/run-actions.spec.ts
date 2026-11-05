@@ -219,12 +219,9 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         page.on('pageerror', (error) => errors.push(error.message));
         await page.setViewportSize({ width, height: 1000 });
         await page.goto(`/runs/${sourceId}`);
-        await expect(
-            actions(page).getByRole('radio', { name: '演示 demo', exact: true }),
-        ).toBeChecked();
+        await expect(actions(page).getByRole('radio')).toHaveCount(0);
         await expect(actions(page)).toContainText('原任务版本与预算');
-        await actions(page).getByRole('radio', { name: '真实 live', exact: true }).check();
-        await expect(actions(page)).toContainText('计量费用');
+        await expect(actions(page)).toContainText('服务费用');
         expect(posts(calls)).toHaveLength(0);
         for (const doubled of [false, true]) {
             if (doubled)
@@ -267,6 +264,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         });
         await actions(page).getByRole('link', { name: '打开执行', exact: true }).click();
         await expect(page).toHaveURL(new RegExp(`/runs/${created.id}$`));
+        await page.getByText('执行标识与时间', { exact: true }).click();
         await expect(page.locator('.execution-overview')).toContainText(id(201));
         await expect(actions(page)).toContainText('不暂停任务的未来计划');
         await actions(page).getByRole('button', { name: '请求取消', exact: true }).click();
@@ -292,14 +290,12 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
             exact: true,
         });
         await expect(retryCanceled).toBeEnabled();
-        await expect(
-            actions(page).getByRole('radio', { name: '演示 demo', exact: true }),
-        ).toBeChecked();
+        await expect(actions(page).getByRole('radio')).toHaveCount(0);
         await retryCanceled.click();
         await expect(commandStatus(page)).toContainText('关联的新执行');
         const afterCancel = [...runs.values()].find((item) => item.parentRunId === created.id)!;
         expect(afterCancel.taskVersionId).toBe(created.taskVersionId);
-        expect(afterCancel.mode).toBe('demo');
+        expect(afterCancel.mode).toBe('live');
         expect(posts(calls).map((call) => call.path)).toEqual([
             `/api/v1/runs/${sourceId}/retry`,
             `/api/v1/runs/${created.id}/cancel`,
@@ -311,7 +307,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
 }
 
 for (const trigger of ['double', 'Enter', 'Space'] as const) {
-    test(`默认demo、${trigger}重复激活仅一个在途命令`, async ({ page }) => {
+    test(`统一真实研究、${trigger}重复激活仅一个在途命令`, async ({ page }) => {
         const { calls, state } = await samples(page.context());
         let release!: () => void;
         state.wait = new Promise<void>((resolve) => {
@@ -329,9 +325,9 @@ for (const trigger of ['double', 'Enter', 'Space'] as const) {
         await expect(button).toHaveAttribute('aria-busy', 'true');
         expect(posts(calls)).toHaveLength(1);
         release();
-        await expect(commandStatus(page)).toContainText('演示 demo');
+        await expect(commandStatus(page)).toContainText('真实 live');
         await expect(commandStatus(page)).toContainText('等待执行');
-        expect(posts(calls)[0]!.body).toEqual({ mode: 'demo' });
+        expect(posts(calls)[0]!.body).toEqual({ mode: 'live' });
         expect(posts(calls)[0]!.key).toMatch(/^[\da-f-]{36}$/);
     });
 }
@@ -342,7 +338,6 @@ test('未知结果显式重发冻结key/body，终态幂等命中按实际状态
     await page.setViewportSize({ width: 320, height: 1000 });
     await page.goto(`/tasks/${taskId}`);
     await page.evaluate(() => (document.documentElement.style.fontSize = '200%'));
-    await actions(page).getByRole('radio', { name: '真实 live', exact: true }).check();
     await actions(page).getByRole('button', { name: '立即执行', exact: true }).click();
     await expect(commandStatus(page)).toContainText('尚不能确认');
     await expect(commandStatus(page)).toBeFocused();
@@ -353,9 +348,7 @@ test('未知结果显式重发冻结key/body，终态幂等命中按实际状态
         }),
         contentType: 'image/png',
     });
-    await expect(
-        actions(page).getByRole('radio', { name: '演示 demo', exact: true }),
-    ).toBeDisabled();
+    await expect(actions(page).getByRole('radio')).toHaveCount(0);
     const created = [...runs.values()].find((item) => item.id !== sourceId)!;
     runs.set(created.id, {
         ...created,
@@ -438,7 +431,6 @@ test('重试复用不同mode/version/parent的活动执行，按返回事实打�
         parentRunId: id(77),
     };
     await page.goto(`/runs/${sourceId}`);
-    await actions(page).getByRole('radio', { name: '真实 live', exact: true }).check();
     await actions(page).getByRole('button', { name: '重试并创建新执行', exact: true }).click();
     await expect(commandStatus(page)).toContainText('已有活动执行');
     await expect(commandStatus(page)).toContainText('演示 demo');

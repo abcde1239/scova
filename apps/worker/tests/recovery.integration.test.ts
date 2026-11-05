@@ -18,6 +18,7 @@ import {
     createModelProvider,
     estimateModelInputTokens,
     DEMO_URL,
+    ConnectorError,
     type ConnectorBundle,
     type StructuredInput,
     type SafeHttpClient,
@@ -38,6 +39,7 @@ import { createAgentSession, createAgentRuntime } from '../src/service/agent.ts'
 import { RunService } from '../src/service/runs.ts';
 import { outboxDatabase } from './support/outbox-database.ts';
 import { emptyUsage, seedRun } from './support/run-database.ts';
+import { scenarioConnectors } from './support/acceptance-scenario-fixtures.ts';
 import { nodeScriptCommand } from '../../../scripts/process-runtime.mjs';
 
 const fixture = outboxDatabase();
@@ -112,7 +114,7 @@ function sessionFixture(
             emit: (event) => runs.emit(seed.current.token, event),
         },
     });
-    return { session, close: () => saver.end() };
+    return { session, prepare: () => saver.setup(), close: () => saver.end() };
 }
 
 beforeAll(async () => {
@@ -124,6 +126,53 @@ beforeAll(async () => {
 afterAll(() => fixture.cleanup());
 
 describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）', () => {
+    it('keeps the failed plan reservation charged and completes its bounded repair under an old 8000 token Run', async () => {
+        const seed = await setup({ mode: 'live' });
+        const bundle = scenarioConnectors('research', 'A');
+        const model = bundle.model;
+        const outputs: number[] = [];
+        bundle.model = {
+            async generateStructured<T>(input: StructuredInput, context: CallContext = {}) {
+                outputs.push(input.maxOutputTokens);
+                if (outputs.length === 1) {
+                    await context.beforeAttempt?.('model');
+                    throw new ConnectorError('output_truncated', 'fixture secret');
+                }
+                return model.generateStructured<T>(input, context);
+            },
+        };
+        const { session, prepare, close } = sessionFixture(seed, bundle);
+        try {
+            await prepare();
+            const candidate = await session.execute();
+            expect(candidate.claims.length).toBeGreaterThan(0);
+            expect(outputs.slice(0, 2)).toEqual([1000, 2000]);
+            expect(await seed.repo.usage()).toMatchObject({ outputTokens: 1003 });
+            const calls = await fixture.db.query.toolCalls.findMany({
+                where: eq(dbToolCalls.runId, seed.run.id),
+            });
+            expect(calls.filter((call) => call.status === 'unknown')).toHaveLength(1);
+            expect(calls.filter((call) => call.tool === 'model')).toHaveLength(4);
+            const events = await fixture.db.query.runEvents.findMany({
+                where: eq(dbRunEvents.runId, seed.run.id),
+            });
+            expect(
+                events.some(
+                    (event) =>
+                        event.type === 'tool.failed' &&
+                        JSON.stringify(event.payload).includes('TOOL_OUTPUT_TRUNCATED'),
+                ),
+            ).toBe(true);
+            expect(JSON.stringify(events)).not.toContain('fixture secret');
+            expect(
+                (await fixture.db.query.runs.findFirst({ where: eq(dbRuns.id, seed.run.id) }))
+                    ?.budgetJson,
+            ).toEqual(seed.config.budget);
+        } finally {
+            await close();
+        }
+    });
+
     it('C14-F01 已提交 operationKey 跨 epoch 复用，结算重放不改结果或重复扣费', async () => {
         const seed = await setup();
         const first = await seed.repo.reserve({
@@ -241,6 +290,26 @@ describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）',
             }),
         ).rejects.toMatchObject({ code: 'INVALID_TOOL_CALL' });
         expect(await seed.repo.usage()).toMatchObject({ searches: 1, pages: 0 });
+    });
+
+    it('工具失败持久化固定分类，仍保留未知结果和已预留预算', async () => {
+        const seed = await setup();
+        const held = await seed.repo.reserve(search('classified-failure'));
+        await seed.repo.fail({ toolCallId: held.toolCallId, failureCode: 'TOOL_UNSAFE_URL' });
+        const calls = await fixture.db.query.toolCalls.findMany({
+            where: eq(dbToolCalls.runId, seed.run.id),
+        });
+        expect(calls[0]?.status).toBe('unknown');
+        expect(await seed.repo.usage()).toMatchObject({ searches: 1 });
+        const events = await fixture.db.query.runEvents.findMany({
+            where: eq(dbRunEvents.runId, seed.run.id),
+        });
+        const failure = events.find((event) => event.type === 'tool.failed');
+        expect(failure?.payload).toMatchObject({
+            code: 'TOOL_UNSAFE_URL',
+            message: '地址或域名解析未通过公网安全校验',
+            retryable: false,
+        });
     });
 
     it.each([true, false])(

@@ -30,6 +30,7 @@
                 <strong>{{ session.user.value.email }}</strong>
             </div>
             <navigation-button to="/account" icon="account">账号</navigation-button>
+            <navigation-button to="/account/agent" icon="settings">Agent 配置</navigation-button>
             <navigation-button to="/account/appearance" icon="appearance">外观</navigation-button>
             <action-button
                 quaternary

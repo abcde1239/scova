@@ -50,7 +50,11 @@ export class ComposeEnvironment {
     private override = '';
     private env: NodeJS.ProcessEnv = {};
     private cleanup: Promise<void> | undefined;
-    private scenario: { name: Scenario; phase: Phase } | undefined;
+    private scenario: { name: Scenario; phase: Phase; partial?: boolean } | undefined = {
+        name: 'english',
+        phase: 'A',
+        partial: true,
+    };
     private questionModel = false;
 
     constructor(images?: Images) {
@@ -79,7 +83,6 @@ export class ComposeEnvironment {
             SCOVA_BIND: '127.0.0.1',
             SCOVA_PORT: String(address.port),
             REGISTRATION_ENABLED: 'true',
-            WORKER_SCHEDULED_RUN_MODE: 'demo',
             SEARCH_PROVIDER: 'searxng',
             MODEL_API_KEY: '',
             MODEL_NAME: '',
@@ -115,6 +118,9 @@ export class ComposeEnvironment {
                                       ? {
                                             SCOVA_ACCEPTANCE_SCENARIO: this.scenario.name,
                                             SCOVA_ACCEPTANCE_PHASE: this.scenario.phase,
+                                            SCOVA_ACCEPTANCE_TRUNCATED: this.scenario.partial
+                                                ? '1'
+                                                : '0',
                                         }
                                       : {}),
                               },

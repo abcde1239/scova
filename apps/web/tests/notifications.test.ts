@@ -271,7 +271,7 @@ describe('notifications', () => {
         await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));
         expect(notifications.items.value[0]?.readAt).toBeNull();
         expect(await notifications.setRead(item(), true)).toBe(false);
-        expect(fetcher.mock.calls[1]?.[1]?.credentials).toBe('same-origin');
+        expect(fetcher.mock.calls[1]?.[1]?.credentials).toBe('include');
         expect(new Headers(fetcher.mock.calls[1]?.[1]?.headers).get('x-csrf-token')).toBe(
             account.csrfToken,
         );

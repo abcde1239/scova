@@ -34,10 +34,10 @@
             state="empty"
             :message="
                 filter === 'unread'
-                    ? '没有未读报告。'
+                    ? '暂无未读报告'
                     : filter === 'read'
-                      ? '没有已读报告。'
-                      : '报告交付后会出现在这里。'
+                      ? '暂无已读报告'
+                      : '暂无报告'
             "
         />
         <div v-if="items.length" class="inbox-list">

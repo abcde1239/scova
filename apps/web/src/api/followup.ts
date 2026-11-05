@@ -35,6 +35,7 @@ export function followupAttempt(
 ) {
     validateQuestion(question, report);
     followupParent(parent, report);
+    if (parent.mode !== 'live') invalidFollowup('历史演示报告不能创建后续研究');
     parseContract(IdempotencyHeadersSchema, { 'idempotency-key': key });
     return Object.freeze({
         reportId: report.id,
@@ -51,7 +52,9 @@ export function followupAttempt(
 export type FollowupAttempt = ReturnType<typeof followupAttempt>;
 export function followupRun(
     run: Run,
-    expected: Pick<FollowupAttempt, 'parentRunId' | 'taskId' | 'taskVersionId' | 'mode' | 'budget'>,
+    expected: Pick<FollowupAttempt, 'parentRunId' | 'taskId' | 'taskVersionId' | 'budget'> & {
+        mode: Run['mode'];
+    },
     linkedId?: string | null,
 ) {
     if (

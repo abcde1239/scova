@@ -9,18 +9,9 @@
                         : '真实查阅报告'
                 }}
             </p>
-            <dl class="metadata scova-interface">
-                <div>
-                    <dt>交付时间</dt>
-                    <dd>
-                        <time :datetime="report.publishedAt">{{ report.publishedAt }}</time>
-                    </dd>
-                </div>
-                <div>
-                    <dt>配置版本标识</dt>
-                    <dd>{{ report.taskVersionId }}</dd>
-                </div>
-            </dl>
+            <p class="published scova-interface">
+                <time :datetime="report.publishedAt">{{ published }}</time>
+            </p>
         </header>
         <aside
             v-if="integrity.partial"
@@ -30,22 +21,38 @@
         >
             <h3>部分交付，结论仍有缺口</h3>
             <p>本报告未完成全部查阅，不能据此认定没有重要变化。</p>
-            <ul>
-                <li v-for="(item, index) in integrity.limitations" :key="index">{{ item }}</li>
-            </ul>
+            <a href="#coverage-title" @click="openCoverage">查看完整限制与缺口</a>
         </aside>
+        <slot name="format-notice" />
+        <section aria-labelledby="summary-title" class="report-summary scova-reading">
+            <h3 id="summary-title">{{ summaryTitle }}</h3>
+            <p>{{ report.summary }}</p>
+        </section>
+        <slot name="after-summary" />
         <section class="coverage scova-interface" aria-labelledby="coverage-title">
             <h3 id="coverage-title">查阅范围与限制</h3>
-            <p>
-                {{
-                    integrity.partial
-                        ? '本次覆盖不完整。'
-                        : '本次计划范围内查阅完成，不代表穷尽互联网资料。'
-                }}
-            </p>
-            <details>
+            <details ref="coverageDetails">
                 <summary>查看查询摘要与覆盖缺口</summary>
                 <div class="coverage-body">
+                    <p>
+                        {{
+                            integrity.partial
+                                ? '本次覆盖不完整。'
+                                : '本次计划范围内查阅完成，不代表穷尽互联网资料。'
+                        }}
+                    </p>
+                    <dl class="metadata scova-interface">
+                        <div>
+                            <dt>交付时间</dt>
+                            <dd>
+                                <time :datetime="report.publishedAt">{{ report.publishedAt }}</time>
+                            </dd>
+                        </div>
+                        <div>
+                            <dt>配置版本标识</dt>
+                            <dd>{{ report.taskVersionId }}</dd>
+                        </div>
+                    </dl>
                     <h4>已执行查询</h4>
                     <ul v-if="report.coverage.searchedQueries.length">
                         <li v-for="(query, index) in report.coverage.searchedQueries" :key="index">
@@ -68,18 +75,13 @@
                 </div>
             </details>
         </section>
-        <slot name="format-notice" />
-        <section aria-labelledby="summary-title" class="scova-reading">
-            <h3 id="summary-title">{{ summaryTitle }}</h3>
-            <p>{{ report.summary }}</p>
-        </section>
         <slot />
         <report-sources :report="report" />
     </article>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import type { Report } from '@scova/models';
 import { reportIntegrity } from '@/composables/useReport';
 import { useReadingTypography } from '@/composables/useReadingTypography';
@@ -89,6 +91,20 @@ const props = withDefaults(defineProps<{ report: Report; summaryTitle?: string }
 });
 const { reading } = useReadingTypography();
 const integrity = computed(() => reportIntegrity(props.report));
+const coverageDetails = ref<HTMLDetailsElement>();
+const published = computed(() =>
+    new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(
+        new Date(props.report.publishedAt),
+    ),
+);
+function openCoverage(event: MouseEvent) {
+    if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    if (!coverageDetails.value) return;
+    coverageDetails.value.open = true;
+    coverageDetails.value.querySelector('summary')?.focus();
+    coverageDetails.value.scrollIntoView({ block: 'nearest' });
+}
 const budgetLabels = {
     searches: '搜索次数',
     pages: '页面数',
@@ -108,6 +124,7 @@ const budgetLabels = {
     overflow-wrap: anywhere;
 }
 .report-header,
+.report-summary,
 .coverage {
     display: grid;
     gap: 0.625rem;
@@ -130,6 +147,25 @@ h4 {
 .mode {
     font-weight: 500;
 }
+.published {
+    color: var(--scova-muted);
+    font-size: 0.875rem;
+}
+.report-summary {
+    gap: 0.75rem;
+}
+.report-warning a {
+    color: inherit;
+    justify-self: start;
+    display: inline-flex;
+    align-items: center;
+    min-block-size: 2.75rem;
+    text-underline-offset: 0.2em;
+}
+.report-warning a:focus-visible {
+    outline: 0.125rem solid var(--scova-primary);
+    outline-offset: 0.1875rem;
+}
 .metadata {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
@@ -145,9 +181,9 @@ dd {
 .report-warning {
     display: grid;
     gap: 0.5rem;
-    padding: 0.875rem 1rem;
+    padding: 0.625rem 1rem;
     border-inline-start: 0.25rem solid var(--scova-partial);
-    background: var(--scova-surface);
+    background: color-mix(in srgb, var(--scova-partial) 4%, transparent);
 }
 ul {
     margin: 0;

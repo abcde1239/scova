@@ -25,7 +25,7 @@ docker compose up -d
 
 API/Worker 与 Web 代理均由非 root 用户运行，只读根文件系统和临时 `/tmp`；PostgreSQL 与 Redis 使用独立持久卷，Redis 开启 AOF/everysec。仅代理发布端口，数据库、队列和搜索均在 Compose 网络内部。正常 `docker compose down` 保留数据；不要使用 `down -v` 作为升级或恢复步骤。
 
-默认演示任务不会联网采集或调用模型。通过 `POST /api/v1/auth/register` 或 `/auth/login` 获取会话与 `csrfToken`，后续写请求携带同源 `Origin`、Cookie 和 `x-csrf-token`；先保存完整配置，再显式创建 `mode=demo` 的 Run。轮询 Run/报告 API 验证成果，演示报告明确标识固定资料。草稿缺模型时返回手工模式。完整配置及接口见 [契约](../reference/contracts.md) 与 [API](../reference/api.md)。
+新执行统一进行真实研究。通过 `POST /api/v1/auth/register` 或 `/auth/login` 获取会话与 `csrfToken`，后续写请求携带同源 `Origin`、Cookie 和 `x-csrf-token`；先保存完整任务配置，再以 `{}` 或 `{ "mode": "live" }` 创建 Run。缺少必要搜索或模型配置时执行明确失败，草稿仍可手工编辑。完整配置及接口见 [契约](../reference/contracts.md) 与 [API](../reference/api.md)。
 
 ## 同源、TLS 与 SSE
 
@@ -45,7 +45,7 @@ SearxNG 是固定镜像、非 root 的可选服务。设置随机 `SEARXNG_SECRE
 docker compose --profile live-search up -d
 ```
 
-设置 `MODEL_API_KEY`、`MODEL_NAME` 和必要的 `MODEL_BASE_URL`。容器使用 `http://searxng:8080`，不使用宿主机的 localhost。默认搜索渠道始终为 SearxNG；仅显式设置 `SEARCH_PROVIDER=tavily` 并提供 `TAVILY_API_KEY` 时使用 Tavily。手动 Run 或调度必须显式选择 live；`WORKER_SCHEDULED_RUN_MODE` 默认 demo。缺凭据或调用失败不会从 live 静默切成演示、付费渠道或其他供应商。真实烟测单独 opt-in，未执行时应记录“未执行”，不能用 fixture 通过冒充真实服务成功。
+设置 `MODEL_API_KEY`、`MODEL_NAME` 和必要的 `MODEL_BASE_URL` 作为部署默认模型，或配置 `AGENT_CREDENTIAL_KEY` 后让各账号在界面添加个人供应商，详见[Agent 配置](agent-configuration.md)。加密主密钥在 Server/Worker 中必须一致，并独立备份。容器使用 `http://searxng:8080`，不使用宿主机的 localhost。默认搜索渠道始终为 SearxNG；仅显式设置 `SEARCH_PROVIDER=tavily` 并提供 `TAVILY_API_KEY` 时使用 Tavily。手动、重试和调度统一创建 live 执行，旧 `WORKER_SCHEDULED_RUN_MODE` 已移除，设置该变量不再改变调度行为。缺凭据或调用失败不会从 live 静默切成演示、付费渠道或其他供应商。真实烟测单独 opt-in，未执行时应记录“未执行”，不能用 fixture 通过冒充真实服务成功。
 
 ## 维护窗口
 
@@ -100,4 +100,4 @@ docker compose up -d
 
 容器验收使用显式命令 `vp run test:deployment`。Harness 中的 `web-deployment` 仅登记根工程的独立部署检查，默认关闭且非必需，不扩大应用单测覆盖或让当前 `ready` 自动启动 Docker；浏览器 CI 与 ready 门禁接入由 #86 单独交付。
 
-`vp check`、`vp test`、`vp run -r build` 和 `vp run test:operations` 分别验证静态、纯逻辑、工作区构建和真实 PostgreSQL/Redis 维护。真实测试要求 PostgreSQL 17 的 `pg_dump`/`pg_restore` 在 PATH，并允许测试账号创建两个随机临时数据库；测试不清空共享 Redis。`vp run test:deployment` 为显式容器验收：构建后端/Web 镜像，在两个随机独立 Compose 项目中验证 Web SPA/静态缓存/缺失文件、真实 API 与 Swagger 路由、迁移、健康、代理会话、演示报告/证据、重启幂等和空库恢复，结束时移除自己创建的容器和卷。它不使用现有部署数据，不调用真实供应商；构建需要网络，运行需要 Docker。脚本还暂停专用 Worker 创建排队 Run，要求代理首事件在 2 秒内可读，再启动真实消费者，验证同一连接收到新增事件、主动断开后的 Last-Event-ID 有序续传、终态后 3 秒内 EOF 及跨账号 404。业务成果始终显式使用 demo；另建 mode=live 的 Run 仅验证缺凭据时失败并关闭流、不调用供应商、不回落 demo，不计为真实 live 服务成功。此脚本的会话检查是 HTTP 级验收；业务页面与真实浏览器 Cookie、渲染和操作另验，不能以 API 成功代替页面交付。
+`vp check`、`vp test`、`vp run -r build` 和 `vp run test:operations` 分别验证静态、纯逻辑、工作区构建和真实 PostgreSQL/Redis 维护。真实测试要求 PostgreSQL 17 的 `pg_dump`/`pg_restore` 在 PATH，并允许测试账号创建两个随机临时数据库；测试不清空共享 Redis。`vp run test:deployment` 为显式容器验收：构建后端/Web 镜像，在两个随机独立 Compose 项目中验证 Web SPA/静态缓存/缺失文件、真实 API 与 Swagger 路由、迁移、健康、代理会话、缺配置失败、重启幂等和空库恢复，结束时移除自己创建的容器和卷。它不使用现有部署数据，不调用真实供应商；构建需要网络，运行需要 Docker。脚本还暂停专用 Worker 创建排队 Run，要求代理首事件在 2 秒内可读，再启动真实消费者，验证同一连接收到新增事件、主动断开后的 Last-Event-ID 有序续传、终态后 3 秒内 EOF 及跨账号 404。脚本使用 live Run 验证缺凭据时明确失败、无伪造报告并关闭流，不调用供应商。报告交付另由显式注入供应商的集成测试验证，两者均不计为远程供应商烟测成功。此脚本的会话检查是 HTTP 级验收；业务页面与真实浏览器 Cookie、渲染和操作另验，不能以 API 成功代替页面交付。

@@ -86,6 +86,27 @@ export function themeOverrides(accent: Accent, scheme: ColorScheme): GlobalTheme
             textColorPressedPrimary: colors.onPrimary,
             textColorFocusPrimary: colors.onPrimary,
         },
+        Input: {
+            borderFocus: `0.0625rem solid ${colors.primary}`,
+            boxShadowFocus: `0 0 0 0.125rem color-mix(in srgb, ${colors.primary} 10%, transparent)`,
+            borderFocusError: `0.0625rem solid ${colors.danger}`,
+            boxShadowFocusError: `0 0 0 0.125rem color-mix(in srgb, ${colors.danger} 10%, transparent)`,
+        },
+        Notification: {
+            color: colors.surface,
+            textColor: colors.text,
+            headerTextColor: colors.text,
+            descriptionTextColor: colors.muted,
+            width: 'min(24rem, calc(100vw - 2rem))',
+            padding: '1rem',
+            fontSize: '0.9375rem',
+            titleFontSize: '1rem',
+            lineHeight: '1.6',
+            borderRadius: '0.75rem',
+            closeSize: '1.75rem',
+            closeIconSize: '1.125rem',
+            boxShadow: '0 0.5rem 2rem rgb(0 0 0 / 12%)',
+        },
     };
 }
 

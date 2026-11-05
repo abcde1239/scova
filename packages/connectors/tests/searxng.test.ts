@@ -122,7 +122,7 @@ describe('SearxNG structured search and source authenticity', () => {
         );
         await expect(
             createSearxngSearch({ http: failed.http }).search('deadline'),
-        ).rejects.toMatchObject({ code: 'invalid_response' });
+        ).rejects.toMatchObject({ code: 'search_unavailable' });
     });
 
     it('records discarded unsafe URLs as a gap without turning them into collected evidence', async () => {

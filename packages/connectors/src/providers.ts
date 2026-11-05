@@ -1,4 +1,6 @@
 import { Ajv } from 'ajv';
+import { modelRequest, normalizeModelResponse, type ModelProtocol } from './model-protocol.ts';
+import { createModelHttpClient } from './model-http.ts';
 import {
     createSafeHttpClient,
     normalizeUrl,
@@ -7,7 +9,12 @@ import {
     withDeadline,
 } from './http.ts';
 import type { HttpResponse, SafeHttpClient } from './http.ts';
-import { ConnectorError } from './types.ts';
+import {
+    ConnectorError,
+    MODEL_CALL_TIMEOUT_MS,
+    MODEL_INPUT_TOKEN_LIMIT,
+    MODEL_OUTPUT_TOKEN_LIMIT,
+} from './types.ts';
 import type {
     CallContext,
     ConnectorKind,
@@ -76,12 +83,17 @@ export function prepareProvider(options: Omit<ProviderOptions, 'apiKey'>) {
             operation: (signal: AbortSignal) => Promise<HttpResponse>,
         ) {
             return withDeadline(
-                Math.min(context.timeoutMs ?? 15_000, 15_000),
+                Math.min(
+                    context.timeoutMs ?? (kind === 'model' ? MODEL_CALL_TIMEOUT_MS : 15_000),
+                    kind === 'model' ? MODEL_CALL_TIMEOUT_MS : 15_000,
+                ),
                 context.signal,
                 async (signal) => {
+                    let previousFailure: ConnectorError | undefined;
                     for (let attempt = 0; ; attempt++) {
                         if (signal.aborted) throw signal.reason;
-                        await context.beforeAttempt?.(kind);
+                        if (previousFailure) await context.beforeAttempt?.(kind, previousFailure);
+                        else await context.beforeAttempt?.(kind);
                         if (signal.aborted) throw signal.reason;
                         let response: HttpResponse | undefined;
                         try {
@@ -95,6 +107,7 @@ export function prepareProvider(options: Omit<ProviderOptions, 'apiKey'>) {
                                 attempt + 1 >= attempts
                             )
                                 throw error;
+                            previousFailure = error;
                             const retryAfter = response?.headers['retry-after'];
                             const seconds = retryAfter ? Number(retryAfter) : Number.NaN;
                             const serverDelay = retryAfter
@@ -219,19 +232,27 @@ export function estimateModelInputTokens(input: StructuredInput): number {
 }
 
 export function createModelProvider(
-    options: ProviderOptions & { model: string; baseUrl?: string },
+    options: ProviderOptions & { model: string; baseUrl?: string; protocol?: ModelProtocol },
 ): ModelProvider {
     if (!options.model.trim()) throw new ConnectorError('configuration', '模型名称未配置');
     if (!options.apiKey.trim()) throw new ConnectorError('configuration', '供应商密钥未配置');
-    const provider = prepareProvider(options);
-    const endpoint = `${(options.baseUrl ?? 'https://api.openai.com/v1').replace(/\/$/, '')}/chat/completions`;
+    const provider = prepareProvider({ ...options, http: options.http ?? createModelHttpClient() });
+    const protocol = options.protocol ?? 'openai_chat_completions';
+    const endpoint = modelRequest(
+        protocol,
+        options.baseUrl,
+        options.model,
+        options.apiKey,
+        { prompt: '', schema: {}, maxInputTokens: 1, maxOutputTokens: 1 },
+        [],
+    ).endpoint;
     if (validatePublicUrl(endpoint).protocol !== 'https:')
         throw new ConnectorError('configuration', '模型服务必须使用 HTTPS');
     const ajv = new Ajv({ strict: true, allErrors: false });
     return {
         async generateStructured<T>(input: StructuredInput, context: CallContext = {}) {
-            positiveLimit(input.maxInputTokens, 40_000, '输入 token');
-            positiveLimit(input.maxOutputTokens, 8_000, '输出 token');
+            positiveLimit(input.maxInputTokens, MODEL_INPUT_TOKEN_LIMIT, '输入 token');
+            positiveLimit(input.maxOutputTokens, MODEL_OUTPUT_TOKEN_LIMIT, '输出 token');
             if (!input.prompt.trim()) throw new ConnectorError('configuration', '模型输入为空');
             let validate;
             try {
@@ -240,6 +261,14 @@ export function createModelProvider(
                 throw new ConnectorError('configuration', '结构化输出 schema 无效');
             }
             const messages = modelMessages(input);
+            const payload = modelRequest(
+                protocol,
+                options.baseUrl,
+                options.model,
+                options.apiKey,
+                input,
+                messages,
+            );
             // UTF-8 bytes are a conservative token reservation, including schema and message overhead.
             const reservedInput = estimateModelInputTokens(input);
             if (reservedInput > input.maxInputTokens)
@@ -247,28 +276,17 @@ export function createModelProvider(
             const response = await provider.call('model', context, (signal) =>
                 provider.http.request(endpoint, {
                     method: 'POST',
-                    headers: {
-                        'content-type': 'application/json',
-                        authorization: `Bearer ${options.apiKey}`,
-                    },
-                    body: JSON.stringify({
-                        model: options.model,
-                        messages,
-                        max_tokens: input.maxOutputTokens,
-                        response_format: {
-                            type: 'json_schema',
-                            json_schema: {
-                                name: 'scova_output',
-                                strict: true,
-                                schema: input.schema,
-                            },
-                        },
-                    }),
+                    headers: payload.headers,
+                    body: JSON.stringify(payload.body),
                     signal,
+                    timeoutMs: Math.min(
+                        context.timeoutMs ?? MODEL_CALL_TIMEOUT_MS,
+                        MODEL_CALL_TIMEOUT_MS,
+                    ),
                     maxRedirects: 0,
                 }),
             );
-            const parsed = parseJson(response.body);
+            const parsed = normalizeModelResponse(protocol, parseJson(response.body));
             if (
                 !record(parsed) ||
                 !Array.isArray(parsed.choices) ||
@@ -278,6 +296,8 @@ export function createModelProvider(
                 throw new ConnectorError('invalid_response', '模型响应结构无效');
             }
             const choice = parsed.choices[0];
+            if (choice.finish_reason === 'length')
+                throw new ConnectorError('output_truncated', '模型输出达到长度上限，未完成生成');
             if (
                 choice.finish_reason !== 'stop' ||
                 !record(choice.message) ||

@@ -1019,6 +1019,11 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
                 kind,
                 confidenceLabel: kind === 'inference' ? '基于来源的推断' : '来源存在冲突，待核验',
             });
+            const report = await fixture.db.query.reports.findFirst({
+                where: eq(dbReports.id, result.reportId),
+            });
+            expect(report!.summary).toBe(claims[0].text);
+            expect(report!.summary.length).toBeLessThanOrEqual(600);
             expect(claims[0].citations).toHaveLength(kind === 'conflict' ? 2 : 1);
             if (kind === 'conflict') {
                 expect(new Set(claims[0].citations.map((citation) => citation.relation))).toEqual(
@@ -1643,37 +1648,41 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
         }
     });
 
-    it('生产runtime的真实demo图完成后交付partial，而不被RunService改写成failed', async () => {
-        const seed = await seedRun(fixture.db);
-        const runtime = createAgentRuntime({
-            database: fixture.db,
-            databaseUrl: fixture.databaseUrl,
-            checkpointSchema: schema,
-            enableDelivery: true,
-        });
-        try {
-            await runtime.connect();
-            await new RunService({
-                repository: runs,
-                executorFactory: (token) => runtime.executorFactory(token),
-            }).execute(seed.run.id);
-            const run = await fixture.db.query.runs
-                .findFirst({ where: eq(dbRuns.id, seed.run.id) })
-                .then((row) => requiredDatabaseValue(row));
-            expect(run).toMatchObject({
-                status: 'partial',
-                outcome: 'inconclusive',
-                failureCode: null,
+    it.each(['demo', 'live'] as const)(
+        '生产runtime对%s缺配置明确失败，不交付演示报告',
+        async (mode) => {
+            const seed = await seedRun(fixture.db, { mode });
+            const runtime = createAgentRuntime({
+                database: fixture.db,
+                databaseUrl: fixture.databaseUrl,
+                checkpointSchema: schema,
+                enableDelivery: true,
+                env: {},
             });
-            expect(
-                await fixture.db
-                    .select({ count: dbCount() })
-                    .from(dbReports)
-                    .where(eq(dbReports.runId, seed.run.id))
-                    .then((rows) => rows[0]!.count),
-            ).toBe(1);
-        } finally {
-            await runtime.close();
-        }
-    });
+            try {
+                await runtime.connect();
+                await new RunService({
+                    repository: runs,
+                    executorFactory: (token) => runtime.executorFactory(token),
+                }).execute(seed.run.id);
+                const run = await fixture.db.query.runs
+                    .findFirst({ where: eq(dbRuns.id, seed.run.id) })
+                    .then((row) => requiredDatabaseValue(row));
+                expect(run).toMatchObject({
+                    status: 'failed',
+                    outcome: null,
+                    failureCode: 'AGENT_CONFIGURATION_INVALID',
+                });
+                expect(
+                    await fixture.db
+                        .select({ count: dbCount() })
+                        .from(dbReports)
+                        .where(eq(dbReports.runId, seed.run.id))
+                        .then((rows) => rows[0]!.count),
+                ).toBe(0);
+            } finally {
+                await runtime.close();
+            }
+        },
+    );
 });

@@ -10,7 +10,17 @@
         <p v-if="!available" class="scova-interface" role="status">
             报告暂时不可用；本地稿仍保留，可复制。恢复读取前不能新建、保存、删除或重放。
         </p>
-        <div v-if="available" class="notes-tools scova-interface">
+        <div
+            v-if="
+                available &&
+                (!allowAll ||
+                    currentTarget ||
+                    !query.isSuccess.value ||
+                    items.length ||
+                    previous.length)
+            "
+            class="notes-tools scova-interface"
+        >
             <label :for="`${id}-target`">笔记目标</label>
             <select
                 :id="`${id}-target`"
@@ -54,25 +64,35 @@
             <p v-if="query.isError.value && items.length" class="scova-interface">
                 以下保留上次读取值，请重新读取以确认。
             </p>
-            <p v-if="query.isSuccess.value && !items.length" class="scova-interface">
-                这一页没有笔记。
+            <p
+                v-if="query.isSuccess.value && !items.length"
+                class="scova-interface empty-copy"
+                role="status"
+            >
+                暂无笔记
             </p>
             <ul class="notes-list">
                 <li v-for="note in items" :key="note.id" class="note-entry">
                     <p class="note-body scova-note">{{ note.body }}</p>
-                    <dl class="scova-interface">
-                        <div>
-                            <dt>{{ note.target.kind === 'report' ? '报告' : '来源' }}目标</dt>
-                            <dd>{{ targetLabel(note) }}</dd>
-                        </div>
-                        <div>
-                            <dt>最近编辑</dt>
-                            <dd>
-                                <time :datetime="note.updatedAt">{{ note.updatedAt }}</time>
-                            </dd>
-                        </div>
-                    </dl>
+                    <p class="note-target scova-interface">{{ targetLabel(note) }}</p>
                     <div class="notes-actions scova-interface">
+                        <details class="note-details">
+                            <summary>笔记详情</summary>
+                            <dl>
+                                <div>
+                                    <dt>
+                                        {{ note.target.kind === 'report' ? '报告' : '来源' }}目标
+                                    </dt>
+                                    <dd>{{ note.target.id }}</dd>
+                                </div>
+                                <div>
+                                    <dt>最近编辑</dt>
+                                    <dd>
+                                        <time :datetime="note.updatedAt">{{ note.updatedAt }}</time>
+                                    </dd>
+                                </div>
+                            </dl>
+                        </details>
                         <action-button
                             :disabled="editor.pending.value || editor.reading.value"
                             @click="open(note)"
@@ -210,7 +230,7 @@ function turn(forward: boolean) {
 }
 function targetLabel(note: Note) {
     const match = props.targets.find((item) => noteTargetKey(item) === noteTargetKey(note.target));
-    return match ? `${match.label}（${note.target.id}）` : note.target.id;
+    return match?.label ?? note.target.id;
 }
 function beforeUnload(event: BeforeUnloadEvent) {
     if (editor.protectedState.value) {
@@ -237,6 +257,28 @@ h2 {
     gap: 1.25rem;
     min-inline-size: 0;
     overflow-wrap: anywhere;
+}
+.note-target {
+    color: var(--scova-muted);
+    font-size: 0.875rem;
+}
+.note-details {
+    min-inline-size: 0;
+    max-inline-size: 100%;
+}
+.note-details[open] {
+    flex-basis: 100%;
+}
+summary {
+    min-block-size: 2.75rem;
+    padding-block: 0.625rem;
+    box-sizing: border-box;
+    cursor: pointer;
+    color: var(--scova-muted);
+}
+summary:focus-visible {
+    outline: 0.125rem solid var(--scova-primary);
+    outline-offset: 0.25rem;
 }
 .notes-panel {
     inline-size: min(100%, 45rem);
@@ -274,6 +316,7 @@ select:disabled {
 }
 .note-entry {
     padding-block: 1.5rem;
+    gap: 0.625rem;
     border-block-end: 0.0625rem solid var(--scova-border);
 }
 .note-body {

@@ -353,7 +353,7 @@ async function liveFixture(auth: Auth, goal: string, complete = false) {
         gaps: complete ? [] : ['测试样例'],
         exhausted: [],
     };
-    await db
+    const liveRun = await db
         .update(tables.runs)
         .set({
             mode: 'live',
@@ -371,7 +371,7 @@ async function liveFixture(auth: Auth, goal: string, complete = false) {
         .where(and(eq(tables.runSources.runId, f.run.id)))
         .returning()
         .then((rows) => ({ count: rows.length }));
-    await db
+    const liveReport = await db
         .update(tables.reports)
         .set({
             completeness: complete ? 'complete' : 'partial',
@@ -380,7 +380,7 @@ async function liveFixture(auth: Auth, goal: string, complete = false) {
         .where(and(eq(tables.reports.id, f.report.id)))
         .returning()
         .then(firstRow);
-    return { ...f, config: original, scope };
+    return { ...f, run: liveRun, report: liveReport, config: original, scope };
 }
 describe('报告证据问答与明确确认后续研究', () => {
     beforeAll(async () => {
@@ -648,9 +648,23 @@ describe('报告证据问答与明确确认后续研究', () => {
                 .then(([row]) => row!.count),
         ).toBe(0);
     });
-    it('confirm=false不启动；确认后固定问题配置、mode和预算且不覆盖原报告/TaskVersion', async () => {
+    it('历史演示报告可读取，但后续研究返回409且不写Outbox', async () => {
         const a = await register(),
             f = await fixture(a);
+        const q = await json(await ask(a, f.report.id));
+        const response = await follow(a, f.report.id, q.id);
+        expect(response.status).toBe(409);
+        expect((await json(response)).code).toBe('LEGACY_DEMO_RUN');
+        expect((await request(`/reports/${f.report.id}`, { headers: headers(a) })).status).toBe(
+            200,
+        );
+        expect(
+            await db.select().from(tables.outbox).where(eq(tables.outbox.userId, a.userId)),
+        ).toHaveLength(0);
+    });
+    it('confirm=false不启动；确认后固定问题配置、mode和预算且不覆盖原报告/TaskVersion', async () => {
+        const a = await register(),
+            f = await liveFixture(a, '核对活动日期');
         const q = await json(await ask(a, f.report.id, '请进一步核对活动日期'));
         expect((await follow(a, f.report.id, q.id, randomUUID(), false)).status).toBe(422);
         const key = randomUUID(),
@@ -712,7 +726,7 @@ describe('报告证据问答与明确确认后续研究', () => {
     });
     it('活动Run互斥与归档规则，失败不留关联Run或Outbox', async () => {
         const a = await register(),
-            f = await fixture(a);
+            f = await liveFixture(a, '核对活动日期');
         const q = await json(await ask(a, f.report.id));
         const active = await request(`/tasks/${f.task.id}/runs`, {
             method: 'POST',
@@ -744,7 +758,7 @@ describe('报告证据问答与明确确认后续研究', () => {
     });
     it('Outbox写失败时回滚Run/首事件/问题链接/幂等，重试可成功', async () => {
         const a = await register(),
-            f = await fixture(a);
+            f = await liveFixture(a, '核对活动日期');
         const q = await json(await ask(a, f.report.id));
         const key = randomUUID();
         await db.execute(

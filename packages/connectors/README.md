@@ -37,7 +37,11 @@ const connectors = createConnectorBundle({
 });
 ```
 
-`generateStructured` 接收 JSON Schema、输入/输出 token 上限与独立 `untrustedSources`，校验输出和 usage；缺 usage 时保守估算。模型地址仅允许 HTTPS。密钥只由部署者传入，不输出日志。完整 bundle 缺必要配置时固定为明确带原因的全 `demo`；独立 `createSearxngSearch()` 仍可真实搜索。已选 `live` 的任何调用失败均不切换演示或其他供应商。显式设置 `searchProvider: "tavily"` 并传入 `tavilyApiKey` 才调用 Tavily。
+`createModelProvider({ protocol, ... })` 和 bundle 的 `modelProtocol` 支持 `openai_chat_completions`（默认严格 JSON Schema）、`openai_json`（JSON 模式）、`anthropic_messages` 与 `gemini`。`generateStructured` 接收 JSON Schema、输入/输出 token 上限与独立 `untrustedSources`，所有协议均校验输出和 usage；缺 usage 时保守估算。模型地址仅允许 HTTPS。密钥由 Server/Worker 从账号加密配置或部署默认值传入，不输出日志。完整 bundle 缺必要配置时固定为明确带原因的全 `demo`；独立 `createSearxngSearch()` 仍可真实搜索。已选 `live` 的任何调用失败均不切换演示或其他供应商。显式设置 `searchProvider: "tavily"` 并传入 `tavilyApiKey` 才调用 Tavily。
+
+`listProviderModels({ baseUrl, protocol, apiKey, signal })` 仅查询模型目录，返回 `items` 与 `truncated`，不生成内容或验证研究能力。支持上述协议，Gemini 过滤非 `generateContent` 模型；最多五页、1000项、每页1 MiB，总超时12秒。复用公网DNS固定连接保护，凭据请求不重定向、不自动重试。
+
+模型目录和生成默认使用`createModelHttpClient`：系统解析全部为Fake-IP时，通过固定IP的AliDNS HTTPS查询重新解析，再校验并固定真实公网地址；不会放行Fake-IP或混合公私结果。`MODEL_DNS_RESOLVER`默认`auto`，可选`system`（不回退）或显式`alidns/cloudflare/google`。解析不发送密钥，DNS服务本身保TLS验证；通用网页/搜索客户端不启用模型回退。IP固定传输显式使用原URL的Host，兼容Bun的证书域名校验并拒绝调用方覆盖。
 
 仓库根目录验证：
 
@@ -51,3 +55,5 @@ vp run test:connectors:tavily  # 显式 Tavily + 阅读 + 模型，有外部费�
 ```
 
 真实烟测仅发送固定公开查询，搜索、读取、模型各最多尝试一次。模型输出最多 256 token，引用必须确实存在于采集正文；缺凭据输出 `NOT RUN`，不算真实通过。普通测试使用固定响应与本地 socket，不消耗真实密钥。
+
+网页读取通过独立 `READER_DNS_RESOLVER=auto` 兼容全Fake-IP解析，配置选项与模型一致，不继承 `MODEL_DNS_RESOLVER`；固定公网IP、逐跳校验、私网拦截及TLS验证仍生效。模型生成单次总预算最多120秒（含重试），搜索和网页读取最多15秒；调用方更短的超时和整次执行剩余时间始终优先。单次模型输入最多256,000、输出最多64,000 token，累计预算由调用方控制，供应商自身能力也会限制可用上下文和输出。供应商明确返回输出长度耗尽时抛出 `output_truncated`，即使残留 JSON 可解析也不交付为完整输出。模型目录仍保持原有短超时，不受生成上限影响。

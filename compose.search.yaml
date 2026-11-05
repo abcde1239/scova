@@ -14,6 +14,7 @@ services:
             GRANIAN_BLOCKING_THREADS: '2'
         volumes:
             - ./ops/searxng/settings.yml:/etc/searxng/settings.yml:ro
+            - ./ops/searxng/bing_international.py:/usr/local/searxng/searx/engines/bing_international.py:ro
             - searxng-cache:/var/cache/searxng
         mem_limit: 512m
         cpus: 1.0

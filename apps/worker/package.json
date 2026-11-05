@@ -4,9 +4,9 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "dev": "bun --watch src/main.ts",
-        "dev:node": "vpx --watch --env-file-if-exists=.env src/node.ts",
-        "start": "bun run src/main.ts",
+        "dev": "vpx ../../scripts/run-bun.mjs --env-file=../../.env.local --watch src/main.ts",
+        "dev:node": "vpx --watch --env-file-if-exists=../../.env.local --env-file-if-exists=.env src/node.ts",
+        "start": "vpx ../../scripts/run-bun.mjs run src/main.ts",
         "start:node": "vpx --env-file-if-exists=.env src/node.ts",
         "build": "tsc --noEmit",
         "test": "vp test",

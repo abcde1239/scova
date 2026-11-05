@@ -4,7 +4,7 @@ import type { Page } from '@playwright/test';
 async function openPrimaryNavigation(page: Page) {
     let navigation = page.getByRole('navigation', { name: '主导航', exact: true });
     if (!(await navigation.isVisible())) {
-        await page.getByRole('button', { name: /打开.*导航|展开.*导航|菜单/ }).click();
+        await page.getByRole('button', { name: /^打开(个人侧栏|导航菜单)$/ }).click();
         navigation = page.getByRole('navigation', { name: '工作台菜单', exact: true });
     }
     await expect(navigation).toBeVisible();
@@ -32,7 +32,9 @@ test('Scova 品牌与面包屑保留真实层级，快捷入口可键盘导航',
     await parent.focus();
     await parent.press('Enter');
     await expect(page).toHaveURL(/\/account$/);
-    await expect(breadcrumbs.locator('[aria-current="page"]')).toHaveText('账号');
+    await expect(breadcrumbs).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: '账号', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '账号信息', exact: true })).toHaveCount(0);
     const shortcut = page.getByRole('link', { name: '外观与阅读设置' });
     await expect(shortcut).toHaveClass(/n-button/);
     await shortcut.focus();

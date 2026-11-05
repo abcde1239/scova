@@ -12,7 +12,7 @@
 
 ```sh
 vp test apps/web/tests/report-topic-list.test.ts apps/web/tests/report-view.test.ts
-vp run web#build
-vp run web#build:e2e
+vp run build:frontend
+vp run build:e2e
 vp run test:e2e tests/e2e/report-topic-list.spec.ts
 ```

@@ -4,6 +4,7 @@ import { createTavilySearch, createModelProvider } from './providers.ts';
 import { createPageReader, pageFingerprint } from './reader.ts';
 import { createSearxngSearch } from './searxng.ts';
 import { ConnectorError } from './types.ts';
+import type { ModelProtocol } from './model-protocol.ts';
 import type {
     CallContext,
     ModelProvider,
@@ -31,6 +32,7 @@ export function createConnectorBundle(
         modelApiKey?: string;
         model?: string;
         modelBaseUrl?: string;
+        modelProtocol?: ModelProtocol;
         http?: SafeHttpClient;
     } = {},
 ): ConnectorBundle {
@@ -53,6 +55,7 @@ export function createConnectorBundle(
                 apiKey: options.modelApiKey,
                 model: options.model,
                 baseUrl: options.modelBaseUrl,
+                protocol: options.modelProtocol,
                 http: options.http,
             }),
         };

@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { JSDOM } from 'jsdom';
 import { Readability } from '@mozilla/readability';
-import { createSafeHttpClient, normalizeUrl, positiveLimit, withDeadline } from './http.ts';
+import { normalizeUrl, positiveLimit, withDeadline } from './http.ts';
+import { createReaderHttpClient } from './reader-http.ts';
 import type { SafeHttpClient } from './http.ts';
 import { ConnectorError } from './types.ts';
 import type { PageReader } from './types.ts';
@@ -16,7 +17,7 @@ export function pageFingerprint(text: string): string {
 export function createPageReader(
     options: { http?: SafeHttpClient; maxTextChars?: number } = {},
 ): PageReader {
-    const http = options.http ?? createSafeHttpClient();
+    const http = options.http ?? createReaderHttpClient();
     const maxText = positiveLimit(options.maxTextChars ?? 100_000, 200_000, '正文长度');
     const origins = new Map<string, Promise<void>>();
     return {

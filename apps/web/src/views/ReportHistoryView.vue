@@ -55,7 +55,7 @@
             retryable
             @retry="retry"
         />
-        <state-panel v-else-if="!items.length" state="empty" message="当前任务范围内尚无报告。" />
+        <state-panel v-else-if="!items.length" state="empty" message="暂无报告" />
         <div v-if="items.length" class="history-list">
             <report-history-entry
                 v-for="item in items"

@@ -161,7 +161,17 @@ export const nodeHttpTransport: HttpTransport = (url, options) =>
             url,
             {
                 method: options.method,
-                headers: { 'accept-encoding': 'identity', ...options.headers },
+                // Bun 1.3.x的IP固定连接需要显式Host才能按原域名校验证书。
+                // Host只取URL，不允许调用方覆盖；TLS证书验证仍保持开启。
+                headers: {
+                    'accept-encoding': 'identity',
+                    ...Object.fromEntries(
+                        Object.entries(options.headers).filter(
+                            ([name]) => name.toLowerCase() !== 'host',
+                        ),
+                    ),
+                    host: url.host,
+                },
                 signal: options.signal,
                 agent: false,
                 // Keep the URL hostname for Host/TLS/SNI, but never perform a second DNS lookup.
@@ -234,8 +244,10 @@ export function createSafeHttpClient(
     config: {
         resolve?: (hostname: string) => Promise<ResolvedAddress[]>;
         transport?: HttpTransport;
+        maxTimeoutMs?: number;
     } = {},
 ): SafeHttpClient {
+    const maxTimeoutMs = positiveLimit(config.maxTimeoutMs ?? 15_000, 120_000, 'HTTP超时上限');
     const resolver =
         config.resolve ?? ((hostname: string) => lookup(hostname, { all: true, verbatim: true }));
     const transport = config.transport ?? nodeHttpTransport;
@@ -270,7 +282,7 @@ export function createSafeHttpClient(
                 throw new ConnectorError('configuration', '重定向上限无效');
             }
             return withDeadline(
-                Math.min(options.timeoutMs ?? 15_000, 15_000),
+                Math.min(options.timeoutMs ?? 15_000, maxTimeoutMs),
                 options.signal,
                 async (signal) => {
                     let url = validatePublicUrl(value);
@@ -282,7 +294,8 @@ export function createSafeHttpClient(
                             addresses = isIP(hostname)
                                 ? [{ address: hostname, family: isIP(hostname) }]
                                 : await resolver(hostname);
-                        } catch {
+                        } catch (error) {
+                            if (error instanceof ConnectorError) throw error;
                             throw new ConnectorError('network', '来源域名解析失败', true);
                         }
                         if (

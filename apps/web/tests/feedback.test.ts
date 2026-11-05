@@ -183,7 +183,7 @@ describe('feedback actions', () => {
             expect(state.current.value?.kind).toBe(kind);
             const post = calls.find((call) => call.init?.method === 'POST')!;
             expect(post.url).toBe('/api/v1/feedback');
-            expect(post.init?.credentials).toBe('same-origin');
+            expect(post.init?.credentials).toBe('include');
             expect(new Headers(post.init?.headers).get('x-csrf-token')).toBe('test-only');
             expect(requestBody(post.init)).toEqual({
                 taskId,

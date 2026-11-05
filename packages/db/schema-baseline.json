@@ -4,10 +4,25 @@
         {
             "name": "0000_database_baseline",
             "hash": "c1a6be6378224e649a2618fc46275895e1fdce43c2c384e3f62062bf40af25e1"
+        },
+        {
+            "name": "0001_abnormal_maverick",
+            "hash": "c4da80976756793915ff53d0414c723dcd5ba6113a13aee3981ffafc13aabe4c"
+        },
+        {
+            "name": "0002_sharp_trauma",
+            "hash": "8f6731b542476a0f661b21b62ac55bc302ee12d533f2b03c471e15f1541ed4ce"
         }
     ],
     "signature": {
         "objects": [
+            {
+                "name": "agent_providers",
+                "kind": "r",
+                "persistence": "p",
+                "row_security": false,
+                "force_row_security": false
+            },
             {
                 "name": "baselines",
                 "kind": "r",
@@ -199,6 +214,127 @@
             }
         ],
         "columns": [
+            {
+                "table_name": "agent_providers",
+                "name": "id",
+                "position": 1,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "agent_providers",
+                "name": "user_id",
+                "position": 2,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "agent_providers",
+                "name": "name",
+                "position": 3,
+                "type": "text",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "agent_providers",
+                "name": "base_url",
+                "position": 4,
+                "type": "text",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "agent_providers",
+                "name": "model",
+                "position": 5,
+                "type": "text",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "agent_providers",
+                "name": "protocol",
+                "position": 6,
+                "type": "text",
+                "not_null": true,
+                "default_value": "'openai_chat_completions'::text",
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "agent_providers",
+                "name": "encrypted_api_key",
+                "position": 7,
+                "type": "text",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "agent_providers",
+                "name": "active",
+                "position": 8,
+                "type": "boolean",
+                "not_null": true,
+                "default_value": "false",
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "agent_providers",
+                "name": "revision",
+                "position": 9,
+                "type": "integer",
+                "not_null": true,
+                "default_value": "1",
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "agent_providers",
+                "name": "updated_at",
+                "position": 10,
+                "type": "timestamp(6) with time zone",
+                "not_null": true,
+                "default_value": "now()",
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "agent_providers",
+                "name": "draft_active",
+                "position": 11,
+                "type": "boolean",
+                "not_null": true,
+                "default_value": "false",
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
             {
                 "table_name": "baselines",
                 "name": "id",
@@ -3165,6 +3301,27 @@
         ],
         "constraints": [
             {
+                "table_name": "agent_providers",
+                "name": "agent_provider_revision_positive",
+                "type": "c",
+                "definition": "CHECK (revision > 0)",
+                "validated": true
+            },
+            {
+                "table_name": "agent_providers",
+                "name": "agent_providers_pkey",
+                "type": "p",
+                "definition": "PRIMARY KEY (id)",
+                "validated": true
+            },
+            {
+                "table_name": "agent_providers",
+                "name": "agent_providers_user_id_users_id_fk",
+                "type": "f",
+                "definition": "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE",
+                "validated": true
+            },
+            {
                 "table_name": "baselines",
                 "name": "baselines_pkey",
                 "type": "p",
@@ -4035,6 +4192,34 @@
         ],
         "indexes": [
             {
+                "table_name": "agent_providers",
+                "name": "agent_providers_one_active_per_user",
+                "definition": "CREATE UNIQUE INDEX agent_providers_one_active_per_user ON agent_providers USING btree (user_id) WHERE (active = true)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "agent_providers",
+                "name": "agent_providers_one_draft_active_per_user",
+                "definition": "CREATE UNIQUE INDEX agent_providers_one_draft_active_per_user ON agent_providers USING btree (user_id) WHERE (draft_active = true)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "agent_providers",
+                "name": "agent_providers_pkey",
+                "definition": "CREATE UNIQUE INDEX agent_providers_pkey ON agent_providers USING btree (id)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "agent_providers",
+                "name": "agent_providers_user_id_idx",
+                "definition": "CREATE INDEX agent_providers_user_id_idx ON agent_providers USING btree (user_id)",
+                "valid": true,
+                "ready": true
+            },
+            {
                 "table_name": "baselines",
                 "name": "baselines_pkey",
                 "definition": "CREATE UNIQUE INDEX baselines_pkey ON baselines USING btree (id)",
@@ -4787,6 +4972,18 @@
         "triggers": [],
         "foreign_key_triggers": [
             {
+                "table_name": "agent_providers",
+                "constraint_name": "agent_providers_user_id_users_id_fk",
+                "event": 5,
+                "enabled": "O"
+            },
+            {
+                "table_name": "agent_providers",
+                "constraint_name": "agent_providers_user_id_users_id_fk",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
                 "table_name": "baselines",
                 "constraint_name": "baselines_user_id_fkey",
                 "event": 5,
@@ -6127,6 +6324,18 @@
             {
                 "table_name": "tool_calls",
                 "constraint_name": "tool_calls_user_id_run_id_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "users",
+                "constraint_name": "agent_providers_user_id_users_id_fk",
+                "event": 9,
+                "enabled": "O"
+            },
+            {
+                "table_name": "users",
+                "constraint_name": "agent_providers_user_id_users_id_fk",
                 "event": 17,
                 "enabled": "O"
             },

@@ -81,7 +81,7 @@ export function createRunPlugin(services: ApiServices) {
                 tags: ['执行'],
                 summary: '启动查阅执行',
                 description:
-                    '固定当前任务配置版本，在同一事务写入执行、首个事件和 Outbox；重复幂等命令或同任务已有活动执行时返回原执行。',
+                    '只创建真实研究执行（mode可省略或为live），缺少必要配置时执行明确失败。固定当前任务配置版本，在同一事务写入执行、首个事件和 Outbox；重复幂等命令或同任务已有活动执行时返回原执行。',
             },
         })
         .get('/runs/:runId', handlers.get, {

@@ -12,6 +12,7 @@
                 placeholder=""
                 v-model:value="email"
                 :readonly="login.pending.value"
+                :status="login.fields.value.email ? 'error' : undefined"
                 :input-props="{
                     id: `${id}-email`,
                     type: 'email',
@@ -22,6 +23,7 @@
                 }"
             />
             <p v-if="login.fields.value.email" :id="`${id}-email-error`" class="field-error">
+                <app-icon name="warning" />
                 {{ login.fields.value.email }}
             </p>
         </div>
@@ -33,6 +35,7 @@
                 v-model:value="password"
                 type="password"
                 :readonly="login.pending.value"
+                :status="login.fields.value.password ? 'error' : undefined"
                 :input-props="{
                     id: `${id}-password`,
                     autocomplete: 'current-password',
@@ -44,6 +47,7 @@
                 }"
             />
             <p v-if="login.fields.value.password" :id="`${id}-password-error`" class="field-error">
+                <app-icon name="warning" />
                 {{ login.fields.value.password }}
             </p>
         </div>
@@ -52,11 +56,11 @@
             ref="errorMessage"
             role="alert"
             tabindex="-1"
-            class="field-error"
+            class="form-error"
         >
             {{ login.message.value }}
         </p>
-        <action-button attr-type="submit" :busy="login.pending.value">{{
+        <action-button type="primary" attr-type="submit" :busy="login.pending.value">{{
             login.pending.value ? '正在登录' : '登录'
         }}</action-button>
     </form>
@@ -67,6 +71,7 @@ import { nextTick, onUnmounted, ref, useId } from 'vue';
 import { NInput } from 'naive-ui';
 import type { InputInst } from 'naive-ui';
 import ActionButton from '@/components/common/ActionButton.vue';
+import AppIcon from '@/components/common/AppIcon.vue';
 import { useSessionLifecycle } from '@/composables/useSessionQuery';
 import { createLoginController } from '@/composables/useLogin';
 const emit = defineEmits<{ success: [] }>();
@@ -99,7 +104,7 @@ onUnmounted(() => {
 .login-form {
     display: grid;
     gap: 1.5rem;
-    inline-size: min(100%, 28rem);
+    inline-size: 100%;
     min-inline-size: 0;
 }
 .field {
@@ -114,7 +119,7 @@ label {
 .login-form :deep(.n-input) {
     --n-font-size: 1rem !important;
     min-block-size: 2.75rem;
-    border-radius: 0.375rem;
+    border-radius: 0.75rem;
 }
 .login-form :deep(input) {
     min-inline-size: 0;
@@ -122,12 +127,28 @@ label {
     cursor: text;
 }
 .field-error {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.375rem;
     margin: 0;
     color: var(--scova-danger);
-    background: var(--scova-surface);
+    font-size: 0.8125rem;
+    line-height: 1.5;
     overflow-wrap: anywhere;
 }
-.field-error:focus-visible {
+.field-error :deep(.app-icon) {
+    margin-block-start: 0.1875rem;
+}
+.form-error {
+    margin: 0;
+    padding: 0.75rem 0.875rem;
+    border-radius: 0.75rem;
+    color: var(--scova-danger);
+    background: color-mix(in srgb, var(--scova-danger) 7%, var(--scova-surface));
+    font-size: 0.875rem;
+    overflow-wrap: anywhere;
+}
+.form-error:focus-visible {
     outline: 0.125rem solid var(--scova-primary);
     outline-offset: 0.25rem;
 }

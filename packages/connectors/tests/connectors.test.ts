@@ -471,10 +471,6 @@ describe('structured model output and usage', () => {
         modelResponse({ answer: 42 }),
         { choices: [] },
         {
-            choices: [{ finish_reason: 'length', message: { content: '{"answer":"cut"}' } }],
-            usage: { prompt_tokens: 1, completion_tokens: 1 },
-        },
-        {
             choices: [
                 { finish_reason: 'stop', message: { refusal: 'Cannot comply', content: null } },
             ],

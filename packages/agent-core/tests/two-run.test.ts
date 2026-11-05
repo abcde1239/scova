@@ -527,7 +527,7 @@ describe('two-run continuous comparison through the persistent graph', () => {
         );
     });
     it('never calls a long-page suffix covered when the comparison model only sees a prefix', async () => {
-        const front = 'Price free. ' + 'Navigation data. '.repeat(350);
+        const front = 'Price free. ' + 'Navigation data. '.repeat(2100);
         const old = source('/long', `${front} Deadline November 15.`, [
             fact('item', 'price', 'free', 'Price free.'),
         ]);

@@ -1,4 +1,4 @@
-import type { TaskConfig, TaskDraftInput } from '@scova/models';
+import { DEFAULT_TASK_BUDGET, type TaskConfig, type TaskDraftInput } from '@scova/models';
 
 export function draftConfig(overrides: Partial<TaskConfig> = {}): TaskConfig {
     return {
@@ -12,13 +12,7 @@ export function draftConfig(overrides: Partial<TaskConfig> = {}): TaskConfig {
         timezone: 'Asia/Tokyo',
         schedule: { frequency: 'manual' },
         outputFormat: 'brief',
-        budget: {
-            maxSearches: 10,
-            maxPages: 20,
-            maxDurationSeconds: 300,
-            maxInputTokens: 40_000,
-            maxOutputTokens: 8_000,
-        },
+        budget: { ...DEFAULT_TASK_BUDGET },
         notificationPreference: { mode: 'off', runIssues: false },
         ...overrides,
     };

@@ -33,7 +33,7 @@ function setup(fetcher: typeof fetch = async () => Response.json(account)) {
     const session = createSessionController(lifecycle);
     const router = createRouter({
         history: createMemoryHistory(),
-        routes: ['tasks', 'library', 'login', 'register']
+        routes: ['tasks', 'library', 'login', 'register', 'service-unavailable']
             .map((name) => ({
                 path: `/${name}`,
                 name,
@@ -94,10 +94,51 @@ describe('session recovery and navigation', () => {
         await session.restore();
         expect(session.phase.value).toBe('unavailable');
         expect(session.user.value?.id).toBe(account.user.id);
+        await vi.waitFor(() => expect(router.currentRoute.value.name).toBe('service-unavailable'));
+        expect(router.currentRoute.value.query.redirect).toBe('/library');
         await session.restore();
+        await router.replace('/library');
         expect(session.phase.value).toBe('ready');
         expect(router.currentRoute.value.name).toBe('library');
         expect(fetcher).toHaveBeenCalledTimes(3);
+    });
+    it.each(['/library?filter=all#section', '/login?redirect=/library', '/register'])(
+        'routes unavailable startup %s to a standalone error with a safe retry target',
+        async (path) => {
+            const { session, router } = setup(async () => {
+                throw new TypeError('offline');
+            });
+            await router.push(path);
+            expect(session.phase.value).toBe('unavailable');
+            expect(router.currentRoute.value.name).toBe('service-unavailable');
+            expect(router.currentRoute.value.query.redirect).toBe(path);
+        },
+    );
+    it('after service recovery a 401 goes to login without mounting the original route', async () => {
+        const fetcher = vi
+            .fn<typeof fetch>()
+            .mockResolvedValueOnce(errorResponse(503))
+            .mockResolvedValueOnce(errorResponse(401));
+        const { session, router } = setup(fetcher);
+        await router.push('/library?filter=all#section');
+        expect(router.currentRoute.value.name).toBe('service-unavailable');
+        const target = sessionReturnTarget(router, router.currentRoute.value.query.redirect, true);
+        await session.restore();
+        await router.replace(target);
+        expect(router.currentRoute.value.name).toBe('login');
+        expect(router.currentRoute.value.query.redirect).toBe('/library?filter=all#section');
+    });
+    it('never retries to the service error itself or an external URL', () => {
+        const { router } = setup();
+        for (const value of [
+            '/service-unavailable?redirect=/library',
+            '//evil.example',
+            '/unknown',
+        ])
+            expect(sessionReturnTarget(router, value, true)).toBe('/tasks');
+        expect(sessionReturnTarget(router, '/login?redirect=/library', true)).toBe(
+            '/login?redirect=/library',
+        );
     });
     it('ignores a recovery result superseded by another login', async () => {
         let complete!: (value: Response) => void;
@@ -119,6 +160,61 @@ describe('session recovery and navigation', () => {
         expect(session.user.value?.id).toBe(next.user.id);
         expect(session.phase.value).toBe('ready');
     });
+    it('checks a later protected navigation before committing it and preserves same-session cache', async () => {
+        const fetcher = vi
+            .fn<typeof fetch>()
+            .mockImplementation(async () => Response.json(account));
+        const { lifecycle, session, router } = setup(fetcher);
+        await router.push('/library');
+        const epoch = lifecycle.session.epoch;
+        const cleanup = vi.fn();
+        lifecycle.capture().registerCleanup(cleanup);
+        lifecycle.queryClient.setQueryData(['keep-cache'], 'saved');
+        await router.push('/tasks');
+        expect(fetcher).toHaveBeenCalledTimes(2);
+        expect(lifecycle.session.epoch).toBe(epoch);
+        expect(lifecycle.queryClient.getQueryData(['keep-cache'])).toBe('saved');
+        expect(cleanup).not.toHaveBeenCalled();
+        fetcher.mockRejectedValueOnce(new TypeError('offline'));
+        await router.push('/library?filter=all#section');
+        expect(session.phase.value).toBe('unavailable');
+        expect(router.currentRoute.value.name).toBe('service-unavailable');
+        expect(router.currentRoute.value.query.redirect).toBe('/library?filter=all#section');
+    });
+    it('handles an expired session before committing a later protected navigation', async () => {
+        const fetcher = vi
+            .fn<typeof fetch>()
+            .mockResolvedValueOnce(Response.json(account))
+            .mockResolvedValueOnce(errorResponse(401));
+        const { session, router } = setup(fetcher);
+        await router.push('/library');
+        await router.push('/tasks');
+        expect(session.user.value).toBeNull();
+        expect(router.currentRoute.value.name).toBe('login');
+        expect(router.currentRoute.value.query.redirect).toBe('/tasks');
+    });
+    it.each(['account', 'csrf'])(
+        'invalidates the previous scope when revalidation changes %s',
+        async (change) => {
+            const { lifecycle, router } = setup();
+            await router.push('/library');
+            const scope = lifecycle.capture();
+            const cleanup = vi.fn();
+            scope.registerCleanup(cleanup);
+            lifecycle.queryClient.setQueryData(['private'], 'old');
+            scope.refreshSession({
+                ...account,
+                user:
+                    change === 'account'
+                        ? { ...account.user, id: '00000000-0000-4000-8000-000000000002' }
+                        : account.user,
+                csrfToken: change === 'csrf' ? 'replacement-csrf' : account.csrfToken,
+            });
+            expect(scope.isCurrent()).toBe(false);
+            expect(cleanup).toHaveBeenCalledTimes(1);
+            expect(lifecycle.queryClient.getQueryData(['private'])).toBeUndefined();
+        },
+    );
     it('locks logout, sends in-memory CSRF and clears all account cache on success', async () => {
         let complete!: (value: Response) => void;
         const fetcher = vi

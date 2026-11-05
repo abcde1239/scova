@@ -3,6 +3,7 @@ import { UuidSchema, parseContract, type Run, type RunEvent, type SseMessage } f
 import { HttpError, InvalidResponseError, raceSignal } from 'requestlane';
 import type { SessionLifecycle } from '@/api/session';
 import { toApiError } from '@/api/errors';
+import { apiUrl, apiCredentials } from '@/api/config';
 import { createSseParser, SseParseError } from '@/api/sse-parser';
 import { requestRun, runQueryOptions } from '@/api/runs';
 
@@ -21,6 +22,7 @@ export interface RunEventOptions {
     backoffMs?: number;
     onEvent?: (event: RunEvent) => void | Promise<void>;
     onSnapshot?: (snapshot: Run) => void | Promise<void>;
+    onReset?: (snapshot: Run) => void | Promise<void>;
 }
 const terminal = new Set(['succeeded', 'partial', 'failed', 'canceled']);
 class CallbackError extends Error {
@@ -96,7 +98,7 @@ export function subscribeRunEvents(
             data: run,
             status: 200,
             headers: {},
-            url: `/api/v1/runs/${runId}`,
+            url: apiUrl(`/runs/${runId}`),
         });
         await notify(options.onSnapshot, run);
     }
@@ -105,6 +107,7 @@ export function subscribeRunEvents(
         for (const message of messages) {
             if (!current()) break;
             if (message.type === 'stream.reset') {
+                await notify(options.onReset, message.payload.snapshot);
                 await snapshot(message.payload.snapshot);
                 if (!current()) break;
                 after = message.payload.resumeAfter;
@@ -138,10 +141,10 @@ export function subscribeRunEvents(
         try {
             arm(headerTimeoutMs);
             const pendingResponse = scope.transport.native(
-                `/api/v1/runs/${runId}/events?after=${after}`,
+                apiUrl(`/runs/${runId}/events?after=${after}`),
                 {
                     method: 'GET',
-                    credentials: 'same-origin',
+                    credentials: apiCredentials,
                     cache: 'no-store',
                     signal: connectionSignal,
                     headers: {

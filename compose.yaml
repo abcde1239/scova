@@ -23,8 +23,10 @@ x-app: &app
         MODEL_API_KEY: ${MODEL_API_KEY:-}
         MODEL_NAME: ${MODEL_NAME:-}
         MODEL_BASE_URL: ${MODEL_BASE_URL:-}
+        MODEL_DNS_RESOLVER: ${MODEL_DNS_RESOLVER:-auto}
+        READER_DNS_RESOLVER: ${READER_DNS_RESOLVER:-auto}
+        AGENT_CREDENTIAL_KEY: ${AGENT_CREDENTIAL_KEY:-}
         TAVILY_API_KEY: ${TAVILY_API_KEY:-}
-        WORKER_SCHEDULED_RUN_MODE: ${WORKER_SCHEDULED_RUN_MODE:-demo}
     logging: &logging
         driver: json-file
         options: { max-size: 5m, max-file: '2' }
@@ -128,6 +130,7 @@ services:
             GRANIAN_BLOCKING_THREADS: '2'
         volumes:
             - ./ops/searxng/settings.yml:/etc/searxng/settings.yml:ro
+            - ./ops/searxng/bing_international.py:/usr/local/searxng/searx/engines/bing_international.py:ro
             - searxng-cache:/var/cache/searxng
         mem_limit: 512m
         cpus: 1.0

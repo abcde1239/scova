@@ -63,7 +63,7 @@ export interface RunAttempt {
     runId?: string;
     taskVersionId?: string;
     budget?: Readonly<Run['budget']>;
-    mode: 'demo' | 'live';
+    mode: 'live';
     key: string;
 }
 /** 输入由动作控制器冻结；不在此创建 key，也不安装命令快照。 */

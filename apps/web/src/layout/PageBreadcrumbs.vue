@@ -1,5 +1,5 @@
 <template>
-    <nav class="breadcrumbs" aria-label="面包屑导航">
+    <nav v-if="items.length > 1" class="breadcrumbs" aria-label="面包屑导航">
         <ol>
             <li v-for="(item, index) in items" :key="item.label">
                 <app-icon v-if="index" name="chevron" />

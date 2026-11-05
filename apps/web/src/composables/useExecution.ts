@@ -6,6 +6,7 @@ import { runReportsOptions } from '@/api/run-detail';
 import { toApiError } from '@/api/errors';
 import { useRunEvents } from '@/composables/useRunEvents';
 import { useSessionLifecycle } from '@/composables/useSessionQuery';
+import { appendExecutionLog, emptyExecutionLog } from '@/utils/execution-log';
 
 export const executionStates = {
     queued: ['等待执行', '已保存排队状态，等待后台开始查阅。'],
@@ -78,11 +79,13 @@ export function useExecution(target: MaybeRefOrGetter<string>) {
         }
     });
     const tools = shallowRef<ToolSummary[]>([]);
+    const log = shallowRef(emptyExecutionLog());
     const published = shallowRef<string>();
     watch(
         () => [id.value, lifecycle.session.epoch],
         () => {
             tools.value = [];
+            log.value = emptyExecutionLog();
             published.value = undefined;
         },
         { flush: 'sync' },
@@ -108,9 +111,15 @@ export function useExecution(target: MaybeRefOrGetter<string>) {
     });
     const streamId = computed(() => (run.value?.id === id.value ? id.value : undefined));
     const subscription = useRunEvents(streamId, {
+        onReset() {
+            log.value = emptyExecutionLog(true);
+            tools.value = [];
+            published.value = undefined;
+        },
         onEvent(event) {
             if (event.runId !== id.value || !lifecycle.session.user) return;
             tools.value = updateTools(tools.value, event);
+            log.value = appendExecutionLog(log.value, event);
             if (event.type === 'report.published' || event.type === 'run.completed')
                 published.value = event.payload.reportId;
         },
@@ -144,5 +153,5 @@ export function useExecution(target: MaybeRefOrGetter<string>) {
                 )?.id
         );
     });
-    return { id, run, query, subscription, tools, reports, reportId };
+    return { id, run, query, subscription, tools, log, reports, reportId };
 }

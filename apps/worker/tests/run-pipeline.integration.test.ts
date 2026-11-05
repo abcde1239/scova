@@ -439,9 +439,9 @@ describe('生产 Run 租约、消费与恢复（真实 PG/Redis，串行）', ()
         ).toBe(1);
         const other = await seedRun(fixture.db);
         await expect(commands.get(other.user.id, id)).rejects.toMatchObject({ status: 404 });
-        await expect(
-            commands.create(seed.user.id, seed.task.id, { mode: 'live' }, key),
-        ).rejects.toMatchObject({ status: 409 });
+        expect(
+            (await commands.create(seed.user.id, seed.task.id, { mode: 'live' }, key)).run.id,
+        ).toBe(id);
         const lease = await claimed(id);
         await repository.finish(lease.token, { code: 'EXECUTOR_NOT_CONFIGURED' });
         expect((await commands.create(seed.user.id, seed.task.id, {}, key)).run.id).toBe(id);
@@ -914,22 +914,11 @@ describe('生产 Run 租约、消费与恢复（真实 PG/Redis，串行）', ()
             .where(eq(dbRuns.id, seed.run.id))
             .returning()
             .then((rows) => requiredDatabaseValue(rows[0]));
-        const demo = await commands.create(
-            seed.user.id,
-            seed.task.id,
-            { mode: 'demo' },
-            randomUUID(),
-        );
-        const demoLease = await claimed(demo.run.id);
-        await repository.finish(demoLease.token, { code: 'EXECUTOR_NOT_CONFIGURED' });
         const live = await commands.create(
             seed.user.id,
             seed.task.id,
             { mode: 'live' },
             randomUUID(),
-        );
-        expect((await stored(demo.run.id)).comparisonScopeHash).not.toBe(
-            (await stored(live.run.id)).comparisonScopeHash,
         );
         let observed: RunExecutionContext | undefined;
         const execute = vi.fn(async (context: RunExecutionContext) => {

@@ -32,6 +32,47 @@
     color: var(--scova-partial);
 }
 
+.empty-copy {
+    margin: 0;
+    padding-block: 1.5rem;
+    color: var(--scova-muted);
+    font-size: 0.9375rem;
+}
+
+.scova-theme select:not(:disabled):focus-visible {
+    border-width: 0.0625rem;
+    border-color: var(--scova-primary);
+    outline: 0.0625rem solid color-mix(in srgb, var(--scova-primary) 20%, transparent);
+    outline-offset: 0.0625rem;
+    box-shadow: none;
+}
+
 .scova-failure {
     color: var(--scova-danger);
+}
+
+.scova-notifications.n-notification-container {
+    max-inline-size: calc(100vw - 2rem);
+}
+.scova-notifications .n-notification {
+    max-inline-size: 100%;
+    overflow-wrap: anywhere;
+    font-family: var(--scova-font-interface);
+}
+.scova-notifications .n-notification-main {
+    min-inline-size: 0;
+}
+@media (max-width: 40rem) {
+    .scova-notifications.n-notification-container {
+        inset-inline-end: 1rem;
+        inset-block-start: 1rem;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .scova-notifications *,
+    .scova-notifications *::before,
+    .scova-notifications *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+    }
 }

@@ -1,5 +1,8 @@
 import { type DatabaseClient } from '@scova/db';
+import { openCredential } from '@scova/shared/credentials';
+import { activeAgentProvider } from '@/repo/agent-providers.ts';
 import { installedCheckpointVersion } from '@/utils/checkpoint-version.ts';
+import { classifyToolFailure } from '@/utils/tool-failure.ts';
 import { createHash } from 'node:crypto';
 import type { RunnableConfig } from '@langchain/core/runnables';
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
@@ -13,6 +16,7 @@ import {
 } from '@scova/agent-core';
 import {
     ConnectorError,
+    MODEL_CALL_TIMEOUT_MS,
     createConnectorBundle,
     estimateModelInputTokens,
     withDeadline,
@@ -213,7 +217,10 @@ export function createAgentSession({
         }
         let attempts = 0;
         try {
-            const remaining = Math.min(15_000, context.deadlineAt.getTime() - Date.now());
+            const remaining = Math.min(
+                tool === 'model' ? MODEL_CALL_TIMEOUT_MS : 15_000,
+                context.deadlineAt.getTime() - Date.now(),
+            );
             if (remaining <= 0) throw new ConnectorError('timeout', '时间预算已耗尽');
             const result = await withDeadline(
                 Math.max(1, Math.ceil(remaining)),
@@ -222,13 +229,16 @@ export function createAgentSession({
                     invoke({
                         signal,
                         timeoutMs: Math.max(1, Math.ceil(remaining)),
-                        beforeAttempt: async (kind) => {
+                        beforeAttempt: async (kind, previousFailure) => {
                             await guard();
                             if (signal.aborted) throw new ConnectorError('aborted', '调用已停止');
                             if (kind !== tool || attempts >= 3)
                                 throw new AgentPersistenceError('INVALID_TOOL_CALL');
                             if (attempts > 0) {
-                                await repository.fail({ toolCallId: held.toolCallId });
+                                await repository.fail({
+                                    toolCallId: held.toolCallId,
+                                    failureCode: classifyToolFailure(previousFailure),
+                                });
                                 held = await repository.reserve({
                                     operationKey: key,
                                     tool,
@@ -263,7 +273,9 @@ export function createAgentSession({
             if (error instanceof ConnectorError && error.code === 'budget_exceeded')
                 tokenBudgetInvalid = true;
             // Failed/aborted external requests may have been billed. Never refund their reservation.
-            await repository.fail({ toolCallId: held.toolCallId }).catch(() => undefined);
+            await repository
+                .fail({ toolCallId: held.toolCallId, failureCode: classifyToolFailure(error) })
+                .catch(() => undefined);
             if (error instanceof AgentPersistenceError && error.code === 'BUDGET_EXCEEDED')
                 throw new ConnectorError('budget_exceeded', '执行预算不足');
             throw error;
@@ -467,29 +479,42 @@ export function createAgentRuntime(options: AgentRuntimeOptions) {
         : undefined;
     let ready = false;
     let closing: Promise<void> | undefined;
-    let liveBundle: ConnectorBundle | undefined;
-    const demoBundle = createConnectorBundle();
-    function bundle(mode: 'demo' | 'live') {
+    async function bundle(mode: 'demo' | 'live', userId: string) {
         if (options.bundle) return options.bundle;
-        if (mode === 'demo')
-            return { ...demoBundle, reason: '本次执行已固定为演示模式，使用固定演示资料' };
-        if (!liveBundle) {
+        if (mode !== 'live') throw new RunExecutionError('AGENT_CONFIGURATION_INVALID');
+        {
             if (
                 env.SEARCH_PROVIDER !== undefined &&
                 !['searxng', 'tavily'].includes(env.SEARCH_PROVIDER)
             )
                 throw new RunExecutionError('AGENT_CONFIGURATION_INVALID');
-            liveBundle = createConnectorBundle({
+            const own = await activeAgentProvider(options.database, userId);
+            let modelApiKey = env.MODEL_API_KEY;
+            if (own) {
+                try {
+                    modelApiKey = openCredential(
+                        own.encryptedApiKey,
+                        userId,
+                        own.id,
+                        env.AGENT_CREDENTIAL_KEY,
+                    );
+                } catch {
+                    throw new RunExecutionError('AGENT_CONFIGURATION_INVALID');
+                }
+            }
+            const liveBundle = createConnectorBundle({
                 searchProvider: env.SEARCH_PROVIDER as 'searxng' | 'tavily' | undefined,
                 searxngBaseUrl: env.SEARXNG_BASE_URL,
                 tavilyApiKey: env.TAVILY_API_KEY,
-                modelApiKey: env.MODEL_API_KEY,
-                model: env.MODEL_NAME,
-                modelBaseUrl: env.MODEL_BASE_URL,
+                modelApiKey,
+                model: own?.model ?? env.MODEL_NAME,
+                modelBaseUrl: own?.baseUrl ?? env.MODEL_BASE_URL,
+                modelProtocol: own?.protocol,
             });
+            if (liveBundle.mode !== 'live')
+                throw new RunExecutionError('AGENT_CONFIGURATION_INVALID');
+            return liveBundle;
         }
-        if (liveBundle.mode !== 'live') throw new RunExecutionError('AGENT_CONFIGURATION_INVALID');
-        return liveBundle;
     }
     return {
         async connect() {
@@ -528,7 +553,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions) {
                         saver,
                         token,
                         context,
-                        bundle: bundle(context.mode),
+                        bundle: await bundle(context.mode, token.userId),
                     });
                     let candidate: AgentCandidate;
                     try {
@@ -552,6 +577,8 @@ export function createAgentRuntime(options: AgentRuntimeOptions) {
                     });
                 },
                 async onDeadline(context) {
+                    if (!options.bundle && context.mode !== 'live')
+                        throw new RunExecutionError('AGENT_CONFIGURATION_INVALID');
                     if (!session) {
                         // A restarted Run may already be past its fixed deadline. Only persisted evidence
                         // is needed; remote credentials and providers must never be consulted here.

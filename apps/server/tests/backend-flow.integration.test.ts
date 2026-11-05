@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Queue } from 'bullmq';
 import { Redis } from 'ioredis';
-import { afterAll, beforeAll, describe, expect, it } from 'vite-plus/test';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vite-plus/test';
 import { parseContract, ReportSchema } from '@scova/models';
 import { nodeScriptCommand } from '../../../scripts/process-runtime.mjs';
 import { outboxDatabase } from '../../worker/tests/support/outbox-database.ts';
@@ -26,10 +26,14 @@ type RunCommand = { reused: boolean; run: { id: string; taskVersionId: string; s
 
 function launch(app: 'server' | 'worker', runtime: Runtime, env: NodeJS.ProcessEnv) {
     if (runtime === 'bun' && !existsSync(bun)) throw new Error('配置 BUN_BIN 为独立 Bun 路径');
+    const entry =
+        app === 'worker'
+            ? 'tests/support/flow-process.ts'
+            : runtime === 'bun'
+              ? 'src/main.ts'
+              : 'src/node.ts';
     const command =
-        runtime === 'bun'
-            ? { executable: bun, args: ['run', 'src/main.ts'] }
-            : nodeScriptCommand('src/node.ts');
+        runtime === 'bun' ? { executable: bun, args: ['run', entry] } : nodeScriptCommand(entry);
     const child = spawn(command.executable, command.args, {
         cwd: fileURLToPath(new URL(`../../${app}/`, import.meta.url)),
         env: { ...process.env, ...env },
@@ -131,10 +135,30 @@ const taskConfig = () => ({
     notificationPreference: { mode: 'summary', runIssues: true },
 });
 
-/** 真实 API/worker 进程完成演示查阅与原子交付；不依赖远程供应商。 */
+/** 真实 API/worker 进程以固定供应商完成真实管线查阅与原子交付；不依赖远程供应商。 */
 describe('整体后端：真实 HTTP → PostgreSQL Outbox → BullMQ → Run consumer', () => {
     beforeAll(() => fixture.setup(), 120_000);
     afterAll(() => fixture.cleanup());
+    beforeEach(async () => {
+        // 各运行时组合只消费自己的新命令，失败的前轮不能遗留待投递行。
+        await fixture.db.delete(tables.outbox);
+        await fixture.db
+            .update(tables.runs)
+            .set({
+                status: 'failed',
+                finishedAt: new Date(),
+                leaseOwner: null,
+                leaseExpiresAt: null,
+            })
+            .where(
+                tables.inArray(tables.runs.status, [
+                    'queued',
+                    'running',
+                    'recovering',
+                    'cancel_requested',
+                ]),
+            );
+    });
 
     it.each([
         ['bun', 'bun'],
@@ -226,7 +250,7 @@ describe('整体后端：真实 HTTP → PostgreSQL Outbox → BullMQ → Run co
                 const response = await request(
                     `/api/v1/tasks/${taskId}/runs`,
                     'POST',
-                    { mode: 'demo' },
+                    { mode: 'live' },
                     session,
                     { 'idempotency-key': key },
                 );
@@ -261,7 +285,7 @@ describe('整体后端：真实 HTTP → PostgreSQL Outbox → BullMQ → Run co
                 const denied = await request(
                     `/api/v1/tasks/${task.id}/runs`,
                     'POST',
-                    { mode: 'demo' },
+                    { mode: 'live' },
                     other,
                     { 'idempotency-key': `denied-${randomUUID()}` },
                 );
@@ -468,7 +492,7 @@ describe('整体后端：真实 HTTP → PostgreSQL Outbox → BullMQ → Run co
                 const report = parseContract(ReportSchema, await reportResponse.json());
                 expect(report).toMatchObject({
                     runId: first.run.id,
-                    mode: 'demo',
+                    mode: 'live',
                     coverage: { completeness: 'partial' },
                 });
                 expect(report.evidence.length).toBeGreaterThan(0);

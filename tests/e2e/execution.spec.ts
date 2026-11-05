@@ -107,6 +107,58 @@ function event(seq: number, type: 'tool.started' | 'tool.completed' = 'tool.star
               },
           };
 }
+
+test('实时日志按阶段筛选、失败原因脱敏并跟随新事件', async ({ page }) => {
+    let current = snapshot('running');
+    await install(page, current);
+    await page.route(`**/api/v1/runs/${runId}`, (route) => route.fulfill({ json: current }));
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    let requests = 0;
+    const started = { ...event(1), type: 'step.started', payload: { step: 'read' } };
+    const failed = {
+        ...event(2),
+        type: 'tool.failed',
+        payload: {
+            toolCallId: taskId,
+            tool: 'read',
+            code: 'TOOL_UNSAFE_URL',
+            message: 'DO_NOT_RENDER sk-secret',
+            retryable: false,
+        },
+    };
+    await page.route(`**/api/v1/runs/${runId}/events?*`, async (route) => {
+        if (++requests === 1)
+            return route.fulfill({
+                contentType: 'text/event-stream',
+                body: `id: ${started.eventId}\nevent: ${started.type}\ndata: ${JSON.stringify(started)}\n\n`,
+            });
+        await gate;
+        current = snapshot('failed');
+        await route.fulfill({
+            contentType: 'text/event-stream',
+            body: `id: ${failed.eventId}\nevent: ${failed.type}\ndata: ${JSON.stringify(failed)}\n\n`,
+        });
+    });
+    await page.goto(`/runs/${runId}`);
+    const logs = page.getByRole('region', { name: '执行日志内容' });
+    await expect(logs).toContainText('读取网页 · 开始');
+    await expect(page.getByLabel('跟随最新')).toBeChecked();
+    await page.getByLabel('跟随最新').uncheck();
+    await page.getByLabel('仅失败').check();
+    await expect(logs).toContainText('当前筛选下没有日志');
+    release();
+    await expect(logs).toContainText('TOOL_UNSAFE_URL');
+    await expect(logs).toContainText('公网安全校验');
+    await expect(logs).not.toContainText('sk-secret');
+    await expect(page.getByRole('heading', { name: '执行失败', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: /读取网页.*1 次工具失败/ }).click();
+    await expect(logs).toContainText('TOOL_UNSAFE_URL');
+    await expect(page.getByLabel('跟随最新')).not.toBeChecked();
+    await page.getByLabel('跟随最新').check();
+});
 function frame(message: ReturnType<typeof event>) {
     return `id: ${message.eventId}\nevent: ${message.type}\ndata: ${JSON.stringify(message)}\n\n`;
 }
@@ -172,10 +224,12 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
                         exact: true,
                     }),
                 ).toBeVisible();
+                await page.getByText('执行标识与时间', { exact: true }).click();
                 await expect(page.getByText('固定任务版本', { exact: true })).toBeVisible();
                 await expect(page.getByText('已读取终态快照，实时连接结束。')).toBeVisible();
-                await expect(page.getByText('搜索来源', { exact: true })).toBeVisible();
-                await expect(page.getByText('调用已完成', { exact: true })).toBeVisible();
+                await expect(page.getByRole('region', { name: '执行日志内容' })).toContainText(
+                    '搜索来源 · 调用已完成',
+                );
                 expect(await page.locator('.execution-detail').innerText()).not.toMatch(
                     /DO_NOT_RENDER|sk-secret|raw prompt|100%/,
                 );
@@ -374,7 +428,7 @@ test('本地HTTP样本：卸载取消等待请求，退出换号不展示旧流�
     await page.getByRole('button', { name: '登录', exact: true }).click();
     await expect(page.getByRole('heading', { name: '执行失败', exact: true })).toBeVisible();
     release();
-    await expect(page.getByText('搜索来源', { exact: true })).toHaveCount(0);
+    await expect(page.getByRole('region', { name: '执行日志内容' })).not.toContainText('调用开始');
     await expect(page.getByRole('link', { name: '查看已发布报告' })).toHaveCount(0);
     await page
         .getByRole('navigation', { name: '主导航', exact: true })

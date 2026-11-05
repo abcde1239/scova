@@ -244,6 +244,15 @@ describe('共享任务与输入契约', () => {
 });
 
 describe('账号与 HTTP 协议', () => {
+    it('注册接受8位纯数字及纯字母密码，拒绝7位和超过128位', () => {
+        const register = { email: 'a@example.org', defaultTimezone: 'UTC' };
+        for (const password of ['12345678', 'abcdefgh', 'a'.repeat(128)])
+            expect(parseContract(RegisterInputSchema, { ...register, password }).password).toBe(
+                password,
+            );
+        for (const password of ['1234567', 'a'.repeat(129)])
+            expect(() => parseContract(RegisterInputSchema, { ...register, password })).toThrow();
+    });
     it('注册拒绝弱密码和 owner 注入，登录不重复应用注册强度策略', () => {
         expect(() =>
             parseContract(RegisterInputSchema, {
@@ -503,4 +512,12 @@ describe('执行、报告与 SSE 语义', () => {
         for (const value of Object.values(contracts))
             if (value && typeof value === 'object' && Kind in value) check(value);
     });
+});
+
+it('执行命令只接受真实研究，历史 Run 仍保留原模式契约', () => {
+    expect(parseContract(contracts.RunCommandInputSchema, {})).toEqual({});
+    expect(parseContract(contracts.RunCommandInputSchema, { mode: 'live' })).toEqual({
+        mode: 'live',
+    });
+    expect(() => parseContract(contracts.RunCommandInputSchema, { mode: 'demo' })).toThrow();
 });

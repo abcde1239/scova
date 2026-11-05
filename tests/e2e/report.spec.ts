@@ -193,7 +193,10 @@ test('本地 HTTP 样本：partial 在正文前、四类结论、保存引用与
     await expect(page.getByText('演示报告：来自演示数据，不代表真实查阅成果。')).toBeVisible();
     for (const name of ['来源事实', 'Agent 推断', '冲突证据', '证据不足'])
         await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
+    await expect(page.getByText(id(4), { exact: true })).toBeHidden();
+    await page.getByRole('link', { name: '查看完整限制与缺口' }).click();
     await expect(page.getByText(id(4), { exact: true })).toBeVisible();
+    await expect(page.locator('.coverage summary')).toBeFocused();
     const citation = page.locator('details.evidence').first();
     const toggle = citation.locator('summary');
     await toggle.focus();
@@ -273,6 +276,7 @@ test('本地 HTTP 样本：无效 UUID、非法引用及非简报布局边界', 
     ).toHaveCount(0);
     await expect(page.locator('.report-comparison')).toBeVisible();
     await expect(page.getByLabel('报告形式', { exact: true })).toHaveValue('comparison');
+    await page.locator('.coverage summary').press('Enter');
     await expect(page.getByText('本次计划范围内查阅完成，不代表穷尽互联网资料。')).toBeVisible();
     await expect(page.getByRole('note', { name: '部分交付警告' })).toHaveCount(0);
 });

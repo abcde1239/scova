@@ -4,12 +4,16 @@
             ref="trigger"
             type="button"
             class="menu-trigger"
+            :aria-label="signedIn ? '打开个人侧栏' : '打开导航菜单'"
             aria-haspopup="dialog"
             :aria-expanded="open"
             :aria-controls="panelId"
             @click="show"
         >
-            <app-icon name="menu" />菜单
+            <span v-if="signedIn" class="avatar trigger-avatar" aria-hidden="true">{{
+                initial
+            }}</span>
+            <app-icon v-else name="account" />
         </button>
         <dialog
             :id="panelId"
@@ -22,17 +26,26 @@
         >
             <div class="drawer-content">
                 <div class="drawer-heading">
-                    <div
-                        v-if="session.user.value && session.phase.value === 'ready'"
+                    <router-link
+                        v-if="signedIn"
                         class="drawer-account"
+                        to="/account"
+                        aria-label="打开账号页面"
+                        :aria-current="route.path === '/account' ? 'page' : undefined"
+                        @click="select('/account', $event)"
                     >
                         <span class="avatar" aria-hidden="true">{{ initial }}</span>
-                        <span>{{ session.user.value.email }}</span>
-                    </div>
+                        <span class="drawer-identity">
+                            <strong>我的账号</strong>
+                            <span class="account-email">{{ session.user.value?.email }}</span>
+                        </span>
+                        <app-icon name="chevron" />
+                    </router-link>
                     <button
                         type="button"
                         class="close-trigger"
                         aria-label="关闭侧边栏"
+                        autofocus
                         @click="close(true)"
                     >
                         <app-icon name="close" />
@@ -88,6 +101,7 @@ const trigger = ref<HTMLButtonElement>();
 const panel = ref<HTMLDialogElement>();
 const open = ref(false);
 const panelId = `mobile-menu-${useId()}`;
+const signedIn = computed(() => !!session.user.value && session.phase.value === 'ready');
 const initial = computed(() => session.user.value?.email.slice(0, 1).toUpperCase());
 let media: MediaQueryList | undefined;
 
@@ -145,7 +159,7 @@ function containFocus(event: KeyboardEvent) {
     }
 }
 watch(
-    () => [route.fullPath, session.user.value?.id],
+    () => [route.fullPath, session.user.value?.id, session.phase.value],
     () => close(),
 );
 onMounted(() => {
@@ -181,6 +195,11 @@ onUnmounted(() => {
     font: inherit;
     text-decoration: none;
     cursor: pointer;
+}
+.menu-trigger {
+    justify-content: center;
+    padding: 0.375rem;
+    border-radius: 50%;
 }
 .mobile-drawer {
     position: fixed;
@@ -225,8 +244,7 @@ onUnmounted(() => {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem;
+    gap: 0.75rem;
     font-weight: 600;
 }
 .close-trigger {
@@ -236,27 +254,60 @@ onUnmounted(() => {
     margin-inline-start: auto;
     grid-column: 2;
     grid-row: 1;
+    align-self: start;
 }
 .drawer-account {
-    display: contents;
-    overflow-wrap: anywhere;
-    min-inline-size: 0;
-}
-.drawer-account > span:last-child {
-    min-inline-size: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.75rem 0.5rem;
     grid-column: 1 / -1;
+    grid-row: 1;
+    min-inline-size: 0;
+    color: inherit;
+    text-decoration: none;
+    border-radius: 0.5rem;
+    cursor: pointer;
+}
+.drawer-identity {
+    display: grid;
+    gap: 0.375rem;
+    min-inline-size: 0;
+    overflow-wrap: anywhere;
+    grid-column: 1;
     grid-row: 2;
+}
+.drawer-identity strong {
+    font-size: 1rem;
+    font-weight: 600;
+}
+.account-email {
+    color: var(--scova-muted);
+    font-size: 0.875rem;
     font-weight: 400;
+}
+.drawer-account > .app-icon {
+    grid-column: 2;
+    grid-row: 2;
+    align-self: center;
+    color: var(--scova-muted);
+}
+.drawer-account:hover .drawer-identity strong {
+    color: var(--scova-primary);
 }
 .avatar {
     display: grid;
     place-items: center;
     flex-shrink: 0;
-    inline-size: 2.5rem;
-    block-size: 2.5rem;
+    inline-size: 3.25rem;
+    block-size: 3.25rem;
     border-radius: 50%;
     background: var(--scova-selected);
     color: var(--scova-primary);
+}
+.trigger-avatar {
+    inline-size: 2rem;
+    block-size: 2rem;
+    font-weight: 600;
 }
 .menu-panel {
     display: grid;
@@ -296,7 +347,6 @@ button:focus-visible {
 @media (max-width: 53.999rem) {
     .mobile-navigation {
         display: block;
-        margin-inline-start: auto;
     }
 }
 </style>

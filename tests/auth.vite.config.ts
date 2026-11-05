@@ -4,5 +4,12 @@ import { fileURLToPath } from 'node:url';
 export default defineConfig({
     resolve: { tsconfigPaths: true },
     root: fileURLToPath(new URL('../', import.meta.url)),
-    test: { include: ['apps/server/tests/auth.integration.test.ts'], testTimeout: 30_000 },
+    test: {
+        include: [
+            'apps/server/tests/auth.integration.test.ts',
+            'apps/server/tests/agent-providers.integration.test.ts',
+        ],
+        testTimeout: 30_000,
+        fileParallelism: false,
+    },
 });

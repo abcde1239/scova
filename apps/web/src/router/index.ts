@@ -4,6 +4,8 @@ import type { RouteLocationNormalizedLoaded, RouteRecordRaw, RouterHistory } fro
 declare module 'vue-router' {
     interface RouteMeta {
         title?: string;
+        layout?: 'auth' | 'status';
+        contentWidth?: 'form';
         section?: string;
         navigation?: 'primary' | 'tool';
         pending?: boolean;
@@ -47,6 +49,12 @@ export function createWorkbenchRouter(
         routes: [
             { path: '/', redirect: '/tasks' },
             ...pages,
+            {
+                path: '/service-unavailable',
+                name: 'service-unavailable',
+                component: () => import('@/views/ServiceUnavailableView.vue'),
+                meta: { title: '暂时无法连接服务', layout: 'status' },
+            },
             {
                 path: '/:pathMatch(.*)*',
                 name: 'not-found',

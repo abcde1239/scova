@@ -12,14 +12,15 @@ export function createSessionController(lifecycle: SessionLifecycle) {
     let restoration: Promise<void> | undefined;
     let loggedOutEpoch: number | undefined;
 
-    function restore(): Promise<void> {
+    function restore(background = false): Promise<void> {
         if (restoration) return restoration;
-        phase.value = 'recovering';
+        if (!background) phase.value = 'recovering';
         const scope = lifecycle.capture();
         restoration = (async () => {
             try {
                 const response = await scope.request(currentSessionEndpoint, {});
-                scope.replaceSession(response.data);
+                if (background) scope.refreshSession(response.data);
+                else scope.replaceSession(response.data);
                 phase.value = 'ready';
             } catch (cause) {
                 const error = toApiError(cause);
@@ -83,13 +84,13 @@ export function useSession() {
 
 export function isPublicPage(route: { name?: string | symbol | null; path: string }) {
     return (
-        ['login', 'register', 'not-found'].includes(String(route.name)) ||
+        ['login', 'register', 'not-found', 'service-unavailable'].includes(String(route.name)) ||
         (import.meta.env.MODE === 'test' && route.path.startsWith('/__examples/'))
     );
 }
 
-/** 只接受本路由器可识别的站内页面，认证页和未知页不作为返回目标。 */
-export function sessionReturnTarget(router: Router, value: unknown): string {
+/** 只接受已登记的站内目标；服务恢复可返回认证页，登录成功仍排除认证页。 */
+export function sessionReturnTarget(router: Router, value: unknown, allowAuth = false): string {
     if (typeof value !== 'string' || !value.startsWith('/') || /[\\\s]/.test(value))
         return '/tasks';
     try {
@@ -103,23 +104,51 @@ export function sessionReturnTarget(router: Router, value: unknown): string {
         const url = new URL(value, 'https://scova.invalid');
         if (url.origin !== 'https://scova.invalid') return '/tasks';
         const target = router.resolve(value);
-        return target.matched.length && !isPublicPage(target) ? target.fullPath : '/tasks';
+        return target.matched.length &&
+            (!isPublicPage(target) ||
+                (allowAuth && ['login', 'register'].includes(String(target.name))))
+            ? target.fullPath
+            : '/tasks';
     } catch {
         return '/tasks';
     }
 }
 
 export function installSessionRouting(router: Router, session: SessionController) {
+    let checkedEpoch: number | undefined;
+    let checkingNavigation = 0;
     const loginLocation = (path: string) => ({
         name: 'login',
         query: { redirect: sessionReturnTarget(router, path) },
         replace: true,
     });
     const removeGuard = router.beforeEach(async (to) => {
-        await session.ensure();
-        if (isPublicPage(to) || session.user.value || session.phase.value === 'unavailable')
-            return true;
-        return loginLocation(to.fullPath);
+        if (to.name === 'service-unavailable') return true;
+        checkingNavigation++;
+        try {
+            const restoring = session.phase.value !== 'ready';
+            await session.ensure();
+            // 登录响应与首次恢复已确认身份；后续业务导航在提交路由前重新核验。
+            if (
+                !restoring &&
+                !isPublicPage(to) &&
+                session.user.value &&
+                session.phase.value === 'ready' &&
+                checkedEpoch === session.lifecycle.session.epoch
+            )
+                await session.restore(true);
+            checkedEpoch = session.lifecycle.session.epoch;
+            if (session.phase.value === 'unavailable')
+                return {
+                    name: 'service-unavailable',
+                    query: { redirect: sessionReturnTarget(router, to.fullPath, true) },
+                    replace: true,
+                };
+            if (isPublicPage(to) || session.user.value) return true;
+            return loginLocation(to.fullPath);
+        } finally {
+            checkingNavigation--;
+        }
     });
     const stop = watch(
         () =>
@@ -131,7 +160,24 @@ export function installSessionRouting(router: Router, session: SessionController
                         ? '会话已过期，请重新登录'
                         : '';
             if (session.user.value && epoch !== previousEpoch) session.phase.value = 'ready';
-            else if (
+            // 在途导航由守卫保留目的地址，避免观察器用旧页面抢先重定向。
+            if (checkingNavigation) return;
+            if (
+                session.phase.value === 'unavailable' &&
+                router.currentRoute.value.matched.length &&
+                router.currentRoute.value.name !== 'service-unavailable'
+            ) {
+                void router.replace({
+                    name: 'service-unavailable',
+                    query: {
+                        redirect: sessionReturnTarget(
+                            router,
+                            router.currentRoute.value.fullPath,
+                            true,
+                        ),
+                    },
+                });
+            } else if (
                 !session.user.value &&
                 session.phase.value === 'ready' &&
                 router.currentRoute.value.matched.length &&

@@ -3,8 +3,14 @@
         :attr-type="attrType"
         :disabled="disabled"
         :quaternary="quaternary"
+        :text="text"
+        :type="type"
         v-bind="accessibility"
-        :class="{ 'scova-action--disabled': disabled, 'scova-action--busy': busy && !disabled }"
+        :class="{
+            'scova-action--disabled': disabled,
+            'scova-action--busy': busy && !disabled,
+            'scova-action--text': text,
+        }"
         class="scova-action-button"
         @click="activate"
     >
@@ -20,12 +26,16 @@ const props = withDefaults(
         disabled?: boolean;
         busy?: boolean;
         quaternary?: boolean;
+        text?: boolean;
+        type?: 'default' | 'primary';
         attrType?: 'button' | 'submit' | 'reset';
     }>(),
     {
         disabled: false,
         busy: false,
         quaternary: false,
+        text: false,
+        type: 'default',
         attrType: 'button',
     },
 );
@@ -58,6 +68,10 @@ function activate(event: MouseEvent) {
 }
 .scova-action-button.scova-action--busy {
     cursor: progress;
+}
+.scova-action-button.scova-action--text {
+    min-inline-size: 0;
+    padding: 0.375rem 0;
 }
 .scova-action-button.scova-action--disabled {
     cursor: not-allowed;

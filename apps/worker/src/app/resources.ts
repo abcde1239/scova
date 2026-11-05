@@ -55,7 +55,6 @@ export function createWorkerResources(
                 scheduler = createSchedulerHandler(
                     new SchedulerService({
                         repository: createSchedulerRepository(database),
-                        mode: config.scheduledRunMode,
                         concurrency: config.schedulerConcurrency,
                     }),
                     config.batchSize,

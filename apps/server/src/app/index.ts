@@ -14,6 +14,8 @@ import { createReportPlugin } from '@/router/reports.ts';
 import { createNotificationPlugin } from '@/router/notifications.ts';
 import { createSystemPlugin } from '@/router/system.ts';
 import { createFeedbackPlugin } from '@/router/feedback.ts';
+import { createCorsPlugin } from '@/http/cors';
+import { createAgentProviderPlugin } from '@/router/agent-providers';
 
 export { contractModels, HealthResponseSchema } from '@/app/contracts.ts';
 
@@ -27,6 +29,7 @@ export const createApiApp = (
         adapter: node(),
     })
         .use(createApiErrorPlugin())
+        .use(createCorsPlugin(services.origin))
         .model({ ...contractModels, HealthResponse: HealthResponseSchema } as unknown as Record<
             string,
             import('elysia').TSchema
@@ -47,6 +50,7 @@ export const createApiApp = (
         )
         .use(createSystemPlugin())
         .use(createAuthPlugin(services))
+        .use(createAgentProviderPlugin(services))
         .use(createTaskPlugin(services))
         .use(createTaskDraftPlugin(services))
         .use(createFeedbackPlugin(services))

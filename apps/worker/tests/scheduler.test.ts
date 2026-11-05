@@ -6,7 +6,7 @@ describe('Scheduler 批次有界并发与故障隔离', () => {
     it('坏任务本批跳过，其他任务仍推进，随后报告失败以触发退避', async () => {
         const seen: string[][] = [];
         const repository = {
-            scheduleNext: vi.fn(async (_mode: 'demo' | 'live', excluded: readonly string[]) => {
+            scheduleNext: vi.fn(async (excluded: readonly string[]) => {
                 seen.push([...excluded]);
                 if (!excluded.includes('bad'))
                     throw new SchedulerTaskError('bad', new Error('private details'));
@@ -15,7 +15,7 @@ describe('Scheduler 批次有界并发与故障隔离', () => {
                 return null;
             }),
         };
-        const service = new SchedulerService({ repository, mode: 'demo', concurrency: 1 });
+        const service = new SchedulerService({ repository, concurrency: 1 });
         await expect(service.scheduleOnce(5)).rejects.toThrow('调度批次部分任务失败');
         expect(seen).toEqual([[], ['bad'], ['bad', 'good']]);
     });
@@ -26,7 +26,6 @@ describe('Scheduler 批次有界并发与故障隔离', () => {
         let maximum = 0;
         let calls = 0;
         const service = new SchedulerService({
-            mode: 'live',
             concurrency: 2,
             repository: {
                 async scheduleNext() {

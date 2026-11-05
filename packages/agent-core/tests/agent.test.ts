@@ -2,7 +2,13 @@ import { createHash } from 'node:crypto';
 import { MemorySaver } from '@langchain/langgraph';
 import type { RunnableConfig } from '@langchain/core/runnables';
 import { describe, expect, it, vi } from 'vite-plus/test';
-import type { ReadPage, SearchResponse } from '@scova/connectors';
+import { DEFAULT_TASK_BUDGET } from '@scova/models';
+import {
+    ConnectorError,
+    estimateModelInputTokens,
+    type ReadPage,
+    type SearchResponse,
+} from '@scova/connectors';
 import { deterministicPartial, runResearchAgent } from '../src/index.ts';
 import type { AgentContext, AgentDependencies, AgentTools } from '../src/index.ts';
 
@@ -119,6 +125,103 @@ function fixture() {
 }
 
 describe('persistent bounded research Agent', () => {
+    it.each([8000, DEFAULT_TASK_BUDGET.maxOutputTokens])(
+        'repairs a truncated plan once within the fixed %i output budget, including synthesis repair',
+        async (maxOutputTokens) => {
+            const { context, deps, tools } = fixture();
+            context.budget.maxOutputTokens = maxOutputTokens;
+            context.comparisonScopeHash = 'scope';
+            const original = tools.model;
+            tools.model = vi.fn<AgentTools['model']>(async (key, input) => {
+                if (key === 'plan-0' || key === 'synthesize-0')
+                    throw new ConnectorError('output_truncated', 'fixture secret');
+                if (key === 'compare-facts-v1')
+                    return {
+                        mode: 'live',
+                        usage: { inputTokens: 1, outputTokens: 1, estimated: false },
+                        data: { pages: [{ pageId: 'read-0', facts: [] }] },
+                    };
+                return original(key, input);
+            });
+            const result = await runResearchAgent(context, deps);
+            const calls = vi.mocked(tools.model).mock.calls;
+            expect(calls.map(([key]) => key)).toEqual([
+                'plan-0',
+                'plan-1',
+                'compare-facts-v1',
+                'synthesize-0',
+                'synthesize-1',
+            ]);
+            expect(calls[0][1].maxOutputTokens).toBeGreaterThanOrEqual(1000);
+            expect(calls[1][1].maxOutputTokens).toBe(calls[0][1].maxOutputTokens * 2);
+            expect(
+                calls.reduce((sum, [, input]) => sum + input.maxOutputTokens, 0),
+            ).toBeLessThanOrEqual(maxOutputTokens);
+            expect(result.claims[0].kind).toBe('fact');
+            expect(JSON.stringify(result)).not.toContain('fixture secret');
+        },
+    );
+
+    it.each(['output_truncated', 'network'] as const)(
+        'falls back to bounded task queries after plan %s and never retries indefinitely',
+        async (code) => {
+            const { context, deps, tools } = fixture();
+            const original = tools.model;
+            tools.model = vi.fn<AgentTools['model']>(async (key, input) => {
+                if (key.startsWith('plan')) throw new ConnectorError(code, 'fixture secret');
+                return original(key, input);
+            });
+            const result = await runResearchAgent(context, deps);
+            expect(
+                vi.mocked(tools.model).mock.calls.filter(([key]) => key.startsWith('plan')),
+            ).toHaveLength(code === 'output_truncated' ? 2 : 1);
+            expect(result.coverage.gaps.join(' ')).toContain('任务原文');
+            expect(result.claims[0].kind).toBe('fact');
+        },
+    );
+
+    it('allocates larger stage limits and doubles synthesis output on repair without exceeding the total', async () => {
+        const { context, deps, tools } = fixture();
+        Object.assign(context.budget, DEFAULT_TASK_BUDGET);
+        context.comparisonScopeHash = 'scope';
+        const body = `${'Source context. '.repeat(9000)}The application deadline is 15 November 2026.`;
+        vi.mocked(tools.read).mockResolvedValue({
+            ...page,
+            text: body,
+            contentHash: createHash('sha256').update(body).digest('hex'),
+        });
+        const original = tools.model;
+        tools.model = vi.fn<AgentTools['model']>(async (key, input) => {
+            if (key === 'compare-facts-v1')
+                return {
+                    mode: 'live',
+                    usage: { inputTokens: 1, outputTokens: 1, estimated: false },
+                    data: { pages: [{ pageId: 'read-0', facts: [] }] },
+                };
+            if (key === 'synthesize-0') throw new ConnectorError('output_truncated', 'fixture');
+            return original(key, input);
+        });
+        const result = await runResearchAgent(context, deps);
+        const calls = vi.mocked(tools.model).mock.calls;
+        expect(calls.map(([key, input]) => [key, input.maxOutputTokens])).toEqual([
+            ['plan-0', 4000],
+            ['compare-facts-v1', 16000],
+            ['synthesize-0', 32000],
+            ['synthesize-1', 64000],
+        ]);
+        expect(
+            calls.reduce((sum, [, input]) => sum + input.maxOutputTokens, 0),
+        ).toBeLessThanOrEqual(context.budget.maxOutputTokens);
+        expect(calls.reduce((sum, [, input]) => sum + input.maxInputTokens, 0)).toBeLessThanOrEqual(
+            context.budget.maxInputTokens,
+        );
+        for (const [, input] of calls.filter(([key]) => key.startsWith('synthesize'))) {
+            expect(input.maxInputTokens).toBe(256000);
+            expect(estimateModelInputTokens(input)).toBeGreaterThan(96000);
+            expect(JSON.stringify(input.untrustedSources)).toContain(body);
+        }
+        expect(result.claims[0].kind).toBe('fact');
+    });
     it.each([
         ['2026-10-25T00:00:00Z', 'complete'],
         ['2026-09-01T00:00:00Z', 'partial'],
@@ -230,7 +333,94 @@ describe('persistent bounded research Agent', () => {
         expect(tools.model).toHaveBeenCalledTimes(3);
         expect(output.coverage.completeness).toBe('partial');
         expect(output.coverage.gaps.join(' ')).toContain('引用校验失败');
-        expect(output.claims[0].text).toBe(text);
+        expect(output.claims[0].kind).toBe('insufficient');
+        expect(output.claims[0].text).toContain('未完成内容归纳');
+        expect(output.claims[0].text).not.toContain(text);
+        expect(output.claims[0].citations[0].quote).toBe(text);
+    });
+
+    it('gives synthesis its own output allocation and includes the end of a long source', async () => {
+        const { context, deps, tools } = fixture();
+        const body = `${'这是背景资料。'.repeat(600)}最后结论：申请需提前准备。`;
+        vi.mocked(tools.read).mockResolvedValue({
+            ...page,
+            text: body,
+            contentHash: createHash('sha256').update(body).digest('hex'),
+        });
+        const original = tools.model;
+        tools.model = vi.fn<AgentTools['model']>(async (key, input) => {
+            if (key.startsWith('plan')) return original(key, input);
+            expect(input.maxOutputTokens).toBeGreaterThan(1500);
+            expect(input.prompt).toContain('使用自己的话');
+            expect(JSON.stringify(input.untrustedSources)).toContain('最后结论');
+            expect(estimateModelInputTokens(input)).toBeLessThanOrEqual(input.maxInputTokens);
+            return {
+                mode: 'live',
+                usage: { inputTokens: 100, outputTokens: 100, estimated: false },
+                data: {
+                    claims: [
+                        {
+                            kind: 'inference',
+                            text: '申请准备应前置，预留充足办理时间。',
+                            questionIds: ['q0'],
+                            citations: [{ pageId: 'read-0', quote: '申请需提前准备。' }],
+                        },
+                    ],
+                },
+            };
+        });
+        const result = await runResearchAgent(context, deps);
+        expect(result.claims[0].text).toBe('申请准备应前置，预留充足办理时间。');
+        expect(result.coverage.gaps.join(' ')).not.toContain('综合输入受预算限制');
+    });
+
+    it('discards length-limited output and does not publish source text as a summary', async () => {
+        const { context, deps, tools } = fixture();
+        const original = tools.model;
+        tools.model = vi.fn<AgentTools['model']>(async (key, input) => {
+            if (key.startsWith('plan')) return original(key, input);
+            throw new ConnectorError('output_truncated', 'fixture secret content');
+        });
+        const result = await runResearchAgent(context, deps);
+        expect(tools.model).toHaveBeenCalledTimes(3);
+        expect(result.coverage.completeness).toBe('partial');
+        expect(result.coverage.gaps.join(' ')).toContain('输出达到长度上限');
+        expect(result.claims[0].kind).toBe('insufficient');
+        expect(result.claims[0].text).not.toContain(text);
+        expect(JSON.stringify(result)).not.toContain('fixture secret');
+    });
+
+    it('rejects a long copied brief even with a valid source quote', async () => {
+        const { context, deps, tools } = fixture();
+        const body = 'This is a sentence about application preparation. '.repeat(12);
+        vi.mocked(tools.read).mockResolvedValue({
+            ...page,
+            text: body,
+            contentHash: createHash('sha256').update(body).digest('hex'),
+        });
+        const original = tools.model;
+        tools.model = vi.fn<AgentTools['model']>(async (key, input) =>
+            key.startsWith('plan')
+                ? original(key, input)
+                : {
+                      mode: 'live',
+                      usage: { inputTokens: 10, outputTokens: 10, estimated: false },
+                      data: {
+                          claims: [
+                              {
+                                  kind: 'fact',
+                                  text: body,
+                                  questionIds: ['q0'],
+                                  citations: [{ pageId: 'read-0', quote: body }],
+                              },
+                          ],
+                      },
+                  },
+        );
+        const result = await runResearchAgent(context, deps);
+        expect(result.claims[0].kind).toBe('insufficient');
+        expect(result.claims[0].citations[0].quote.endsWith('.')).toBe(true);
+        expect(result.claims[0].text).not.toContain('This is a sentence');
     });
 
     it('requires paraphrased conclusions to be marked inference', async () => {

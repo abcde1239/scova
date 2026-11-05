@@ -1,6 +1,7 @@
 import { computed, reactive, ref, watch } from 'vue';
 import {
     ContractValidationError,
+    DEFAULT_TASK_BUDGET,
     CreateTaskInputSchema,
     TimeRangeSchema,
     TaskDetailResponseSchema,
@@ -23,8 +24,8 @@ export const budgetFields = [
     { key: 'maxSearches', label: '搜索次数上限' },
     { key: 'maxPages', label: '网页读取次数上限' },
     { key: 'maxDurationSeconds', label: '执行时长上限（秒）' },
-    { key: 'maxInputTokens', label: '输入 token 上限' },
-    { key: 'maxOutputTokens', label: '输出 token 上限' },
+    { key: 'maxInputTokens', label: '累计输入 token 上限' },
+    { key: 'maxOutputTokens', label: '累计输出 token 上限' },
 ] as const;
 
 export function initialTaskDraft(preferences?: SessionResponse['user']['preferences']) {
@@ -32,25 +33,27 @@ export function initialTaskDraft(preferences?: SessionResponse['user']['preferen
         title: '',
         topic: '',
         goal: '',
-        focusPoints: '',
-        exclusions: '',
-        preferredUrls: '',
-        excludedUrls: '',
+        focusPoints: [] as string[],
+        exclusions: [] as string[],
+        preferredUrls: [] as string[],
+        excludedUrls: [] as string[],
         officialOnly: false,
         rangeKind: 'rolling',
         days: '7',
         start: '',
         end: '',
-        timezone: preferences?.defaultTimezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+        timezone:
+            preferences?.defaultTimezone ??
+            (Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai'),
         scheduleFrequency: 'manual',
         scheduleLocalTime: '',
         scheduleWeekday: '',
         outputFormat: 'brief',
-        maxSearches: '10',
-        maxPages: '20',
-        maxDurationSeconds: '300',
-        maxInputTokens: '40000',
-        maxOutputTokens: '8000',
+        maxSearches: String(DEFAULT_TASK_BUDGET.maxSearches),
+        maxPages: String(DEFAULT_TASK_BUDGET.maxPages),
+        maxDurationSeconds: String(DEFAULT_TASK_BUDGET.maxDurationSeconds),
+        maxInputTokens: String(DEFAULT_TASK_BUDGET.maxInputTokens),
+        maxOutputTokens: String(DEFAULT_TASK_BUDGET.maxOutputTokens),
         notificationMode: String(preferences?.notificationPreference.mode ?? 'summary'),
         runIssues: preferences?.notificationPreference.runIssues ?? true,
     };
@@ -69,10 +72,10 @@ export function taskDraftFromConfig(config: TaskConfig): TaskDraft {
         title: config.title,
         topic: config.topic,
         goal: config.goal,
-        focusPoints: config.focusPoints.join('\n'),
-        exclusions: config.exclusions.join('\n'),
-        preferredUrls: config.sourcePreferences.preferredUrls.join('\n'),
-        excludedUrls: config.sourcePreferences.excludedUrls.join('\n'),
+        focusPoints: [...config.focusPoints],
+        exclusions: [...config.exclusions],
+        preferredUrls: [...config.sourcePreferences.preferredUrls],
+        excludedUrls: [...config.sourcePreferences.excludedUrls],
         officialOnly: config.sourcePreferences.officialOnly,
         rangeKind: config.timeRange.kind,
         days: config.timeRange.kind === 'rolling' ? String(config.timeRange.days) : '7',
@@ -99,17 +102,15 @@ export function taskScheduleDescription(config: TaskConfig) {
           ? `每日 ${schedule.localTime}（${config.timezone}）`
           : `每周${['一', '二', '三', '四', '五', '六', '日'][schedule.weekday - 1]} ${schedule.localTime}（${config.timezone}）`;
 }
-const lines = (value: string) =>
-    value
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter(Boolean);
+const entries = (values: string[]) => values.filter((value) => value.trim());
 
 /** 表单值转为公开契约；固定日期由明确标注的浏览器当地时间转成 UTC。 */
 export function taskInput(draft: TaskDraft, original?: TaskConfig, keepSchedule = true) {
     const initial = original ? taskDraftFromConfig(original) : undefined;
     const preserve = <T>(field: TaskDraftField, previous: T, next: T): T =>
-        initial && draft[field] === initial[field] ? previous : next;
+        initial && JSON.stringify(draft[field]) === JSON.stringify(initial[field])
+            ? previous
+            : next;
     const instant = (value: string) => {
         const date = new Date(value);
         const parts = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?$/.exec(
@@ -181,19 +182,23 @@ export function taskInput(draft: TaskDraft, original?: TaskConfig, keepSchedule 
             focusPoints: preserve(
                 'focusPoints',
                 original?.focusPoints ?? [],
-                lines(draft.focusPoints),
+                entries(draft.focusPoints),
             ),
-            exclusions: preserve('exclusions', original?.exclusions ?? [], lines(draft.exclusions)),
+            exclusions: preserve(
+                'exclusions',
+                original?.exclusions ?? [],
+                entries(draft.exclusions),
+            ),
             sourcePreferences: {
                 preferredUrls: preserve(
                     'preferredUrls',
                     original?.sourcePreferences.preferredUrls ?? [],
-                    lines(draft.preferredUrls),
+                    entries(draft.preferredUrls).map((value) => value.trim()),
                 ),
                 excludedUrls: preserve(
                     'excludedUrls',
                     original?.sourcePreferences.excludedUrls ?? [],
-                    lines(draft.excludedUrls),
+                    entries(draft.excludedUrls).map((value) => value.trim()),
                 ),
                 officialOnly: draft.officialOnly,
             },

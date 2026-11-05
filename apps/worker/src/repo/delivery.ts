@@ -1,4 +1,5 @@
 import { requiredDatabaseValue } from '@/utils/database.ts';
+import { reportSummary } from '@/utils/report-summary.ts';
 import {
     type DatabaseClient,
     type Run,
@@ -503,7 +504,7 @@ export function createDeliveryRepository(db: DatabaseClient) {
                                 taskVersionId: run.taskVersionId,
                                 baselineRunId: run.baselineRunId,
                                 title: candidate.title,
-                                summary: candidate.claims.map((claim) => claim.text).join('\n\n'),
+                                summary: reportSummary(candidate.claims),
                                 format: config.outputFormat,
                                 completeness: candidate.coverage.completeness,
                                 limitationsJson: candidate.coverage.gaps,

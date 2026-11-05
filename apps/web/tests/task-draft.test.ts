@@ -130,8 +130,11 @@ describe('自然语言草稿与显式应用', () => {
             await natural.parse();
             expect(calls).toHaveLength(1);
             expect(calls[0]?.path).toBe('/api/v1/task-drafts');
-            expect(JSON.parse(calls[0]?.init?.body as string)).toEqual({ inputText: originalText });
-            expect(calls[0]?.init?.credentials).toBe('same-origin');
+            expect(JSON.parse(calls[0]?.init?.body as string)).toEqual({
+                inputText: originalText,
+                timezone: 'UTC',
+            });
+            expect(calls[0]?.init?.credentials).toBe('include');
             expect(new Headers(calls[0]?.init?.headers).get('x-csrf-token')).toBe('draft-csrf');
             expect(new Headers(calls[0]?.init?.headers).get('idempotency-key')).toBeNull();
             expect(natural.result.value?.mode).toBe(mode);
@@ -390,6 +393,23 @@ describe('自然语言草稿与显式应用', () => {
             end: new Date(draft.end).toISOString(),
         });
         expect(updated.focusPoints).toEqual(original.focusPoints);
+    });
+    it('编辑或删除列表中的一项，不按换行、逗号或空格拆分其他项', () => {
+        const original = config();
+        const draft = taskDraftFromConfig(original);
+        draft.focusPoints[0] = '费用、资格\n仍是一个关注点';
+        draft.exclusions.push('广告,重复转载');
+        const updated = taskInput(draft, original).config;
+        expect(updated.focusPoints).toEqual([
+            '费用、资格\n仍是一个关注点',
+            original.focusPoints[1],
+        ]);
+        expect(updated.exclusions).toEqual([...original.exclusions, '广告,重复转载']);
+        draft.focusPoints.splice(0, 1);
+        expect(taskInput(draft, original).config.focusPoints).toEqual([original.focusPoints[1]]);
+        expect(taskInput(draft, original).config.sourcePreferences).toEqual(
+            original.sourcePreferences,
+        );
     });
     it('沿既有shared schema按UTF-16码元限制，非BMP边界不冒称8000字节合法样本', () => {
         const boundary = '𠮷'.repeat(1000);

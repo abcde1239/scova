@@ -11,7 +11,10 @@
         />
         <task-config-field
             v-model="timezone"
-            label="任务时区（IANA）"
+            label="任务时区"
+            kind="select"
+            searchable
+            :options="timezones"
             :error="errors?.timezone"
             :disabled="disabled"
         />
@@ -47,8 +50,10 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import TaskConfigField from '@/components/tasks/TaskConfigField.vue';
 import SchedulePreview from '@/components/tasks/SchedulePreview.vue';
+import { timezoneOptions } from '@/utils/timezones';
 import { weekdayOptions, type SavedSchedule, type ScheduleDraft } from '@/utils/schedule';
 defineProps<{
     disabled?: boolean;
@@ -58,6 +63,7 @@ defineProps<{
 }>();
 const frequency = defineModel<string>('frequency', { required: true });
 const timezone = defineModel<string>('timezone', { required: true });
+const timezones = computed(() => timezoneOptions(timezone.value));
 const localTime = defineModel<string>('localTime', { required: true });
 const weekday = defineModel<string>('weekday', { required: true });
 const frequencies = [

@@ -13,6 +13,24 @@ import {
     describeProperties,
 } from './common.ts';
 
+/** 新任务初始配额；保存后的任务版本和执行预算不会随默认值改变。 */
+export const DEFAULT_TASK_BUDGET = {
+    maxSearches: 10,
+    maxPages: 20,
+    maxDurationSeconds: 600,
+    maxInputTokens: 1_000_000,
+    maxOutputTokens: 128_000,
+} as const;
+
+/** 默认部署允许保存的预算上限；已冻结执行继续使用自身快照。 */
+export const DEFAULT_TASK_BUDGET_LIMITS = {
+    maxSearches: 10,
+    maxPages: 20,
+    maxDurationSeconds: 1800,
+    maxInputTokens: 2_000_000,
+    maxOutputTokens: 512_000,
+} as const;
+
 /** 默认预算与硬上限由部署策略提供，契约只约束类型和正整数。 */
 export interface BudgetPolicy {
     maxSearches?: number;

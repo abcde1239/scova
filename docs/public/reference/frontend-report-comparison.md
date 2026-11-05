@@ -15,8 +15,8 @@
 ```sh
 vp test apps/web/tests/report-comparison-table.test.ts apps/web/tests/report-changes.test.ts apps/web/tests/report-topic-list.test.ts apps/web/tests/report-view.test.ts
 vp check
-vp run web#build
-vp run web#build:e2e
+vp run build:frontend
+vp run build:e2e
 vp run test:e2e tests/e2e/report-comparison-table.spec.ts
 vp run harness-lint
 ```

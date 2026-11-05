@@ -16,7 +16,7 @@ Linux 需安装 Chromium 系统依赖：`vp exec playwright install --with-deps 
 
 | 范围         | 浏览器用例                         | 关键断言                                                                              |
 | ------------ | ---------------------------------- | ------------------------------------------------------------------------------------- |
-| 英语材料     | `two-rounds-english.spec.ts`       | demo 两轮交付与幂等；受控 live 免费变付费、转载、重复和排除；双方原文引用             |
+| 英语材料     | `two-rounds-english.spec.ts`       | 固定供应商两轮交付与幂等；受控 live 免费变付费、转载、重复和排除；双方原文引用        |
 | 招生         | `two-rounds-admission.spec.ts`     | 截止日期和语言要求变化、时区周期计划、第三轮 partial 不推进完整基线                   |
 | 研究         | `two-rounds-research.spec.ts`      | 事实/推断/冲突/不足、修订与二手关系、重复与不完整覆盖                                 |
 | 可靠性与隔离 | `browser-resilience.spec.ts`       | 关闭页面、暂停与 Worker 停止分别处理；真实断网、事件 N+1 回放/reset、取消及迟到旧 401 |
@@ -29,6 +29,6 @@ Linux 需安装 Chromium 系统依赖：`vp exec playwright install --with-deps 
 
 原 Server 基准继续由 `vp run test:e2e:backend` 验证：十个真实会话、每账号 20 个任务和 400 个 Run/Report/Inbox，四类列表预热后完整 HTTP 响应及 JSON 解析 p95 小于 500ms；持久 SSE 新事件在 2 秒内可读。测试输出运行时、平台、数据规模及实测值，详见[后端验证](backend-verification.md)。这与浏览器渲染、首屏或前端刷新耗时分别记录，不能互相替代。
 
-受控 live 执行真实 API、Worker、Agent、账本、checkpoint、数据库和交付，固定 supplier 仅替代外部研究响应。demo 明确标记演示与覆盖缺口，不能用于证明连续领域比较。远程模型与公网供应商须显式配置后另做烟测，普通 CI 不消费生产密钥。
+受控 live 执行真实 API、Worker、Agent、账本、checkpoint、数据库和交付，固定 supplier 仅替代外部研究响应。历史 demo 报告仍标记演示与覆盖缺口，正式入口不能创建 demo。远程模型与公网供应商须显式配置后另做烟测，普通 CI 不消费生产密钥。
 
 六宽和 200% 根文字检查不证明整页缩放或实体手机兼容。实际桌面读屏应核名称、顺序、状态、装饰图标零重复报读及纯图标命名，并记录工具、浏览器与构建。移动软键盘、安全区、旋转和移动读屏按[后续计划](../reference/mobile-acceptance-plan.md)分别验收；本地分发按[本地一体化计划](../reference/local-integration-plan.md)另行决策。

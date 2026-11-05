@@ -184,7 +184,7 @@ describe('ResearchReport empty changes outcome rendering', () => {
             resolve: {
                 alias: { '@': fileURLToPath(new URL('../src', import.meta.url)) },
             },
-            server: { middlewareMode: true, watch: null },
+            server: { middlewareMode: true, watch: null, hmr: false },
             appType: 'custom',
         });
         research = (await server.ssrLoadModule('/src/components/reports/ResearchReport.vue'))

@@ -1,4 +1,7 @@
 export type ConnectorKind = 'search' | 'model' | 'read';
+export const MODEL_CALL_TIMEOUT_MS = 120_000;
+export const MODEL_INPUT_TOKEN_LIMIT = 256_000;
+export const MODEL_OUTPUT_TOKEN_LIMIT = 64_000;
 
 export type ConnectorErrorCode =
     | 'configuration'
@@ -9,6 +12,8 @@ export type ConnectorErrorCode =
     | 'response_too_large'
     | 'http'
     | 'invalid_response'
+    | 'output_truncated'
+    | 'search_unavailable'
     | 'budget_exceeded'
     | 'extraction_failed';
 
@@ -28,7 +33,7 @@ export interface CallContext {
     signal?: AbortSignal;
     timeoutMs?: number;
     /** Invoked before every attempt, including retries. The caller can persist a budget reservation. */
-    beforeAttempt?: (kind: ConnectorKind) => void | Promise<void>;
+    beforeAttempt?: (kind: ConnectorKind, previousFailure?: ConnectorError) => void | Promise<void>;
 }
 
 export interface SearchResult {

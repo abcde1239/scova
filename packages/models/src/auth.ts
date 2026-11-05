@@ -14,9 +14,9 @@ const EmailSchema = Type.String({
     description: '邮箱地址，账号服务负责规范化与唯一性判断',
 });
 const PasswordSchema = Type.String({
-    minLength: 12,
+    minLength: 8,
     maxLength: 128,
-    description: '12 至 128 个字符的密码，禁止写入日志或返回体',
+    description: '8 至 128 位密码，不要求特定组合，禁止写入日志或返回体',
 });
 export const RegisterInputSchema = Type.Object(
     {

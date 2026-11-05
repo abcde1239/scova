@@ -18,9 +18,30 @@
             <p v-if="item.report.coverage.completeness === 'partial'" class="partial">
                 部分交付，结论仍有缺口；不能据此认定没有重要变化。
             </p>
-            <p class="entry-summary">{{ item.report.summary }}</p>
+            <p
+                :id="summaryId"
+                class="entry-summary"
+                :class="{ collapsed: longSummary && !expanded }"
+            >
+                {{ item.report.summary }}
+            </p>
+            <button
+                v-if="longSummary"
+                class="summary-toggle"
+                type="button"
+                :aria-expanded="expanded"
+                :aria-controls="summaryId"
+                @click="expanded = !expanded"
+            >
+                {{ expanded ? '收起摘要' : '展开摘要' }}
+            </button>
         </div>
-        <action-button :busy="pending" :disabled="disabled" @click="emit('read', !item.readAt)">
+        <action-button
+            quaternary
+            :busy="pending"
+            :disabled="disabled"
+            @click="emit('read', !item.readAt)"
+        >
             <app-icon :name="item.readAt ? 'inbox' : 'confirm'" />
             {{ pending ? '正在更新' : item.readAt ? '恢复未读' : '标记已读' }}
         </action-button>
@@ -28,7 +49,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref, useId, watch } from 'vue';
 import { RouterLink } from 'vue-router';
 import type { InboxItem } from '@/api/inbox';
 import ActionButton from '@/components/common/ActionButton.vue';
@@ -36,6 +57,14 @@ import AppIcon from '@/components/common/AppIcon.vue';
 import '@/styles/reading-fonts.css';
 const props = defineProps<{ item: InboxItem; pending?: boolean; disabled?: boolean }>();
 const emit = defineEmits<{ read: [read: boolean]; open: [event: MouseEvent] }>();
+const summaryId = `inbox-summary-${useId()}`;
+const expanded = ref(false);
+const longSummary = computed(
+    () => props.item.report.summary.length > 100 || props.item.report.summary.includes('\n'),
+);
+watch([() => props.item.id, () => props.item.report.summary], () => {
+    expanded.value = false;
+});
 const published = computed(() =>
     new Intl.DateTimeFormat('zh-CN', {
         dateStyle: 'medium',
@@ -49,14 +78,14 @@ const published = computed(() =>
     display: flex;
     flex-wrap: wrap;
     align-items: start;
-    gap: 1.5rem 2rem;
-    padding-block: 2rem;
-    border-block-end: 0.0625rem solid var(--scova-border);
+    gap: 0.75rem 1.5rem;
+    padding-block: 1.25rem;
+    border-block-end: 0.0625rem solid color-mix(in srgb, var(--scova-border) 35%, transparent);
     min-inline-size: 0;
 }
 .entry-content {
     display: grid;
-    gap: 1rem;
+    gap: 0.5rem;
     flex: 1 1 30rem;
     min-inline-size: 0;
     overflow-wrap: anywhere;
@@ -82,7 +111,7 @@ a:focus-visible {
 .entry-metadata {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.5rem 1.25rem;
+    gap: 0.375rem 0.875rem;
     color: var(--scova-muted);
 }
 .entry-metadata strong {
@@ -94,7 +123,27 @@ a:focus-visible {
     font-weight: 500;
 }
 .entry-summary {
-    max-inline-size: 55ch;
+    max-inline-size: 72ch;
     white-space: pre-wrap;
+}
+.entry-summary.collapsed {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.summary-toggle {
+    justify-self: start;
+    min-block-size: 2.75rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    color: var(--scova-primary);
+    cursor: pointer;
+}
+.summary-toggle:focus-visible {
+    outline: 0.125rem solid var(--scova-primary);
+    outline-offset: 0.1875rem;
 }
 </style>

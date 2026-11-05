@@ -140,7 +140,7 @@ describe('inbox', () => {
         expect(inbox.pendingId.value).toBe(id(1));
         expect(await inbox.setRead(item(), true)).toBe(false);
         const init = fetcher.mock.calls[1]?.[1];
-        expect(init?.credentials).toBe('same-origin');
+        expect(init?.credentials).toBe('include');
         expect(new Headers(init?.headers).get('x-csrf-token')).toBe(account.csrfToken);
         expect(JSON.parse(typeof init?.body === 'string' ? init.body : '')).toEqual({ read: true });
         stored = { ...stored, readAt: '2026-10-31T02:00:00Z' };

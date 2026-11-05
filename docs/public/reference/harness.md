@@ -14,13 +14,19 @@ vp run harness-verify
 
 `harness-lint` 检查工作区测试布局、任务依赖和验收文档链接，不运行测试；repository.visibility=public 时还检查 Git index 文件边界。仓库当前先采用 private，内部文档仍按约定仅保留本地；未来公开前需切换治理配置并重新验证边界。`harness-verify` 先执行同一治理检查，再逐项运行以下任务；`vp run ready` 是它的别名。
 
+根级 `test:*` 入口由 `tests/tasks.ts` 定义，通过根 `vite.config.ts` 的 `run.tasks` 注册；调用仍为 `vp run test:<名称>`，无需放入根 `package.json`。这些任务显式关闭缓存，集成聚合的 command 数组依次执行各套件，避免共享测试 Redis 的并发干扰。
+
 | 任务            | 命令              | 当前覆盖范围                                                     |
 | --------------- | ----------------- | ---------------------------------------------------------------- |
 | static-check    | `vp check`        | 格式、lint、TypeScript 静态检查                                  |
 | unit-tests      | `vp test`         | Web/会话/通信/领域逻辑、contracts、别名隔离、API、Agent 与共享包 |
 | workspace-build | `vp run -r build` | 所有已登记工作区构建/类型检查                                    |
 
+其余必需任务为 `runtime-bun`、`runtime-node`、`connectors-runtime`、`api-openapi`、`api-processes`、`backend-integration`、`web-browser-gate` 和 `web-workbench-gate`。`web-deployment` 已登记为禁用的可选任务，需单独执行 `vp run test:deployment`；完整 `ready` 通过不代表运行过该部署验证。根提交钩子只运行 `vp staged`，不执行完整治理或测试；后端 CI 的 `vp run ready` 会先执行 harness lint，再运行必需任务。
+
 根聚合测试只声明实际覆盖的工作区，没有额外配置相同的子任务，避免重复执行。暂无测试的工作区保持 `not-configured`；这不代表业务验收通过。新建工作区或接入真实业务测试后须同时更新 `harness.config.json`、框架扫描配置和真实测试任务；`covers` 只记录覆盖关系，不创建测试。
+
+`packages-db` 的客户端单元测试由根 `vp test` 发现，迁移/数据库集成另由 `backend-integration` 覆盖。维护集成已包含在 `test:worker` 的 Worker 集成扫描中，根 `test:integration` 不再重复调用 `test:operations`；该专项入口仍可单独使用。
 
 根 TypeScript 配置排除 `artifacts`、`.pnpm-store`、构建和覆盖率产物，避免本地历史工作树与包缓存进入源码类型检查；应用源码和测试仍按各工作区配置检查。
 
@@ -41,6 +47,8 @@ Worker 的配置与生命周期、Agent 有限图与原文校验单元纳入根�
 ## 工具可移植性
 
 完整门禁还包含 `runtime-bun`（`vp run test:runtime`）与 `runtime-node`（`vp run test:runtime:node`），验证真实 PostgreSQL/Redis 的事务、队列、跨进程 checkpoint 恢复和 fencing。先运行 `docker compose -f compose.test.yaml -p scova-runtime-test up -d --wait`；没有服务时明确失败，不回退内存。实验每次创建并清理独立 schema 和命名队列，详见源码中的 `tests/runtime/README.md`。
+
+[本地开发环境](../guides/local-development.md)使用独立的 `compose.local.yaml` 和根 `.env.local`。它不替代上述专用测试依赖；`harness-lint` 本身不启动 Docker、不调用搜索或模型，也不验证 Windows 系统启动项。`compose.local.yaml`、`.env.local.example` 已登记为公开配置，真实 `.env.local` 仍仅本地保存。
 
 `scripts/vendor/harness-kit.mjs` 是 harness-kit 随附 CLI 的原样快照（schemaVersion 1，SHA-256 `cc523948f6244abe42aa0f7d6be4a5bf14c39c9547bd88e2b2a7322ef594e5e2`），仅依赖 Bun 和 Git，不依赖全局安装的技能。`scripts/harness.mjs` 固定项目根、校验摘要，并使用 `BUN_BIN`、用户目录下独立 Bun 或 PATH 中的 Bun。指定 `BUN_BIN` 时必须是可执行文件路径，不含命令参数。
 

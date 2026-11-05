@@ -180,7 +180,7 @@ describe('report history', () => {
         );
         const history = setup(fetcher);
         await vi.waitFor(() => expect(history.items.value).toHaveLength(1));
-        expect(fetcher.mock.calls[0]?.[1]?.credentials).toBe('same-origin');
+        expect(fetcher.mock.calls[0]?.[1]?.credentials).toBe('include');
         const all = reportHistoryOptions(history.lifecycle, undefined);
         const task = reportHistoryOptions(history.lifecycle, id(100));
         expect(all.queryKey).not.toEqual(task.queryKey);

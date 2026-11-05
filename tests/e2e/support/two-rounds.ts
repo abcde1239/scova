@@ -2,6 +2,8 @@ import { expect, type Page, type TestInfo } from '@playwright/test';
 import type { Report, Run, TaskConfig, TaskDetailResponse } from '@scova/models';
 import type { BrowserEnvironment, Owner } from './environment.ts';
 import type { Phase, Scenario } from './compose.ts';
+import { fillList } from './list-input.ts';
+import { chooseOption, chooseTimezone } from './select.ts';
 
 export async function createTaskThroughUI(owner: Owner, config: TaskConfig) {
     const page = owner.page;
@@ -10,33 +12,46 @@ export async function createTaskThroughUI(owner: Owner, config: TaskConfig) {
         ['任务标题', config.title],
         ['查阅主题', config.topic],
         ['查阅目标', config.goal],
-        ['任务时区（IANA）', config.timezone],
         ['执行时长上限（秒）', String(config.budget.maxDurationSeconds)],
     ])
         await page.getByLabel(label!, { exact: true }).fill(value!);
-    await page.getByLabel('输出形式', { exact: true }).selectOption(config.outputFormat);
+    await chooseTimezone(page, config.timezone, '任务时区');
+    await chooseOption(
+        page,
+        '输出形式',
+        { brief: '简报', list: '主题清单', comparison: '对比表', research_report: '研究报告' }[
+            config.outputFormat
+        ],
+    );
     await page.getByText('关注范围与来源偏好', { exact: true }).click();
-    await page.getByLabel('重点关注（可选）', { exact: true }).fill(config.focusPoints.join('\n'));
-    await page
-        .getByLabel('排除主题或条件（可选）', { exact: true })
-        .fill(config.exclusions.join('\n'));
-    await page
-        .getByLabel('优先来源网址（可选）', { exact: true })
-        .fill(config.sourcePreferences.preferredUrls.join('\n'));
+    await fillList(page, '重点关注（可选）', config.focusPoints);
+    await fillList(page, '排除主题或条件（可选）', config.exclusions);
+    await fillList(page, '优先来源网址（可选）', config.sourcePreferences.preferredUrls);
+    await fillList(page, '排除来源网址（可选）', config.sourcePreferences.excludedUrls);
     await page
         .getByLabel('仅查阅官方来源', { exact: true })
         .setChecked(config.sourcePreferences.officialOnly);
-    await page.getByLabel('计划频率', { exact: true }).selectOption(config.schedule.frequency);
+    await chooseOption(
+        page,
+        '计划频率',
+        { manual: '仅手动', daily: '每日', weekly: '每周' }[config.schedule.frequency],
+    );
     if (config.schedule.frequency !== 'manual') {
         await page.getByLabel('执行当地时间', { exact: true }).fill(config.schedule.localTime);
         if (config.schedule.frequency === 'weekly')
-            await page
-                .getByLabel('每周执行星期', { exact: true })
-                .selectOption(String(config.schedule.weekday));
+            await chooseOption(
+                page,
+                '每周执行星期',
+                `周${['一', '二', '三', '四', '五', '六', '日'][config.schedule.weekday - 1]}`,
+            );
     }
-    await page
-        .getByLabel('结果提醒', { exact: true })
-        .selectOption(config.notificationPreference.mode);
+    await chooseOption(
+        page,
+        '结果提醒',
+        { summary: '每次汇总', important_change: '仅重要变化', off: '关闭结果提醒' }[
+            config.notificationPreference.mode
+        ],
+    );
     const saved = page.waitForResponse(
         (response) =>
             new URL(response.url()).pathname === '/api/v1/tasks' &&
@@ -86,16 +101,14 @@ export async function executeThroughUI(
     environment: BrowserEnvironment,
     owner: Owner,
     taskId: string,
-    options: { mode: 'demo' | 'live'; scenario?: Scenario; phase?: Phase },
+    options: { mode: 'live'; scenario?: Scenario; phase?: Phase },
 ) {
     if (options.scenario)
         await environment.services.useScenario(options.scenario, options.phase ?? 'A');
     const page = owner.page;
     await page.goto(`/tasks/${taskId}`);
     const actions = page.locator('.run-actions');
-    await actions
-        .getByLabel(options.mode === 'demo' ? '演示 demo' : '真实 live', { exact: true })
-        .check();
+    await expect(actions.getByRole('radio')).toHaveCount(0);
     const submitted = page.waitForResponse(
         (response) =>
             new URL(response.url()).pathname === `/api/v1/tasks/${taskId}/runs` &&

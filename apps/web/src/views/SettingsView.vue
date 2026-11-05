@@ -1,13 +1,17 @@
 <template>
     <div class="settings">
-        <section aria-labelledby="account-summary-title">
-            <h2 id="account-summary-title">账号信息</h2>
+        <section aria-label="当前登录账号">
             <p class="account-email">{{ session.user.value?.email }}</p>
         </section>
         <section aria-labelledby="account-defaults-title">
             <h2 id="account-defaults-title">新任务默认偏好</h2>
             <p>用于后续新建的任务草稿，不会改动已保存任务的时区、计划或配置版本。</p>
             <preferences-form />
+        </section>
+        <section aria-labelledby="account-agent-title">
+            <h2 id="account-agent-title">Agent 与模型</h2>
+            <p>管理自己的供应商、API 连接与默认模型。</p>
+            <navigation-button to="/account/agent" icon="settings">Agent 配置</navigation-button>
         </section>
         <section aria-labelledby="account-local-title">
             <h2 id="account-local-title">本机外观与阅读</h2>

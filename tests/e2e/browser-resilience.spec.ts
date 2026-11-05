@@ -1,3 +1,4 @@
+import { chooseTimezone } from './support/select.ts';
 import { logoutFromAccount, expectAccountReady } from './support/account-menu.ts';
 import { randomUUID } from 'node:crypto';
 import type { Run, TaskDetailResponse } from '@scova/models';
@@ -8,7 +9,7 @@ import { assertAtomicDelivery, attachProvenance, waitForDelivery } from './suppo
 async function queued(environment: BrowserEnvironment, owner: Owner, taskId: string) {
     const result = await environment.request<{ run: Run }>(owner, `/api/v1/tasks/${taskId}/runs`, {
         method: 'POST',
-        body: { mode: 'demo' },
+        body: { mode: 'live' },
         headers: { 'idempotency-key': randomUUID() },
     });
     expect(result.run.status).toBe('queued');
@@ -222,7 +223,7 @@ test('取消只作用于本次Run，未来周期计划保持；晚到真实401�
         await owner.page.getByRole('link', { name: '注册账号', exact: true }).click();
         await owner.page.getByLabel('邮箱', { exact: true }).fill(`${randomUUID()}@example.test`);
         await owner.page.getByLabel('密码', { exact: true }).fill(`Fixture-${randomUUID()}`);
-        await owner.page.getByLabel('默认时区', { exact: true }).fill('UTC');
+        await chooseTimezone(owner.page, 'UTC');
         const registered = owner.page.waitForResponse(
             (response) =>
                 response.request().method() === 'POST' &&

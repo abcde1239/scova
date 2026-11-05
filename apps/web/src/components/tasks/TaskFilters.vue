@@ -36,7 +36,11 @@ const group = useId();
     border: 0;
 }
 legend {
-    margin-block-end: 0.75rem;
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
 }
 label {
     display: flex;

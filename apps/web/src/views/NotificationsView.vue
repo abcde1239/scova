@@ -34,7 +34,7 @@
             retryable
             @retry="retry"
         />
-        <state-panel v-else-if="!items.length" state="empty" message="没有符合筛选条件的通知。" />
+        <state-panel v-else-if="!items.length" state="empty" message="暂无通知" />
         <div v-if="items.length" class="notification-list">
             <notification-entry
                 v-for="item in items"

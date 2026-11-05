@@ -1,7 +1,7 @@
 import { createDatabaseClient, closeDatabase, type DatabaseClient } from '@scova/db';
 import { createRequire } from 'node:module';
 import type { Redis } from 'ioredis';
-import type { ModelProvider } from '@scova/connectors';
+import { listProviderModels, type ModelProvider } from '@scova/connectors';
 import {
     createTaskDraftModel,
     createTaskDraftPolicy,
@@ -9,6 +9,7 @@ import {
 } from '@/app/task-drafts.ts';
 import { createStreamRegistry, type ApiStreamRegistry } from '@/app/streams.ts';
 import { DEFAULT_SSE_POLICY, type SsePolicy } from '@/utils/sse.ts';
+import { createAgentProviderService } from '@/service/agent-providers';
 
 const require = createRequire(import.meta.url);
 
@@ -31,8 +32,9 @@ export interface ApiServices {
     rateLimit: AuthRateLimitConfig;
     taskDraftPolicy: TaskDraftPolicy;
     reportQuestionPolicy: TaskDraftPolicy;
-    reportQuestionModel(): ModelProvider | null;
-    taskDraftModel(): ModelProvider | null;
+    reportQuestionModel(userId?: string): ModelProvider | null | Promise<ModelProvider | null>;
+    taskDraftModel(userId?: string): ModelProvider | null | Promise<ModelProvider | null>;
+    providerModels: typeof listProviderModels;
     streams: ApiStreamRegistry;
     sse: SsePolicy;
     clock(): Date;
@@ -75,7 +77,8 @@ export function createDefaultServices(overrides: ApiServiceOverrides = {}): ApiS
         if (key !== 'keyPrefix' && (!Number.isSafeInteger(value) || Number(value) < 1))
             throw new Error('认证限流配置必须是正安全整数');
     }
-    return {
+    const services: ApiServices = {
+        providerModels: overrides.providerModels ?? listProviderModels,
         origin,
         production: overrides.production ?? process.env.NODE_ENV === 'production',
         registrationEnabled:
@@ -90,13 +93,21 @@ export function createDefaultServices(overrides: ApiServiceOverrides = {}): ApiS
         }),
         reportQuestionModel:
             overrides.reportQuestionModel ??
-            (() => {
+            (async (userId) => {
+                const own = userId
+                    ? await createAgentProviderService(services).model(userId)
+                    : null;
+                if (own) return own;
                 if (questionModel === undefined) questionModel = createTaskDraftModel();
                 return questionModel;
             }),
         taskDraftModel:
             overrides.taskDraftModel ??
-            (() => {
+            (async (userId) => {
+                const own = userId
+                    ? await createAgentProviderService(services).model(userId, 'task_draft')
+                    : null;
+                if (own) return own;
                 if (draftModel === undefined) draftModel = createTaskDraftModel();
                 return draftModel;
             }),
@@ -146,4 +157,5 @@ export function createDefaultServices(overrides: ApiServiceOverrides = {}): ApiS
                 await Promise.all(tasks);
             })()),
     };
+    return services;
 }

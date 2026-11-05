@@ -6,7 +6,6 @@ export class SchedulerService {
     constructor(
         private readonly options: {
             repository: SchedulerRepository;
-            mode: 'demo' | 'live';
             concurrency: number;
         },
     ) {
@@ -30,7 +29,6 @@ export class SchedulerService {
                     attempts += 1;
                     try {
                         const result = await this.options.repository.scheduleNext(
-                            this.options.mode,
                             [...excluded],
                             signal,
                         );

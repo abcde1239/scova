@@ -22,6 +22,34 @@ const account = (n = 100) => ({
     },
     csrfToken: 'bookmarks-test-only',
 });
+
+test('空列表只显示短提示，收藏和全部笔记不重复放置读取或创建按钮', async ({ page }, testInfo) => {
+    await page.route('**/api/v1/me', (route) => route.fulfill({ json: account() }));
+    for (const path of ['bookmarks', 'notes', 'notifications', 'inbox']) {
+        await page.route(`**/api/v1/${path}**`, (route) =>
+            route.fulfill({ json: { items: [], nextCursor: null } }),
+        );
+    }
+    await page.goto('/library');
+    const library = page.locator('#library-content');
+    await expect(library.getByRole('status')).toHaveText('暂无收藏');
+    await expect(library.locator('.library-toolbar button')).toHaveCount(0);
+    await page
+        .getByRole('navigation', { name: '资料库分区' })
+        .getByRole('button', { name: '笔记', exact: true })
+        .click();
+    const notes = page.locator('.notes-panel');
+    await expect(notes.getByRole('status')).toHaveText('暂无笔记');
+    await expect(notes.getByRole('button')).toHaveCount(0);
+    await page.screenshot({ path: testInfo.outputPath('empty-notes.png'), fullPage: true });
+    await page.goto('/notifications');
+    const empty = page.locator('.state-panel--empty');
+    await expect(empty).toHaveText('暂无通知');
+    await expect(empty.getByRole('button')).toHaveCount(0);
+    await page.goto('/inbox');
+    await expect(empty).toHaveText('暂无报告');
+    await expect(empty.getByRole('button')).toHaveCount(0);
+});
 function bookmark(n = 40, source = sourceId) {
     return {
         id: id(n),
@@ -256,6 +284,16 @@ test('HTTP sample: report create201, library context, delete204 and original cit
     const externalLink = entries(page).getByRole('link', { name: '打开原始来源（新窗口）' });
     await expect(externalLink).toHaveAttribute('target', '_blank');
     await expect(externalLink).toHaveAttribute('rel', 'noopener noreferrer');
+    const details = entries(page).locator('.source-details');
+    await expect(details.locator('p')).toBeHidden();
+    await details.locator('summary').focus();
+    await details.locator('summary').press('Enter');
+    await expect(details.locator('p')).toHaveText(bookmark().source.canonicalUrl);
+    await expect(details.locator('time').first()).toHaveAttribute('datetime', bookmark().createdAt);
+    await expect(externalLink).toBeVisible();
+    await details.locator('summary').press('Space');
+    await expect(details.locator('p')).toBeHidden();
+    expect(state.writes).toHaveLength(1);
     await entries(page).getByRole('button', { name: '取消收藏', exact: true }).press('Space');
     await expect(entries(page)).toHaveCount(0);
     await expect(page.locator('#library-content')).toBeFocused();
@@ -607,7 +645,7 @@ for (const late of [201, 401]) {
             .getByRole('navigation', { name: '主导航' })
             .getByRole('link', { name: '资料库' })
             .click();
-        await expect(page.getByText('这一页没有收藏。可以从报告选择来源收藏。')).toBeVisible();
+        await expect(page.getByText('暂无收藏')).toBeVisible();
         await expect(entries(page)).toHaveCount(0);
         await expect(page.getByRole('link', { name: '返回刚才的报告' })).toHaveCount(0);
         expect(state.switched).toBe(true);

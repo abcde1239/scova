@@ -134,7 +134,7 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
             plugins: [vue()],
             optimizeDeps: { noDiscovery: true, include: [] },
             resolve: { alias: { '@': resolve(dirname(fileURLToPath(import.meta.url)), '../src') } },
-            server: { middlewareMode: true, watch: null },
+            server: { middlewareMode: true, watch: null, hmr: false },
             appType: 'custom',
         });
         for (const [format, name] of Object.entries({
@@ -263,8 +263,10 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
                 report.publishedAt,
             );
             expect(text(document, '.mode')).toContain('演示报告');
-            expect(text(document, '.report-warning')).toContain('原始限制');
-            expect(text(document, '.report-warning')).toContain('原始覆盖缺口');
+            expect(text(document, '.report-warning')).toContain('不能据此认定没有重要变化');
+            expect(text(document, '.report-warning a')).toBe('查看完整限制与缺口');
+            expect(text(document, '.coverage details')).toContain('原始限制');
+            expect(text(document, '.coverage details')).toContain('原始覆盖缺口');
             expect(
                 document
                     .querySelector('.report-warning')!

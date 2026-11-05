@@ -20,40 +20,53 @@
             <p v-if="run.mode === 'demo'">此执行使用演示数据，不代表真实联网研究。</p>
             <p v-if="executionOutcome(run)" class="outcome">{{ executionOutcome(run) }}</p>
             <p v-if="executionFailure(run)">{{ executionFailure(run) }}</p>
-            <dl class="identity">
-                <div>
-                    <dt>执行</dt>
-                    <dd>{{ run.id }}</dd>
-                </div>
-                <div>
-                    <dt>固定任务版本</dt>
-                    <dd>{{ run.taskVersionId }}</dd>
-                </div>
-                <div>
-                    <dt>排队时间</dt>
-                    <dd>
-                        <time :datetime="run.queuedAt">{{ time(run.queuedAt) }}</time>
-                    </dd>
-                </div>
-                <div v-if="run.startedAt">
-                    <dt>开始时间</dt>
-                    <dd>
-                        <time :datetime="run.startedAt">{{ time(run.startedAt) }}</time>
-                    </dd>
-                </div>
-                <div v-if="run.finishedAt">
-                    <dt>结束时间</dt>
-                    <dd>
-                        <time :datetime="run.finishedAt">{{ time(run.finishedAt) }}</time>
-                    </dd>
-                </div>
-            </dl>
+            <p class="run-timing">
+                <time :datetime="run.startedAt ?? run.queuedAt">{{
+                    time(run.startedAt ?? run.queuedAt)
+                }}</time
+                ><span v-if="elapsed"> · {{ elapsed }}</span>
+            </p>
+            <details class="execution-metadata">
+                <summary>执行标识与时间</summary>
+                <dl class="identity">
+                    <div>
+                        <dt>执行</dt>
+                        <dd>{{ run.id }}</dd>
+                    </div>
+                    <div>
+                        <dt>固定任务版本</dt>
+                        <dd>{{ run.taskVersionId }}</dd>
+                    </div>
+                    <div>
+                        <dt>排队时间</dt>
+                        <dd>
+                            <time :datetime="run.queuedAt">{{ time(run.queuedAt) }}</time>
+                        </dd>
+                    </div>
+                    <div v-if="run.startedAt">
+                        <dt>开始时间</dt>
+                        <dd>
+                            <time :datetime="run.startedAt">{{ time(run.startedAt) }}</time>
+                        </dd>
+                    </div>
+                    <div v-if="run.finishedAt">
+                        <dt>结束时间</dt>
+                        <dd>
+                            <time :datetime="run.finishedAt">{{ time(run.finishedAt) }}</time>
+                        </dd>
+                    </div>
+                </dl>
+            </details>
         </section>
 
-        <run-actions :task-id="run.taskId" :run="run" />
+        <execution-logs
+            :key="run.id"
+            :log="execution.log.value"
+            :terminal="terminal"
+            :connection-text="connectionText"
+        />
 
         <section class="connection scova-glass scova-glass--tools" aria-label="执行连接">
-            <p role="status" aria-live="polite">{{ connectionText }}</p>
             <p v-if="execution.query.isPaused.value">
                 快照更新已暂停，当前展示上次成功读取的状态；恢复网络后将继续更新。
             </p>
@@ -135,35 +148,10 @@
             </section>
         </div>
 
-        <section class="detail-section scova-surface" aria-labelledby="tools-title">
-            <h2 id="tools-title">工具活动</h2>
-            <ul v-if="execution.tools.value.length" class="tools-list">
-                <li v-for="tool in execution.tools.value" :key="tool.id">
-                    <strong>{{ toolLabels[tool.tool] }}</strong>
-                    <p>
-                        {{
-                            tool.status === 'completed'
-                                ? '调用已完成'
-                                : tool.status === 'failed'
-                                  ? '本次调用失败；执行结果仍以快照为准'
-                                  : terminal
-                                    ? '已观察到调用开始，未取得结束记录'
-                                    : '调用中'
-                        }}
-                    </p>
-                    <p v-if="tool.durationMs !== undefined">
-                        耗时
-                        {{
-                            (tool.durationMs / 1000).toLocaleString('zh-CN', {
-                                maximumFractionDigits: 2,
-                            })
-                        }}
-                        秒
-                    </p>
-                </li>
-            </ul>
-            <p v-else>暂无可用的工具活动记录，当前执行状态与用量以上方快照为准。</p>
-        </section>
+        <details class="execution-actions" open>
+            <summary>执行操作</summary>
+            <run-actions :task-id="run.taskId" :run="run" />
+        </details>
 
         <section
             v-if="terminal"
@@ -212,6 +200,7 @@ import { RouterLink } from 'vue-router';
 import ActionButton from '@/components/common/ActionButton.vue';
 import AppIcon from '@/components/common/AppIcon.vue';
 import RunActions from '@/components/run/RunActions.vue';
+import ExecutionLogs from '@/components/run/ExecutionLogs.vue';
 import {
     executionStates,
     executionOutcome,
@@ -228,6 +217,15 @@ const run = computed(() => props.execution.run.value);
 const terminal = computed(
     () => !!run.value && ['succeeded', 'partial', 'failed', 'canceled'].includes(run.value.status),
 );
+const elapsed = computed(() => {
+    const current = run.value;
+    if (!current?.startedAt || !current.finishedAt) return undefined;
+    const seconds = Math.max(
+        0,
+        Math.round((Date.parse(current.finishedAt) - Date.parse(current.startedAt)) / 1000),
+    );
+    return `耗时 ${seconds >= 60 ? `${Math.floor(seconds / 60)}分 ` : ''}${seconds % 60}秒`;
+});
 const connectionText = computed(() => {
     if (!online.value) return '浏览器网络已断开，实时更新暂停；后台执行状态需恢复连接后确认。';
     if (props.execution.query.isPaused.value)
@@ -247,14 +245,13 @@ const exhaustedLabels = {
     input_tokens: '模型输入',
     output_tokens: '模型输出',
 };
-const toolLabels = { search: '搜索来源', read: '读取网页', model: '模型处理' };
 const time = (instant: string) => new Date(instant).toLocaleString('zh-CN', { hour12: false });
 </script>
 
 <style scoped>
 .execution-detail {
     display: grid;
-    gap: 1.5rem;
+    gap: 1rem;
     min-inline-size: 0;
     padding-block-end: 3rem;
 }
@@ -269,7 +266,21 @@ const time = (instant: string) => new Date(instant).toLocaleString('zh-CN', { ho
     overflow-wrap: anywhere;
 }
 .execution-overview {
-    gap: 1rem;
+    gap: 0.625rem;
+}
+.execution-overview p {
+    margin: 0;
+}
+summary {
+    cursor: pointer;
+    min-block-size: 2.75rem;
+    display: list-item;
+    align-content: center;
+    color: var(--scova-muted);
+    font-size: 0.875rem;
+}
+.execution-actions {
+    padding-inline: 1rem;
 }
 .status-heading {
     display: flex;
@@ -349,12 +360,6 @@ ul {
     padding-inline-start: 1.25rem;
     display: grid;
     gap: 0.75rem;
-}
-.tools-list {
-    list-style: none;
-    padding: 0;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
-    gap: 1.5rem;
 }
 .report-link {
     display: inline-flex;

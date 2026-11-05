@@ -51,7 +51,7 @@ export function createReportQuestionPlugin(services: ApiServices) {
                 tags: ['报告问答'],
                 summary: '确认后续联网研究',
                 description:
-                    'confirm=true后才创建关联Run，固定原报告配置、问题、模式及预算，使用任务互斥与幂等事务。不覆盖原报告或任务配置；任务有活动执行时返回409。',
+                    'confirm=true后才创建关联Run，仅接受真实研究报告，固定原报告配置、问题及预算；历史演示报告返回409，使用任务互斥与幂等事务。不覆盖原报告或任务配置；任务有活动执行时返回409。',
             },
         });
 }

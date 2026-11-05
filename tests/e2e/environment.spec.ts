@@ -17,8 +17,8 @@ test('隔离账号、真实 Run 与交付链可重复使用，三类两轮结果
         ).toBeVisible();
     }
     const task = await environment.task(owner);
-    const demo = await environment.execute(owner, task.id, 'demo');
-    expect(demo.run.mode).toBe('demo');
+    const demo = await environment.execute(owner, task.id, 'live');
+    expect(demo.run.mode).toBe('live');
     expect(demo.report.runId).toBe(demo.run.id);
     expect((await environment.response(other, `/api/v1/reports/${demo.report.id}`)).status).toBe(
         404,
@@ -120,7 +120,7 @@ test('测试中途失败后账号、schema、队列和独立服务全部回收',
             try {
                 const owner = await environment.owner();
                 const task = await environment.task(owner);
-                await environment.execute(owner, task.id, 'demo');
+                await environment.execute(owner, task.id, 'live');
                 throw new Error('Injected E2E mid-test failure');
             } finally {
                 await environment.close();

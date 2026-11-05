@@ -15,24 +15,23 @@ vp run worker#start:node  # Node.js
 
 ## 配置
 
-| 环境变量                       | 默认值       | 用途                                        |
-| ------------------------------ | ------------ | ------------------------------------------- |
-| `WORKER_QUEUE_NAME`            | `scova-runs` | BullMQ 队列名                               |
-| `WORKER_POLL_INTERVAL_MS`      | `1000`       | 批次间隔                                    |
-| `WORKER_FAILURE_DELAY_MS`      | `5000`       | 批次失败等待                                |
-| `WORKER_BATCH_SIZE`            | `50`         | 单批领取上限                                |
-| `WORKER_LEASE_SECONDS`         | `30`         | 单条投递租约                                |
-| `WORKER_RUN_LEASE_SECONDS`     | `30`         | Run 租约；续期间隔为其三分之一，最多 10 秒  |
-| `WORKER_RUN_CONCURRENCY`       | `2`          | Run 消费并发数，最大 32                     |
-| `WORKER_SCHEDULER_INTERVAL_MS` | `30000`      | 周期任务扫描间隔                            |
-| `WORKER_SCHEDULER_CONCURRENCY` | `2`          | 同批调度事务并发数，最大 8                  |
-| `WORKER_SCHEDULED_RUN_MODE`    | `demo`       | 周期执行固定模式；真实研究需显式配置 `live` |
+| 环境变量                       | 默认值       | 用途                                       |
+| ------------------------------ | ------------ | ------------------------------------------ |
+| `WORKER_QUEUE_NAME`            | `scova-runs` | BullMQ 队列名                              |
+| `WORKER_POLL_INTERVAL_MS`      | `1000`       | 批次间隔                                   |
+| `WORKER_FAILURE_DELAY_MS`      | `5000`       | 批次失败等待                               |
+| `WORKER_BATCH_SIZE`            | `50`         | 单批领取上限                               |
+| `WORKER_LEASE_SECONDS`         | `30`         | 单条投递租约                               |
+| `WORKER_RUN_LEASE_SECONDS`     | `30`         | Run 租约；续期间隔为其三分之一，最多 10 秒 |
+| `WORKER_RUN_CONCURRENCY`       | `2`          | Run 消费并发数，最大 32                    |
+| `WORKER_SCHEDULER_INTERVAL_MS` | `30000`      | 周期任务扫描间隔                           |
+| `WORKER_SCHEDULER_CONCURRENCY` | `2`          | 同批调度事务并发数，最大 8                 |
 
 Run 从数据库固定 owner、版本、模式和预算，队列只能选择 runId。同一 Run 只有一个有效租约，接管递增 epoch，最多恢复三次；恢复保留首次开始时间和 deadline。数据库恢复扫描独立于原始 job，能处理消息丢失和保留的 completed/failed job。
 
 调度以 IANA 时区的每日/每周当地时间计算 UTC 时点。DST 缺失时刻取首个有效时刻，重复时刻取较早一次。停机只补最近一次到期，较早时点计入 `missedCount`；已有活动执行则记 `skipped_overlap`。Occurrence、Run、首事件、Outbox 与下一时点在一个 PostgreSQL 事务内提交，多 Worker 通过任务行锁和唯一约束去重。暂停保留当前执行且允许显式手动运行，恢复只安排未来时点；归档阻止新执行并请求取消当前执行。
 
-`AGENT_CHECKPOINT_SCHEMA` 默认为 `scova_agent`，启动时在独立表空间串行运行 saver 迁移。真实执行使用 `SEARXNG_BASE_URL`（默认 `http://127.0.0.1:8080`）、`MODEL_API_KEY`、`MODEL_NAME` 和可选 `MODEL_BASE_URL`。`SEARCH_PROVIDER` 默认为 `searxng`，只有显式选择 `tavily` 时才读取 `TAVILY_API_KEY`。详情见[搜索部署](../../docs/public/guides/search.md)。密钥仅来自部署者环境，不写入任务或事件。真实 Run 缺配置以 `AGENT_CONFIGURATION_INVALID` 失败，禁止静默转为演示；demo Run 始终使用固定演示资料。
+`AGENT_CHECKPOINT_SCHEMA` 默认为 `scova_agent`，启动时在独立表空间串行运行 saver 迁移。真实执行使用 `SEARXNG_BASE_URL`（默认 `http://127.0.0.1:8080`）、`MODEL_API_KEY`、`MODEL_NAME` 和可选 `MODEL_BASE_URL`。`SEARCH_PROVIDER` 默认为 `searxng`，只有显式选择 `tavily` 时才读取 `TAVILY_API_KEY`。详情见[搜索部署](../../docs/public/guides/search.md)。密钥仅来自部署者环境，不写入任务或事件。真实 Run 缺配置以 `AGENT_CONFIGURATION_INVALID` 失败，生产 Worker 不接受 demo 队列；历史演示报告仍可读取，测试可显式注入固定供应商。
 
 执行层通过受限上下文发出进度事件并检查执行权限；受信领域 repository 必须通过 `withRunFence` 在同一 Run 行锁事务内写入。普通写入拒绝取消、超期或失效租约；失败/取消终结有单独入口。执行器返回本身不代表已交付成果。
 

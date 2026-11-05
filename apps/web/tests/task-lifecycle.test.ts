@@ -111,7 +111,7 @@ describe('任务生命周期命令', () => {
         expect(new Headers(post.init?.headers).get('if-match')).toBe('"1"');
         expect(new Headers(post.init?.headers).get('x-csrf-token')).toBe('local-csrf');
         expect(new Headers(post.init?.headers).get('idempotency-key')).toBeNull();
-        expect(post.init?.credentials).toBe('same-origin');
+        expect(post.init?.credentials).toBe('include');
         expect(post.init?.body).toBeUndefined();
         expect(calls.every((call) => !call.path.includes('/runs'))).toBe(true);
         expect(actions.snapshot.value?.data.task.status).toBe('paused');

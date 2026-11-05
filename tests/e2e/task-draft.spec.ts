@@ -1,3 +1,4 @@
+import { chooseOption, chooseTimezone } from './support/select.ts';
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import type { TaskDraftResponse } from '../../packages/models/src/task-drafts.ts';
 import type { taskInput } from '../../apps/web/src/composables/useCreateTask.ts';
@@ -139,11 +140,12 @@ async function samples(context: BrowserContext) {
     });
     return { calls, state };
 }
-const panel = (page: Page) => page.getByRole('region', { name: '从描述生成草稿' });
-const original = (page: Page) => page.getByLabel('原始需求描述', { exact: true });
-const timezone = (page: Page) => page.getByLabel('解析时区（可选，IANA）', { exact: true });
+const panel = (page: Page) => page.getByRole('region', { name: '用 AI 整理需求' });
+const original = (page: Page) => page.getByLabel('需求描述', { exact: true });
+const timezone = (page: Page) => page.getByLabel('需求时区', { exact: true });
 const title = (page: Page) => page.getByLabel('任务标题', { exact: true });
-const parse = (page: Page) => panel(page).getByRole('button', { name: '解析为草稿', exact: true });
+const parse = (page: Page) =>
+    panel(page).getByRole('button', { name: '生成任务草稿', exact: true });
 const apply = (page: Page) =>
     panel(page).getByRole('button', { name: '应用草稿并替换当前配置', exact: true });
 const feedback = (page: Page) => panel(page).getByRole('status');
@@ -178,7 +180,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         await original(page).fill(inputText);
         await title(page).fill('原有手工配置');
         await page.getByLabel('搜索次数上限', { exact: true }).fill('1');
-        await timezone(page).fill('Asia/Tokyo');
+        await chooseTimezone(page, 'Asia/Tokyo', '需求时区');
         await parse(page).focus();
         await parse(page).press('Enter');
         await expect(apply(page)).toBeEnabled();
@@ -188,7 +190,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         await expect(original(page)).toHaveValue(inputText);
         await expect(
             panel(page).getByRole('heading', {
-                name: state.mode === 'model' ? '模型解析草稿' : '手工编辑草稿',
+                name: state.mode === 'model' ? '建议配置' : '待完善的配置',
                 exact: true,
             }),
         ).toBeVisible();
@@ -198,10 +200,12 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         await expect(panel(page).getByRole('list', { name: '解析警告' })).toContainText(
             '请检查独立单次执行预算',
         );
-        const usage = panel(page).getByRole('region', { name: '独立解析用量' });
+        await panel(page).getByRole('button', { name: '查看生成详情' }).click();
+        const usage = page.getByRole('dialog');
         await expect(usage).toContainText(`模型调用 ${state.mode === 'model' ? 2 : 0} 次`);
-        await expect(usage).toContainText('不计入任何 Run 预算');
-        if (state.mode === 'manual') await expect(panel(page)).toContainText('未使用演示研究资料');
+        await expect(usage).toContainText('不计入后续研究预算');
+        await page.keyboard.press('Escape');
+        await expect(usage).not.toBeVisible();
         await panel(page).getByText('本次解析原文', { exact: true }).click();
         expect(await panel(page).locator('.original-text').textContent()).toBe(inputText);
         expect(taskPosts(calls)).toHaveLength(0);
@@ -228,7 +232,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         await expect(title(page)).toBeEditable();
         await expect(apply(page)).toBeDisabled();
         await expect(panel(page).getByText(/原文、解析时区或表单已变化/)).toHaveCount(0);
-        await expect(page.getByLabel('计划频率', { exact: true })).toHaveValue('weekly');
+        await expect(page.getByLabel('计划频率', { exact: true })).toContainText('每周');
         await expect(page.getByLabel('开始时间', { exact: true })).toHaveValue(
             '2026-10-01T12:04:05.123',
         );
@@ -242,7 +246,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
                 }),
                 contentType: 'image/png',
             });
-            await page.getByLabel('计划频率', { exact: true }).selectOption('manual');
+            await chooseOption(page, '计划频率', '仅手动');
             await expect(schedule).toContainText('仅手动执行');
             await schedule.scrollIntoViewIfNeeded();
             await info.attach('320-explicit-manual-text-200', {
@@ -251,10 +255,9 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
                 }),
                 contentType: 'image/png',
             });
-            await page.getByLabel('计划频率', { exact: true }).selectOption('weekly');
+            await chooseOption(page, '计划频率', '每周');
         }
-        if (width === 390)
-            await page.getByLabel('计划频率', { exact: true }).selectOption('manual');
+        if (width === 390) await chooseOption(page, '计划频率', '仅手动');
         await title(page).fill('用户确认后的标题');
         await page.getByRole('button', { name: '确认保存任务', exact: true }).click();
         await expect(page).toHaveURL(new RegExp(`/tasks/${taskId}$`));
@@ -283,10 +286,10 @@ test('应用解析草稿后手改星期和当地时间，保存使用修改值�
     await parse(page).click();
     await expect(apply(page)).toBeEnabled();
     await apply(page).click();
-    await expect(page.getByLabel('计划频率', { exact: true })).toHaveValue('weekly');
-    await expect(page.getByLabel('每周执行星期', { exact: true })).toHaveValue('3');
+    await expect(page.getByLabel('计划频率', { exact: true })).toContainText('每周');
+    await expect(page.getByLabel('每周执行星期', { exact: true })).toContainText('周三');
     await expect(page.getByLabel('执行当地时间', { exact: true })).toHaveValue('09:15');
-    await page.getByLabel('每周执行星期', { exact: true }).selectOption('5');
+    await chooseOption(page, '每周执行星期', '周五');
     await page.getByLabel('执行当地时间', { exact: true }).fill('18:40');
     await expect(apply(page)).toBeDisabled();
     expect(taskPosts(calls)).toHaveLength(0);
@@ -328,7 +331,7 @@ for (const status of [429, 408]) {
             body: await page.screenshot({ path: info.outputPath('failure-text-200.png') }),
             contentType: 'image/png',
         });
-        await panel(page).getByRole('button', { name: '直接手工填写', exact: true }).click();
+        await panel(page).getByRole('button', { name: '手动填写', exact: true }).click();
         await expect(title(page)).toBeFocused();
         await title(page).fill('失败后继续手工填写');
         expect(draftPosts(calls)).toHaveLength(1);
@@ -363,12 +366,14 @@ for (const timing of ['during', 'after'] as const) {
                       ? title(page)
                       : timezone(page);
             const newValue = changed === 'timezone' ? 'Asia/Tokyo' : '解析之后的新内容';
-            await edited.fill(newValue);
+            if (changed === 'timezone') await chooseTimezone(page, newValue, '需求时区');
+            else await edited.fill(newValue);
             if (timing === 'during') release();
             await expect(apply(page)).toBeDisabled();
             await expect(panel(page)).toContainText('此结果不能覆盖当前配置');
             await expect(edited).toBeFocused();
-            await expect(edited).toHaveValue(newValue);
+            if (changed === 'timezone') await expect(edited).toContainText(newValue);
+            else await expect(edited).toHaveValue(newValue);
             await expect(title(page)).toHaveValue(changed === 'form' ? newValue : '手工标题');
             expect(taskPosts(calls)).toHaveLength(0);
             if (timing === 'during' && changed === 'form') {
@@ -403,15 +408,14 @@ test('字符边界与非法时区前端拦截保留原文，2000中文字符合�
     const boundary = '中'.repeat(2000);
     expect(new TextEncoder().encode(boundary).byteLength).toBe(6000);
     await original(page).fill(boundary);
-    await timezone(page).fill('Mars/Olympus');
-    await parse(page).click();
-    await expect(timezone(page)).toHaveAttribute('aria-invalid', 'true');
-    await expect(timezone(page)).toBeFocused();
+    await timezone(page).click();
+    await page.getByRole('combobox', { name: '搜索需求时区' }).fill('Mars/Olympus');
+    await expect(page.getByRole('option')).toHaveCount(0);
+    await page.keyboard.press('Escape');
     expect(draftPosts(calls)).toHaveLength(0);
-    await timezone(page).fill('');
     await parse(page).click();
     await expect(apply(page)).toBeEnabled();
-    expect(draftPosts(calls)[0]!.body).toEqual({ inputText: boundary });
+    expect(draftPosts(calls)[0]!.body).toEqual({ inputText: boundary, timezone: 'UTC' });
     expect(taskPosts(calls)).toHaveLength(0);
 });
 
@@ -424,7 +428,7 @@ test('在途重复解析与停止不会写任务，迟到结果不复活', async
     await page.goto('/tasks/new');
     await original(page).fill(inputText);
     await parse(page).dblclick();
-    const pending = panel(page).getByRole('button', { name: '正在解析', exact: true });
+    const pending = panel(page).getByRole('button', { name: '正在整理', exact: true });
     await expect(pending).toHaveAttribute('aria-busy', 'true');
     await pending.press('Enter');
     await pending.press('Space');
@@ -439,7 +443,7 @@ test('在途重复解析与停止不会写任务，迟到结果不复活', async
     expect(taskPosts(calls)).toHaveLength(0);
 });
 
-test('原文Enter保留换行，时区Enter仅解析不触发表单保存', async ({ page }) => {
+test('原文Enter保留换行，时区Enter选择预设且不生成草稿或保存', async ({ page }) => {
     const { calls } = await samples(page.context());
     await page.goto('/tasks/new');
     await original(page).fill('原文第一行');
@@ -448,8 +452,12 @@ test('原文Enter保留换行，时区Enter仅解析不触发表单保存', asyn
     await original(page).pressSequentially('第二行');
     await expect(original(page)).toHaveValue('原文第一行\n第二行');
     expect(draftPosts(calls)).toHaveLength(0);
-    await timezone(page).fill('Asia/Tokyo');
     await timezone(page).press('Enter');
+    await page.getByRole('combobox', { name: '搜索需求时区' }).fill('Asia/Tokyo');
+    await page.keyboard.press('Enter');
+    await expect(timezone(page)).toContainText('Asia/Tokyo');
+    expect(draftPosts(calls)).toHaveLength(0);
+    await parse(page).click();
     await expect(apply(page)).toBeEnabled();
     expect(draftPosts(calls)).toHaveLength(1);
     expect(taskPosts(calls)).toHaveLength(0);
@@ -475,4 +483,24 @@ test('离开解析页后迟到结果不会应用到新页面', async ({ page }) 
     await expect(title(page)).toHaveValue('');
     await expect(apply(page)).toHaveCount(0);
     expect(taskPosts(calls)).toHaveLength(0);
+});
+
+test('空描述只显示简短提示；创建说明弹窗支持 Esc 和焦点返回', async ({ page }, info) => {
+    const { calls } = await samples(page.context());
+    await page.goto('/tasks/new');
+    await expect(timezone(page)).toContainText('UTC');
+    await parse(page).click();
+    await expect(panel(page)).toContainText('请先描述你想研究的内容。');
+    await expect(panel(page)).not.toContainText('UTF-8');
+    await expect(panel(page)).not.toContainText('接口约束');
+    await expect(original(page)).toBeFocused();
+    expect(draftPosts(calls)).toHaveLength(0);
+    const help = panel(page).getByRole('button', { name: '如何创建任务' });
+    await help.click();
+    const modal = page.getByRole('dialog');
+    await expect(modal).toContainText('两种方式最终创建的是同一种任务');
+    await page.screenshot({ path: info.outputPath('draft-help.png'), animations: 'disabled' });
+    await page.keyboard.press('Escape');
+    await expect(modal).not.toBeVisible();
+    await expect(help).toBeFocused();
 });

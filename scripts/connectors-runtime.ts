@@ -53,7 +53,8 @@ try {
     const url = new URL(`http://scova-pin.invalid:${address.port}/fixture`);
     const options = {
         method: 'GET' as const,
-        headers: {},
+        // Explicit Host must preserve the URL domain under IP pinning, even on Bun.
+        headers: { Host: 'caller-override.invalid' },
         address: { address: '127.0.0.1', family: 4 },
         signal: deadline,
         maxBytes: 2_048,

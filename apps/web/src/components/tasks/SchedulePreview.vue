@@ -1,14 +1,24 @@
 <template>
     <section class="schedule-preview scova-surface" aria-labelledby="schedule-preview-title">
-        <h3 id="schedule-preview-title">计划预览</h3>
+        <div class="preview-heading">
+            <h3 id="schedule-preview-title">计划预览</h3>
+            <info-dialog label="计划说明" title="执行计划说明">
+                <p>
+                    保存任务后，计划才会生效。下次执行时间以服务端记录为准；未保存的修改不会影响原有计划。
+                </p>
+                <p>
+                    “仅手动”表示不自动定时执行。定时执行会调用已配置的搜索与模型；缺少配置时会明确报错。
+                </p>
+                <p>夏令时：当地时刻不存在时，顺延至首个有效时刻；时刻重复时，只执行第一次。</p>
+            </info-dialog>
+        </div>
         <p>{{ description }}</p>
-        <p v-if="!saved || dirty">
-            当前未保存修改尚未安排执行；下次计划以保存后从服务端读取的时刻为准。
+        <p v-if="!saved || dirty" class="preview-hint">
+            保存后生效；下次执行时间以已保存计划为准。
         </p>
-        <p v-else>当前填写内容与已保存配置一致，下次计划见下方服务端记录。</p>
         <section v-if="saved" class="saved-schedule" aria-labelledby="saved-schedule-title">
             <h3 id="saved-schedule-title">服务端已保存的计划</h3>
-            <p v-if="dirty">当前有未保存修改，下列记录仍对应上次保存或读取的配置与时区。</p>
+            <p v-if="dirty">有未保存修改，以下为上次保存的计划。</p>
             <p>{{ scheduleDescription(saved.schedule, saved.timezone) }}</p>
             <dl v-if="serverTime">
                 <div>
@@ -26,33 +36,13 @@
             </dl>
             <p v-else>{{ noServerTime }}</p>
         </section>
-        <p v-else>尚未保存任务，服务端还没有此任务的下次计划时刻。</p>
-        <p>
-            “仅手动”是计划频率，不是执行模式。定时执行模式由部署者设置，默认演示
-            demo；当前部署模式未知，页面不能修改或保证真实 live。
-        </p>
-        <details>
-            <summary>夏令时与重复时刻规则</summary>
-            <p>
-                当地时刻不存在时顺延到首个有效时刻；当地时刻重复时只选择首次。以下 America/New_York
-                固定示例用于解释规则，不是当前任务预测。
-            </p>
-            <dl class="dst-examples">
-                <div v-for="example in examples" :key="example.kind">
-                    <dt>{{ example.kind }}示例 · 请求 {{ example.requested }}</dt>
-                    <dd>{{ example.note }}</dd>
-                    <dd>实际当地时间：{{ example.local }}</dd>
-                    <dd>UTC：{{ example.utc }}</dd>
-                </div>
-            </dl>
-        </details>
     </section>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import InfoDialog from '@/components/common/InfoDialog.vue';
 import {
-    dstExamples,
     formatScheduleInstant,
     scheduleDescription,
     scheduleInput,
@@ -81,10 +71,6 @@ const noServerTime = computed(() =>
             ? '服务端已保存为仅手动执行，没有周期计划。'
             : '服务端当前未返回下次计划时刻，请重新读取任务核对。',
 );
-const examples = dstExamples.map((example) => ({
-    ...example,
-    ...formatScheduleInstant(example.instant, 'America/New_York'),
-}));
 </script>
 
 <style scoped>
@@ -122,17 +108,15 @@ dt {
 dd {
     margin: 0.25rem 0 0;
 }
-details > p,
-.dst-examples {
-    margin-block-start: 1rem;
+.preview-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
 }
-summary {
-    cursor: pointer;
-    min-block-size: 2.75rem;
-    padding-block: 0.5rem;
-}
-summary:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
+.preview-hint {
+    color: var(--scova-muted);
+    font-size: 0.875rem;
 }
 </style>

@@ -12,15 +12,23 @@ for (const width of [1440, 1024, 768, 390, 360, 320]) {
                 document.documentElement.style.fontSize = `${value}%`;
             }, scale);
             for (const name of ['收件箱', '资料库', '通知', '账号', '外观', '任务']) {
-                const trigger = page.getByRole('button', { name: '菜单', exact: true });
+                const trigger = page.getByRole('button', {
+                    name: /^打开(个人侧栏|导航菜单)$/,
+                    exact: true,
+                });
                 let link;
                 if (await trigger.isVisible()) {
                     await trigger.focus();
                     await page.keyboard.press('Enter');
                     await expect(trigger).toHaveAttribute('aria-expanded', 'true');
-                    link = page
-                        .getByRole('navigation', { name: '工作台菜单', exact: true })
-                        .getByRole('link', { name, exact: true });
+                    link =
+                        name === '账号'
+                            ? page
+                                  .getByRole('dialog', { name: '工作台侧边栏' })
+                                  .getByRole('link', { name: '打开账号页面', exact: true })
+                            : page
+                                  .getByRole('navigation', { name: '工作台菜单', exact: true })
+                                  .getByRole('link', { name, exact: true });
                 } else if (['账号', '外观'].includes(name)) {
                     await openAccountMenu(page);
                     link = page
@@ -61,7 +69,7 @@ for (const width of [1440, 1024, 768, 390, 360, 320]) {
 test('Esc、同页选择和宽度切换保持可见焦点并清理菜单状态', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/tasks');
-    const trigger = page.getByRole('button', { name: '菜单', exact: true });
+    const trigger = page.getByRole('button', { name: /^打开(个人侧栏|导航菜单)$/, exact: true });
     const tasks = page
         .getByRole('navigation', { name: '工作台菜单' })
         .getByRole('link', { name: '任务', exact: true });

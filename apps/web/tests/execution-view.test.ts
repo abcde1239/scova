@@ -352,9 +352,11 @@ describe('Run detail facts and isolation', () => {
         await vi.waitFor(() => expect(execution.subscription.value?.state.value).toBe('open'));
         controller.enqueue(frame(event(1)));
         await vi.waitFor(() => expect(execution.tools.value).toHaveLength(1));
+        expect(execution.log.value.entries).toHaveLength(1);
         id.value = otherId;
         await vi.waitFor(() => expect(cancel).toHaveBeenCalledTimes(1));
         expect(execution.tools.value).toHaveLength(0);
+        expect(execution.log.value.entries).toHaveLength(0);
         await vi.waitFor(() => expect(release).toBeTypeOf('function'));
         lifecycle.replaceSession(null);
         scope.stop();

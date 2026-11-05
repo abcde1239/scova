@@ -6,7 +6,7 @@
 
 缩略图采用约 9.375rem、3:2；容器变窄后约 5.5rem 方形、极窄约 4.5rem，并允许图文上下重排。报告使用 `variant="report"`，按原比例 contain 显示完整图例与比例尺。尺寸为弹性单位，保留浏览器默认根字号，文字放大可重排。
 
-受控样例只在 `vp run web#build:e2e` 的 test 模式提供 `/__examples/source-images`；普通生产构建不登记该路由，也不包含其素材。素材为仓库自制 SVG 几何概念图，图中与图注均明确标记，不是真实地图、来源图片或研究结果。SVG viewBox 数值是绘图坐标，不是布局像素尺寸。
+受控样例只在 `vp run build:e2e` 的 test 模式提供 `/__examples/source-images`；普通生产构建不登记该路由，也不包含其素材。素材为仓库自制 SVG 几何概念图，图中与图注均明确标记，不是真实地图、来源图片或研究结果。SVG viewBox 数值是绘图坐标，不是布局像素尺寸。
 
 执行 `vp run test:e2e tests/e2e/source-images.spec.ts` 检查六个视口、200% 文字、失败/无图列回收、文字动作及报告原比例。截图保存在 `artifacts/e2e/results`。单元输入检查运行 `vp test apps/web/tests/source-image.test.ts`。
 

@@ -14,7 +14,7 @@ export function useNaturalLanguageDraft(
     options: { timeout?: number } = {},
 ) {
     const command = useCommand();
-    const timezone = ref('');
+    const timezone = ref(task.draft.timezone);
     const result = shallowRef<TaskDraftResponse>();
     const message = ref('');
     const inputError = ref('');
@@ -64,7 +64,7 @@ export function useNaturalLanguageDraft(
         () => lifecycle.session.epoch,
         () => {
             clear();
-            timezone.value = '';
+            timezone.value = lifecycle.session.user?.preferences.defaultTimezone ?? 'Asia/Shanghai';
         },
         { flush: 'sync' },
     );
@@ -94,7 +94,7 @@ export function useNaturalLanguageDraft(
                 result.value = response.data;
                 message.value = stale.value
                     ? '解析期间原文或表单已变化，当前配置未改动。请重新解析或继续手工填写。'
-                    : '草稿尚未应用、保存或执行，请查看警告后选择是否应用。';
+                    : '请检查建议配置，再应用到下方表单。';
             } catch (cause) {
                 if (current !== generation || signal.aborted || !scope.isCurrent()) return;
                 const error = toApiError(cause);
@@ -103,17 +103,21 @@ export function useNaturalLanguageDraft(
                     cause instanceof ContractValidationError
                         ? cause.fieldErrors
                         : error.fieldErrors;
-                inputError.value =
-                    fields?.find(
-                        (field) => field.path === '/inputText' || field.path === '/body/inputText',
-                    )?.message ?? '';
-                timezoneError.value =
-                    fields?.find(
-                        (field) => field.path === '/timezone' || field.path === '/body/timezone',
-                    )?.message ?? '';
+                inputError.value = fields?.find(
+                    (field) => field.path === '/inputText' || field.path === '/body/inputText',
+                )
+                    ? !task.inputText.value.trim()
+                        ? '请先描述你想研究的内容。'
+                        : '需求描述最多输入 2000 字，请精简后再试。'
+                    : '';
+                timezoneError.value = fields?.find(
+                    (field) => field.path === '/timezone' || field.path === '/body/timezone',
+                )
+                    ? '请从列表中选择有效时区。'
+                    : '';
                 message.value =
                     inputError.value || timezoneError.value
-                        ? '请检查原始描述或解析时区；手工表单仍可填写。'
+                        ? '请检查需求描述和时区，也可以直接手动填写。'
                         : error.status === 429
                           ? '解析过于频繁，请稍后再试，或直接手工填写。原文已保留。'
                           : error.kind === 'timeout' || error.status === 408
@@ -126,7 +130,7 @@ export function useNaturalLanguageDraft(
         if (!canApply.value || !result.value || !task.applyParsed(result.value.config))
             return false;
         applied.value = true;
-        message.value = '已应用到可编辑表单；请检查全部配置，再确认保存。尚未创建任务或执行。';
+        message.value = '已应用到下方表单，请检查后保存任务。';
         return true;
     }
     function cancel() {

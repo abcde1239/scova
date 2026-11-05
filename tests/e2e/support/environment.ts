@@ -132,7 +132,7 @@ export class BrowserEnvironment {
         ).task;
     }
 
-    async execute(owner: Owner, taskId: string, mode: 'demo' | 'live') {
+    async execute(owner: Owner, taskId: string, mode: 'live') {
         const created = await this.request<{ run: Run }>(owner, `/api/v1/tasks/${taskId}/runs`, {
             method: 'POST',
             body: { mode },

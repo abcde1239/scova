@@ -26,6 +26,7 @@ import {
 import { appendEvent, withRunFence } from '@/repo/runs.ts';
 import type { RunLeaseToken } from '@/utils/runs.ts';
 import { loadBaseline } from '@/repo/comparison.ts';
+import { toolFailures, type ToolFailureCode } from '@/utils/tool-failure.ts';
 import type { AgentBaseline } from '@scova/agent-core';
 
 export type AgentTool = 'search' | 'read' | 'model';
@@ -68,7 +69,11 @@ export interface AgentRepository {
         output: unknown;
         actualUsage?: Usage;
     }): Promise<{ usage: Usage }>;
-    fail(input: { toolCallId: string; unknown?: boolean }): Promise<void>;
+    fail(input: {
+        toolCallId: string;
+        unknown?: boolean;
+        failureCode?: ToolFailureCode;
+    }): Promise<void>;
     markInterruptedUnknown(): Promise<number>;
     usage(): Promise<Usage>;
     readAuthorizedCheckpoint(): Promise<AgentCheckpointRef | null>;
@@ -402,6 +407,10 @@ export function createAgentRepository(db: DatabaseClient, token: RunLeaseToken):
         },
         fail(input) {
             return fence(async (tx, run, now) => {
+                const failure =
+                    input.failureCode && Object.hasOwn(toolFailures, input.failureCode)
+                        ? toolFailures[input.failureCode]
+                        : undefined;
                 const call = await callForSettlement(tx, input.toolCallId);
                 if (call.status !== 'reserved' && call.status !== 'running') return;
                 if (!Object.hasOwn(TOOL_SUMMARIES, call.tool))
@@ -420,12 +429,17 @@ export function createAgentRepository(db: DatabaseClient, token: RunLeaseToken):
                     payload: {
                         toolCallId: call.id,
                         tool: call.tool as AgentTool,
-                        code: input.unknown === false ? 'TOOL_FAILED' : 'TOOL_RESULT_UNKNOWN',
-                        message:
-                            input.unknown === false
-                                ? '工具调用失败，预留预算保留'
-                                : '工具结果未确认，预留预算保留',
-                        retryable: true,
+                        code: failure
+                            ? input.failureCode!
+                            : input.unknown === false
+                              ? 'TOOL_FAILED'
+                              : 'TOOL_RESULT_UNKNOWN',
+                        message: failure
+                            ? failure[0]
+                            : input.unknown === false
+                              ? '工具调用失败，预留预算保留'
+                              : '工具结果未确认，预留预算保留',
+                        retryable: failure ? failure[1] : true,
                     },
                 });
             });

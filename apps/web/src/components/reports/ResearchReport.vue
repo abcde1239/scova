@@ -1,61 +1,63 @@
 <template>
     <article ref="root" class="research-report" aria-labelledby="report-title">
-        <nav class="report-directory scova-interface" aria-label="报告目录">
-            <h2>报告目录</h2>
-            <ol>
-                <li>
-                    <n-button
-                        tag="a"
-                        quaternary
-                        type="primary"
-                        v-bind="{ href: '#summary-title' }"
-                        @click="jump($event, 'summary-title')"
-                        >报告概述</n-button
-                    >
-                </li>
-                <li>
-                    <n-button
-                        tag="a"
-                        quaternary
-                        type="primary"
-                        v-bind="{ href: '#coverage-title' }"
-                        @click="jump($event, 'coverage-title')"
-                        >查阅范围与限制</n-button
-                    >
-                </li>
-                <li>
-                    <n-button
-                        tag="a"
-                        quaternary
-                        type="primary"
-                        v-bind="{ href: '#report-changes-title' }"
-                        @click="jump($event, 'report-changes-title')"
-                        >变化与基线</n-button
-                    >
-                </li>
-                <li v-for="section in sections" :key="section.kind">
-                    <n-button
-                        tag="a"
-                        quaternary
-                        type="primary"
-                        v-bind="{ href: `#claims-${section.kind}` }"
-                        @click="jump($event, `claims-${section.kind}`)"
-                        >{{ section.title }}</n-button
-                    >
-                </li>
-                <li>
-                    <n-button
-                        tag="a"
-                        quaternary
-                        type="primary"
-                        v-bind="{ href: '#saved-evidence-title' }"
-                        @click="jump($event, 'saved-evidence-title')"
-                        >来源与保存引用</n-button
-                    >
-                </li>
-            </ol>
-        </nav>
         <report-frame :report="report" summary-title="报告概述">
+            <template #after-summary>
+                <nav class="report-directory scova-interface" aria-label="报告目录">
+                    <h2>报告目录</h2>
+                    <ol>
+                        <li>
+                            <n-button
+                                tag="a"
+                                quaternary
+                                type="primary"
+                                v-bind="{ href: '#summary-title' }"
+                                @click="jump($event, 'summary-title')"
+                                >报告概述</n-button
+                            >
+                        </li>
+                        <li>
+                            <n-button
+                                tag="a"
+                                quaternary
+                                type="primary"
+                                v-bind="{ href: '#coverage-title' }"
+                                @click="jump($event, 'coverage-title')"
+                                >查阅范围与限制</n-button
+                            >
+                        </li>
+                        <li>
+                            <n-button
+                                tag="a"
+                                quaternary
+                                type="primary"
+                                v-bind="{ href: '#report-changes-title' }"
+                                @click="jump($event, 'report-changes-title')"
+                                >变化与基线</n-button
+                            >
+                        </li>
+                        <li v-for="section in sections" :key="section.kind">
+                            <n-button
+                                tag="a"
+                                quaternary
+                                type="primary"
+                                v-bind="{ href: `#claims-${section.kind}` }"
+                                @click="jump($event, `claims-${section.kind}`)"
+                                >{{ section.title }}</n-button
+                            >
+                        </li>
+                        <li>
+                            <n-button
+                                tag="a"
+                                quaternary
+                                type="primary"
+                                v-bind="{ href: '#saved-evidence-title' }"
+                                @click="jump($event, 'saved-evidence-title')"
+                                >来源与保存引用</n-button
+                            >
+                        </li>
+                    </ol>
+                </nav>
+            </template>
             <report-changes :report="report" />
             <section
                 v-for="section in sections"
@@ -90,6 +92,7 @@ const props = defineProps<{ report: Report }>();
 const sections = computed(() => reportSections(props.report));
 const root = ref<HTMLElement>();
 function jump(event: MouseEvent, id: string) {
+    if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
     const target = root.value?.querySelector<HTMLElement>(`#${CSS.escape(id)}`);
     if (!target) return;
@@ -126,7 +129,7 @@ onMounted(() => {
     gap: 1rem;
 }
 .report-directory {
-    padding: 1rem 1.25rem;
+    padding: 0.5rem 0;
     border-block: 0.0625rem solid var(--scova-border);
 }
 .report-directory h2 {

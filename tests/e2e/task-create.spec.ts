@@ -1,3 +1,5 @@
+import { chooseOption, chooseTimezone } from './support/select.ts';
+import { fillList } from './support/list-input.ts';
 import { expect, test, type Page } from '@playwright/test';
 import type { taskInput } from '../../apps/web/src/composables/useCreateTask.ts';
 type CreateTaskInput = ReturnType<typeof taskInput>;
@@ -81,6 +83,57 @@ async function noOverflow(page: Page) {
         true,
     );
 }
+for (const width of [1440, 320]) {
+    test(`输出布局示例：四种形式、文字入口、键盘关闭且不修改任务 ${width}`, async ({
+        page,
+    }, info) => {
+        const calls = await samples(page);
+        await page.setViewportSize({ width, height: 1000 });
+        if (width === 320)
+            await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
+        await page.goto('/tasks/new');
+        const output = page.getByRole('combobox', { name: '输出形式', exact: true });
+        const originalOutput = await output.textContent();
+        if (width === 320)
+            await page.evaluate(() => {
+                document.documentElement.style.fontSize = '200%';
+            });
+        const trigger = page.getByRole('button', { name: '查看输出示例', exact: true });
+        await expect(trigger).toHaveClass(/scova-action--text/);
+        await trigger.press('Enter');
+        const dialog = page.getByRole('dialog');
+        await expect(dialog).toContainText('虚构内容');
+        for (const [label, heading] of [
+            ['简报', '主要发现'],
+            ['主题清单', '费用与材料'],
+            ['对比', '与上次查阅对比'],
+            ['研究报告', '事实与分析'],
+        ]) {
+            const choice = dialog.getByRole('button', { name: label, exact: true });
+            await choice.press('Enter');
+            await expect(choice).toHaveAttribute('aria-pressed', 'true');
+            await expect(dialog.getByRole('heading', { name: heading, exact: true })).toBeVisible();
+            await expect(
+                dialog.getByRole('heading', { name: '来源与引用', exact: true }),
+            ).toBeVisible();
+            await noOverflow(page);
+            const sample = dialog.getByRole('article');
+            expect(await sample.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+            expect(await sample.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe(
+                width === 320 ? 'rgb(25, 31, 38)' : 'rgb(255, 255, 255)',
+            );
+            await page.screenshot({
+                path: info.outputPath(`output-${label}-${width}.png`),
+                animations: 'disabled',
+            });
+        }
+        await page.keyboard.press('Escape');
+        await expect(dialog).not.toBeVisible();
+        await expect(trigger).toBeFocused();
+        await expect(output).toHaveText(originalOutput ?? '');
+        expect(calls.filter((call) => call.method !== 'GET')).toHaveLength(0);
+    });
+}
 for (const width of [320, 390, 768, 1024, 1440, 1920]) {
     test(`本地手工任务样本${width}：完整配置、200%文字、确认保存不运行`, async ({
         page,
@@ -95,26 +148,22 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         await expect(page).toHaveURL(/\/tasks\/new$/);
         await fillMain(page);
         await page.getByText('关注范围与来源偏好', { exact: true }).click();
-        await page.getByLabel('重点关注（可选）', { exact: true }).fill('资格\n费用');
-        await page.getByLabel('排除主题或条件（可选）', { exact: true }).fill('商业广告');
-        await page
-            .getByLabel('优先来源网址（可选）', { exact: true })
-            .fill('https://example.test/admission');
-        await page
-            .getByLabel('排除来源网址（可选）', { exact: true })
-            .fill('https://example.test/ads');
+        await fillList(page, '重点关注（可选）', ['资格', '费用']);
+        await fillList(page, '排除主题或条件（可选）', ['商业广告']);
+        await fillList(page, '优先来源网址（可选）', ['https://example.test/admission']);
+        await fillList(page, '排除来源网址（可选）', ['https://example.test/ads']);
         await page.getByLabel('仅查阅官方来源', { exact: true }).check();
-        await page.getByLabel('输出形式', { exact: true }).selectOption('comparison');
+        await chooseOption(page, '输出形式', '对比表');
         await page.getByLabel('搜索次数上限', { exact: true }).fill('3');
         await page.getByLabel('网页读取次数上限', { exact: true }).fill('4');
         await page.getByLabel('执行时长上限（秒）', { exact: true }).fill('60');
-        await page.getByLabel('输入 token 上限', { exact: true }).fill('1000');
-        await page.getByLabel('输出 token 上限', { exact: true }).fill('500');
-        await page.getByLabel('任务时区（IANA）', { exact: true }).fill('Asia/Shanghai');
-        await page.getByLabel('结果提醒', { exact: true }).selectOption('important_change');
+        await page.getByLabel('累计输入 token 上限', { exact: true }).fill('1000');
+        await page.getByLabel('累计输出 token 上限', { exact: true }).fill('500');
+        await chooseTimezone(page, 'Asia/Shanghai', '任务时区');
+        await chooseOption(page, '结果提醒', '仅重要变化');
         await page.getByLabel('提醒失败或不完整执行', { exact: true }).uncheck();
         await noOverflow(page);
-        await page.getByLabel('查阅时间范围', { exact: true }).selectOption('fixed');
+        await chooseOption(page, '查阅时间范围', '固定范围');
         await page.getByLabel('开始时间', { exact: true }).fill('2026-10-01T09:00');
         await page.getByLabel('结束时间', { exact: true }).fill('2026-10-30T17:00');
         for (const doubled of [false, true]) {
@@ -188,6 +237,34 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
     });
 }
 
+test('列表逐项新增删除与键盘操作，不拆分项内内容', async ({ page }) => {
+    const calls = await samples(page);
+    await page.goto('/tasks/new');
+    await fillMain(page);
+    await page.getByText('关注范围与来源偏好', { exact: true }).click();
+    await fillList(page, '重点关注（可选）', ['关键词，资格\n费用', '保留这项']);
+    const group = page.getByRole('region', { name: '重点关注（可选）', exact: true });
+    await group.getByRole('textbox').first().press('Enter');
+    await expect(group.getByRole('textbox')).toHaveCount(3);
+    await expect(group.getByRole('textbox').nth(1)).toBeFocused();
+    await group.getByRole('textbox').nth(1).fill('新增项目');
+    await group.getByRole('button', { name: '删除重点关注（可选） 2', exact: true }).click();
+    await expect(group.getByRole('textbox').first()).toHaveValue('关键词，资格\n费用');
+    await expect(group.getByRole('textbox').nth(1)).toHaveValue('保留这项');
+    await expect(group.getByRole('textbox').nth(1)).toBeFocused();
+    await fillList(page, '排除主题或条件（可选）', ['临时项']);
+    const exclusions = page.getByRole('region', { name: '排除主题或条件（可选）', exact: true });
+    await exclusions.getByRole('button', { name: /^删除/ }).click();
+    await expect(
+        exclusions.getByRole('button', { name: '添加排除条件', exact: true }),
+    ).toBeFocused();
+    await page.getByRole('button', { name: '确认保存任务', exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/tasks/${id(11)}$`));
+    const saved = calls.find((call) => call.method === 'POST')!.body!;
+    expect(saved.config.focusPoints).toEqual(['关键词，资格\n费用', '保留这项']);
+    expect(saved.config.exclusions).toEqual([]);
+});
+
 test('字段错误聚焦、来源校验、固定日期与失败保留重试', async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 390, height: 1000 });
     const calls = await samples(page);
@@ -197,13 +274,13 @@ test('字段错误聚焦、来源校验、固定日期与失败保留重试', as
     expect(calls.filter((call) => call.method === 'POST')).toHaveLength(0);
     await fillMain(page);
     await page.getByText('关注范围与来源偏好', { exact: true }).click();
-    await page.getByLabel('优先来源网址（可选）', { exact: true }).fill('ftp://bad.test');
+    await fillList(page, '优先来源网址（可选）', ['ftp://bad.test']);
     await page.getByRole('button', { name: '确认保存任务', exact: true }).click();
-    await expect(page.getByLabel('优先来源网址（可选）', { exact: true })).toBeFocused();
+    await expect(page.getByLabel('优先来源网址（可选） 1', { exact: true })).toBeFocused();
     await noOverflow(page);
     await page.screenshot({ path: testInfo.outputPath('source-error-390.png'), fullPage: true });
-    await page.getByLabel('优先来源网址（可选）', { exact: true }).fill('https://example.test');
-    await page.getByLabel('查阅时间范围', { exact: true }).selectOption('fixed');
+    await fillList(page, '优先来源网址（可选）', ['https://example.test']);
+    await chooseOption(page, '查阅时间范围', '固定范围');
     await page.getByLabel('开始时间', { exact: true }).fill('2026-10-31T08:00');
     await page.getByLabel('结束时间', { exact: true }).fill('2026-10-30T08:00');
     await page.getByRole('button', { name: '确认保存任务', exact: true }).click();

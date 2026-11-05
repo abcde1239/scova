@@ -336,6 +336,9 @@ describe('长期任务、不可变版本与并发编辑', () => {
                 },
             }),
             config({ budget: { ...config().budget, maxSearches: 11 } }),
+            config({ budget: { ...config().budget, maxDurationSeconds: 1801 } }),
+            config({ budget: { ...config().budget, maxInputTokens: 2000001 } }),
+            config({ budget: { ...config().budget, maxOutputTokens: 512001 } }),
         ]) {
             const response = await request('/api/v1/tasks', {
                 method: 'POST',
@@ -351,6 +354,23 @@ describe('长期任务、不可变版本与并发编辑', () => {
         const a = config();
         const b = config({ timezone: 'UTC' });
         expect(comparisonScopeHash(a as TaskConfig)).toBe(comparisonScopeHash(b as TaskConfig));
+    });
+
+    it('接受提高后的累计预算并保留准确快照', async () => {
+        const owner = await register();
+        const budget = {
+            ...config().budget,
+            maxDurationSeconds: 1800,
+            maxInputTokens: 2000000,
+            maxOutputTokens: 512000,
+        };
+        const response = await request('/api/v1/tasks', {
+            method: 'POST',
+            headers: authHeaders(owner),
+            body: JSON.stringify({ config: config({ budget }) }),
+        });
+        expect(response.status).toBe(201);
+        expect((await json(response)).version.config.budget).toEqual(budget);
     });
 
     it('比较范围保留预算调整，关键来源和时间窗口改变则隔离', () => {

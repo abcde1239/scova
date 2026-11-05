@@ -58,7 +58,7 @@ function eventDto(event: StoredRunEvent) {
 
 function commandBody(input: RunCommandInput | undefined) {
     const parsed = parseContract(RunCommandInputSchema, input ?? {});
-    return { mode: parsed.mode ?? 'demo' } as const;
+    return { mode: parsed.mode ?? 'live' } as const;
 }
 
 /** Run 业务规则与事务编排；不包含请求对象、Elysia 或数据库查询。 */
@@ -298,6 +298,12 @@ export function createRunService(services: ApiServices) {
         },
         async followup(userId: string, reportRunId: string, questionId: string, key: string) {
             const parent = await requireRun(userId, reportRunId);
+            if (parent.mode !== 'live')
+                throw new ApiError(
+                    409,
+                    'LEGACY_DEMO_RUN',
+                    '历史演示报告不能创建后续研究，请从任务页启动真实执行',
+                );
             const result = await createRun(
                 parent.taskId,
                 userId,

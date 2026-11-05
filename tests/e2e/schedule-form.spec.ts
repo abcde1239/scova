@@ -1,3 +1,4 @@
+import { chooseOption, chooseTimezone } from './support/select.ts';
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import type { taskInput } from '../../apps/web/src/composables/useCreateTask.ts';
 
@@ -130,7 +131,7 @@ async function samples(context: BrowserContext) {
             return route.fulfill({ json: { items: [detail().task], nextCursor: null } });
         return route.fulfill({
             status: request.method() === 'POST' ? 201 : 200,
-            headers: { etag: `"${state.revision}"` },
+            headers: { etag: `"${state.revision}"`, 'access-control-expose-headers': 'ETag' },
             json: detail(),
         });
     });
@@ -141,7 +142,7 @@ const preview = (page: Page) => fields(page).getByRole('region', { name: '计划
 const saved = (page: Page) =>
     fields(page).getByRole('region', { name: '服务端已保存的计划', exact: true });
 const frequency = (page: Page) => page.getByLabel('计划频率', { exact: true });
-const timezone = (page: Page) => page.getByLabel('任务时区（IANA）', { exact: true });
+const timezone = (page: Page) => page.getByLabel('任务时区', { exact: true });
 const localTime = (page: Page) => page.getByLabel('执行当地时间', { exact: true });
 const weekday = (page: Page) => page.getByLabel('每周执行星期', { exact: true });
 const save = (page: Page) => page.getByRole('button', { name: '确认保存修改', exact: true });
@@ -151,7 +152,7 @@ async function noOverflow(page: Page) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
         true,
     );
-    for (const target of await fields(page).locator('input,select,summary').all()) {
+    for (const target of await fields(page).locator('input,button[aria-haspopup],summary').all()) {
         if (!(await target.isVisible())) continue;
         const box = await target.boundingBox();
         expect(box).not.toBeNull();
@@ -171,15 +172,17 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         await page.setViewportSize({ width, height: 1000 });
         await page.goto(`/tasks/${taskId}/edit`);
         await expect(localTime(page)).toHaveValue('01:30');
-        await expect(weekday(page)).toHaveValue('7');
+        await expect(weekday(page)).toContainText('周日');
         await expect(saved(page)).toContainText('2026-11-01 01:30:00（America/New_York，GMT-4）');
         await expect(saved(page)).toContainText('2026-11-01T05:30:00.000Z');
         await expect(preview(page)).not.toContainText('当前填写内容尚未安排执行');
-        await expect(preview(page)).toContainText('当前填写内容与已保存配置一致');
+        await expect(
+            preview(page).getByText('保存后生效；下次执行时间以已保存计划为准。'),
+        ).toHaveCount(0);
         const kind = [320, 768, 1440].includes(width) ? 'daily' : 'weekly';
-        await frequency(page).selectOption(kind);
-        if (kind === 'weekly') await weekday(page).selectOption('1');
-        await timezone(page).fill('Asia/Tokyo');
+        await chooseOption(page, '计划频率', kind === 'weekly' ? '每周' : '每日');
+        if (kind === 'weekly') await chooseOption(page, '每周执行星期', '周一');
+        await chooseTimezone(page, 'Asia/Tokyo', '任务时区');
         await localTime(page).fill('02:30');
         await expect(localTime(page)).toHaveAttribute('type', 'time');
         await expect(localTime(page)).toBeEditable();
@@ -187,17 +190,17 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
             'auto',
         );
         await expect(preview(page)).toContainText('任务时区 Asia/Tokyo');
-        await expect(saved(page)).toContainText('当前有未保存修改');
+        await expect(saved(page)).toContainText('有未保存修改');
         await expect(saved(page)).not.toContainText('Asia/Tokyo');
         await expect(saved(page)).toContainText('2026-11-01T05:30:00.000Z');
-        await expect(preview(page)).toContainText('默认演示 demo');
-        await expect(preview(page)).toContainText('当前部署模式未知');
-        await fields(page).getByText('夏令时与重复时刻规则', { exact: true }).click();
-        await expect(preview(page)).toContainText('2026-03-08 02:30');
-        await expect(preview(page)).toContainText('2026-03-08 03:00:00');
-        await expect(preview(page)).toContainText('2026-03-08T07:00:00.000Z');
-        await expect(preview(page)).toContainText('2026-11-01T05:30:00.000Z');
-        await expect(preview(page)).toContainText('重复的第二次 01:30 不再执行');
+        await preview(page).getByRole('button', { name: '计划说明' }).click();
+        const dialog = page.getByRole('dialog');
+        await expect(dialog).toContainText('夏令时');
+        await expect(dialog).toContainText('定时执行会调用已配置的搜索与模型');
+        await expect(dialog).toContainText('时刻重复时，只执行第一次');
+        await page.keyboard.press('Escape');
+        await expect(dialog).not.toBeVisible();
+        await expect(preview(page).getByRole('button', { name: '计划说明' })).toBeFocused();
         for (const doubled of [false, true]) {
             if (doubled)
                 await page.evaluate(() => (document.documentElement.style.fontSize = '200%'));
@@ -237,12 +240,16 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         }
         await save(page).focus();
         await save(page).press('Enter');
-        await expect(page.getByRole('status')).toContainText('修改已保存');
-        await expect(page.getByRole('status')).toBeFocused();
+        await expect(page.locator('.task-config-form').getByRole('status')).toContainText(
+            '修改已保存',
+        );
+        await expect(page.locator('.task-config-form').getByRole('status')).toBeFocused();
         await expect(saved(page)).toContainText('Asia/Tokyo');
-        await expect(saved(page)).not.toContainText('当前有未保存修改');
+        await expect(saved(page)).not.toContainText('有未保存修改');
         await expect(preview(page)).not.toContainText('当前填写内容尚未安排执行');
-        await expect(preview(page)).toContainText('当前填写内容与已保存配置一致');
+        await expect(
+            preview(page).getByText('保存后生效；下次执行时间以已保存计划为准。'),
+        ).toHaveCount(0);
         await expect(saved(page).locator('time').first()).toHaveAttribute(
             'datetime',
             state.nextRunAt!,
@@ -272,17 +279,17 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
 test('选每日后明确改为仅手动创建，只保存配置且不启动Run', async ({ page }) => {
     const { calls, state } = await samples(page.context());
     await page.goto('/tasks/new');
-    await expect(frequency(page)).toHaveValue('manual');
+    await expect(frequency(page)).toContainText('仅手动');
     await expect(localTime(page)).toHaveCount(0);
     await expect(weekday(page)).toHaveCount(0);
-    await expect(preview(page)).toContainText('尚未保存任务');
+    await expect(preview(page)).toContainText('保存后生效');
     await page.getByLabel('任务标题', { exact: true }).fill('新周期任务');
     await page.getByLabel('查阅主题', { exact: true }).fill('政策');
     await page.getByLabel('查阅目标', { exact: true }).fill('核验');
-    await frequency(page).selectOption('daily');
+    await chooseOption(page, '计划频率', '每日');
     await localTime(page).fill('09:15');
-    await timezone(page).fill('America/New_York');
-    await frequency(page).selectOption('manual');
+    await chooseTimezone(page, 'America/New_York', '任务时区');
+    await chooseOption(page, '计划频率', '仅手动');
     await expect(localTime(page)).toHaveCount(0);
     await page.getByRole('button', { name: '确认保存任务', exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/tasks/${taskId}$`));
@@ -295,31 +302,32 @@ test('选每日后明确改为仅手动创建，只保存配置且不启动Run',
 test('ISO星期1到7映射，0或8没有选项；切换manual清除周期payload', async ({ page }) => {
     const { calls, state } = await samples(page.context());
     await page.goto(`/tasks/${taskId}/edit`);
-    await expect(weekday(page).locator('option')).toHaveCount(8);
-    const options = await weekday(page)
-        .locator('option')
+    await weekday(page).click();
+    const options = await page
+        .getByRole('option')
         .evaluateAll((elements) =>
-            elements.map((element) => ({
-                value: (element as HTMLOptionElement).value,
-                label: element.textContent,
-            })),
+            elements.map((element) => ({ label: element.textContent?.trim() })),
         );
-    expect(options).toEqual([
-        { value: '', label: '请选择星期' },
-        ...['周一', '周二', '周三', '周四', '周五', '周六', '周日'].map((label, index) => ({
-            value: String(index + 1),
-            label,
-        })),
+    expect(options.map((option) => option.label)).toEqual([
+        '请选择星期',
+        '周一',
+        '周二',
+        '周三',
+        '周四',
+        '周五',
+        '周六',
+        '周日',
     ]);
+    await page.keyboard.press('Escape');
     for (let day = 1; day <= 7; day++) {
-        await weekday(page).selectOption(String(day));
+        await chooseOption(page, '每周执行星期', options[day]!.label!);
         await expect(preview(page)).toContainText(`每${options[day]!.label}`);
     }
-    await frequency(page).selectOption('manual');
+    await chooseOption(page, '计划频率', '仅手动');
     await expect(localTime(page)).toHaveCount(0);
     await expect(weekday(page)).toHaveCount(0);
     await save(page).click();
-    await expect(page.getByRole('status')).toContainText('修改已保存');
+    await expect(page.locator('.task-config-form').getByRole('status')).toContainText('修改已保存');
     expect(state.config).toEqual({ ...original, schedule: { frequency: 'manual' } });
     await expect(saved(page)).toContainText('服务端已保存为仅手动执行');
     await expect(saved(page).locator('time')).toHaveCount(0);
@@ -331,17 +339,17 @@ test('非法IANA、空当地时间与未选星期定位错误，完整配置不�
     await page.setViewportSize({ width: 320, height: 1000 });
     await page.goto(`/tasks/${taskId}/edit`);
     await page.evaluate(() => (document.documentElement.style.fontSize = '200%'));
-    await timezone(page).fill('Mars/Olympus');
-    await save(page).click();
-    await expect(timezone(page)).toHaveAttribute('aria-invalid', 'true');
-    await expect(timezone(page)).toBeFocused();
-    await timezone(page).fill('America/New_York');
+    await timezone(page).click();
+    await page.getByRole('combobox', { name: '搜索任务时区' }).fill('Mars/Olympus');
+    await expect(page.getByRole('option')).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await expect(timezone(page)).toContainText('America/New_York');
     await localTime(page).fill('');
     await save(page).click();
     await expect(localTime(page)).toHaveAttribute('aria-invalid', 'true');
     await expect(localTime(page)).toBeFocused();
     await localTime(page).fill('02:30');
-    await weekday(page).selectOption('');
+    await chooseOption(page, '每周执行星期', '请选择星期');
     await save(page).click();
     await expect(weekday(page)).toHaveAttribute('aria-invalid', 'true');
     await expect(weekday(page)).toBeFocused();
@@ -361,7 +369,7 @@ test('计划冲突保留字段与已保存时区，重新读取后使用新quote
         release = resolve;
     });
     await page.goto(`/tasks/${taskId}/edit`);
-    await timezone(page).fill('Asia/Tokyo');
+    await chooseTimezone(page, 'Asia/Tokyo', '任务时区');
     state.failure = 409;
     await save(page).click();
     await expect(localTime(page)).toBeDisabled();
@@ -372,7 +380,7 @@ test('计划冲突保留字段与已保存时区，重新读取后使用新quote
     expect(patches(calls)).toHaveLength(1);
     release();
     await expect(page.getByRole('alert')).toContainText('当前草稿已保留');
-    await expect(timezone(page)).toHaveValue('Asia/Tokyo');
+    await expect(timezone(page)).toContainText('Asia/Tokyo');
     await expect(saved(page)).toContainText('America/New_York');
     await expect(saved(page)).not.toContainText('Asia/Tokyo');
     await expect(save(page)).toBeDisabled();
@@ -386,11 +394,11 @@ test('计划冲突保留字段与已保存时区，重新读取后使用新quote
     };
     await page.getByRole('button', { name: '重新读取最新版本', exact: true }).click();
     await page.getByRole('button', { name: '确认丢弃草稿并重新读取', exact: true }).click();
-    await expect(timezone(page)).toHaveValue('UTC');
+    await expect(timezone(page)).toContainText('UTC');
     await expect(localTime(page)).toHaveValue('10:00');
     await localTime(page).fill('10:15');
     await save(page).click();
-    await expect(page.getByRole('status')).toContainText('修改已保存');
+    await expect(page.locator('.task-config-form').getByRole('status')).toContainText('修改已保存');
     expect(patches(calls).map((call) => call.etag)).toEqual(['"1"', '"8"']);
     expect(patches(calls)[1]!.body?.config).toEqual({
         ...state.config,

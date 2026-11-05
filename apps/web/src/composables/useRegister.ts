@@ -16,8 +16,8 @@ export function createRegisterController(lifecycle: SessionLifecycle) {
     let disposed = false;
     const labels: Record<RegisterField, string> = {
         email: '请输入有效邮箱地址',
-        password: '密码须为12至128个字符',
-        defaultTimezone: '请输入有效的IANA时区，例如Asia/Shanghai',
+        password: '密码至少需要 8 位',
+        defaultTimezone: '请选择有效的时区',
     };
     async function submit(input: RegisterInput) {
         if (disposed || command.pending.value || closed.value) return 'ignored';
@@ -36,7 +36,10 @@ export function createRegisterController(lifecycle: SessionLifecycle) {
                 for (const detail of error.fieldErrors ?? []) {
                     const field = detail.path.replace(/^\/(body\/)?/, '');
                     if (field === 'email' || field === 'password' || field === 'defaultTimezone')
-                        fields.value[field] = labels[field];
+                        fields.value[field] =
+                            field === 'password' && Array.from(input.password).length > 128
+                                ? '密码最多支持 128 位'
+                                : labels[field];
                 }
                 if (error.status === 409) fields.value.email = '该邮箱已注册，请返回登录';
                 firstField.value = (['email', 'password', 'defaultTimezone'] as const).find(
@@ -46,7 +49,7 @@ export function createRegisterController(lifecycle: SessionLifecycle) {
                 message.value = closed.value
                     ? '当前部署已关闭注册，请返回登录'
                     : firstField.value
-                      ? '请检查标出的字段'
+                      ? ''
                       : error.status === 429
                         ? '注册尝试过于频繁，请稍后重试'
                         : error.kind === 'network'

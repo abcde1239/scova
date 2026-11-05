@@ -409,7 +409,7 @@ for (const side of ['old', 'new']) {
         await page.goBack();
         await expect(page).toHaveURL(new RegExp(`${path}$`));
         await expect(
-            page.locator('.report-detail > .state-panel').getByRole('status'),
+            page.locator('.report-content > .state-panel').getByRole('status'),
         ).toContainText('报告证据校验未通过');
         await expect(page.locator('article.report-brief, .report-changes, blockquote')).toHaveCount(
             0,

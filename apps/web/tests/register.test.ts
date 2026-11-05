@@ -28,7 +28,7 @@ function setup(fetcher: typeof fetch = async () => Response.json(account, { stat
 afterEach(() => active.splice(0).forEach((lifecycle) => lifecycle.dispose()));
 
 describe('registration', () => {
-    it.each([12, 128])(
+    it.each([8, 128])(
         'accepts password boundary %s and installs one cookie-backed session',
         async (length) => {
             const fetcher = vi
@@ -39,7 +39,7 @@ describe('registration', () => {
                 'success',
             );
             expect(fetcher.mock.calls[0]![0]).toBe('/api/v1/auth/register');
-            expect(fetcher.mock.calls[0]![1]?.credentials).toBe('same-origin');
+            expect(fetcher.mock.calls[0]![1]?.credentials).toBe('include');
             expect(lifecycle.session.user?.id).toBe(account.user.id);
             expect(JSON.stringify(lifecycle.pinia.state.value)).not.toContain(account.csrfToken);
             expect(JSON.stringify(lifecycle.pinia.state.value)).not.toContain('password');
@@ -47,7 +47,7 @@ describe('registration', () => {
     );
     it.each([
         [{ ...input, email: 'bad' }, 'email'],
-        [{ ...input, password: 'a'.repeat(11) }, 'password'],
+        [{ ...input, password: 'a'.repeat(7) }, 'password'],
         [{ ...input, password: 'a'.repeat(129) }, 'password'],
         [{ ...input, defaultTimezone: 'Not/AZone' }, 'defaultTimezone'],
     ] as const)('validates before requesting %s', async (value, field) => {

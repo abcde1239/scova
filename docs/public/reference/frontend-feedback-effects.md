@@ -25,7 +25,7 @@
 ```sh
 vp test apps/web/tests/feedback-effects.test.ts apps/web/tests/feedback.test.ts apps/web/tests/report-view.test.ts
 vp check
-vp run web#build
+vp run build:frontend
 vp run test:e2e tests/e2e/feedback-effects.spec.ts
 ```
 

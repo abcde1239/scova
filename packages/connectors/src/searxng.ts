@@ -293,7 +293,7 @@ export function createSearxngSearch(
             if (truncated) gaps.push('搜索结果已按调用上限截断');
             if (!results.length && gaps.length)
                 throw new ConnectorError(
-                    'invalid_response',
+                    unresponsiveEngines.length ? 'search_unavailable' : 'invalid_response',
                     '搜索没有可用来源，存在引擎失败或无效条目',
                 );
             const totalResults =

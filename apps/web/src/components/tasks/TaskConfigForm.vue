@@ -112,16 +112,20 @@
                 :error="task.fields.value.outputFormat"
                 :disabled="locked"
             />
+            <output-examples />
         </fieldset>
         <details ref="sources">
             <summary>关注范围与来源偏好</summary>
             <div class="field-group">
-                <task-config-field
+                <list-input
                     v-for="field in sourceFields"
                     :key="field.key"
                     v-model="task.draft[field.key]"
                     :label="field.label"
-                    kind="textarea"
+                    :url="field.url"
+                    :hint="field.hint"
+                    :placeholder="field.placeholder"
+                    :add-label="field.addLabel"
                     :error="task.fields.value[field.key]"
                     :disabled="locked"
                 />
@@ -132,7 +136,7 @@
                     :error="task.fields.value.officialOnly"
                     :disabled="locked"
                 />
-                <p>网址和条目每行一项；来源偏好不代表安全审核或官方身份认证。</p>
+                <p>每项可单独修改或删除；来源偏好不代表安全审核或官方身份认证。</p>
             </div>
         </details>
         <details ref="budget" open>
@@ -148,7 +152,14 @@
                     :disabled="locked"
                 />
             </div>
-            <p>预算包含重试；填写正整数，服务端另有部署上限。</p>
+            <p>
+                预算按整次执行累计，包含规划、比较、综合和重试。时长最多{{
+                    DEFAULT_TASK_BUDGET_LIMITS.maxDurationSeconds
+                }}秒，输入最多{{ DEFAULT_TASK_BUDGET_LIMITS.maxInputTokens }}、输出最多{{
+                    DEFAULT_TASK_BUDGET_LIMITS.maxOutputTokens
+                }}
+                token。累计输出额度不等于简报篇幅；实际调用还受所选模型支持的上下文和输出上限约束。
+            </p>
         </details>
         <schedule-fields
             v-model:frequency="task.draft.scheduleFrequency"
@@ -219,7 +230,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import { onBeforeRouteLeave, onBeforeRouteUpdate, RouterLink } from 'vue-router';
-import type { TaskDetailResponse } from '@scova/models';
+import { DEFAULT_TASK_BUDGET_LIMITS, type TaskDetailResponse } from '@scova/models';
 import {
     createTaskController,
     editTaskController,
@@ -228,8 +239,12 @@ import {
 } from '@/composables/useCreateTask';
 import { useSessionLifecycle } from '@/composables/useSessionQuery';
 import TaskConfigField from '@/components/tasks/TaskConfigField.vue';
+import ListInput from '@/components/common/ListInput.vue';
 import ActionButton from '@/components/common/ActionButton.vue';
 import ScheduleFields from '@/components/tasks/ScheduleFields.vue';
+import OutputExamples from '@/components/tasks/OutputExamples.vue';
+import { useActionNotification } from '@/composables/useActionNotification';
+const notice = useActionNotification();
 import type { ApiResponse } from '@/api/client';
 const props = defineProps<{ initialResponse?: ApiResponse<TaskDetailResponse> }>();
 import NaturalLanguageDraft from '@/components/tasks/NaturalLanguageDraft.vue';
@@ -276,10 +291,38 @@ const mainFields = [
     { key: 'goal', label: '查阅目标', kind: 'textarea' },
 ] as const;
 const sourceFields = [
-    { key: 'focusPoints', label: '重点关注（可选）' },
-    { key: 'exclusions', label: '排除主题或条件（可选）' },
-    { key: 'preferredUrls', label: '优先来源网址（可选）' },
-    { key: 'excludedUrls', label: '排除来源网址（可选）' },
+    {
+        key: 'focusPoints',
+        label: '重点关注（可选）',
+        url: false,
+        hint: '添加关键词、问题或需要持续关注的内容。Enter 新增，Shift+Enter 换行。',
+        placeholder: '例如：费用变化、申请资格',
+        addLabel: '添加关注点',
+    },
+    {
+        key: 'exclusions',
+        label: '排除主题或条件（可选）',
+        url: false,
+        hint: '列出不需要纳入研究的内容。',
+        placeholder: '例如：商业广告、重复转载',
+        addLabel: '添加排除条件',
+    },
+    {
+        key: 'preferredUrls',
+        label: '优先来源网址（可选）',
+        url: true,
+        hint: '优先查看的官网或具体页面，一项一个链接。',
+        placeholder: 'https://example.com',
+        addLabel: '添加优先链接',
+    },
+    {
+        key: 'excludedUrls',
+        label: '排除来源网址（可选）',
+        url: true,
+        hint: '不希望查阅的网页，一项一个链接。',
+        placeholder: 'https://example.com',
+        addLabel: '添加排除链接',
+    },
 ] as const;
 const ranges = [
     { value: 'rolling', label: '滚动范围' },
@@ -304,6 +347,7 @@ async function focusConfiguration() {
 async function save() {
     const result = await task.submit();
     if (result) {
+        notice.success(editor ? '任务修改已保存' : '任务已创建', '保存不会开始执行研究。');
         emit('saved', result);
         if (editor) {
             await nextTick();
@@ -311,6 +355,10 @@ async function save() {
         }
     } else if (task.message.value) {
         const invalid = Object.keys(task.fields.value) as TaskDraftField[];
+        if (!invalid.length && !task.expired.value) {
+            if (task.uncertain.value) notice.warning('保存结果未确认', task.message.value);
+            else notice.error('任务未保存', task.message.value);
+        }
         if (invalid.some((key) => sourceFields.some((field) => field.key === key)) && sources.value)
             sources.value.open = true;
         if (invalid.some((key) => budgetFields.some((field) => field.key === key)) && budget.value)

@@ -24,7 +24,7 @@ test('补充入口六宽/文字放大、四主题浅暗与四报告形式（真�
     const owner = await environment.owner();
     const page = owner.page;
     const demoTask = await environment.task(owner);
-    const demo = await environment.execute(owner, demoTask.id, 'demo');
+    const demo = await environment.execute(owner, demoTask.id, 'live');
     const prepared = await environment.prepareDisplay(owner, 'english');
     const report = prepared.rounds[1].report;
     const errors: string[] = [];
@@ -159,7 +159,7 @@ test('补充入口六宽/文字放大、四主题浅暗与四报告形式（真�
                                     (width === 320 && scale === 200))
                             )
                                 await info.attach(
-                                    `${scheme}-${width}-${scale}-${saved.id === report.id ? 'live' : 'demo'}-${format}`,
+                                    `${scheme}-${width}-${scale}-${saved.id === report.id ? 'comparison' : 'initial'}-${format}`,
                                     {
                                         body: await page.screenshot({ fullPage: true }),
                                         contentType: 'image/png',
@@ -343,7 +343,7 @@ test('补充入口六宽/文字放大、四主题浅暗与四报告形式（真�
         body: JSON.stringify({
             browser: browser.version(),
             remoteResearch: false,
-            provenance: 'executed-supplier-fixture-and-demo',
+            provenance: 'executed-supplier-fixture',
             screenReaderVerified: false,
             browserZoomVerified: false,
             realDeviceVerified: false,

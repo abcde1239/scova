@@ -14,25 +14,22 @@
         </div>
         <div class="field">
             <label :for="`${id}-timezone`">默认时区</label>
-            <n-input
+            <app-select
                 ref="timezoneInput"
-                v-model:value="draft.defaultTimezone"
-                placeholder=""
-                :readonly="pending"
-                :input-props="{
-                    id: `${id}-timezone`,
-                    list: `${id}-timezones`,
-                    autocomplete: 'off',
-                    'aria-invalid': fields.defaultTimezone ? 'true' : undefined,
-                    'aria-describedby': fields.defaultTimezone
-                        ? `${id}-timezone-error`
-                        : `${id}-timezone-help`,
-                }"
+                v-model="draft.defaultTimezone"
+                :id="`${id}-timezone`"
+                label="默认时区"
+                :options="timezones"
+                icon="timezone"
+                searchable
+                search-placeholder="搜索城市或时区"
+                :disabled="pending"
+                :invalid="!!fields.defaultTimezone"
+                :describedby="
+                    fields.defaultTimezone ? `${id}-timezone-error` : `${id}-timezone-help`
+                "
             />
-            <datalist :id="`${id}-timezones`">
-                <option v-for="zone in timezones" :key="zone" :value="zone" />
-            </datalist>
-            <p :id="`${id}-timezone-help`" class="help">使用 IANA 时区，例如 Asia/Shanghai。</p>
+            <p :id="`${id}-timezone-help`" class="help">搜索城市或时区，选择你所在的地区。</p>
             <p v-if="fields.defaultTimezone" :id="`${id}-timezone-error`" class="field-error">
                 {{ fields.defaultTimezone }}
             </p>
@@ -41,18 +38,16 @@
             <legend>默认提醒</legend>
             <div class="field">
                 <label :for="`${id}-mode`">结果提醒</label>
-                <select
+                <app-select
                     ref="modeInput"
                     :id="`${id}-mode`"
-                    v-model="draft.notificationPreference.mode"
+                    v-model="notificationMode"
                     :disabled="pending"
-                    :aria-invalid="fields.mode ? 'true' : undefined"
-                    :aria-describedby="fields.mode ? `${id}-mode-error` : undefined"
-                >
-                    <option value="summary">每次汇总</option>
-                    <option value="important_change">仅重要变化</option>
-                    <option value="off">关闭结果提醒</option>
-                </select>
+                    label="结果提醒"
+                    :options="notificationOptions"
+                    :invalid="!!fields.mode"
+                    :describedby="fields.mode ? `${id}-mode-error` : undefined"
+                />
                 <p v-if="fields.mode" :id="`${id}-mode-error`" class="field-error">
                     {{ fields.mode }}
                 </p>
@@ -89,30 +84,44 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, ref, useId } from 'vue';
-import { NInput } from 'naive-ui';
-import type { InputInst } from 'naive-ui';
+import { computed, nextTick, ref, useId } from 'vue';
+import AppSelect from '@/components/common/AppSelect.vue';
 import ActionButton from '@/components/common/ActionButton.vue';
 import { usePreferences } from '@/composables/usePreferences';
+import { useActionNotification } from '@/composables/useActionNotification';
+import { timezoneOptions } from '@/utils/timezones';
 
 const id = useId();
 const { form, query } = usePreferences();
+const notice = useActionNotification();
 const { draft, fields, message, saved, pending, dirty } = form;
-const timezones = [
-    'UTC',
-    'Asia/Shanghai',
-    'Asia/Hong_Kong',
-    'Asia/Tokyo',
-    'Europe/London',
-    'America/New_York',
-];
-const timezoneInput = ref<InputInst>();
-const modeInput = ref<HTMLSelectElement>();
+const timezones = computed(() => timezoneOptions(draft.value.defaultTimezone));
+const notificationMode = computed({
+    get: () => draft.value.notificationPreference.mode,
+    set: (value: string) => {
+        if (value === 'summary' || value === 'important_change' || value === 'off')
+            draft.value.notificationPreference.mode = value;
+    },
+});
+const notificationOptions = [
+    { value: 'summary', label: '每次汇总', description: '每次研究完成后提醒', icon: 'inbox' },
+    {
+        value: 'important_change',
+        label: '仅重要变化',
+        description: '只在发现重要变化时提醒',
+        icon: 'notifications',
+    },
+    { value: 'off', label: '关闭结果提醒', description: '仍可在收件箱中查看报告', icon: 'pause' },
+] as const;
+const timezoneInput = ref<InstanceType<typeof AppSelect>>();
+const modeInput = ref<InstanceType<typeof AppSelect>>();
 const issuesInput = ref<HTMLInputElement>();
 const errorMessage = ref<HTMLParagraphElement>();
 async function submit() {
     if (!query.isSuccess.value) return;
     const outcome = await form.submit();
+    if (outcome === 'success') notice.success('默认偏好已保存');
+    else if (outcome === 'error') notice.error('默认偏好未保存', message.value);
     if (outcome === 'invalid' || outcome === 'error') {
         await nextTick();
         if (form.firstField.value === 'defaultTimezone') timezoneInput.value?.focus();
@@ -133,7 +142,7 @@ async function submit() {
 }
 .preferences-form {
     gap: 1.5rem;
-    inline-size: min(100%, 32rem);
+    inline-size: 100%;
 }
 .field {
     gap: 0.5rem;
@@ -160,29 +169,6 @@ legend {
     padding: 0;
     font-weight: 600;
 }
-.preferences-form :deep(.n-input) {
-    --n-font-size: 1rem !important;
-    min-block-size: 2.75rem;
-    border-radius: 0.375rem;
-}
-.preferences-form :deep(input) {
-    min-inline-size: 0;
-    font-size: 1rem;
-    cursor: text;
-}
-select {
-    inline-size: 100%;
-    min-inline-size: 0;
-    max-inline-size: 100%;
-    min-block-size: 2.75rem;
-    padding: 0.625rem 0.75rem;
-    border: 0.0625rem solid var(--scova-border);
-    border-radius: 0.375rem;
-    color: var(--scova-text);
-    background: var(--scova-surface);
-    font: inherit;
-    cursor: pointer;
-}
 .checkbox-field {
     display: flex;
     align-items: center;
@@ -198,12 +184,10 @@ select {
     accent-color: var(--scova-primary);
     cursor: pointer;
 }
-select:disabled,
 .checkbox-field:has(:disabled),
 .checkbox-field input:disabled {
     cursor: not-allowed;
 }
-select:focus-visible,
 .checkbox-field input:focus-visible,
 .field-error:focus-visible {
     outline: 0.125rem solid var(--scova-primary);

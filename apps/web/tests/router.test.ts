@@ -11,6 +11,7 @@ describe('工作台路由契约', () => {
         ['/library', 'library', '资料库'],
         ['/notifications', 'notifications', '通知'],
         ['/account', 'account', '账号'],
+        ['/account/agent', 'account', 'Agent 配置'],
         ['/account/appearance', 'account', '外观'],
     ])('%s 可直达且具有标题和所属导航', (path, section, title) => {
         const route = createWorkbenchRouter(createMemoryHistory()).resolve(path);
