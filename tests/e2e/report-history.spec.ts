@@ -235,9 +235,9 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         await page.goto(width === 390 ? `/tasks/reports?taskId=${taskA}` : '/tasks/reports');
         await expect(entries(page)).toHaveCount(3);
         await expect(entry(page, 1)).toContainText('演示报告');
-        await expect(entry(page, 1)).toContainText('部分交付');
+        await expect(entry(page, 1)).toContainText('有范围说明');
         await expect(entry(page, 2)).toContainText('真实查阅');
-        await expect(entry(page, 2)).toContainText('计划范围内完整交付');
+        await expect(entry(page, 2)).toContainText('计划范围内完成');
         expect(
             await link(page, 1).evaluate((element) => getComputedStyle(element).fontFamily),
         ).toContain('Noto Serif SC');
@@ -345,7 +345,10 @@ test('任务选项分页与键盘筛选重置目的缓存，空态保留留白',
     ).toEqual([null, tasksCursor]);
     await select(page).focus();
     await select(page).press('Home');
+    await expect(select(page)).toHaveValue('');
+    await expect(select(page)).toBeFocused();
     await select(page).press('ArrowDown');
+    await expect(select(page)).toHaveValue(taskA);
     await select(page).press('Enter');
     await expect(select(page)).toHaveValue(taskA);
     await expect(select(page)).toBeFocused();
@@ -356,7 +359,7 @@ test('任务选项分页与键盘筛选重置目的缓存，空态保留留白',
     expect(reportCalls(calls).at(-1)!.cursor).toBeNull();
     await select(page).selectOption(taskC);
     await expect(entries(page)).toHaveCount(0);
-    await expect(region(page).getByRole('status').filter({ hasText: '尚无报告' })).toBeVisible();
+    await expect(region(page).getByRole('status').filter({ hasText: '暂无报告' })).toBeVisible();
     await screenshot(page, info, 'empty-viewport');
     await page.evaluate(() => (document.documentElement.style.fontSize = '200%'));
     await noOverflow(page);
@@ -401,7 +404,7 @@ test('对应Run入口保留真实执行ID与partial模式，不隐式写已读',
     await page.goto('/tasks/reports');
     await entry(page, 1).getByRole('link', { name: '查看对应执行', exact: true }).press('Enter');
     await expect(page).toHaveURL(new RegExp(`/runs/${id(101)}$`));
-    await expect(page.getByRole('heading', { name: '部分完成', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '已生成结果', exact: true })).toBeVisible();
     expect(calls.every((call) => call.method === 'GET')).toBe(true);
 });
 for (const status of [403, 404, 'protocol', 503] as const) {

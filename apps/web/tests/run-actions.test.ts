@@ -75,6 +75,35 @@ const failure = (status: number, code = 'LOCAL_FAILURE') =>
 afterEach(() => cleanups.splice(0).forEach((cleanup) => cleanup()));
 
 describe('显式 Run 命令与冻结重发', () => {
+    it('未知结果重发冻结原Agent选择，更改页面选择不会改变原请求', async () => {
+        const calls: { body: string; key: string | null }[] = [];
+        const { actions, target } = setup(
+            async (_url, init) => {
+                calls.push({
+                    body: init?.body as string,
+                    key: new Headers(init?.headers).get('idempotency-key'),
+                });
+                if (calls.length === 1) throw new TypeError('network');
+                return success();
+            },
+            { taskId, agentProviderId: otherId },
+        );
+        await actions.submit('start');
+        expect(actions.phase.value).toBe('uncertain');
+        target.value.agentProviderId = null;
+        await actions.replay();
+        expect(calls[1]).toEqual(calls[0]);
+        expect(JSON.parse(calls[0]!.body)).toEqual({ mode: 'live', agentProviderId: otherId });
+    });
+    it('显式账号默认以null覆盖任务配置，省略选择仍兼容原请求', async () => {
+        const fetcher = vi.fn<typeof fetch>(async () => success());
+        const { actions } = setup(fetcher, { taskId, agentProviderId: null });
+        await actions.submit('start');
+        expect(JSON.parse(fetcher.mock.calls[0]![1]?.body as string)).toEqual({
+            mode: 'live',
+            agentProviderId: null,
+        });
+    });
     it.each(['archived', 'paused'] as const)('任务%s按真实权限决定手动执行', async (taskStatus) => {
         const fetcher = vi.fn<typeof fetch>(async () => success());
         const { actions } = setup(fetcher, { taskId, taskStatus });

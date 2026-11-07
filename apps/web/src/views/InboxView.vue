@@ -53,7 +53,7 @@
         </div>
         <div
             v-if="items.length && query.hasNextPage.value && !error.hidden"
-            class="inbox-pagination"
+            class="inbox-pagination scova-pagination"
         >
             <action-button
                 :busy="query.isFetchingNextPage.value"
@@ -212,8 +212,5 @@ p {
 }
 .inbox-list {
     min-inline-size: 0;
-}
-.inbox-pagination {
-    padding-block: 1rem;
 }
 </style>

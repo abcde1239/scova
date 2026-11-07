@@ -47,7 +47,7 @@ test('关闭网页与Worker停止分开验证：暂停保留在途Run，重开�
         .toBe('partial');
     owner.page = await owner.context.newPage();
     await owner.page.goto(`/runs/${run.id}`);
-    await expect(owner.page.locator('#execution-status')).toHaveText('部分完成');
+    await expect(owner.page.locator('#execution-status')).toHaveText('已生成结果');
     const delivered = await waitForDelivery(environment, owner, run);
     await expect(owner.page.getByRole('link', { name: '查看已发布报告' })).toHaveAttribute(
         'href',
@@ -119,7 +119,7 @@ test('真实网络中断不猜测执行失败：恢复终态、N+1持久事件�
         await owner.context.setOffline(false);
     }
     await owner.page.getByRole('button', { name: '刷新快照', exact: true }).click();
-    await expect(owner.page.locator('#execution-status')).toHaveText('部分完成');
+    await expect(owner.page.locator('#execution-status')).toHaveText('已生成结果');
     const delivered = await waitForDelivery(environment, owner, run);
     const readEvents = async (lastEventId: string) =>
         owner.page.evaluate(

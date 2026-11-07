@@ -269,7 +269,7 @@ test('real SFC: semantic caption/headers and missing sides do not borrow opposit
     await expect(article(page).locator('.comparison-summary')).toContainText('变化结论仍不确定');
     expect(
         await page.evaluate(() => {
-            const warning = document.querySelector('[aria-label="部分交付警告"]')!;
+            const warning = document.querySelector('[aria-label="查阅范围说明"]')!;
             return [
                 ...document.querySelectorAll('#summary-title,.comparison-section,.claim'),
             ].every(
@@ -289,7 +289,7 @@ test('real SFC: empty changes retain all claims/partial and do not invent a no-c
     await expect(table(page)).toHaveCount(0);
     await expect(article(page).getByText('本报告没有提供逐项变化记录。')).toBeVisible();
     expect(await claims(page)).toEqual(expectedClaims(report));
-    await expect(article(page).getByRole('note', { name: '部分交付警告' })).toBeVisible();
+    await expect(article(page).getByRole('note', { name: '查阅范围说明' })).toBeVisible();
     await expect(article(page).locator('.comparison-summary')).toContainText(
         '不能据此认定没有重要变化',
     );
@@ -348,7 +348,9 @@ test('real SFC: raw HTML/Markdown/whitespace stay inert in values, reasons and s
     const citation = changed.locator('.old-side .table-citation').first();
     await citation.locator('summary').press('Enter');
     expect(await citation.locator('blockquote').textContent()).toBe(raw);
-    await expect(article(page).locator('script,img,iframe,strong')).toHaveCount(0);
+    await expect(article(page).locator('script,img,iframe')).toHaveCount(0);
+    await expect(changed.locator('strong')).toHaveCount(0);
+    await expect(citation.locator('blockquote strong')).toHaveCount(0);
     expect(await page.evaluate(() => 'comparisonInjected' in window)).toBe(false);
     expect(external).toEqual([]);
 });

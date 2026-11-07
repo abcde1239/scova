@@ -1,8 +1,16 @@
 <template>
     <div :id="`claim-${claim.id}`" class="claim">
         <p class="scova-reading claim-text">{{ claim.text }}</p>
-        <p class="confidence scova-interface">证据说明：{{ claim.confidenceLabel }}</p>
-        <div v-if="evidence.length" class="citations">
+        <p v-if="claim.kind === 'insufficient'" class="scova-warning scova-interface">
+            <strong>需要补充材料</strong> · 这条线索的来源依据较少，详情见下方引用。
+        </p>
+        <p
+            class="confidence scova-interface"
+            :class="{ 'scova-warning': claim.kind === 'insufficient' || claim.kind === 'conflict' }"
+        >
+            {{ `证据说明：${claim.confidenceLabel}` }}
+        </p>
+        <div v-if="showEvidence && evidence.length" class="citations">
             <div
                 v-for="item in evidence"
                 :id="`claim-${claim.id}-evidence-${item.id}`"
@@ -12,7 +20,9 @@
                 <evidence-citation :evidence="item" />
             </div>
         </div>
-        <p v-else class="scova-interface">这条结论未提供直接引用，应结合证据不足说明阅读。</p>
+        <p v-else-if="showEvidence" class="scova-interface">
+            这条内容暂时没有可展开的直接引用，保留为线索。
+        </p>
     </div>
 </template>
 
@@ -21,7 +31,12 @@ import { computed } from 'vue';
 import type { Claim, Report } from '@scova/models';
 import EvidenceCitation from '@/components/reports/EvidenceCitation.vue';
 import { claimEvidence } from '@/composables/useReport';
-const props = defineProps<{ report: Report; claim: Claim }>();
+const props = withDefaults(
+    defineProps<{ report: Report; claim: Claim; showEvidence?: boolean }>(),
+    {
+        showEvidence: true,
+    },
+);
 const evidence = computed(() => claimEvidence(props.report, props.claim));
 </script>
 

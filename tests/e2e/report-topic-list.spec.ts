@@ -42,7 +42,7 @@ const path = '/test-fixtures/report-topic-list.html';
 const kinds = ['fact', 'inference', 'conflict', 'insufficient'];
 const labels = ['来源事实', 'Agent 推断', '冲突证据', '证据不足'];
 const article = (page: Page) => page.locator('article.report-frame');
-const warning = (page: Page) => page.getByRole('note', { name: '部分交付警告' });
+const warning = (page: Page) => page.getByRole('note', { name: '查阅范围说明' });
 const claim = (page: Page, id: string) => page.locator(`#claim-${id}`);
 async function open(page: Page) {
     await page.goto(path);
@@ -157,10 +157,10 @@ test('real SFCs: partial precedes summary and every claim; raw coverage and mode
     const report = await open(page);
     for (const view of ['brief', 'topic-list'] as const) {
         await setView(page, view);
-        await expect(warning(page)).toContainText('不能据此认定没有重要变化');
+        await expect(warning(page)).toContainText('未覆盖项目和来源详情见下方');
         expect(
             await page.evaluate(() => {
-                const alert = document.querySelector('[aria-label="部分交付警告"]')!;
+                const alert = document.querySelector('[aria-label="查阅范围说明"]')!;
                 return [...document.querySelectorAll('#summary-title, .claim')].every(
                     (element) =>
                         !!(
@@ -184,7 +184,7 @@ test('real SFCs: partial precedes summary and every claim; raw coverage and mode
         );
         const noEvidence = report.claims.find((entry) => entry.evidenceIds.length === 0)!;
         await expect(claim(page, noEvidence.id)).toContainText(
-            '这条结论未提供直接引用，应结合证据不足说明阅读。',
+            '这条内容暂时没有可展开的直接引用，保留为线索。',
         );
         if (view === 'topic-list') {
             await expect(article(page).locator('.topic-section')).toHaveCount(4);

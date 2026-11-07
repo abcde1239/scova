@@ -350,7 +350,7 @@ for (const scenario of [
             await expect(panel(page)).toContainText('本报告没有提供逐项变化记录');
         if (scenario === 'partial-null-baseline') {
             await expect(
-                page.getByRole('note', { name: '部分交付警告', exact: true }),
+                page.getByRole('note', { name: '查阅范围说明', exact: true }),
             ).toBeVisible();
             await expect(panel(page)).toContainText('报告未提供关联的基线执行');
             await expect(

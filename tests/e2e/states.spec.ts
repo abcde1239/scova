@@ -1,5 +1,24 @@
 import { expect, test } from '@playwright/test';
 
+test.beforeEach(async ({ page }) => {
+    await page.route('**/api/v1/me', (route) =>
+        route.fulfill({
+            json: {
+                user: {
+                    id: '00000000-0000-4000-8000-000000000001',
+                    email: 'states@example.test',
+                    createdAt: '2026-10-31T00:00:00Z',
+                    preferences: {
+                        defaultTimezone: 'UTC',
+                        notificationPreference: { mode: 'summary', runIssues: true },
+                    },
+                },
+                csrfToken: 'states-fixture',
+            },
+        }),
+    );
+});
+
 test('失败重试保持焦点，忙碌不重复派发，成功后焦点落到说明', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/__examples/states');

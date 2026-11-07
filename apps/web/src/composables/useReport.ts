@@ -38,6 +38,7 @@ export const claimLabels: Record<Claim['kind'], string> = {
 };
 
 export function reportSections(report: Report) {
+    if (report.coverage.reportValue) return [];
     return (Object.entries(claimLabels) as [Claim['kind'], string][])
         .map(([kind, title]) => ({
             kind,

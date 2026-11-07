@@ -142,6 +142,115 @@ async function openReport(page: Page, state: State) {
 }
 test.beforeAll(async ({ browser }) => console.log(`Browser: Chromium ${browser.version()}`));
 
+for (const width of [1280, 390]) {
+    test(`question answers group one source while keeping distinct views and quote links at ${width}`, async ({
+        page,
+    }) => {
+        await page.setViewportSize({ width, height: 1000 });
+        const state: State = { baselineOnly: false, requests: [] };
+        await openReport(page, state);
+        await page.evaluate(() => {
+            const report = window.scovaResearchFixture.getReport();
+            report.evidence[1]!.sourceId = '00000000-0000-4000-8000-000000000099';
+            report.claims.push({
+                ...report.claims[0]!,
+                id: '00000000-0000-4000-8000-000000000014',
+                text: '同一来源的另一观点：后续批次另行公布。',
+            });
+            const value = {
+                ...report,
+                coverage: {
+                    ...report.coverage,
+                    reportValue: {
+                        version: 1,
+                        questions: [
+                            {
+                                id: 'q0',
+                                text: '公开批次与范围有何差异？',
+                                priority: 'core',
+                                status: 'disputed',
+                                claimIndexes: [0, 1, 2, 4],
+                                gap: '两份资料的适用范围不同。',
+                            },
+                        ],
+                        selections: report.claims.map((_, claimIndex) => ({
+                            claimIndex,
+                            questionIds: claimIndex === 3 ? [] : ['q0'],
+                            placement: claimIndex === 3 ? 'reference' : 'main',
+                            reason: '回答公开范围',
+                            basis: 'model_assessment',
+                            timeScope: 'unknown',
+                            assessment: {
+                                relevance: 'direct',
+                                support: 'partial',
+                                role: 'answer',
+                                sourceRelation: 'unknown',
+                                reason: '对应公开批次',
+                                conditions: claimIndex === 4 ? '只适用于后续批次。' : '',
+                                gap: '',
+                            },
+                        })),
+                    },
+                },
+            };
+            window.scovaResearchFixture.setReport(value);
+        });
+        const answer = page.locator('#question-q0');
+        await expect(answer.locator('.answer-source')).toHaveCount(3);
+        const first = answer.locator('.answer-source').first();
+        await expect(first.locator('.claim')).toHaveCount(2);
+        await expect(first.locator('.source-evidence .evidence')).toHaveCount(1);
+        await expect(first).toContainText('只适用于后续批次。');
+        const link = first.locator('.claim-sources a').last();
+        const target = await link.getAttribute('href');
+        await link.click();
+        await page.locator(`${target} summary`).click();
+        await expect(page.locator(`${target} blockquote`)).toBeVisible();
+        await expect(first.locator('.assessment').first()).not.toHaveAttribute('open');
+        await first.locator('.assessment > summary').first().click();
+        await expect(
+            first.getByText('评估说明：对应公开批次', { exact: true }).first(),
+        ).toBeVisible();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+            true,
+        );
+        const ids = await page.locator('[id]').evaluateAll((nodes) => nodes.map((node) => node.id));
+        expect(new Set(ids).size).toBe(ids.length);
+        await page.screenshot({
+            path: `artifacts/report-wording-2026-11-07/report-${width}.png`,
+            fullPage: true,
+        });
+        expect(state.requests).toEqual([]);
+    });
+}
+
+test('soft evidence keeps uncertain content visible without creating citations and shows candidate notes separately', async ({
+    page,
+}) => {
+    const state: State = { baselineOnly: false, requests: [] };
+    await openReport(page, state);
+    await page.evaluate(() => {
+        const report = window.scovaResearchFixture.getReport();
+        const claim = report.claims.find((c) => c.kind === 'insufficient')!;
+        claim.text = '保留待核实的模型判断 <script>doNotRun()</script>';
+        const value = {
+            ...report,
+            coverage: { ...report.coverage, notes: ['候选按上限筛选，不代表引擎故障。'] },
+        };
+        window.scovaResearchFixture.setReport(value);
+    });
+    const claim = page.locator('.claim').filter({ hasText: '保留待核实的模型判断' });
+    await expect(claim.getByText('需要补充材料', { exact: true })).toBeVisible();
+    await expect(claim.locator('.claim-text')).toHaveText(
+        '保留待核实的模型判断 <script>doNotRun()</script>',
+    );
+    await expect(claim.locator('.citation')).toHaveCount(0);
+    await expect(claim.locator('script')).toHaveCount(0);
+    await page.getByText('查看查询摘要与覆盖缺口', { exact: true }).click();
+    await expect(page.getByText('候选按上限筛选，不代表引擎故障。', { exact: true })).toBeVisible();
+    expect(state.requests).toEqual([]);
+});
+
 test('ResearchReport 目录、四类结论、changes 与孤立 evidence 按真实 DTO 完整呈现', async ({
     page,
 }) => {
@@ -159,8 +268,8 @@ test('ResearchReport 目录、四类结论、changes 与孤立 evidence 按真�
         '来源与保存引用',
     ])
         await expect(page.getByRole('link', { name, exact: true })).toBeVisible();
-    await expect(page.getByRole('note', { name: '部分交付警告' })).toContainText(
-        '不能据此认定没有重要变化',
+    await expect(page.getByRole('note', { name: '查阅范围说明' })).toContainText(
+        '未覆盖项目和来源详情见下方',
     );
     await expect(page.getByText('研究范围', { exact: true })).toBeVisible();
     await expect(

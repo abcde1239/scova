@@ -83,6 +83,57 @@ async function noOverflow(page: Page) {
         true,
     );
 }
+for (const width of [390, 1440]) {
+    test(`Token 预算即时分配、超额阻止保存、修正后可保存 ${width}`, async ({ page }, info) => {
+        const calls = await samples(page);
+        await page.setViewportSize({ width, height: 1000 });
+        await page.goto('/tasks/new');
+        await fillMain(page);
+        const preview = page.getByRole('region', { name: 'Token 分配测算', exact: true });
+        await expect(preview).toContainText('网页读取次数降至 15 页以内');
+        await page.getByLabel('网页读取次数上限', { exact: true }).fill('10');
+        await expect(preview).not.toContainText('比较额度偏紧');
+        await page.getByLabel('累计输出 token 上限', { exact: true }).fill('64000');
+        await expect(preview).toContainText('网页读取次数降至 7 页以内');
+        await page.getByLabel('累计输出 token 上限', { exact: true }).fill('128000');
+        await expect(preview.locator('.token-output-total')).toHaveText(
+            '分配合计 127,999 / 128,000；未分配 1 token。',
+        );
+        await expect(
+            preview.getByRole('row', { name: '来源比较 31,996 31,997', exact: true }),
+        ).toBeVisible();
+        await page.getByLabel('累计输出 token 上限', { exact: true }).fill('1');
+        await expect(preview.getByRole('alert')).toContainText('输出总额不足');
+        await page.getByRole('button', { name: '确认保存任务', exact: true }).click();
+        await expect(page.getByLabel('累计输出 token 上限', { exact: true })).toBeFocused();
+        expect(calls.filter((c) => c.method === 'POST')).toHaveLength(0);
+        await page.getByLabel('累计输出 token 上限', { exact: true }).fill('8000');
+        await expect(preview.locator('.token-output-total')).toHaveText(
+            '分配合计 7,999 / 8,000；未分配 1 token。',
+        );
+        await page.getByLabel('累计输入 token 上限', { exact: true }).fill('');
+        await expect(preview).toContainText('请填写有效的正整数');
+        await page.getByRole('button', { name: '确认保存任务', exact: true }).click();
+        expect(calls.filter((c) => c.method === 'POST')).toHaveLength(0);
+        await page.getByLabel('累计输入 token 上限', { exact: true }).fill('40000');
+        for (const size of ['100%', '200%']) {
+            await page.evaluate((value) => {
+                document.documentElement.style.fontSize = value;
+            }, size);
+            await noOverflow(page);
+            await expect(preview.getByRole('table')).toBeVisible();
+        }
+        await preview.screenshot({ path: info.outputPath(`token-budget-${width}.png`) });
+        await page.getByRole('button', { name: '确认保存任务', exact: true }).click();
+        await expect(page).toHaveURL(new RegExp(`/tasks/${id(11)}$`));
+        expect(calls.filter((c) => c.method === 'POST')).toHaveLength(1);
+        expect(calls.find((c) => c.method === 'POST')?.body?.config.budget).toMatchObject({
+            maxOutputTokens: 8000,
+            maxInputTokens: 40000,
+            maxPages: 10,
+        });
+    });
+}
 for (const width of [1440, 320]) {
     test(`输出布局示例：四种形式、文字入口、键盘关闭且不修改任务 ${width}`, async ({
         page,

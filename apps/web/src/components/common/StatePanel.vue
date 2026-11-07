@@ -5,6 +5,7 @@
         :class="{
             'state-panel--empty': state === 'empty',
             'state-panel--loading': state === 'loading',
+            'state-panel--centered': centered,
         }"
         :aria-busy="state === 'loading' ? 'true' : undefined"
     >
@@ -42,6 +43,7 @@ const props = defineProps<{
     state: 'loading' | 'empty' | 'error' | 'success';
     message?: string;
     retryable?: boolean;
+    centered?: boolean;
 }>();
 const emit = defineEmits<{ retry: [] }>();
 const labels = { loading: '正在加载', empty: '暂无内容', error: '加载失败', success: '加载成功' };
@@ -88,15 +90,24 @@ p {
     font-size: 0.9375rem;
 }
 .state-panel--loading {
-    justify-items: center;
-    text-align: center;
-    padding-block: 2rem;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    justify-items: start;
+    text-align: start;
 }
 .loading-animation {
     display: block;
-    inline-size: min(10rem, 100%);
+    inline-size: 3rem;
     block-size: auto;
     object-fit: contain;
+}
+.state-panel--centered {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+    text-align: center;
+}
+.state-panel--loading > :deep(.scova-action-button) {
+    grid-column: 1 / -1;
 }
 @media (prefers-reduced-motion: reduce) {
     .loading-animation {

@@ -87,7 +87,7 @@
                     <p :class="{ 'scova-partial': run.coverage.completeness === 'partial' }">
                         {{
                             run.coverage.completeness === 'partial'
-                                ? '查阅不完整'
+                                ? '结果已生成（覆盖范围说明）'
                                 : '已完成本次查阅范围'
                         }}
                     </p>
@@ -100,7 +100,7 @@
                     <p v-else>
                         {{
                             run.coverage.completeness === 'partial'
-                                ? '尚未取得具体缺口说明，结论仍不完整。'
+                                ? '结果已整理当前查阅到的内容；未覆盖项目见查阅说明。'
                                 : '当前快照未记录额外覆盖缺口。'
                         }}
                     </p>
@@ -110,12 +110,53 @@
                         }}
                     </p>
                     <p>已执行查询：{{ run.coverage.searchedQueries.length }} 项</p>
+                    <p v-if="run.coverage.reportValue">
+                        核心问题：
+                        <span
+                            v-for="question in run.coverage.reportValue.questions.filter(
+                                (q) => q.priority === 'core',
+                            )"
+                            :key="question.id"
+                        >
+                            {{ question.text }} ·
+                            {{
+                                {
+                                    supported: '已回答',
+                                    provisional: '主要结论',
+                                    disputed: '不同来源',
+                                    unresolved: '暂无直接回答',
+                                }[question.status]
+                            }}；
+                        </span>
+                    </p>
+                    <details v-if="run.coverage.notes?.length">
+                        <summary>查阅说明</summary>
+                        <ul>
+                            <li v-for="(note, index) in run.coverage.notes" :key="index">
+                                {{ note }}
+                            </li>
+                        </ul>
+                    </details>
                 </template>
                 <p v-else>尚未形成覆盖结论；不能将等待、失败或取消视为没有变化。</p>
             </section>
 
             <section class="detail-section scova-surface" aria-labelledby="budget-title">
                 <h2 id="budget-title">用量与预算</h2>
+                <p>本次使用启动时的预算快照；修改任务后的新预算不会应用于此执行或其重试。</p>
+                <p v-if="run.coverage?.research">
+                    正文成功 {{ run.coverage.research.readSuccess }} /
+                    {{ run.coverage.research.readAttempts }} 次， 筛选判断相关
+                    {{ run.coverage.research.relatedPages }} 页， 保留结论
+                    {{ run.coverage.research.acceptedClaims }} 条。 搜索缓存命中
+                    {{ run.coverage.research.cacheHits }} 次。
+                    相关性判断与请求成功均不代表研究已完整完成。
+                    <span v-if="run.coverage.research.uncertainClaims"
+                        >其中
+                        {{ run.coverage.research.uncertainClaims }}
+                        条需要补充材料，详情见报告引用。</span
+                    >
+                </p>
                 <dl class="usage">
                     <div>
                         <dt>搜索调用</dt>
@@ -181,12 +222,13 @@
                     @click="execution.reports.refetch()"
                     >重试查找报告</action-button
                 >
-                <action-button
-                    v-else-if="execution.reports.hasNextPage.value"
-                    :busy="execution.reports.isFetchingNextPage.value"
-                    @click="execution.reports.fetchNextPage()"
-                    >继续查找报告</action-button
-                >
+                <div v-else-if="execution.reports.hasNextPage.value" class="scova-pagination">
+                    <action-button
+                        :busy="execution.reports.isFetchingNextPage.value"
+                        @click="execution.reports.fetchNextPage()"
+                        >继续查找报告</action-button
+                    >
+                </div>
             </template>
             <p v-else>本次执行未完成报告交付。</p>
         </section>

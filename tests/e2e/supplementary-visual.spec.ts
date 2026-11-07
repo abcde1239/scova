@@ -106,7 +106,7 @@ test('补充入口六宽/文字放大、四主题浅暗与四报告形式（真�
                             ).toEqual(saved.evidence.map((evidence) => `evidence-${evidence.id}`));
                             if (saved.coverage.completeness === 'partial')
                                 await expect(
-                                    page.getByRole('note', { name: '部分交付警告' }),
+                                    page.getByRole('note', { name: '查阅范围说明' }),
                                 ).toBeVisible();
                             await layout(page, scale);
                             const evidence = frame.locator('.evidence-entry').first();

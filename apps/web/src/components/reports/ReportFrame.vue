@@ -17,10 +17,10 @@
             v-if="integrity.partial"
             class="report-warning scova-warning"
             role="note"
-            aria-label="部分交付警告"
+            aria-label="查阅范围说明"
         >
-            <h3>部分交付，结论仍有缺口</h3>
-            <p>本报告未完成全部查阅，不能据此认定没有重要变化。</p>
+            <h3>查阅范围说明</h3>
+            <p>结果已整理当前查阅到的内容；未覆盖项目和来源详情见下方。</p>
             <a href="#coverage-title" @click="openCoverage">查看完整限制与缺口</a>
         </aside>
         <slot name="format-notice" />
@@ -29,6 +29,7 @@
             <p>{{ report.summary }}</p>
         </section>
         <slot name="after-summary" />
+        <report-answers v-if="report.coverage.reportValue" :report="report" />
         <section class="coverage scova-interface" aria-labelledby="coverage-title">
             <h3 id="coverage-title">查阅范围与限制</h3>
             <details ref="coverageDetails">
@@ -37,7 +38,7 @@
                     <p>
                         {{
                             integrity.partial
-                                ? '本次覆盖不完整。'
+                                ? '本次结果覆盖已执行范围。'
                                 : '本次计划范围内查阅完成，不代表穷尽互联网资料。'
                         }}
                     </p>
@@ -67,6 +68,14 @@
                         </li>
                     </ul>
                     <p v-else>未记录额外缺口。</p>
+                    <template v-if="report.coverage.notes?.length">
+                        <h4>查阅说明</h4>
+                        <ul>
+                            <li v-for="(note, index) in report.coverage.notes" :key="index">
+                                {{ note }}
+                            </li>
+                        </ul>
+                    </template>
                     <p v-if="report.coverage.exhausted.length">
                         已耗尽预算：{{
                             report.coverage.exhausted.map((key) => budgetLabels[key]).join('、')
@@ -86,6 +95,7 @@ import type { Report } from '@scova/models';
 import { reportIntegrity } from '@/composables/useReport';
 import { useReadingTypography } from '@/composables/useReadingTypography';
 import ReportSources from '@/components/reports/ReportSources.vue';
+import ReportAnswers from '@/components/reports/ReportAnswers.vue';
 const props = withDefaults(defineProps<{ report: Report; summaryTitle?: string }>(), {
     summaryTitle: '报告概述',
 });
@@ -153,6 +163,9 @@ h4 {
 }
 .report-summary {
     gap: 0.75rem;
+}
+.report-summary > p {
+    white-space: pre-line;
 }
 .report-warning a {
     color: inherit;

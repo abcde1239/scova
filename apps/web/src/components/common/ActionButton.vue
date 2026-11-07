@@ -14,6 +14,7 @@
         class="scova-action-button"
         @click="activate"
     >
+        <span v-if="busy" class="action-spinner" aria-hidden="true" />
         <slot />
     </n-button>
 </template>
@@ -55,6 +56,26 @@ function activate(event: MouseEvent) {
 </script>
 
 <style scoped>
+.action-spinner {
+    display: inline-block;
+    flex: 0 0 1em;
+    inline-size: 1em;
+    block-size: 1em;
+    border: 0.125em solid currentColor;
+    border-inline-end-color: transparent;
+    border-radius: 50%;
+    animation: action-spin 0.8s linear infinite;
+}
+@keyframes action-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .action-spinner {
+        animation: none;
+    }
+}
 .scova-action-button {
     min-inline-size: 2.75rem;
     min-block-size: 2.75rem;
@@ -68,6 +89,9 @@ function activate(event: MouseEvent) {
 }
 .scova-action-button.scova-action--busy {
     cursor: progress;
+}
+.scova-action-button[aria-busy='true'] :deep(.app-icon) {
+    display: none;
 }
 .scova-action-button.scova-action--text {
     min-inline-size: 0;

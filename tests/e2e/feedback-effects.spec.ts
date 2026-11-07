@@ -384,7 +384,7 @@ test('saved effects: current set/revoke and later report never rewrite the old r
     await page.goBack();
     await expect(panel(page)).toBeVisible();
     expect(await panel(page).textContent()).toBe(originalPanel);
-    await expect(page.getByRole('note', { name: '部分交付警告' })).toBeVisible();
+    await expect(page.getByRole('note', { name: '查阅范围说明' })).toBeVisible();
     await expect(page.locator('#claims-fact')).toHaveText('来源事实');
     await expect(
         page.locator('.report-brief').getByText(saved.claims[0]!.text, { exact: true }),

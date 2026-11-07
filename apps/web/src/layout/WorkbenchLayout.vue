@@ -19,16 +19,21 @@
                 </router-link>
             </nav>
             <nav class="tool-navigation" aria-label="全局工具">
-                <router-link
-                    v-for="item in tools"
-                    :key="String(item.name)"
-                    :to="item.path"
-                    :class="{ selected: isSelected(item) }"
-                    :aria-current="route.path === item.path ? 'page' : undefined"
-                >
-                    <app-icon :name="navigationIcon(item.meta.section)" />
-                    {{ item.meta.title }}
-                </router-link>
+                <template v-for="item in tools" :key="String(item.name)">
+                    <notification-menu
+                        v-if="item.meta.section === 'notifications'"
+                        :selected="isSelected(item)"
+                    />
+                    <router-link
+                        v-else
+                        :to="item.path"
+                        :class="{ selected: isSelected(item) }"
+                        :aria-current="route.path === item.path ? 'page' : undefined"
+                    >
+                        <app-icon :name="navigationIcon(item.meta.section)" />
+                        {{ item.meta.title }}
+                    </router-link>
+                </template>
             </nav>
             <account-menu />
         </header>
@@ -63,6 +68,7 @@ import type { IconName } from '@/components/common/icons';
 import MobileNavigation from '@/layout/MobileNavigation.vue';
 import PageBreadcrumbs from '@/layout/PageBreadcrumbs.vue';
 import AccountMenu from '@/layout/AccountMenu.vue';
+import NotificationMenu from '@/components/notifications/NotificationMenu.vue';
 
 const props = defineProps<{ title: string; navigation: RouteRecordNormalized[] }>();
 defineSlots<{ default(): unknown; context(): unknown; tools(): unknown; reading(): unknown }>();

@@ -56,6 +56,11 @@
                 >手动填写</action-button
             >
         </div>
+        <state-panel
+            v-if="draft.pending.value"
+            state="loading"
+            message="正在整理需求与生成建议配置，可随时停止解析。"
+        />
         <div
             v-if="draft.message.value"
             ref="feedback"
@@ -139,6 +144,7 @@ import TaskConfigField from '@/components/tasks/TaskConfigField.vue';
 import ActionButton from '@/components/common/ActionButton.vue';
 import AppIcon from '@/components/common/AppIcon.vue';
 import InfoDialog from '@/components/common/InfoDialog.vue';
+import StatePanel from '@/components/common/StatePanel.vue';
 import { timezoneOptions } from '@/utils/timezones';
 const props = defineProps<{ task: ReturnType<typeof createTaskController> }>();
 const emit = defineEmits<{ applied: []; manual: [] }>();

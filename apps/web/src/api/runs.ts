@@ -55,7 +55,12 @@ const cancelEndpoint = defineApiEndpoint<{ params: { runId: string }; data: RunC
     validator: commandValidator,
 });
 
-export type RunActionTarget = { taskId: string; run?: Run; taskStatus?: Task['status'] };
+export type RunActionTarget = {
+    taskId: string;
+    run?: Run;
+    taskStatus?: Task['status'];
+    agentProviderId?: string | null;
+};
 export type RunAction = 'start' | 'retry' | 'cancel';
 export interface RunAttempt {
     action: RunAction;
@@ -65,6 +70,7 @@ export interface RunAttempt {
     budget?: Readonly<Run['budget']>;
     mode: 'live';
     key: string;
+    agentProviderId?: string | null;
 }
 /** 输入由动作控制器冻结；不在此创建 key，也不安装命令快照。 */
 export async function requestRunAction(
@@ -76,17 +82,23 @@ export async function requestRunAction(
         signal,
         ...(attempt.action !== 'cancel' ? { idempotencyKey: attempt.key } : {}),
     };
+    const body: RunCommandInput = {
+        mode: attempt.mode,
+        ...(attempt.agentProviderId !== undefined
+            ? { agentProviderId: attempt.agentProviderId }
+            : {}),
+    };
     const response =
         attempt.action === 'start'
             ? await scope.request(
                   startEndpoint,
-                  { params: { taskId: attempt.taskId }, body: { mode: attempt.mode } },
+                  { params: { taskId: attempt.taskId }, body },
                   options,
               )
             : attempt.action === 'retry'
               ? await scope.request(
                     retryEndpoint,
-                    { params: { runId: attempt.runId! }, body: { mode: attempt.mode } },
+                    { params: { runId: attempt.runId! }, body },
                     options,
                 )
               : await scope.request(cancelEndpoint, { params: { runId: attempt.runId! } }, options);

@@ -49,12 +49,15 @@
                     retryable
                     @retry="query.refetch()"
                 />
-                <action-button
-                    v-if="query.hasNextPage.value"
-                    :busy="query.isFetchingNextPage.value"
-                    @click="query.fetchNextPage()"
-                    >{{ query.isFetchingNextPage.value ? '正在加载' : '加载更多' }}</action-button
-                >
+                <div v-if="query.hasNextPage.value" class="scova-pagination">
+                    <action-button
+                        :busy="query.isFetchingNextPage.value"
+                        @click="query.fetchNextPage()"
+                        >{{
+                            query.isFetchingNextPage.value ? '正在加载' : '加载更多'
+                        }}</action-button
+                    >
+                </div>
             </template>
         </template>
         <template v-else>
@@ -212,5 +215,13 @@ function changeFilter(value: TaskFilter) {
 }
 .task-summary dd {
     margin: 0 0 1rem;
+}
+.task-center > :deep(.run-actions),
+.task-center > :deep(.task-lifecycle) {
+    padding-inline: 0;
+    padding-block: 2rem 0;
+    border-block-start: 0.0625rem solid var(--scova-border);
+    border-radius: 0;
+    background: transparent;
 }
 </style>

@@ -85,7 +85,7 @@ test('研究A/B/C：原文、次级来源、不同观点、作者修订与正文
     expect(third.report.coverage.completeness).toBe('partial');
     expect(third.report.outcome).not.toBe('no_important_change');
     await openReport(owner.page, third.report);
-    await expect(owner.page.getByRole('note', { name: '部分交付警告' })).toBeVisible();
+    await expect(owner.page.getByRole('note', { name: '查阅范围说明' })).toBeVisible();
     await owner.page.locator('.coverage summary').press('Enter');
     for (const gap of third.report.coverage.gaps)
         await expect(owner.page.locator('.coverage')).toContainText(gap);

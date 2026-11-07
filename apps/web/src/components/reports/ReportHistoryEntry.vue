@@ -11,12 +11,12 @@
         <p class="history-metadata">
             <strong>{{ item.mode === 'demo' ? '演示报告' : '真实查阅' }}</strong>
             <span>{{
-                item.coverage.completeness === 'partial' ? '部分交付' : '计划范围内完整交付'
+                item.coverage.completeness === 'partial' ? '有范围说明' : '计划范围内完成'
             }}</span>
             <time :datetime="item.publishedAt">{{ localTaskTime(item.publishedAt) }}</time>
         </p>
         <p v-if="item.coverage.completeness === 'partial'" class="partial">
-            结论仍有缺口，不能据此认定没有重要变化。
+            结果已生成，未覆盖项目见报告详情。
         </p>
         <p class="history-summary">{{ item.summary }}</p>
         <router-link class="run-link" :to="{ name: 'run-detail', params: { runId: item.runId } }"

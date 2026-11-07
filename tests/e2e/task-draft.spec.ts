@@ -153,6 +153,34 @@ const taskPosts = (calls: Awaited<ReturnType<typeof samples>>['calls']) =>
     calls.filter((call) => call.method === 'POST' && call.path !== '/api/v1/task-drafts');
 const draftPosts = (calls: Awaited<ReturnType<typeof samples>>['calls']) =>
     calls.filter((call) => call.method === 'POST' && call.path === '/api/v1/task-drafts');
+
+test('草稿解析显示就地进度和按钮加载，取消后清除且不应用迟到结果', async ({ page }, info) => {
+    const { state, calls } = await samples(page.context());
+    let release!: () => void;
+    state.wait = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    await page.setViewportSize({ width: 390, height: 1000 });
+    await page.goto('/tasks/new');
+    await original(page).fill(inputText);
+    await title(page).fill('保留手工标题');
+    await parse(page).click();
+    const loading = panel(page).locator('.state-panel--loading');
+    await expect(loading).toContainText('正在整理需求与生成建议配置');
+    await expect(panel(page).locator('.action-spinner')).toBeVisible();
+    const imageBox = await loading.locator('img').boundingBox();
+    const textBox = await loading.getByRole('status').boundingBox();
+    expect(imageBox!.x + imageBox!.width).toBeLessThanOrEqual(textBox!.x);
+    await loading.screenshot({ path: info.outputPath('draft-loading.png') });
+    await panel(page).getByRole('button', { name: '停止解析', exact: true }).click();
+    await expect(loading).toHaveCount(0);
+    await expect(panel(page).locator('.action-spinner')).toHaveCount(0);
+    release();
+    await expect(feedback(page)).toContainText('解析已停止');
+    await expect(title(page)).toHaveValue('保留手工标题');
+    await expect(apply(page)).toHaveCount(0);
+    expect(taskPosts(calls)).toHaveLength(0);
+});
 async function noOverflow(page: Page) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
         true,

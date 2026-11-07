@@ -7,6 +7,7 @@ import {
     TaskDetailResponseSchema,
     parseRevisionEtag,
     TaskConfigSchema,
+    taskTokenAllocation,
     parseContract,
     type TaskConfig,
     type TaskDetailResponse,
@@ -49,6 +50,7 @@ export function initialTaskDraft(preferences?: SessionResponse['user']['preferen
         scheduleLocalTime: '',
         scheduleWeekday: '',
         outputFormat: 'brief',
+        agentProviderId: '',
         maxSearches: String(DEFAULT_TASK_BUDGET.maxSearches),
         maxPages: String(DEFAULT_TASK_BUDGET.maxPages),
         maxDurationSeconds: String(DEFAULT_TASK_BUDGET.maxDurationSeconds),
@@ -87,6 +89,7 @@ export function taskDraftFromConfig(config: TaskConfig): TaskDraft {
         scheduleWeekday:
             config.schedule.frequency === 'weekly' ? String(config.schedule.weekday) : '',
         outputFormat: config.outputFormat,
+        agentProviderId: config.agentProviderId ?? '',
         ...(Object.fromEntries(
             budgetFields.map(({ key }) => [key, String(config.budget[key])]),
         ) as Pick<TaskDraft, (typeof budgetFields)[number]['key']>),
@@ -174,7 +177,7 @@ export function taskInput(draft: TaskDraft, original?: TaskConfig, keepSchedule 
             );
         throw cause;
     }
-    return parseContract(CreateTaskInputSchema, {
+    const input = parseContract(CreateTaskInputSchema, {
         config: {
             title: preserve('title', original?.title ?? '', draft.title.trim()),
             topic: preserve('topic', original?.topic ?? '', draft.topic.trim()),
@@ -206,10 +209,26 @@ export function taskInput(draft: TaskDraft, original?: TaskConfig, keepSchedule 
             timezone: preserve('timezone', original?.timezone ?? '', draft.timezone.trim()),
             schedule: keepSchedule ? schedule : { frequency: 'manual' },
             outputFormat: draft.outputFormat,
+            ...(draft.agentProviderId ? { agentProviderId: draft.agentProviderId } : {}),
             budget: Object.fromEntries(budgetFields.map(({ key }) => [key, Number(draft[key])])),
             notificationPreference: { mode: draft.notificationMode, runIssues: draft.runIssues },
         },
     });
+    const allocation = taskTokenAllocation(input.config.budget);
+    if (
+        allocation?.overBudget &&
+        (!original ||
+            original.budget.maxOutputTokens !== input.config.budget.maxOutputTokens ||
+            original.budget.maxPages !== input.config.budget.maxPages)
+    ) {
+        throw new ContractValidationError([
+            {
+                path: '/config/budget/maxOutputTokens',
+                message: '输出总额不足以容纳阶段分配与修复预留，请增加累计输出 token 上限。',
+            },
+        ]);
+    }
+    return input;
 }
 
 const fieldPaths: Partial<Record<string, TaskDraftField>> = {
@@ -229,6 +248,7 @@ const fieldPaths: Partial<Record<string, TaskDraftField>> = {
     'schedule/localTime': 'scheduleLocalTime',
     'schedule/weekday': 'scheduleWeekday',
     outputFormat: 'outputFormat',
+    agentProviderId: 'agentProviderId',
     'notificationPreference/mode': 'notificationMode',
     'notificationPreference/runIssues': 'runIssues',
     ...Object.fromEntries(budgetFields.map(({ key }) => [`budget/${key}`, key])),
@@ -362,7 +382,9 @@ export function createTaskController(lifecycle: SessionLifecycle) {
             return false;
         const valid = parseContract(TaskConfigSchema, config);
         parsedConfig.value = JSON.parse(JSON.stringify(valid)) as TaskConfig;
-        Object.assign(draft, taskDraftFromConfig(valid));
+        Object.assign(draft, taskDraftFromConfig(valid), {
+            agentProviderId: draft.agentProviderId,
+        });
         keepSuggestedSchedule.value = true;
         fields.value = {};
         message.value = '';

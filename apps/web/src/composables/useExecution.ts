@@ -14,7 +14,7 @@ export const executionStates = {
     recovering: ['系统恢复中', '系统正在恢复上次执行，不需要手动继续。'],
     cancel_requested: ['正在取消', '取消请求已保存，等待后台停止在途工作。'],
     succeeded: ['已完成', '已完成本次查阅范围，仍须结合覆盖说明阅读结论。'],
-    partial: ['部分完成', '已有部分交付，覆盖仍有缺口，不能视为完整查阅或没有变化。'],
+    partial: ['已生成结果', '结果覆盖已执行范围，未覆盖项目见报告详情。'],
     failed: ['执行失败', '本次未完成交付，不能将失败解释为资料没有变化。'],
     canceled: ['已取消', '执行已经停止，不能据此判断查阅结论。'],
 } satisfies Record<Run['status'], [string, string]>;
@@ -27,7 +27,7 @@ const outcomes = {
 };
 export function executionOutcome(run: Run) {
     if (run.status === 'succeeded' && run.outcome) return outcomes[run.outcome];
-    if (run.status === 'partial') return '结果不完整';
+    if (run.status === 'partial') return '已生成结果';
     return undefined;
 }
 export function executionFailure(run: Run) {

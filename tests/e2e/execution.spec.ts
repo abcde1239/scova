@@ -34,7 +34,7 @@ const states: Record<Status, string> = {
     recovering: '系统恢复中',
     cancel_requested: '正在取消',
     succeeded: '已完成',
-    partial: '部分完成',
+    partial: '已生成结果',
     failed: '执行失败',
     canceled: '已取消',
 };
@@ -158,6 +158,49 @@ test('实时日志按阶段筛选、失败原因脱敏并跟随新事件', async
     await expect(logs).toContainText('TOOL_UNSAFE_URL');
     await expect(page.getByLabel('跟随最新')).not.toBeChecked();
     await page.getByLabel('跟随最新').check();
+});
+
+test('研究统计与固定诊断区分合法结论和请求成功', async ({ page }) => {
+    const current = snapshot('partial');
+    const enriched = {
+        ...current,
+        coverage: {
+            ...current.coverage!,
+            research: {
+                candidates: 30,
+                selected: 5,
+                readAttempts: 5,
+                readSuccess: 3,
+                relatedPages: 2,
+                supplementalSearches: 1,
+                acceptedClaims: 4,
+                rejectedClaims: 1,
+                cacheHits: 1,
+                networkAttempts: 2,
+            },
+        },
+    };
+    await install(page, current);
+    await page.route(`**/api/v1/runs/${runId}`, (route) => route.fulfill({ json: enriched }));
+    const diagnostic = {
+        ...event(3),
+        type: 'research.updated',
+        payload: { state: 'claims_repair' },
+    };
+    await page.route(`**/api/v1/runs/${runId}/events?*`, (route) =>
+        route.fulfill({
+            contentType: 'text/event-stream',
+            body: `id: ${diagnostic.eventId}\nevent: research.updated\ndata: ${JSON.stringify(diagnostic)}\n\n`,
+        }),
+    );
+    await page.goto(`/runs/${runId}`);
+    await expect(page.getByText('正文成功 3 / 5 次', { exact: false })).toBeVisible();
+    await expect(page.getByText('保留结论 4 条', { exact: false })).toBeVisible();
+    await expect(page.getByRole('region', { name: '执行日志内容' })).toContainText(
+        '已保留合法结论',
+    );
+    await expect(page.getByText('本次使用启动时的预算快照', { exact: false })).toBeVisible();
+    await noOverflow(page);
 });
 function frame(message: ReturnType<typeof event>) {
     return `id: ${message.eventId}\nevent: ${message.type}\ndata: ${JSON.stringify(message)}\n\n`;
@@ -292,7 +335,7 @@ for (const width of [390, 768, 1440]) {
         await page.setViewportSize({ width, height: 1000 });
         await install(page, snapshot());
         await page.goto(`/runs/${runId}`);
-        await expect(page.getByRole('heading', { name: '部分完成', exact: true })).toBeVisible();
+        await expect(page.getByRole('heading', { name: '已生成结果', exact: true })).toBeVisible();
         await page.evaluate(() => {
             document.documentElement.style.fontSize = '200%';
         });
@@ -360,10 +403,10 @@ test('本地HTTP样本：截断后提示重连，终态仍由快照决定；刷�
     ).toBeVisible();
     await expect(page.getByRole('heading', { name: '正在查阅', exact: true })).toBeVisible();
     release();
-    await expect(page.getByRole('heading', { name: '部分完成', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '已生成结果', exact: true })).toBeVisible();
     await expect(page.getByText('已读取终态快照，实时连接结束。')).toBeVisible();
     await page.reload();
-    await expect(page.getByRole('heading', { name: '部分完成', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '已生成结果', exact: true })).toBeVisible();
 });
 test('本地HTTP样本：报告分页只匹配当前执行，报告查找失败可恢复', async ({ page }) => {
     const run = snapshot();

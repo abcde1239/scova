@@ -7,6 +7,10 @@ import {
     AgentProviderActivationSchema,
     AgentModelCatalogInputSchema,
     AgentModelCatalogSchema,
+    AgentProviderBalanceInputSchema,
+    AgentProviderBalanceSchema,
+    type AgentProviderBalanceInput,
+    type AgentProviderBalance,
     type AgentModelCatalogInput,
     type AgentModelCatalog,
     type AgentProviderPurpose,
@@ -22,6 +26,16 @@ import { modelValidator, voidValidator } from '@/api/validator';
 const params = {
     parse: (value: unknown) => ({ id: parseContract(UuidSchema, (value as { id?: unknown })?.id) }),
 };
+export const providerBalanceEndpoint = defineApiEndpoint<{
+    params: { id: string };
+    body: AgentProviderBalanceInput;
+    data: AgentProviderBalance;
+}>({
+    method: 'POST',
+    path: '/me/agent-providers/:id/balance',
+    inputValidators: { params, body: modelValidator(AgentProviderBalanceInputSchema) },
+    validator: modelValidator(AgentProviderBalanceSchema),
+});
 export const providerModelsEndpoint = defineApiEndpoint<{
     body: AgentModelCatalogInput;
     data: AgentModelCatalog;

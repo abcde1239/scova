@@ -158,9 +158,9 @@ describe('Run detail facts and isolation', () => {
             });
             const label = executionOutcome(snapshot);
             if (status === 'succeeded') expect(label).toBe('本次范围内未发现重要变化');
-            else if (status === 'partial') expect(label).toBe('结果不完整');
+            else if (status === 'partial') expect(label).toBe('已生成结果');
             else expect(label).toBeUndefined();
-            if (status === 'partial') expect(label).toBe('结果不完整');
+            if (status === 'partial') expect(label).toBe('已生成结果');
         },
     );
     it('keeps only safe tool facts, merges a completed call and bounds retained activity', () => {

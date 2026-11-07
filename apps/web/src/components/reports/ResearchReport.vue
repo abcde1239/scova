@@ -5,6 +5,16 @@
                 <nav class="report-directory scova-interface" aria-label="报告目录">
                     <h2>报告目录</h2>
                     <ol>
+                        <li
+                            v-for="question in report.coverage.reportValue?.questions ?? []"
+                            :key="question.id"
+                        >
+                            <a
+                                :href="`#question-${question.id}`"
+                                @click="jump($event, `question-${question.id}`)"
+                                >{{ question.text }}</a
+                            >
+                        </li>
                         <li>
                             <n-button
                                 tag="a"

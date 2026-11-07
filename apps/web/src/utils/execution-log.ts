@@ -27,6 +27,7 @@ const failures: Record<string, string> = {
     TOOL_HTTP_ERROR: '目标服务返回 HTTP 错误',
     TOOL_INVALID_RESPONSE: '响应格式或内容类型不符合要求',
     TOOL_OUTPUT_TRUNCATED: '模型输出达到长度上限，未完成生成',
+    TOOL_MODEL_QUOTA_EXCEEDED: '模型服务额度不足，请补充额度后新建执行',
     TOOL_BUDGET_EXCEEDED: '剩余调用预算不足',
     TOOL_EXTRACTION_FAILED: '未能提取可用网页正文',
     TOOL_FAILED: '工具调用失败',
@@ -114,6 +115,14 @@ export function appendExecutionLog(state: ExecutionLog, event: RunEvent): Execut
                     failures: next.steps[entry.step]!.failures + 1,
                 };
         }
+    } else if (event.type === 'research.updated') {
+        const labels = {
+            waiting: '搜索等待 · 等待共享额度或相同查询结果',
+            cooldown: '搜索冷却 · 上游暂不可用',
+            cache_hit: '搜索复用 · 使用已缓存候选，仍需读取和核验正文',
+            claims_repair: '引用校验 · 已保留合法结论，正在修复失败项',
+        };
+        entry.text = labels[event.payload.state];
     } else if (event.type === 'run.failed') {
         entry.level = 'error';
         const code = event.payload.code;

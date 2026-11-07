@@ -72,6 +72,7 @@
         </fieldset>
         <fieldset :disabled="locked">
             <legend>时间与输出</legend>
+            <execution-agent-select v-model="task.draft.agentProviderId" :disabled="locked" />
             <task-config-field
                 v-model="task.draft.rangeKind"
                 label="查阅时间范围"
@@ -141,6 +142,9 @@
         </details>
         <details ref="budget" open>
             <summary>单次执行预算</summary>
+            <p v-if="legacyBudget">
+                当前填写的预算低于新任务默认值。可按需调整后保存，再新建执行；重试旧执行仍使用原预算。
+            </p>
             <div class="field-group budget-grid">
                 <task-config-field
                     v-for="field in budgetFields"
@@ -152,6 +156,11 @@
                     :disabled="locked"
                 />
             </div>
+            <task-token-budget
+                :input="Number(task.draft.maxInputTokens)"
+                :output="Number(task.draft.maxOutputTokens)"
+                :pages="Number(task.draft.maxPages)"
+            />
             <p>
                 预算按整次执行累计，包含规划、比较、综合和重试。时长最多{{
                     DEFAULT_TASK_BUDGET_LIMITS.maxDurationSeconds
@@ -230,7 +239,11 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import { onBeforeRouteLeave, onBeforeRouteUpdate, RouterLink } from 'vue-router';
-import { DEFAULT_TASK_BUDGET_LIMITS, type TaskDetailResponse } from '@scova/models';
+import {
+    DEFAULT_TASK_BUDGET,
+    DEFAULT_TASK_BUDGET_LIMITS,
+    type TaskDetailResponse,
+} from '@scova/models';
 import {
     createTaskController,
     editTaskController,
@@ -239,6 +252,7 @@ import {
 } from '@/composables/useCreateTask';
 import { useSessionLifecycle } from '@/composables/useSessionQuery';
 import TaskConfigField from '@/components/tasks/TaskConfigField.vue';
+import TaskTokenBudget from '@/components/tasks/TaskTokenBudget.vue';
 import ListInput from '@/components/common/ListInput.vue';
 import ActionButton from '@/components/common/ActionButton.vue';
 import ScheduleFields from '@/components/tasks/ScheduleFields.vue';
@@ -248,6 +262,7 @@ const notice = useActionNotification();
 import type { ApiResponse } from '@/api/client';
 const props = defineProps<{ initialResponse?: ApiResponse<TaskDetailResponse> }>();
 import NaturalLanguageDraft from '@/components/tasks/NaturalLanguageDraft.vue';
+import ExecutionAgentSelect from '@/components/tasks/ExecutionAgentSelect.vue';
 const emit = defineEmits<{ saved: [result: TaskDetailResponse] }>();
 const lifecycle = useSessionLifecycle();
 const editor = props.initialResponse
@@ -255,6 +270,12 @@ const editor = props.initialResponse
     : undefined;
 const creator = editor ? undefined : createTaskController(lifecycle);
 const task = editor ?? creator!;
+const legacyBudget = computed(
+    () =>
+        Boolean(editor) &&
+        (Number(task.draft.maxInputTokens) < DEFAULT_TASK_BUDGET.maxInputTokens ||
+            Number(task.draft.maxOutputTokens) < DEFAULT_TASK_BUDGET.maxOutputTokens),
+);
 const locked = computed(() => task.pending.value || task.uncertain.value || task.expired.value);
 const form = ref<HTMLFormElement>();
 const errorMessage = ref<HTMLParagraphElement>();

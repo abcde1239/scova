@@ -135,7 +135,7 @@ test('基础页面真实服务六宽、文字放大和浅暗矩阵（实际读�
                         const inputs = await checkLayout(page, scale);
                         if (entry.selector === '.report-frame') {
                             await expect(
-                                page.getByRole('note', { name: '部分交付警告' }),
+                                page.getByRole('note', { name: '查阅范围说明' }),
                             ).toBeVisible();
                             const citation = page.locator('.report-frame details.evidence').first();
                             await citation.locator('summary').press('Enter');

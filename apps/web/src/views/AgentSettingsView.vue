@@ -65,6 +65,10 @@
                                 <span>{{ protocolLabel(provider.protocol) }}</span
                                 ><span><app-icon name="confirm" />密钥已保存</span>
                             </div>
+                            <provider-balance
+                                :provider="provider"
+                                :disabled="pending || !data.storageReady"
+                            />
                         </div>
                         <div class="provider-actions">
                             <action-button
@@ -118,6 +122,7 @@ import AppIcon from '@/components/common/AppIcon.vue';
 import StatePanel from '@/components/common/StatePanel.vue';
 import AgentProviderForm from '@/components/account/AgentProviderForm.vue';
 import AgentPurposeSelect from '@/components/account/AgentPurposeSelect.vue';
+import ProviderBalance from '@/components/account/ProviderBalance.vue';
 import { useActionNotification } from '@/composables/useActionNotification';
 const notice = useActionNotification();
 const lifecycle = useSessionLifecycle();

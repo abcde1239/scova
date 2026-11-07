@@ -47,7 +47,7 @@
         </div>
         <div
             v-if="items.length && query.hasNextPage.value && !error.hidden"
-            class="notification-pagination"
+            class="notification-pagination scova-pagination"
         >
             <action-button
                 :busy="query.isFetchingNextPage.value"
@@ -180,8 +180,5 @@ p {
 }
 .notification-list {
     min-inline-size: 0;
-}
-.notification-pagination {
-    padding-block: 1rem;
 }
 </style>

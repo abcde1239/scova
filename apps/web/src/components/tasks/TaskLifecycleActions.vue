@@ -1,6 +1,6 @@
 <template>
     <section class="task-lifecycle scova-surface" aria-labelledby="task-lifecycle-title">
-        <h2 id="task-lifecycle-title">任务计划与归档</h2>
+        <h2 id="task-lifecycle-title">任务管理</h2>
         <template v-if="actions.snapshot.value">
             <p>当前状态：{{ statusLabels[actions.snapshot.value.data.task.status] }}</p>
             <p v-if="actions.snapshot.value.data.task.status === 'archived'">
@@ -48,6 +48,14 @@
                     >
                 </div>
             </template>
+            <action-button
+                ref="deleteTrigger"
+                class="danger"
+                :disabled="actions.disabled.value"
+                @click="openDelete"
+            >
+                <app-icon name="delete" />清除任务
+            </action-button>
         </template>
         <p v-else>{{ actions.refreshing.value ? '正在读取任务状态' : '任务状态暂不可用' }}</p>
         <div
@@ -87,16 +95,65 @@
                 >
             </div>
         </dialog>
+        <dialog
+            ref="deleteDialog"
+            aria-labelledby="delete-task-title"
+            aria-describedby="delete-task-consequence"
+            @cancel.prevent="cancelDelete"
+        >
+            <h2 id="delete-task-title">永久清除任务？</h2>
+            <div id="delete-task-consequence" class="delete-consequence" tabindex="0">
+                <p>
+                    将永久删除“{{
+                        actions.confirmation.value?.data.task.title
+                    }}”及其配置版本、执行历史、报告、通知、报告笔记和问答，无法恢复。
+                </p>
+                <p>
+                    共享来源、网页快照和来源收藏保留。仍有活动执行时，请先取消并等待结束后再清除。
+                </p>
+            </div>
+            <div class="lifecycle-buttons">
+                <action-button ref="deleteCancel" @click="cancelDelete">取消</action-button>
+                <action-button
+                    class="danger"
+                    :busy="actions.pending.value"
+                    :disabled="!actions.confirmation.value"
+                    @click="confirmDelete"
+                    >确认永久清除</action-button
+                >
+            </div>
+        </dialog>
     </section>
 </template>
 
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue';
+import { useRouter } from 'vue-router';
 import ActionButton from '@/components/common/ActionButton.vue';
 import AppIcon from '@/components/common/AppIcon.vue';
 import { useTaskLifecycle } from '@/composables/useTaskLifecycle';
 const props = defineProps<{ taskId: string }>();
 const actions = useTaskLifecycle(() => props.taskId);
+const router = useRouter();
+const deleteDialog = ref<HTMLDialogElement>();
+const deleteTrigger = ref<{ $el: HTMLButtonElement }>();
+const deleteCancel = ref<{ $el: HTMLButtonElement }>();
+async function openDelete() {
+    if (!actions.prepareDelete()) return;
+    deleteDialog.value?.showModal();
+    await nextTick();
+    deleteCancel.value?.$el.focus();
+}
+async function cancelDelete() {
+    deleteDialog.value?.close();
+    actions.cancelArchive();
+    await nextTick();
+    deleteTrigger.value?.$el.focus();
+}
+async function confirmDelete() {
+    deleteDialog.value?.close();
+    if (await actions.remove()) await router.replace({ name: 'tasks' });
+}
 const statusLabels = { active: '进行中', paused: '已暂停', archived: '已归档' };
 const confirmationDialog = ref<HTMLDialogElement>();
 const archiveTrigger = ref<{ $el: HTMLButtonElement }>();
@@ -127,7 +184,10 @@ async function confirmArchive() {
     await actions.submit('archive');
 }
 watch(actions.confirmation, (value) => {
-    if (!value) confirmationDialog.value?.close();
+    if (!value) {
+        confirmationDialog.value?.close();
+        deleteDialog.value?.close();
+    }
 });
 watch([actions.message, actions.pending, actions.refreshing], async () => {
     if (!actions.message.value || actions.pending.value || actions.refreshing.value) return;
@@ -190,7 +250,8 @@ dialog h2,
 dialog p {
     margin: 0;
 }
-#archive-consequence {
+#archive-consequence,
+.delete-consequence {
     min-block-size: 0;
     overflow: auto;
     overscroll-behavior: contain;

@@ -339,13 +339,14 @@ defineExpose({ focus: () => trigger.value?.focus() });
     align-items: center;
     gap: 0.625rem;
     inline-size: 100%;
-    min-block-size: 2.875rem;
+    min-block-size: 2.75rem;
     padding: 0.625rem 0.875rem;
-    border: 0.0625rem solid color-mix(in srgb, var(--scova-border) 32%, transparent);
-    border-radius: 0.875rem;
+    border: 0.0625rem solid var(--scova-select-border);
+    border-radius: var(--scova-select-radius);
     background: var(--scova-surface);
     color: var(--scova-text);
     font: inherit;
+    line-height: 1.5;
     text-align: start;
     cursor: pointer;
     transition:
@@ -357,6 +358,7 @@ defineExpose({ focus: () => trigger.value?.focus() });
     display: grid;
     flex: 1;
     min-inline-size: 0;
+    gap: 0.125rem;
     overflow-wrap: anywhere;
 }
 .select-value small {
@@ -367,11 +369,9 @@ defineExpose({ focus: () => trigger.value?.focus() });
     display: grid;
     place-items: center;
     flex: none;
-    inline-size: 2rem;
-    block-size: 2rem;
-    border-radius: 0.625rem;
+    inline-size: 1.5rem;
+    block-size: 1.5rem;
     color: var(--scova-primary);
-    background: var(--scova-selected);
 }
 .app-select--compact .select-leading {
     inline-size: 1.25rem;
@@ -381,7 +381,7 @@ defineExpose({ focus: () => trigger.value?.focus() });
 .app-select--compact .select-trigger {
     padding: 0.5rem 0.75rem;
     min-block-size: 2.75rem;
-    border-radius: 0.75rem;
+    border-radius: var(--scova-select-radius);
 }
 .select-chevron {
     margin-inline-start: auto;
@@ -391,21 +391,25 @@ defineExpose({ focus: () => trigger.value?.focus() });
 [aria-expanded='true'] .select-chevron {
     transform: rotate(180deg);
 }
-.select-trigger:hover {
-    border-color: var(--scova-primary);
+.select-trigger:hover:not(:disabled) {
+    border-color: var(--scova-select-hover-border);
 }
 .select-trigger:focus-visible,
 .select-trigger[aria-expanded='true'] {
     outline: none;
     border-color: var(--scova-primary);
-    box-shadow: 0 0 0 0.125rem color-mix(in srgb, var(--scova-primary) 10%, transparent);
+    box-shadow: 0 0 0 0.1875rem var(--scova-select-focus-ring);
 }
 .select-trigger:disabled {
     opacity: 0.55;
-    cursor: default;
+    cursor: not-allowed;
 }
-.app-select--invalid .select-trigger {
+.app-select--invalid .select-trigger:not(:disabled) {
     border-color: var(--scova-danger);
+}
+.app-select--invalid .select-trigger:focus-visible,
+.app-select--invalid .select-trigger[aria-expanded='true'] {
+    box-shadow: 0 0 0 0.1875rem color-mix(in srgb, var(--scova-danger) 12%, transparent);
 }
 .select-panel {
     position: fixed;
@@ -416,11 +420,11 @@ defineExpose({ focus: () => trigger.value?.focus() });
     overscroll-behavior: contain;
     padding: 0.5rem;
     border: 0.0625rem solid color-mix(in srgb, var(--scova-border) 28%, transparent);
-    border-radius: 1rem;
+    border-radius: 0.625rem;
     background: var(--scova-surface);
     color: var(--scova-text);
     box-shadow:
-        0 1rem 3rem -0.75rem color-mix(in srgb, var(--scova-text) 20%, transparent),
+        0 0.75rem 2rem -0.5rem color-mix(in srgb, var(--scova-text) 14%, transparent),
         0 0.125rem 0.5rem color-mix(in srgb, var(--scova-text) 4%, transparent);
     font: 1rem/1.5 var(--scova-font-interface);
     animation: select-reveal 150ms ease-out;
@@ -451,10 +455,10 @@ defineExpose({ focus: () => trigger.value?.focus() });
 .select-option {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
-    min-block-size: 2.875rem;
+    gap: 0.5rem;
+    min-block-size: 2.75rem;
     padding: 0.625rem 0.75rem;
-    border-radius: 0.625rem;
+    border-radius: 0.375rem;
     cursor: pointer;
     border: 0.0625rem solid transparent;
 }
@@ -463,11 +467,14 @@ defineExpose({ focus: () => trigger.value?.focus() });
 }
 .select-option.is-active {
     background: var(--scova-selected);
-    border-color: color-mix(in srgb, var(--scova-primary) 25%, transparent);
 }
 .select-option[aria-selected='true'] {
+    font-weight: 500;
     color: var(--scova-primary);
     background: color-mix(in srgb, var(--scova-primary) 8%, var(--scova-surface));
+}
+.select-option.is-active[aria-selected='true'] {
+    background: color-mix(in srgb, var(--scova-primary) 13%, var(--scova-surface));
 }
 .select-option-icon {
     display: grid;
@@ -494,10 +501,8 @@ defineExpose({ focus: () => trigger.value?.focus() });
     block-size: 1.25rem;
     flex: none;
     margin-inline-start: auto;
-    border-radius: 50%;
-    background: var(--scova-primary);
-    color: var(--scova-on-primary);
-    font-size: 0.875rem;
+    color: var(--scova-primary);
+    font-size: 1rem;
 }
 .select-swatch {
     inline-size: 0.875rem;
@@ -515,10 +520,10 @@ defineExpose({ focus: () => trigger.value?.focus() });
     gap: 0.5rem;
     padding: 0.625rem 0.75rem;
     margin-block-end: 0.5rem;
-    border: 0.0625rem solid color-mix(in srgb, var(--scova-border) 40%, transparent);
-    border-radius: 0.625rem;
+    border: 0.0625rem solid var(--scova-select-border);
+    border-radius: var(--scova-select-radius);
     color: var(--scova-muted);
-    background: var(--scova-canvas);
+    background: var(--scova-surface);
 }
 .select-search:focus-within {
     border-color: var(--scova-primary);
@@ -551,16 +556,6 @@ defineExpose({ focus: () => trigger.value?.focus() });
         font-size: 1rem;
     }
 }
-@supports (backdrop-filter: blur(1rem)) {
-    .select-panel {
-        background: color-mix(in srgb, var(--scova-surface) 96%, transparent);
-        backdrop-filter: blur(1rem);
-    }
-}
-:global([data-reduced-transparency='true'] .select-panel) {
-    background: var(--scova-surface);
-    backdrop-filter: none;
-}
 @keyframes select-reveal {
     from {
         opacity: 0;
@@ -578,12 +573,6 @@ defineExpose({ focus: () => trigger.value?.focus() });
     }
     .select-panel {
         animation: none;
-    }
-}
-@media (prefers-reduced-transparency: reduce) {
-    .select-panel {
-        background: var(--scova-surface);
-        backdrop-filter: none;
     }
 }
 </style>

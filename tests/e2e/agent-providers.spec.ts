@@ -151,7 +151,8 @@ for (const width of [1440, 320]) {
         await expect(page.getByRole('option')).toHaveCount(1);
         await page.screenshot({
             path: info.outputPath(`models-search-${width}.png`),
-            fullPage: true,
+            // 全页截图会滚动长表单，使离开视口的固定下拉浮层按设计关闭。
+            fullPage: false,
             animations: 'disabled',
         });
         await page.getByRole('combobox', { name: '搜索模型', exact: true }).press('Enter');
@@ -391,7 +392,9 @@ test('模型选择与管理分区；切换失败保留原选择，在途及编�
     const selection = page.getByRole('region', { name: '模型选择', exact: true });
     const management = page.getByRole('region', { name: '供应商管理', exact: true });
     await expect(selection.getByRole('button', { name: '编辑', exact: true })).toHaveCount(0);
-    await expect(management.getByRole('combobox')).toHaveCount(0);
+    await expect(management.getByLabel('研究执行使用的配置', { exact: true })).toHaveCount(0);
+    await expect(management.getByLabel('需求整理使用的配置', { exact: true })).toHaveCount(0);
+    await expect(management.getByLabel('额度查询方式', { exact: true })).toHaveCount(2);
     await chooseOption(page, '研究执行使用的配置', '备用模型');
     const research = page.getByLabel('研究执行使用的配置', { exact: true });
     const draft = page.getByLabel('需求整理使用的配置', { exact: true });

@@ -9,6 +9,12 @@
                 }}。重试使用原任务版本与预算，创建关联的新执行。
             </p>
             <p>执行会调用已配置的搜索与模型，可能产生服务费用；缺少配置时会明确报错。</p>
+            <execution-agent-select
+                v-model="agentSelection"
+                inherit
+                :disabled="actions.locked.value || actions.pending.value"
+                hint="仅影响本次新执行，重试仍保留原任务版本和预算。"
+            />
             <action-button
                 :disabled="actions.locked.value && !actions.pending.value"
                 :busy="actions.pending.value"
@@ -86,14 +92,28 @@ import { RouterLink } from 'vue-router';
 import type { Run, Task } from '@scova/models';
 import ActionButton from '@/components/common/ActionButton.vue';
 import AppIcon from '@/components/common/AppIcon.vue';
+import ExecutionAgentSelect from '@/components/tasks/ExecutionAgentSelect.vue';
 import { useRunActions } from '@/composables/useRunActions';
 import { executionStates } from '@/composables/useExecution';
 const props = defineProps<{ taskId: string; run?: Run; taskStatus?: Task['status'] }>();
+const agentSelection = ref('');
 const actions = useRunActions(() => ({
     taskId: props.taskId,
     run: props.run,
     taskStatus: props.taskStatus,
+    agentProviderId:
+        agentSelection.value === ''
+            ? undefined
+            : agentSelection.value === '__default'
+              ? null
+              : agentSelection.value,
 }));
+watch(
+    () => props.taskId,
+    () => {
+        agentSelection.value = '';
+    },
+);
 const canStart = computed(() => !props.run || ['failed', 'canceled'].includes(props.run.status));
 const feedback = ref<HTMLElement>();
 watch(actions.phase, async (phase) => {

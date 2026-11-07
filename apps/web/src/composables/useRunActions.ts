@@ -147,6 +147,9 @@ export function useRunActions(
             taskVersionId: run?.taskVersionId,
             budget: run ? Object.freeze({ ...run.budget }) : undefined,
             mode: 'live',
+            ...(action !== 'cancel' && value.agentProviderId !== undefined
+                ? { agentProviderId: value.agentProviderId }
+                : {}),
             key: crypto.randomUUID(),
         });
         result.value = undefined;

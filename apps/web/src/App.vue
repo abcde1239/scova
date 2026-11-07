@@ -2,7 +2,7 @@
     <app-theme-provider>
         <notification-session />
         <status-layout v-if="booting">
-            <state-panel state="loading" message="正在恢复账号会话" />
+            <state-panel state="loading" message="正在恢复账号会话" centered />
         </status-layout>
         <status-layout v-else-if="route.meta.layout === 'status'">
             <router-view />

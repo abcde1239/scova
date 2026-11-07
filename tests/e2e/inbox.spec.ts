@@ -247,7 +247,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         await page.setViewportSize({ width, height: 1000 });
         await page.goto(width === 390 ? '/inbox?read=unread' : '/inbox');
         await expect(entries(page)).toHaveCount(3);
-        await expect(entry(page, 1)).toContainText('部分交付');
+        await expect(entry(page, 1)).toContainText('结果已生成，未覆盖项目见报告详情。');
         await expect(entry(page, 1)).toContainText('演示报告');
         await expect(entry(page, 2)).toContainText('真实查阅');
         expect(

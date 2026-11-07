@@ -15,6 +15,23 @@ const start = (seq: number): RunEvent => ({
     payload: { step: 'read' },
 });
 describe('执行日志安全投影', () => {
+    it('separates citation repair and search waiting from provider transport failure', () => {
+        const state = appendExecutionLog(emptyExecutionLog(), {
+            ...common,
+            seq: 1,
+            type: 'research.updated',
+            payload: { state: 'claims_repair' },
+        });
+        expect(state.entries[0].text).toContain('已保留合法结论');
+        expect(state.entries[0].level).toBe('info');
+        const waiting = appendExecutionLog(state, {
+            ...common,
+            seq: 2,
+            type: 'research.updated',
+            payload: { state: 'waiting' },
+        });
+        expect(waiting.entries[1].text).toContain('共享额度');
+    });
     it('按序去重，保留阶段与耗时；节点结束不抹掉工具失败', () => {
         let state = appendExecutionLog(emptyExecutionLog(), start(1));
         state = appendExecutionLog(state, {
@@ -50,6 +67,21 @@ describe('执行日志安全投影', () => {
         expect(appendExecutionLog(state, start(2))).toBe(state);
     });
     it('未知code/异常/摘要均不进入日志，恶意对象属性名不命中白名单', () => {
+        const quota = appendExecutionLog(emptyExecutionLog(), {
+            ...common,
+            seq: 1,
+            type: 'tool.failed',
+            payload: {
+                toolCallId: common.eventId,
+                tool: 'model',
+                code: 'TOOL_MODEL_QUOTA_EXCEEDED',
+                message: 'DO_NOT_RENDER',
+                retryable: false,
+            },
+        });
+        expect(quota.entries[0]?.text).toContain('额度不足');
+        expect(quota.entries[0]?.code).toBe('TOOL_MODEL_QUOTA_EXCEEDED');
+        expect(JSON.stringify(quota)).not.toContain('DO_NOT_RENDER');
         for (const code of ['sk-secret', '__proto__', 'constructor']) {
             const state = appendExecutionLog(emptyExecutionLog(), {
                 ...common,

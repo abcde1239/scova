@@ -16,7 +16,7 @@
                 <time :datetime="item.report.publishedAt">{{ published }}</time>
             </p>
             <p v-if="item.report.coverage.completeness === 'partial'" class="partial">
-                部分交付，结论仍有缺口；不能据此认定没有重要变化。
+                结果已生成，未覆盖项目见报告详情。
             </p>
             <p
                 :id="summaryId"

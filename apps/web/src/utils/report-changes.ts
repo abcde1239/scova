@@ -55,7 +55,7 @@ export function changeSummary(report: Report) {
             state: 'inconclusive',
             title: '变化结论仍不确定',
             message: incomplete
-                ? '本次查阅不完整，以下记录只代表已取得的证据，不能据此认定没有重要变化。'
+                ? '本次查阅不完整，以下保留已取得证据与待核实线索，不能据此认定没有重要变化。'
                 : report.changes.some(
                         (change) => change.oldValue !== null && change.oldEvidenceIds.length === 0,
                     )
