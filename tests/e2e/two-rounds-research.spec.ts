@@ -18,6 +18,9 @@ test('研究A/B/C：原文、次级来源、不同观点、作者修订与正文
     config.title = '研究观点与作者修订';
     config.goal =
         'Track original research, secondary reporting, contrasting findings and author revisions';
+    // This journey checks all evidence types, including background and unresolved
+    // material; the brief's separate length policy may deliberately trim them.
+    config.outputFormat = 'research_report';
     const task = await createTaskThroughUI(owner, config);
     const first = await executeThroughUI(environment, owner, task.task.id, {
         mode: 'live',
@@ -62,13 +65,21 @@ test('研究A/B/C：原文、次级来源、不同观点、作者修订与正文
         second.report,
         (entry) => entry.reason.includes('修订') || entry.reason.includes('不同观点'),
     );
-    await expect(
-        owner.page
-            .locator('.claim-section')
-            .filter({ has: owner.page.locator('#claims-inference') }),
-    ).toContainText('不据此断定旧研究已被推翻');
-    for (const kind of ['fact', 'inference', 'conflict', 'insufficient'])
-        await expect(owner.page.locator(`#claims-${kind}`)).toBeVisible();
+    // Current reports group answers by question; supporting and disputed claims
+    // remain readable in the reference disclosure with their original confidence.
+    await owner.page.locator('.references > summary').click();
+    for (const kind of ['fact', 'inference', 'conflict', 'insufficient']) {
+        const claims = second.report.claims.filter((claim) => claim.kind === kind);
+        expect(claims.length).toBeGreaterThan(0);
+        for (const claim of claims) {
+            const row = owner.page.locator(`#claim-${claim.id}`);
+            await expect(row).toHaveCount(1);
+            await expect(row).toBeVisible();
+            await expect(row.locator('.claim-text')).toHaveText(claim.text);
+            await expect(row.locator('.confidence')).toContainText(claim.confidenceLabel);
+        }
+    }
+    await expect(owner.page.locator('.answers')).toContainText('不据此断定旧研究已被推翻');
     const conflict = second.report.claims.find((entry) => entry.kind === 'conflict')!;
     expect(conflict.evidenceIds.length).toBeGreaterThanOrEqual(2);
     const conflictRow = owner.page.locator(`#claim-${conflict.id}`);
