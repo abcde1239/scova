@@ -2,6 +2,10 @@
 
 桌面 Chromium 的窄视口与根文字放大用于自动回归；移动设备的软键盘、安全区、旋转和读屏需要分别验证。自动化入口见[浏览器测试](browser-testing.md)。
 
+共享下拉框根据 VisualViewport 的可见尺寸和偏移调整位置，随键盘区域变化与视口平移重新定位，保留搜索文本、焦点与活动选项。高度较小时隐藏重复标题，为搜索和选项留出空间；浏览器不支持此 API 时使用窗口尺寸。
+
+`vp run test:e2e tests/e2e/mobile-select.spec.ts tests/e2e/auth-layout.spec.ts` 覆盖可见区缩小、平移、100%/200% 根文字、键盘与点击选择、取消和窗口回退。可见区事件采用受控 API 样本，不能作为真实手机键盘或整页缩放的验证结果。
+
 实际设备检查使用独立测试账号与受控 HTTPS 实例，保持同源 Cookie、Origin/CSRF 与账号隔离。记录代码版本、设备型号、OS/浏览器版本、CSS 可用宽高、文字缩放及辅助技术版本。
 
 1. 在 iOS Safari 与 Android Chrome 检查登录、会话恢复、任务编辑和确认弹层。
