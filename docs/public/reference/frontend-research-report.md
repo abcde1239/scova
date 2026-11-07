@@ -10,7 +10,7 @@
 
 标题、摘要、章节和结论正文沿用阅读字体；目录、工具、状态和引用控件使用界面字体。正文采用纯文本插值和自然换行，不执行 HTML/Markdown，不补图片、章节字段、研究正文或模型重写。尺寸使用 rem 和弹性宽度，窄屏及文字放大时自然重排。
 
-验证：`vp test apps/web/tests/report-research.test.ts`，并结合报告相关回归、`vp check` 与 `vp run build:frontend`。`vp run build:e2e` 仅在 test 模式加入 `/test-fixtures/report-research.html`，真实挂载 ResearchReport 与 ReportBrief，保留既有主题清单和对比样本入口。测试页面可通过 `window.scovaResearchFixture.setReport(report)` 校验 DTO 后换样本，`setView('research' | 'brief')` 比较布局；这些控制和全局接口不进入生产输出。
+验证：`vp test apps/web/tests/report-research.test.ts`，并结合报告相关回归、`vp check` 与 `vp run build:frontend`。`vp run build:e2e` 仅在 test 模式加入 `/tests/fixtures/reports/report-research.html`，真实挂载 ResearchReport 与 ReportBrief，保留既有主题清单和对比样本入口。测试页面可通过 `window.scovaResearchFixture.setReport(report)` 校验 DTO 后换样本，`setView('research' | 'brief')` 比较布局；这些控制和全局接口不进入生产输出。
 
 浏览器专项命令是 `vp run test:e2e tests/e2e/report-research.spec.ts`，需要先生成 test 构建并按项目 E2E 配置启动预览。实际目录键盘定位、焦点/滚动边距、字体切换和六宽矩阵属于独立 QA；受控组件样本不代表真实报告权限、数据库交付或完整研究执行。
 

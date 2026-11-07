@@ -22,7 +22,7 @@ vp run harness-verify
 | unit-tests      | `vp test`         | Web/会话/通信/领域逻辑、contracts、别名隔离、API、Agent 与共享包 |
 | workspace-build | `vp run -r build` | 所有已登记工作区构建/类型检查                                    |
 
-其余必需任务为 `runtime-bun`、`runtime-node`、`connectors-runtime`、`api-openapi`、`api-processes`、`backend-integration`、`web-browser-gate` 和 `web-workbench-gate`。`web-deployment` 已登记为禁用的可选任务，需单独执行 `vp run test:deployment`；完整 `ready` 通过不代表运行过该部署验证。根提交钩子只运行 `vp staged`，不执行完整治理或测试；后端 CI 的 `vp run ready` 会先执行 harness lint，再运行必需任务。
+其余必需任务为 `runtime-bun`、`runtime-node`、`connectors-runtime`、`api-openapi`、`api-processes`、`backend-integration`、`web-browser-gate` 和 `web-workbench-gate`。`web-deployment` 已登记为禁用的可选任务，需单独执行 `vp run test:deployment`；完整 `ready` 通过不代表运行过该部署验证。根提交钩子通过 `scripts/check-staged.mjs` 运行 `vp staged`，只允许检查工具更新原先选中的文件；额外改变的暂存范围会还原，工作区内容保留。钩子不执行完整治理或测试；后端 CI 的 `vp run ready` 会先执行 harness lint，再运行必需任务。
 
 根聚合测试只声明实际覆盖的工作区，没有额外配置相同的子任务，避免重复执行。暂无测试的工作区保持 `not-configured`；这不代表业务验收通过。新建工作区或接入真实业务测试后须同时更新 `harness.config.json`、框架扫描配置和真实测试任务；`covers` 只记录覆盖关系，不创建测试。
 
@@ -40,7 +40,7 @@ Worker 的配置与生命周期、Agent 有限图与原文校验单元纳入根�
 
 任务图中不包含 `ready`、`harness-lint` 或 `harness-verify`，避免递归。检查退出码：0 表示所请求门禁通过，1 表示规则或任务失败，2 表示配置或执行条件错误。查看 JSON 中每个工作区和任务的状态，不以外层命令成功替代测试覆盖判断。
 
-根 Vitest 只扫描 `apps/*`、`packages/*` 的 `src`/`tests` 下 `*.test.ts` 和 `*.spec.ts`，排除产物、E2E 和 `*.integration.test.ts`，避免临时快照被重复发现。数据库、认证、任务、执行与 Outbox 集成须启动专用服务，再依次运行 `vp test --config tests/<suite>.vite.config.ts`，其中 suite 分别为 `database`、`auth`、`tasks`、`runs`、`worker-outbox`；使用同一测试 Redis 的套件不要并行。根命令和覆盖声明不能代替这些真实集成。
+根 Vitest 只扫描 `apps/*`、`packages/*` 的 `tests` 下 `*.test.ts` 和 `*.spec.ts`，排除产物、E2E 和 `*.integration.test.ts`，避免临时快照被重复发现。数据库、认证、任务、执行与 Outbox 集成须启动专用服务，再依次运行 `vp test --config tests/<suite>.vite.config.ts`，其中 suite 分别为 `database`、`auth`、`tasks`、`runs`、`worker-outbox`；使用同一测试 Redis 的套件不要并行。根命令和覆盖声明不能代替这些真实集成。
 
 脚本缓存关闭，确保治理每次读取 Git index；需要构建缓存时使用显式 Vite task，不能缓存外层入口。Vite/Vitest 使用原生 `resolve.tsconfigPaths` 按导入文件解析工作区别名。
 

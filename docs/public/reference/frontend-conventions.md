@@ -60,6 +60,8 @@ EOF 不代替空行，不输出部分消息；错误或 finish 后不能复用�
 
 ## 5. 验收
 
+应用与共享包的测试实现放各工作区 `tests/`，固定输入和辅助代码放 `tests/fixtures/` 或 `tests/support/`。Web 组件展示页、素材、报告 HTML 与测试路由定义统一位于 `apps/web/tests/fixtures/`，仅在 test 构建启用；`src/` 保存生产应用代码。根 `tests/` 负责跨工作区与浏览器验证，运行产物写入忽略的 `artifacts/`。
+
 新增的 apps/web 配置、示例页面和通信测试应通过 `vp check`、`vp test` 与 `vp run -r build`。重点测试 Cookie、CSRF/幂等头、校验失败、401/403、取消、Query 失效、换号迟到响应，以及 SSE 分片/重连；Playwright 检查页面状态、键盘操作与两账号隔离。
 
 当前 `apps/web/src/api` 已提供最小 HTTP 通信入口，端点由 `defineApiEndpoint` 在模块作用域声明，输入/输出使用 `modelValidator` 适配共享 schema。`api.request(endpoint, input, options)` 返回 `{ data, status, headers, url }`，编辑时读取 `headers.etag`，在下一次调用的 `ifMatch` 中原样传回；内部使用 requestlane 的 `requestRaw` 保留真实状态和响应头，并统一执行端点校验。`options` 接收 `signal`、`timeout`、`csrfToken`、`idempotencyKey` 与 `ifMatch`，认证写请求必须提供当前 CSRF，同一动作重发复用调用方持有的幂等键，不自动重试。

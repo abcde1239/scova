@@ -31,4 +31,4 @@ Linux 需安装 Chromium 系统依赖：`vp exec playwright install --with-deps 
 
 受控 live 执行真实 API、Worker、Agent、账本、checkpoint、数据库和交付，固定 supplier 仅替代外部研究响应。历史 demo 报告仍标记演示与覆盖缺口，正式入口不能创建 demo。远程模型与公网供应商须显式配置后另做烟测，普通 CI 不消费生产密钥。
 
-六宽和 200% 根文字检查不证明整页缩放或实体手机兼容。实际桌面读屏应核名称、顺序、状态、装饰图标零重复报读及纯图标命名，并记录工具、浏览器与构建。移动软键盘、安全区、旋转和移动读屏按[后续计划](../reference/mobile-acceptance-plan.md)分别验收；本地分发按[本地一体化计划](../reference/local-integration-plan.md)另行决策。
+六宽和 200% 根文字检查不证明整页缩放或实体手机兼容。实际桌面读屏应核名称、顺序、状态、装饰图标零重复报读及纯图标命名，并记录工具、浏览器与构建。移动软键盘、安全区、旋转和移动读屏按[移动设备检查](../reference/mobile-verification.md)分别验收；当前本地运行方式见[部署指南](deployment.md)。

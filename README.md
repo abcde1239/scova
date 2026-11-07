@@ -68,11 +68,13 @@ vp run verify:mvp-full  # 追加补充页面与完整工作台联合旅程
 
 ## 文档
 
+[文档索引](docs/public/README.md)按使用指南、实现参考和示例组织。
+
 - [系统架构](docs/public/reference/architecture.md) · [数据模型](docs/public/reference/data-model.md)
 - [接口文档](docs/public/reference/api.md) · [共享契约](packages/models/README.md)
 - [本机 SearxNG 部署](docs/public/guides/search.md) · [搜索、模型与安全阅读](packages/connectors/README.md)
 - [Swagger / OpenAPI JSON](swagger.json)（`vp run api:openapi` 重新生成）
-- [交付计划](docs/public/guides/delivery-plan.md) · [两次执行验收](docs/public/examples/two-run-scenarios.md)
+- [两次执行验收](docs/public/examples/two-run-scenarios.md)
 - [Web 工作台](docs/public/guides/web-workbench.md) · [前端与通信约定](docs/public/reference/frontend-conventions.md) · [浏览器测试](docs/public/reference/browser-testing.md)
 
 单机 Web/API 启动、迁移、备份恢复与数据保留见 [部署指南](docs/public/guides/deployment.md)。
