@@ -1,3 +1,4 @@
+import { chooseTimezone } from './support/select.ts';
 import { logoutFromAccount, expectAccountReady } from './support/account-menu.ts';
 import { randomUUID } from 'node:crypto';
 import type { Run, TaskDetailResponse } from '@scova/models';
@@ -8,7 +9,7 @@ import { assertAtomicDelivery, attachProvenance, waitForDelivery } from './suppo
 async function queued(environment: BrowserEnvironment, owner: Owner, taskId: string) {
     const result = await environment.request<{ run: Run }>(owner, `/api/v1/tasks/${taskId}/runs`, {
         method: 'POST',
-        body: { mode: 'demo' },
+        body: { mode: 'live' },
         headers: { 'idempotency-key': randomUUID() },
     });
     expect(result.run.status).toBe('queued');
@@ -46,7 +47,7 @@ test('关闭网页与Worker停止分开验证：暂停保留在途Run，重开�
         .toBe('partial');
     owner.page = await owner.context.newPage();
     await owner.page.goto(`/runs/${run.id}`);
-    await expect(owner.page.locator('#execution-status')).toHaveText('部分完成');
+    await expect(owner.page.locator('#execution-status')).toHaveText('已生成结果');
     const delivered = await waitForDelivery(environment, owner, run);
     await expect(owner.page.getByRole('link', { name: '查看已发布报告' })).toHaveAttribute(
         'href',
@@ -118,7 +119,7 @@ test('真实网络中断不猜测执行失败：恢复终态、N+1持久事件�
         await owner.context.setOffline(false);
     }
     await owner.page.getByRole('button', { name: '刷新快照', exact: true }).click();
-    await expect(owner.page.locator('#execution-status')).toHaveText('部分完成');
+    await expect(owner.page.locator('#execution-status')).toHaveText('已生成结果');
     const delivered = await waitForDelivery(environment, owner, run);
     const readEvents = async (lastEventId: string) =>
         owner.page.evaluate(
@@ -222,7 +223,7 @@ test('取消只作用于本次Run，未来周期计划保持；晚到真实401�
         await owner.page.getByRole('link', { name: '注册账号', exact: true }).click();
         await owner.page.getByLabel('邮箱', { exact: true }).fill(`${randomUUID()}@example.test`);
         await owner.page.getByLabel('密码', { exact: true }).fill(`Fixture-${randomUUID()}`);
-        await owner.page.getByLabel('默认时区', { exact: true }).fill('UTC');
+        await chooseTimezone(owner.page, 'UTC');
         const registered = owner.page.waitForResponse(
             (response) =>
                 response.request().method() === 'POST' &&

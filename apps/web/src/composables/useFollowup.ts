@@ -162,7 +162,12 @@ export function useFollowup(
             (!!attempt.value && ['uncertain', 'blocked', 'sending'].includes(phase.value)),
     );
     const canOpen = computed(
-        () => available.value && !attempt.value && !candidateId.value && !pending.value,
+        () =>
+            available.value &&
+            toValue(report)?.mode === 'live' &&
+            !attempt.value &&
+            !candidateId.value &&
+            !pending.value,
     );
     watch(linkedRun, (value) => {
         if (value && !pending.value && ['uncertain', 'blocked'].includes(phase.value)) {

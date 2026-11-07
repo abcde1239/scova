@@ -11,7 +11,7 @@ import { defineApiEndpoint } from '@/api/endpoints';
 import { toApiError } from '@/api/errors';
 import type { SessionLifecycle } from '@/api/session';
 import { taskEndpoint, taskKeys } from '@/api/tasks';
-import { modelValidator } from '@/api/validator';
+import { modelValidator, voidValidator } from '@/api/validator';
 
 export type TaskLifecycleAction = 'pause' | 'resume' | 'archive';
 const desiredStatus = { pause: 'paused', resume: 'active', archive: 'archived' } as const;
@@ -21,6 +21,24 @@ const paramsValidator = {
         return { taskId: parseContract(UuidSchema, id) };
     },
 };
+const deleteEndpoint = defineApiEndpoint<{ params: { taskId: string }; data: void }>({
+    method: 'DELETE',
+    path: '/tasks/:taskId',
+    inputValidators: { params: paramsValidator },
+    validator: voidValidator,
+});
+export function requestTaskDeletion(
+    scope: ReturnType<SessionLifecycle['capture']>,
+    snapshot: ApiResponse<TaskDetailResponse>,
+    signal: AbortSignal,
+) {
+    validateLifecycleSnapshot(snapshot, snapshot.data.task.id);
+    return scope.request(
+        deleteEndpoint,
+        { params: { taskId: snapshot.data.task.id } },
+        { ifMatch: snapshot.headers.etag, signal },
+    );
+}
 const endpoint = (action: TaskLifecycleAction) =>
     defineApiEndpoint<{
         params: { taskId: string };

@@ -198,6 +198,35 @@ async function noOverflow(page: Page) {
     }
 }
 
+test('长摘要按需展开，刷新保留相同内容状态，更新内容后恢复收起且不写入', async ({ page }) => {
+    const { state, calls } = await samples(page.context());
+    state.items[0]!.report.summary = '完整来源说明与尚待核验的研究缺口。'.repeat(30);
+    state.items[1]!.report.summary = '短摘要保持完整。';
+    await page.goto('/inbox');
+    const first = entry(page, 1);
+    const summary = first.locator('.entry-summary');
+    const toggle = first.getByRole('button', { name: '展开摘要', exact: true });
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(toggle).toHaveAttribute('aria-controls', (await summary.getAttribute('id'))!);
+    const collapsedHeight = (await summary.boundingBox())!.height;
+    await toggle.focus();
+    await toggle.press('Enter');
+    await expect(first.getByRole('button', { name: '收起摘要' })).toBeFocused();
+    expect((await summary.boundingBox())!.height).toBeGreaterThan(collapsedHeight);
+    await refresh(page).click();
+    await expect(first.getByRole('button', { name: '收起摘要' })).toHaveAttribute(
+        'aria-expanded',
+        'true',
+    );
+    state.items[0]!.report.summary = '更新后的完整摘要。'.repeat(40);
+    await refresh(page).click();
+    await expect(summary).toHaveText(state.items[0]!.report.summary);
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(entry(page, 2).getByRole('button', { name: /展开摘要|收起摘要/ })).toHaveCount(0);
+    await expect(entry(page, 2).locator('.entry-summary')).toHaveText('短摘要保持完整。');
+    expect(patches(calls)).toEqual([]);
+});
+
 for (const width of [320, 390, 768, 1024, 1440, 1920]) {
     test(`本地收件箱样本${width}：纯文字与200%排版、原样游标去重和报告返回位置`, async ({
         page,
@@ -218,7 +247,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         await page.setViewportSize({ width, height: 1000 });
         await page.goto(width === 390 ? '/inbox?read=unread' : '/inbox');
         await expect(entries(page)).toHaveCount(3);
-        await expect(entry(page, 1)).toContainText('部分交付');
+        await expect(entry(page, 1)).toContainText('结果已生成，未覆盖项目见报告详情。');
         await expect(entry(page, 1)).toContainText('演示报告');
         await expect(entry(page, 2)).toContainText('真实查阅');
         expect(
@@ -285,10 +314,14 @@ test('已读在途保原状态、重复激活不重写；成功后刷新仍已�
     await page.evaluate(() => (document.documentElement.style.fontSize = '200%'));
     await entry(page, 1).getByRole('button', { name: '标记已读', exact: true }).dblclick();
     await expect(entry(page, 1).locator('strong')).toHaveText('未读');
-    await expect(entry(page, 1).getByRole('button')).toHaveAttribute('aria-busy', 'true');
-    await entry(page, 1).getByRole('button').press('Enter');
-    await entry(page, 1).getByRole('button').press('Space');
-    await expect(entry(page, 2).getByRole('button')).toBeDisabled();
+    await expect(
+        entry(page, 1).getByRole('button', { name: '正在更新', exact: true }),
+    ).toHaveAttribute('aria-busy', 'true');
+    await entry(page, 1).getByRole('button', { name: '正在更新', exact: true }).press('Enter');
+    await entry(page, 1).getByRole('button', { name: '正在更新', exact: true }).press('Space');
+    await expect(
+        entry(page, 2).getByRole('button', { name: '标记已读', exact: true }),
+    ).toBeDisabled();
     expect(patches(calls)).toHaveLength(1);
     release();
     await expect(entry(page, 1).locator('strong')).toHaveText('已读');
@@ -322,7 +355,9 @@ test('写失败保留未读和可重试按钮，320/200%错误可读', async ({ 
     await entry(page, 1).getByRole('button', { name: '标记已读', exact: true }).click();
     await expect(inbox(page).getByRole('alert')).toContainText('原状态已保留');
     await expect(entry(page, 1).locator('strong')).toHaveText('未读');
-    await expect(entry(page, 1).getByRole('button')).toBeEnabled();
+    await expect(
+        entry(page, 1).getByRole('button', { name: '标记已读', exact: true }),
+    ).toBeEnabled();
     await noOverflow(page);
     await inbox(page).getByRole('alert').scrollIntoViewIfNeeded();
     await info.attach('320-write-failure-text-200', {
@@ -331,7 +366,7 @@ test('写失败保留未读和可重试按钮，320/200%错误可读', async ({ 
     });
     expect(patches(calls)).toHaveLength(1);
     state.patchFailure = 0;
-    await entry(page, 1).getByRole('button').click();
+    await entry(page, 1).getByRole('button', { name: '标记已读', exact: true }).click();
     await expect(entry(page, 1).locator('strong')).toHaveText('已读');
 });
 
@@ -340,14 +375,14 @@ test('未读写成功移除条目并聚焦后继，最后条目移除返回当�
     state.items = [item(1), item(2)];
     await page.goto('/inbox?read=unread');
     await expect(entries(page)).toHaveCount(2);
-    await entry(page, 1).getByRole('button').focus();
-    await entry(page, 1).getByRole('button').press('Enter');
+    await entry(page, 1).getByRole('button', { name: '标记已读', exact: true }).focus();
+    await entry(page, 1).getByRole('button', { name: '标记已读', exact: true }).press('Enter');
     await expect(entry(page, 1)).toHaveCount(0);
     await expect(reportLink(page, 2)).toBeFocused();
-    await entry(page, 2).getByRole('button').click();
+    await entry(page, 2).getByRole('button', { name: '标记已读', exact: true }).click();
     await expect(entries(page)).toHaveCount(0);
     await expect(filterLink(page, '未读')).toBeFocused();
-    await expect(inbox(page).getByRole('status').filter({ hasText: '没有未读报告' })).toBeVisible();
+    await expect(inbox(page).getByRole('status').filter({ hasText: '暂无未读报告' })).toBeVisible();
     await info.attach('unread-empty-focus', {
         body: await page.screenshot({ path: info.outputPath('unread-empty-focus.png') }),
         contentType: 'image/png',
@@ -382,7 +417,7 @@ test('all写入在途切未读再返回，已接受成功仍更新全部缓存',
         release = resolve;
     });
     await page.goto('/inbox');
-    await entry(page, 1).getByRole('button').click();
+    await entry(page, 1).getByRole('button', { name: '标记已读', exact: true }).click();
     await expect.poll(() => patches(calls).length).toBe(1);
     await filterLink(page, '未读').click();
     await expect(entries(page)).toHaveCount(3);

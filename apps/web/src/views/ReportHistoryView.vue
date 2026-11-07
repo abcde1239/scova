@@ -39,12 +39,14 @@
                     >重试任务选项</action-button
                 >
             </template>
-            <action-button
+            <div
                 v-if="tasks.query.hasNextPage.value && !taskOptionsHidden"
-                :busy="tasks.query.isFetchingNextPage.value"
-                @click="moreTasks"
-                >加载更多任务选项</action-button
+                class="scova-pagination"
             >
+                <action-button :busy="tasks.query.isFetchingNextPage.value" @click="moreTasks"
+                    >加载更多任务选项</action-button
+                >
+            </div>
         </div>
         <state-panel v-if="!valid" state="error" :message="error.message" />
         <state-panel v-else-if="query.isPending.value" state="loading" message="正在读取报告历史" />
@@ -55,7 +57,7 @@
             retryable
             @retry="retry"
         />
-        <state-panel v-else-if="!items.length" state="empty" message="当前任务范围内尚无报告。" />
+        <state-panel v-else-if="!items.length" state="empty" message="暂无报告" />
         <div v-if="items.length" class="history-list">
             <report-history-entry
                 v-for="item in items"
@@ -66,7 +68,7 @@
         </div>
         <div
             v-if="items.length && query.hasNextPage.value && !error.hidden"
-            class="history-pagination"
+            class="history-pagination scova-pagination"
         >
             <action-button
                 :busy="query.isFetchingNextPage.value"
@@ -265,8 +267,5 @@ p {
 }
 .history-list {
     min-inline-size: 0;
-}
-.history-pagination {
-    padding-block: 1rem;
 }
 </style>

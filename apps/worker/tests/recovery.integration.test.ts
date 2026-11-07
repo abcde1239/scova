@@ -18,6 +18,7 @@ import {
     createModelProvider,
     estimateModelInputTokens,
     DEMO_URL,
+    ConnectorError,
     type ConnectorBundle,
     type StructuredInput,
     type SafeHttpClient,
@@ -38,6 +39,7 @@ import { createAgentSession, createAgentRuntime } from '../src/service/agent.ts'
 import { RunService } from '../src/service/runs.ts';
 import { outboxDatabase } from './support/outbox-database.ts';
 import { emptyUsage, seedRun } from './support/run-database.ts';
+import { scenarioConnectors } from './support/acceptance-scenario-fixtures.ts';
 import { nodeScriptCommand } from '../../../scripts/process-runtime.mjs';
 
 const fixture = outboxDatabase();
@@ -112,7 +114,7 @@ function sessionFixture(
             emit: (event) => runs.emit(seed.current.token, event),
         },
     });
-    return { session, close: () => saver.end() };
+    return { session, prepare: () => saver.setup(), close: () => saver.end() };
 }
 
 beforeAll(async () => {
@@ -124,6 +126,251 @@ beforeAll(async () => {
 afterAll(() => fixture.cleanup());
 
 describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）', () => {
+    it('persists quota blocking across epochs without refunding or blocking a fresh Run', async () => {
+        const seed = await setup({ mode: 'live' });
+        const input: StructuredInput = {
+            prompt: 'fixture quota check',
+            schema: {},
+            maxInputTokens: 2000,
+            maxOutputTokens: 100,
+        };
+        let dispatches = 0;
+        const bundle = scenarioConnectors('research', 'A');
+        bundle.model = {
+            async generateStructured(_input, context = {}) {
+                dispatches++;
+                await context.beforeAttempt?.('model');
+                throw new ConnectorError('model_quota_exceeded', 'DO_NOT_RENDER');
+            },
+        };
+        const first = sessionFixture(seed, bundle);
+        try {
+            await first.prepare();
+            await expect(first.session.tools.model('first', input)).rejects.toMatchObject({
+                code: 'model_quota_exceeded',
+            });
+            const heldUsage = await seed.repo.usage();
+            expect(heldUsage.outputTokens).toBe(100);
+            await expect(first.session.tools.model('later', input)).rejects.toMatchObject({
+                code: 'model_quota_exceeded',
+            });
+            const next = await takeover(seed.run.id);
+            const recovered = sessionFixture({ ...seed, ...next }, bundle);
+            try {
+                await recovered.prepare();
+                await expect(recovered.session.tools.model('first', input)).rejects.toMatchObject({
+                    code: 'model_quota_exceeded',
+                });
+                expect(await next.repo.usage()).toEqual(heldUsage);
+                expect(dispatches).toBe(1);
+                const events = await fixture.db.query.runEvents.findMany({
+                    where: eq(dbRunEvents.runId, seed.run.id),
+                });
+                expect(events.filter((event) => event.type === 'tool.failed')).toHaveLength(1);
+                expect(JSON.stringify(events)).toContain('TOOL_MODEL_QUOTA_EXCEEDED');
+                expect(JSON.stringify(events)).not.toContain('DO_NOT_RENDER');
+                const calls = await fixture.db.query.toolCalls.findMany({
+                    where: eq(dbToolCalls.runId, seed.run.id),
+                });
+                expect(calls).toHaveLength(1);
+                expect(calls[0].status).toBe('unknown');
+            } finally {
+                await recovered.close();
+            }
+            const fresh = await setup({ mode: 'live' });
+            await expect(
+                fresh.repo.reserve({
+                    operationKey: 'new-after-topup',
+                    tool: 'model',
+                    reserved: usage({ inputTokens: 2000, outputTokens: 100 }),
+                }),
+            ).resolves.toMatchObject({ kind: 'reserved' });
+        } finally {
+            await first.close();
+        }
+    });
+
+    it('persists fixed research diagnostics through the fenced PG progress entry', async () => {
+        const seed = await setup({ mode: 'live' });
+        for (const state of ['waiting', 'cooldown', 'cache_hit', 'claims_repair'] as const)
+            await runs.emit(seed.current.token, { type: 'research.updated', payload: { state } });
+        const events = await fixture.db.query.runEvents.findMany({
+            where: eq(dbRunEvents.runId, seed.run.id),
+        });
+        expect(
+            events
+                .filter((event) => event.type === 'research.updated')
+                .map((event) => event.payload),
+        ).toEqual([
+            { state: 'waiting' },
+            { state: 'cooldown' },
+            { state: 'cache_hit' },
+            { state: 'claims_repair' },
+        ]);
+        await expect(
+            runs.emit(seed.current.token, {
+                type: 'research.updated',
+                payload: { state: 'secret' },
+            } as never),
+        ).rejects.toThrow();
+    });
+    it('retains mixed claims with explicit uncertainty without requiring a second synthesis', async () => {
+        const seed = await setup({ mode: 'live' });
+        const bundle = scenarioConnectors('research', 'A');
+        const model = bundle.model;
+        let syntheses = 0;
+        bundle.model = {
+            async generateStructured<T>(input: StructuredInput, context: CallContext = {}) {
+                if ('claims' in (input.schema.properties as Record<string, unknown>)) {
+                    syntheses++;
+                    if (syntheses === 2) {
+                        await context.beforeAttempt?.('model');
+                        throw new ConnectorError('network', 'repair unavailable');
+                    }
+                    const result = await model.generateStructured<{ claims: unknown[] }>(
+                        input,
+                        context,
+                    );
+                    return {
+                        ...result,
+                        data: {
+                            claims: [
+                                ...result.data.claims,
+                                {
+                                    kind: 'fact',
+                                    text: 'fabricated',
+                                    questionIds: ['q0'],
+                                    citations: [],
+                                },
+                            ],
+                        } as T,
+                    };
+                }
+                return model.generateStructured<T>(input, context);
+            },
+        };
+        const { session, prepare, close } = sessionFixture(seed, bundle);
+        try {
+            await prepare();
+            const candidate = await session.execute();
+            expect(candidate.claims.some((claim) => claim.kind !== 'insufficient')).toBe(true);
+            expect(candidate.claims.find((claim) => claim.text === 'fabricated')).toMatchObject({
+                kind: 'insufficient',
+                citations: [],
+                uncertainty: ['missing_citation'],
+            });
+            expect(candidate.coverage.completeness).toBe('partial');
+            expect(syntheses).toBe(1);
+            expect(candidate.coverage.research?.uncertainClaims).toBe(1);
+            const events = await fixture.db.query.runEvents.findMany({
+                where: eq(dbRunEvents.runId, seed.run.id),
+            });
+            expect(
+                events.some(
+                    (event) =>
+                        event.type === 'research.updated' &&
+                        (event.payload as { state?: string }).state === 'claims_repair',
+                ),
+            ).toBe(false);
+        } finally {
+            await close();
+        }
+    });
+    it('keeps the failed plan reservation charged and completes its bounded repair under an old 8000 token Run', async () => {
+        const seed = await setup({ mode: 'live' });
+        const bundle = scenarioConnectors('research', 'A');
+        const model = bundle.model;
+        const outputs: number[] = [];
+        bundle.model = {
+            async generateStructured<T>(input: StructuredInput, context: CallContext = {}) {
+                outputs.push(input.maxOutputTokens);
+                if (outputs.length === 1) {
+                    await context.beforeAttempt?.('model');
+                    throw new ConnectorError('output_truncated', 'fixture secret');
+                }
+                return model.generateStructured<T>(input, context);
+            },
+        };
+        const { session, prepare, close } = sessionFixture(seed, bundle);
+        try {
+            await prepare();
+            const candidate = await session.execute();
+            expect(candidate.claims.length).toBeGreaterThan(0);
+            expect(outputs.slice(0, 2)).toEqual([1000, 2000]);
+            expect(await seed.repo.usage()).toMatchObject({ outputTokens: 1003 });
+            const calls = await fixture.db.query.toolCalls.findMany({
+                where: eq(dbToolCalls.runId, seed.run.id),
+            });
+            expect(calls.filter((call) => call.status === 'unknown')).toHaveLength(1);
+            expect(calls.filter((call) => call.tool === 'model')).toHaveLength(4);
+            const events = await fixture.db.query.runEvents.findMany({
+                where: eq(dbRunEvents.runId, seed.run.id),
+            });
+            expect(
+                events.some(
+                    (event) =>
+                        event.type === 'tool.failed' &&
+                        JSON.stringify(event.payload).includes('TOOL_OUTPUT_TRUNCATED'),
+                ),
+            ).toBe(true);
+            expect(JSON.stringify(events)).not.toContain('fixture secret');
+            expect(
+                (await fixture.db.query.runs.findFirst({ where: eq(dbRuns.id, seed.run.id) }))
+                    ?.budgetJson,
+            ).toEqual(seed.config.budget);
+        } finally {
+            await close();
+        }
+    });
+    it('charges truncated comparison and its compact repair within the old Run budget', async () => {
+        const seed = await setup({ mode: 'live' });
+        const bundle = scenarioConnectors('research', 'A');
+        const original = bundle.model;
+        let comparisons = 0;
+        const outputs: number[] = [];
+        bundle.model = {
+            async generateStructured<T>(input: StructuredInput, context: CallContext = {}) {
+                outputs.push(input.maxOutputTokens);
+                if (
+                    'pages' in (input.schema.properties as Record<string, unknown>) &&
+                    ++comparisons === 1
+                ) {
+                    await context.beforeAttempt?.('model');
+                    throw new ConnectorError('output_truncated', 'DO_NOT_RENDER');
+                }
+                expect(estimateModelInputTokens(input)).toBeLessThanOrEqual(input.maxInputTokens);
+                return original.generateStructured<T>(input, context);
+            },
+        };
+        const { session, prepare, close } = sessionFixture(seed, bundle);
+        try {
+            await prepare();
+            const candidate = await session.execute();
+            expect(candidate.comparison).toBe('completed');
+            expect(comparisons).toBe(2);
+            expect(outputs.slice(0, 3)).toEqual([1000, 1000, 2000]);
+            expect(outputs.reduce((sum, n) => sum + n, 0)).toBeLessThanOrEqual(8000);
+            expect(await seed.repo.usage()).toMatchObject({ outputTokens: 1003 });
+            const calls = await fixture.db.query.toolCalls.findMany({
+                where: eq(dbToolCalls.runId, seed.run.id),
+            });
+            expect(calls.filter((c) => c.status === 'unknown')).toHaveLength(1);
+            expect(
+                calls.some(
+                    (c) =>
+                        c.operationKey.startsWith('compare-facts-repair-v1') &&
+                        c.status === 'succeeded',
+                ),
+            ).toBe(true);
+            const events = await fixture.db.query.runEvents.findMany({
+                where: eq(dbRunEvents.runId, seed.run.id),
+            });
+            expect(JSON.stringify(events)).not.toContain('DO_NOT_RENDER');
+        } finally {
+            await close();
+        }
+    });
+
     it('C14-F01 已提交 operationKey 跨 epoch 复用，结算重放不改结果或重复扣费', async () => {
         const seed = await setup();
         const first = await seed.repo.reserve({
@@ -241,6 +488,26 @@ describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）',
             }),
         ).rejects.toMatchObject({ code: 'INVALID_TOOL_CALL' });
         expect(await seed.repo.usage()).toMatchObject({ searches: 1, pages: 0 });
+    });
+
+    it('工具失败持久化固定分类，仍保留未知结果和已预留预算', async () => {
+        const seed = await setup();
+        const held = await seed.repo.reserve(search('classified-failure'));
+        await seed.repo.fail({ toolCallId: held.toolCallId, failureCode: 'TOOL_UNSAFE_URL' });
+        const calls = await fixture.db.query.toolCalls.findMany({
+            where: eq(dbToolCalls.runId, seed.run.id),
+        });
+        expect(calls[0]?.status).toBe('unknown');
+        expect(await seed.repo.usage()).toMatchObject({ searches: 1 });
+        const events = await fixture.db.query.runEvents.findMany({
+            where: eq(dbRunEvents.runId, seed.run.id),
+        });
+        const failure = events.find((event) => event.type === 'tool.failed');
+        expect(failure?.payload).toMatchObject({
+            code: 'TOOL_UNSAFE_URL',
+            message: '地址或域名解析未通过公网安全校验',
+            retryable: false,
+        });
     });
 
     it.each([true, false])(

@@ -1,0 +1,82 @@
+import { spawnSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
+const root = fileURLToPath(new URL('../', import.meta.url));
+const envPath = fileURLToPath(new URL('../.env.local', import.meta.url));
+const commands: Record<string, string[]> = {
+    up: ['up', '-d', '--wait', '--wait-timeout', '180'],
+    down: ['down'],
+    status: ['ps'],
+};
+const action = process.argv[2];
+if (!action || (action !== 'init' && !Object.hasOwn(commands, action)))
+    throw new Error('Expected init, up, down or status');
+
+if (!existsSync(envPath)) {
+    if (action !== 'init' && action !== 'up') throw new Error('Run vp run local:init first');
+    const template = readFileSync(new URL('../.env.local.example', import.meta.url), 'utf8');
+    const contents = template
+        .replaceAll('replace_with_a_random_database_password', randomBytes(24).toString('hex'))
+        .replaceAll('replace_with_a_random_search_secret', randomBytes(32).toString('hex'));
+    writeFileSync(envPath, contents, { mode: 0o600, flag: 'wx' });
+    console.log('Created .env.local with random local credentials.');
+}
+
+// Add new deployment-only encryption material once; never rotate existing user credentials.
+const existingEnv = readFileSync(envPath, 'utf8');
+const credential = [...existingEnv.matchAll(/^AGENT_CREDENTIAL_KEY=([^\r\n]*)\r?$/gm)]
+    .at(-1)?.[1]
+    ?.trim();
+if (
+    (action === 'init' || action === 'up') &&
+    (!credential || credential === '""' || credential === "''")
+) {
+    const withoutBlankKey = existingEnv.replace(/^AGENT_CREDENTIAL_KEY=[^\r\n]*(?:\r?\n|$)/gm, '');
+    writeFileSync(
+        envPath,
+        `${withoutBlankKey.trimEnd()}\nAGENT_CREDENTIAL_KEY=${randomBytes(32).toString('hex')}\n`,
+        { mode: 0o600 },
+    );
+    console.log(
+        'Initialized account model credential encryption. Keep .env.local backed up securely.',
+    );
+}
+
+if (action === 'init') {
+    console.log('Local configuration ready; existing .env.local is preserved.');
+} else {
+    if (action === 'up' && process.platform === 'win32') {
+        const startup = spawnSync(
+            'powershell.exe',
+            [
+                '-NoProfile',
+                '-NonInteractive',
+                '-File',
+                fileURLToPath(new URL('./start-docker.ps1', import.meta.url)),
+            ],
+            { cwd: root, stdio: 'inherit', windowsHide: true },
+        );
+        if (startup.error) throw startup.error;
+        if (startup.status !== 0) process.exit(startup.status ?? 1);
+    }
+    const result = spawnSync(
+        'docker',
+        [
+            'compose',
+            '--env-file',
+            envPath,
+            '-f',
+            'compose.local.yaml',
+            '-p',
+            'scova-local',
+            ...commands[action],
+        ],
+        { cwd: root, stdio: 'inherit', windowsHide: true },
+    );
+    if (result.error) throw result.error;
+    process.exitCode = result.status ?? 1;
+    if (result.status === 0 && action === 'up')
+        console.log('Local dependencies ready. Next: vp run db:migrate, then vp run dev.');
+}

@@ -6,6 +6,7 @@ import {
     migrateDatabase,
     readDatabaseMigrations,
     readLegacyMigrations,
+    scopeMigrationSql,
     verifyDatabase,
 } from '../src/migrate.ts';
 
@@ -133,6 +134,86 @@ describe('Drizzle SQL 迁移与旧库无损接管', () => {
         }
     });
 
+    it('已有供应商升级后保留研究用途并初始化需求整理用途，重复迁移不覆盖新选择', async () => {
+        const item = target();
+        const client = new pg.Client({
+            connectionString: baseUrl,
+            options: `-c search_path=${item.namespace}`,
+        });
+        await admin.query(`CREATE SCHEMA "${item.namespace}"`);
+        await client.connect();
+        try {
+            await client.query(
+                'CREATE TABLE _scova_migrations (name text PRIMARY KEY, hash char(64) NOT NULL, applied_at timestamptz NOT NULL DEFAULT clock_timestamp())',
+            );
+            const migrations = await readDatabaseMigrations();
+            const providerUseMigration = migrations.findIndex(
+                (migration) => migration.name === '0002_sharp_trauma',
+            );
+            expect(providerUseMigration).toBeGreaterThan(0);
+            for (const migration of migrations.slice(0, providerUseMigration)) {
+                await client.query(scopeMigrationSql(migration.sql, item.namespace));
+                await client.query('INSERT INTO _scova_migrations(name,hash) VALUES($1,$2)', [
+                    migration.name,
+                    migration.hash,
+                ]);
+            }
+            const owner = randomUUID(),
+                enabled = randomUUID(),
+                spare = randomUUID();
+            await client.query(
+                'INSERT INTO users(id,email,normalized_email,password_hash) VALUES($1,$2,$2,$3)',
+                [owner, owner + '@test.dev', 'fixture-hash'],
+            );
+            for (const [id, active] of [
+                [enabled, true],
+                [spare, false],
+            ])
+                await client.query(
+                    'INSERT INTO agent_providers(id,user_id,name,base_url,model,encrypted_api_key,active) VALUES($1,$2,$3,$4,$5,$6,$7)',
+                    [
+                        id,
+                        owner,
+                        'fixture',
+                        'https://api.example.test/v1',
+                        'model',
+                        'encrypted-fixture-unchanged',
+                        active,
+                    ],
+                );
+            await migrateDatabase(item);
+            expect(
+                (
+                    await client.query(
+                        'SELECT active,draft_active,encrypted_api_key FROM agent_providers WHERE id=$1',
+                        [enabled],
+                    )
+                ).rows[0],
+            ).toEqual({
+                active: true,
+                draft_active: true,
+                encrypted_api_key: 'encrypted-fixture-unchanged',
+            });
+            expect(
+                (
+                    await client.query('SELECT draft_active FROM agent_providers WHERE id=$1', [
+                        spare,
+                    ])
+                ).rows[0].draft_active,
+            ).toBe(false);
+            await client.query('UPDATE agent_providers SET draft_active=false WHERE id=$1', [
+                enabled,
+            ]);
+            await client.query('UPDATE agent_providers SET draft_active=true WHERE id=$1', [spare]);
+            await migrateDatabase(item);
+            expect(
+                (await client.query('SELECT id FROM agent_providers WHERE draft_active')).rows,
+            ).toEqual([{ id: spare }]);
+            await verifyDatabase(item);
+        } finally {
+            await client.end();
+        }
+    });
     it('只读 readiness 不创建 schema 或迁移账本', async () => {
         const item = target();
         await expect(verifyDatabase(item)).rejects.toThrow('待执行迁移');
@@ -254,7 +335,19 @@ describe('Drizzle SQL 迁移与旧库无损接管', () => {
             const before = await snapshotAll();
             expect(await migrateDatabase(item)).toEqual({ migrated: true, current: true });
             expect(await migrateDatabase(item)).toEqual({ migrated: false, current: true });
-            expect(await snapshotAll()).toEqual(before);
+            const after = await snapshotAll();
+            expect(
+                after.filter((row) => before.some((previous) => previous.table === row.table)),
+            ).toEqual(before);
+            // New migrations may add tables, while every pre-existing table must remain identical.
+            expect(
+                after.filter((row) => !before.some((previous) => previous.table === row.table)),
+            ).toEqual([
+                {
+                    table: 'agent_providers',
+                    data: { count: 0, hash: createHash('md5').update('[]').digest('hex') },
+                },
+            ]);
             expect(
                 (
                     await client.query(

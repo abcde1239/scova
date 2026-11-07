@@ -175,7 +175,7 @@ describe('notifications', () => {
         expect(notificationLabel(item(2, 'important_change'))).toBe('重要变化');
         expect(notificationLabel(item(3, 'run_issue'))).toBe('运行问题');
         expect(notificationMessage({ ...item(3, 'run_issue'), runStatus: 'partial' })).toContain(
-            '部分交付',
+            '结果已生成，未覆盖项目见报告详情。',
         );
         expect(notificationMessage(item(3, 'run_issue'))).toContain('执行失败');
         expect(notificationLabel({ ...item(2, 'important_change'), runStatus: 'partial' })).toBe(
@@ -271,7 +271,7 @@ describe('notifications', () => {
         await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));
         expect(notifications.items.value[0]?.readAt).toBeNull();
         expect(await notifications.setRead(item(), true)).toBe(false);
-        expect(fetcher.mock.calls[1]?.[1]?.credentials).toBe('same-origin');
+        expect(fetcher.mock.calls[1]?.[1]?.credentials).toBe('include');
         expect(new Headers(fetcher.mock.calls[1]?.[1]?.headers).get('x-csrf-token')).toBe(
             account.csrfToken,
         );

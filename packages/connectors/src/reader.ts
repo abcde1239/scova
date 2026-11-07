@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
-import { JSDOM } from 'jsdom';
+import { JSDOM, VirtualConsole } from 'jsdom';
 import { Readability } from '@mozilla/readability';
-import { createSafeHttpClient, normalizeUrl, positiveLimit, withDeadline } from './http.ts';
+import { normalizeUrl, positiveLimit, withDeadline } from './http.ts';
+import { createReaderHttpClient } from './reader-http.ts';
 import type { SafeHttpClient } from './http.ts';
 import { ConnectorError } from './types.ts';
 import type { PageReader } from './types.ts';
@@ -16,7 +17,7 @@ export function pageFingerprint(text: string): string {
 export function createPageReader(
     options: { http?: SafeHttpClient; maxTextChars?: number } = {},
 ): PageReader {
-    const http = options.http ?? createSafeHttpClient();
+    const http = options.http ?? createReaderHttpClient();
     const maxText = positiveLimit(options.maxTextChars ?? 100_000, 200_000, '正文长度');
     const origins = new Map<string, Promise<void>>();
     return {
@@ -56,7 +57,14 @@ export function createPageReader(
                     const charset = contentType.match(/charset\s*=\s*["']?([^;\s"']+)/i)?.[1];
                     if (charset && !/^utf-?8$/i.test(charset))
                         throw new ConnectorError('invalid_response', '网页字符编码不支持');
-                    const dom = new JSDOM(response.body, { url: response.url });
+                    // Reader extracts text, not rendered styles. Modern source CSS can be valid
+                    // in browsers while unsupported by jsdom's CSS parser. Keep other diagnostics.
+                    const virtualConsole = new VirtualConsole();
+                    virtualConsole.on('jsdomError', (error) => {
+                        if (Reflect.get(error, 'type') !== 'css parsing')
+                            console.error(error.message);
+                    });
+                    const dom = new JSDOM(response.body, { url: response.url, virtualConsole });
                     try {
                         const document = dom.window.document;
                         if (document.getElementsByTagName('*').length > 20_000)

@@ -18,7 +18,7 @@ Web 使用 community 同源的 `@vicons/ionicons5`（0.13.0），集中在 `comp
 3. 在窄屏打开菜单并按 Escape 退出，核对焦点返回；检查禁用和忙碌状态。实际工具报读与自动化 AX/DOM 断言分别记录。
 4. 生产路径与 test-only 图标样例分别登记工具、浏览器、构建和结果；清理专属测试账号及服务。
 
-自动化入口为 `visual-foundation.spec.ts`、`base-pages-accessibility.spec.ts`，运行方式见[浏览器测试](browser-testing.md)。六宽、根文字放大、computed style 和可访问名称检查均不能代替实际读屏；移动 VoiceOver/TalkBack 按[实机计划](mobile-acceptance-plan.md)另验。组件样例只在 test 构建开放，不表示生产额外提供该动作。
+自动化入口为 `visual-foundation.spec.ts`、`base-pages-accessibility.spec.ts`，运行方式见[浏览器测试](browser-testing.md)。六宽、根文字放大、computed style 和可访问名称检查均不能代替实际读屏；移动 VoiceOver/TalkBack 按[移动设备检查](mobile-verification.md)另验。组件样例只在 test 构建开放，不表示生产额外提供该动作。
 
 ## 实际工具记录
 

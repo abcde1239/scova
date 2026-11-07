@@ -74,13 +74,50 @@ function setup(fetcher: typeof fetch) {
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe('手工任务配置', () => {
+    it('拒绝新填写的超额阶段分配，保留未改的历史低预算', () => {
+        expect(() => taskInput({ ...validDraft(), maxOutputTokens: '1' })).toThrow();
+        const original = {
+            ...taskInput(validDraft()).config,
+            budget: { ...taskInput(validDraft()).config.budget, maxOutputTokens: 1 },
+        };
+        expect(
+            taskInput({ ...validDraft(), maxOutputTokens: '1' }, original).config.budget
+                .maxOutputTokens,
+        ).toBe(1);
+    });
+    it('本地预算分配超额时不发送创建请求', async () => {
+        const fetcher = vi.fn<typeof fetch>();
+        const { controller } = setup(fetcher);
+        controller.draft.maxOutputTokens = '1';
+        await controller.submit();
+        expect(fetcher).not.toHaveBeenCalled();
+        expect(controller.fields.value.maxOutputTokens).toContain('输出总额不足');
+    });
+    it('新任务使用可完成综合的累计预算，显式配置保留原值', () => {
+        expect(initialTaskDraft()).toMatchObject({
+            maxDurationSeconds: '600',
+            maxInputTokens: '1000000',
+            maxOutputTokens: '128000',
+        });
+        const input = taskInput({
+            ...validDraft(),
+            maxDurationSeconds: '300',
+            maxInputTokens: '40000',
+            maxOutputTokens: '8000',
+        });
+        expect(input.config.budget).toMatchObject({
+            maxDurationSeconds: 300,
+            maxInputTokens: 40000,
+            maxOutputTokens: 8000,
+        });
+    });
     it('完整公开config可编辑，明确manual且不夹带inputText或owner', () => {
         const draft = {
             ...validDraft(),
-            focusPoints: '费用\n资格',
-            exclusions: '广告',
-            preferredUrls: 'https://example.test/a\nhttps://example.org/b',
-            excludedUrls: 'http://example.test/no',
+            focusPoints: ['费用', '资格'],
+            exclusions: ['广告'],
+            preferredUrls: ['https://example.test/a', 'https://example.org/b'],
+            excludedUrls: ['http://example.test/no'],
             officialOnly: true,
             outputFormat: 'comparison',
             maxSearches: '3',
@@ -114,10 +151,10 @@ describe('手工任务配置', () => {
     it.each([
         { goal: '   ' },
         { title: '字'.repeat(201) },
-        { preferredUrls: 'ftp://example.test' },
-        { preferredUrls: 'https://user:pass@example.test' },
-        { excludedUrls: 'bad' },
-        { preferredUrls: 'https://example.test\nhttps://example.test' },
+        { preferredUrls: ['ftp://example.test'] },
+        { preferredUrls: ['https://user:pass@example.test'] },
+        { excludedUrls: ['bad'] },
+        { preferredUrls: ['https://example.test', 'https://example.test'] },
         { maxSearches: '0' },
         { maxPages: '-1' },
         { maxDurationSeconds: '1.5' },

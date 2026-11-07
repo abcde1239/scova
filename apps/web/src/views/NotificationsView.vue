@@ -34,7 +34,7 @@
             retryable
             @retry="retry"
         />
-        <state-panel v-else-if="!items.length" state="empty" message="没有符合筛选条件的通知。" />
+        <state-panel v-else-if="!items.length" state="empty" message="暂无通知" />
         <div v-if="items.length" class="notification-list">
             <notification-entry
                 v-for="item in items"
@@ -47,7 +47,7 @@
         </div>
         <div
             v-if="items.length && query.hasNextPage.value && !error.hidden"
-            class="notification-pagination"
+            class="notification-pagination scova-pagination"
         >
             <action-button
                 :busy="query.isFetchingNextPage.value"
@@ -180,8 +180,5 @@ p {
 }
 .notification-list {
     min-inline-size: 0;
-}
-.notification-pagination {
-    padding-block: 1rem;
 }
 </style>

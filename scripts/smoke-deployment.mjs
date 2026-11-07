@@ -31,7 +31,6 @@ const env = {
     SCOVA_BIND: '127.0.0.1',
     APP_ORIGIN: origin,
     REGISTRATION_ENABLED: 'true',
-    WORKER_SCHEDULED_RUN_MODE: 'demo',
     MODEL_API_KEY: '',
     MODEL_NAME: '',
     MODEL_BASE_URL: '',
@@ -282,7 +281,7 @@ async function drainEvents(stream, previous) {
             assert.notEqual(event.id, previous.id);
             events.push(event);
             previous = event;
-            assert(events.length < 500, 'Unexpectedly unbounded demo event history');
+            assert(events.length < 500, 'Unexpectedly unbounded event history');
         }
     } finally {
         await stream.close();
@@ -332,15 +331,15 @@ try {
             await request(
                 `/api/v1/tasks/${task.id}/runs`,
                 'POST',
-                { mode: 'demo' },
+                { mode: 'live' },
                 { 'idempotency-key': key },
             )
         ).json();
     // Hold the real consumer so the proxy must flush an event before the Run can finish.
     await compose(project, ['stop', 'worker']);
     const run = (await start()).run;
-    assert.equal(run.mode, 'demo');
-    const demo = await firstEvent(run.id, session);
+    assert.equal(run.mode, 'live');
+    const firstStream = await firstEvent(run.id, session);
     const liveTask = (
         await (
             await request('/api/v1/tasks', 'POST', {
@@ -360,20 +359,20 @@ try {
     ).run;
     assert.equal(live.mode, 'live');
     const liveStream = await firstEvent(live.id, session);
-    const nextDemo = demo.stream.next();
-    void nextDemo.catch(() => undefined);
+    const nextFirst = firstStream.stream.next();
+    void nextFirst.catch(() => undefined);
     // Observe the already-open socket while independently draining the explicit live failure.
     const liveHistory = drainEvents(liveStream.stream, liveStream.first);
     void liveHistory.catch(() => undefined);
     await compose(project, ['start', 'worker']);
-    const changed = await nextDemo;
+    const changed = await nextFirst;
     assert(changed, 'Proxy SSE ended after queued replay instead of streaming new events');
-    assert.equal(changed.data.seq, demo.first.data.seq + 1);
-    await demo.stream.close();
+    assert.equal(changed.data.seq, firstStream.first.data.seq + 1);
+    await firstStream.stream.close();
     const resumed = await openEvents(run.id, session, changed.id);
-    const demoTail = await drainEvents(resumed, changed);
-    const demoEvents = [demo.first, changed, ...demoTail];
-    assert.equal(demoEvents.at(-1).event, 'run.completed');
+    const firstTail = await drainEvents(resumed, changed);
+    const firstEvents = [firstStream.first, changed, ...firstTail];
+    assert.equal(firstEvents.at(-1).event, 'run.failed');
     const liveEvents = [liveStream.first, ...(await liveHistory)];
     assert.equal(liveEvents.at(-1).event, 'run.failed');
     const liveState = await (await request(`/api/v1/runs/${live.id}`)).json();
@@ -384,25 +383,25 @@ try {
         (await (await request(`/api/v1/reports?taskId=${liveTask.id}`)).json()).items.length,
         0,
     );
-    const replay = await openEvents(run.id, session, demo.first.id);
+    const replay = await openEvents(run.id, session, firstStream.first.id);
     assert.deepEqual(
-        (await drainEvents(replay, demo.first)).map((event) => event.id),
-        demoEvents.slice(1).map((event) => event.id),
+        (await drainEvents(replay, firstStream.first)).map((event) => event.id),
+        firstEvents.slice(1).map((event) => event.id),
     );
-    const completed = await openEvents(run.id, session, demoEvents.at(-1).id);
-    assert.deepEqual(await drainEvents(completed, demoEvents.at(-1)), []);
+    const completed = await openEvents(run.id, session, firstEvents.at(-1).id);
+    assert.deepEqual(await drainEvents(completed, firstEvents.at(-1)), []);
     const denied = await fetch(`${origin}/api/v1/runs/${run.id}/events`, {
-        headers: { origin, cookie: other.cookie, 'last-event-id': demo.first.id },
+        headers: { origin, cookie: other.cookie, 'last-event-id': firstStream.first.id },
         signal: AbortSignal.timeout(5000),
     });
     assert.equal(denied.status, 404);
     assert(!denied.headers.get('content-type')?.includes('text/event-stream'));
     const deniedBody = await denied.text();
-    assert(!deniedBody.includes(run.id) && !deniedBody.includes(demo.first.id));
+    assert(!deniedBody.includes(run.id) && !deniedBody.includes(firstStream.first.id));
     console.log(
         JSON.stringify({
             check: 'proxy-sse',
-            demoEvents: demoEvents.length,
+            firstEvents: firstEvents.length,
             liveEvents: liveEvents.length,
             liveOutcome: 'configuration rejected; no external calls or demo fallback',
             reconnect: 'Last-Event-ID exact ordered replay',
@@ -410,23 +409,14 @@ try {
             otherOwner: 404,
         }),
     );
-    const deadline = Date.now() + 120_000;
-    for (;;) {
-        const state = await (await request(`/api/v1/runs/${run.id}`)).json();
-        if (['succeeded', 'partial'].includes(state.status)) break;
-        assert(!['failed', 'canceled'].includes(state.status), `Demo terminated: ${state.status}`);
-        assert(Date.now() < deadline, 'Demo delivery timed out');
-        await new Promise((resolve) => setTimeout(resolve, 500));
-    }
-    const reportList = await (await request(`/api/v1/reports?taskId=${task.id}`)).json();
-    assert.equal(reportList.items.length, 1);
-    const report = await (await request(`/api/v1/reports/${reportList.items[0].id}`)).json();
-    assert.equal(report.mode, 'demo');
-    assert.equal(report.runId, run.id);
-    assert(report.evidence.length > 0);
-    const inboxBefore = await (await request('/api/v1/inbox')).json();
-    assert.equal(inboxBefore.items.filter((item) => item.reportId === report.id).length, 1);
-    console.log('同源登录、演示交付和证据通过；验证重启不重复交付。');
+    const failed = await (await request(`/api/v1/runs/${run.id}`)).json();
+    assert.equal(failed.status, 'failed');
+    assert.equal(failed.failureCode, 'AGENT_CONFIGURATION_INVALID');
+    assert.equal(
+        (await (await request(`/api/v1/reports?taskId=${task.id}`)).json()).items.length,
+        0,
+    );
+    console.log('同源登录、真实研究缺配置失败和零伪造报告通过；验证重启幂等。');
     await compose(project, ['restart', 'postgres', 'redis', 'api', 'worker', 'proxy']);
     await compose(project, [
         'up',
@@ -441,7 +431,7 @@ try {
     assert.equal((await start()).run.id, run.id);
     assert.equal(
         (await (await request(`/api/v1/reports?taskId=${task.id}`)).json()).items.length,
-        1,
+        0,
     );
     await compose(project, ['stop', 'proxy', 'api', 'worker']);
     await compose(project, [
@@ -474,12 +464,14 @@ try {
         'worker',
         'proxy',
     ]);
-    assert.deepEqual(await (await request(`/api/v1/reports/${report.id}`)).json(), report);
+    assert.deepEqual(await (await request(`/api/v1/runs/${run.id}`)).json(), failed);
     assert.equal((await start()).run.id, run.id);
-    const inboxRestored = await (await request('/api/v1/inbox')).json();
-    assert.equal(inboxRestored.items.filter((item) => item.reportId === report.id).length, 1);
+    assert.equal(
+        (await (await request(`/api/v1/reports?taskId=${task.id}`)).json()).items.length,
+        0,
+    );
     console.log(
-        '通过：容器启动、代理持续SSE/续传/owner隔离、演示报告、live缺凭据关闭、持久重启及空库恢复。',
+        '通过：容器启动、代理持续SSE/续传/owner隔离、缺配置失败且无伪造报告、持久重启及空库恢复。',
     );
 } finally {
     for (const controller of streams) controller.abort();

@@ -6,6 +6,7 @@ import { runReportsOptions } from '@/api/run-detail';
 import { toApiError } from '@/api/errors';
 import { useRunEvents } from '@/composables/useRunEvents';
 import { useSessionLifecycle } from '@/composables/useSessionQuery';
+import { appendExecutionLog, emptyExecutionLog } from '@/utils/execution-log';
 
 export const executionStates = {
     queued: ['等待执行', '已保存排队状态，等待后台开始查阅。'],
@@ -13,7 +14,7 @@ export const executionStates = {
     recovering: ['系统恢复中', '系统正在恢复上次执行，不需要手动继续。'],
     cancel_requested: ['正在取消', '取消请求已保存，等待后台停止在途工作。'],
     succeeded: ['已完成', '已完成本次查阅范围，仍须结合覆盖说明阅读结论。'],
-    partial: ['部分完成', '已有部分交付，覆盖仍有缺口，不能视为完整查阅或没有变化。'],
+    partial: ['已生成结果', '结果覆盖已执行范围，未覆盖项目见报告详情。'],
     failed: ['执行失败', '本次未完成交付，不能将失败解释为资料没有变化。'],
     canceled: ['已取消', '执行已经停止，不能据此判断查阅结论。'],
 } satisfies Record<Run['status'], [string, string]>;
@@ -26,7 +27,7 @@ const outcomes = {
 };
 export function executionOutcome(run: Run) {
     if (run.status === 'succeeded' && run.outcome) return outcomes[run.outcome];
-    if (run.status === 'partial') return '结果不完整';
+    if (run.status === 'partial') return '已生成结果';
     return undefined;
 }
 export function executionFailure(run: Run) {
@@ -78,11 +79,13 @@ export function useExecution(target: MaybeRefOrGetter<string>) {
         }
     });
     const tools = shallowRef<ToolSummary[]>([]);
+    const log = shallowRef(emptyExecutionLog());
     const published = shallowRef<string>();
     watch(
         () => [id.value, lifecycle.session.epoch],
         () => {
             tools.value = [];
+            log.value = emptyExecutionLog();
             published.value = undefined;
         },
         { flush: 'sync' },
@@ -108,9 +111,15 @@ export function useExecution(target: MaybeRefOrGetter<string>) {
     });
     const streamId = computed(() => (run.value?.id === id.value ? id.value : undefined));
     const subscription = useRunEvents(streamId, {
+        onReset() {
+            log.value = emptyExecutionLog(true);
+            tools.value = [];
+            published.value = undefined;
+        },
         onEvent(event) {
             if (event.runId !== id.value || !lifecycle.session.user) return;
             tools.value = updateTools(tools.value, event);
+            log.value = appendExecutionLog(log.value, event);
             if (event.type === 'report.published' || event.type === 'run.completed')
                 published.value = event.payload.reportId;
         },
@@ -144,5 +153,5 @@ export function useExecution(target: MaybeRefOrGetter<string>) {
                 )?.id
         );
     });
-    return { id, run, query, subscription, tools, reports, reportId };
+    return { id, run, query, subscription, tools, log, reports, reportId };
 }

@@ -2,6 +2,7 @@
     <div class="workbench">
         <a class="skip-link" href="#main-content">跳到主内容</a>
         <header class="workbench-header">
+            <mobile-navigation :items="mobileItems" />
             <router-link class="brand" to="/tasks" aria-label="Scova，任务首页">
                 <span lang="en">Scova</span>
             </router-link>
@@ -18,23 +19,36 @@
                 </router-link>
             </nav>
             <nav class="tool-navigation" aria-label="全局工具">
-                <router-link
-                    v-for="item in tools"
-                    :key="String(item.name)"
-                    :to="item.path"
-                    :class="{ selected: isSelected(item) }"
-                    :aria-current="route.path === item.path ? 'page' : undefined"
-                >
-                    <app-icon :name="navigationIcon(item.meta.section)" />
-                    {{ item.meta.title }}
-                </router-link>
+                <template v-for="item in tools" :key="String(item.name)">
+                    <notification-menu
+                        v-if="item.meta.section === 'notifications'"
+                        :selected="isSelected(item)"
+                    />
+                    <router-link
+                        v-else
+                        :to="item.path"
+                        :class="{ selected: isSelected(item) }"
+                        :aria-current="route.path === item.path ? 'page' : undefined"
+                    >
+                        <app-icon :name="navigationIcon(item.meta.section)" />
+                        {{ item.meta.title }}
+                    </router-link>
+                </template>
             </nav>
             <account-menu />
-            <mobile-navigation :items="mobileItems" />
         </header>
-        <main id="main-content" class="workbench-main" tabindex="-1" aria-labelledby="page-title">
+        <main
+            id="main-content"
+            class="workbench-main"
+            :class="{ 'workbench-main--form': route.meta.contentWidth === 'form' }"
+            tabindex="-1"
+            aria-labelledby="page-title"
+        >
             <page-breadcrumbs />
-            <div class="page-heading">
+            <div
+                class="page-heading"
+                :class="{ 'page-heading--report': route.name === 'report-detail' }"
+            >
                 <h1 id="page-title">{{ title }}</h1>
                 <div class="page-tools"><slot name="tools" /></div>
             </div>
@@ -54,6 +68,7 @@ import type { IconName } from '@/components/common/icons';
 import MobileNavigation from '@/layout/MobileNavigation.vue';
 import PageBreadcrumbs from '@/layout/PageBreadcrumbs.vue';
 import AccountMenu from '@/layout/AccountMenu.vue';
+import NotificationMenu from '@/components/notifications/NotificationMenu.vue';
 
 const props = defineProps<{ title: string; navigation: RouteRecordNormalized[] }>();
 defineSlots<{ default(): unknown; context(): unknown; tools(): unknown; reading(): unknown }>();
@@ -77,18 +92,37 @@ function navigationIcon(section: unknown): IconName {
         return section;
     return 'account';
 }
+const mobileOrder = ['tasks', 'inbox', 'library', 'notifications'];
 const mobileItems = computed(() => [
-    ...[...primary.value, ...tools.value].map((item) => ({
-        path: item.path,
-        label: String(item.meta.title),
-        icon: navigationIcon(item.meta.section),
-    })),
-    { path: '/account', label: '账号', icon: 'account' as const },
+    ...[...primary.value, ...tools.value]
+        .sort(
+            (left, right) =>
+                mobileOrder.indexOf(String(left.meta.section)) -
+                mobileOrder.indexOf(String(right.meta.section)),
+        )
+        .map((item) => ({
+            path: item.path,
+            label: String(item.meta.title),
+            icon: navigationIcon(item.meta.section),
+        })),
+    { path: '/account/agent', label: 'Agent 配置', icon: 'settings' as const },
     { path: '/account/appearance', label: '外观', icon: 'appearance' as const },
 ]);
 </script>
 
 <style scoped>
+.page-heading.page-heading--report {
+    margin: 0;
+    min-block-size: 0;
+}
+.page-heading--report h1 {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
 .workbench {
     min-block-size: 100dvh;
 }
@@ -165,6 +199,10 @@ a:focus-visible {
 
 .workbench-main {
     padding-block: 0.75rem 2rem;
+}
+
+.workbench-main--form {
+    width: min(100%, calc(44rem + clamp(2rem, 5vw, 4rem)));
 }
 
 .page-heading {

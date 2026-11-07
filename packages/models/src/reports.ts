@@ -13,6 +13,7 @@ import {
     pageSchema,
 } from './common.ts';
 import { CoverageSchema } from './runs.ts';
+import { validReportValueClaims } from './report-value.ts';
 import { FeedbackEffectsSchema } from './feedback.ts';
 
 export const EvidenceSelectorSchema = refineSchema(
@@ -179,6 +180,21 @@ const ReportObject = Type.Object(
     { additionalProperties: false, description: '四种展示形式共用的不可变报告 DTO' },
 );
 export const ReportSchema = refineSchema(ReportObject, 'ScovaReport', (value) => {
+    if (
+        value.coverage.reportValue &&
+        (!validReportValueClaims(value.coverage.reportValue, value.claims.length) ||
+            value.coverage.reportValue.selections.some(
+                (s) => s.placement === 'main' && !value.claims[s.claimIndex]?.evidenceIds.length,
+            ) ||
+            (value.coverage.completeness === 'complete' &&
+                value.coverage.reportValue.questions.some((q) => q.status !== 'supported')) ||
+            value.coverage.reportValue.questions.some(
+                (q) =>
+                    q.status === 'disputed' &&
+                    !q.claimIndexes.some((index) => value.claims[index]?.kind === 'conflict'),
+            ))
+    )
+        return false;
     if (
         value.coverage.completeness === 'partial' &&
         ['no_important_change', 'baseline'].includes(value.outcome)

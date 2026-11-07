@@ -134,7 +134,7 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
             plugins: [vue()],
             optimizeDeps: { noDiscovery: true, include: [] },
             resolve: { alias: { '@': resolve(dirname(fileURLToPath(import.meta.url)), '../src') } },
-            server: { middlewareMode: true, watch: null },
+            server: { middlewareMode: true, watch: null, hmr: false },
             appType: 'custom',
         });
         for (const [format, name] of Object.entries({
@@ -167,6 +167,153 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
     function quote(report: Report, evidenceId: string) {
         return report.evidence.find((entry) => entry.id === evidenceId)!.quote;
     }
+
+    it.each(formats)(
+        '%s presents question answers, preserves conditions and separates reference clues',
+        async (format) => {
+            const report = fixture();
+            const assessment = {
+                relevance: 'direct',
+                support: 'partial',
+                role: 'answer',
+                sourceRelation: 'unknown',
+                reason: '正文部分支持',
+                conditions: '仅限申请阶段',
+                gap: '审批条件未知',
+            } as const;
+            report.coverage.reportValue = {
+                version: 1,
+                questions: [
+                    {
+                        id: 'q0',
+                        text: '核心问题 <script>inert()</script>',
+                        priority: 'core',
+                        status: 'provisional',
+                        claimIndexes: [1],
+                        gap: '审批条件未知',
+                    },
+                    {
+                        id: 'q1',
+                        text: '补充问题',
+                        priority: 'supporting',
+                        status: 'unresolved',
+                        claimIndexes: [],
+                        gap: '尚无直接回答',
+                    },
+                ],
+                selections: report.claims.map((_, index) => ({
+                    claimIndex: index,
+                    questionIds: index === 1 ? ['q0'] : [],
+                    placement: index === 1 ? 'main' : index === 4 ? 'omitted' : 'reference',
+                    reason: '报告选择说明',
+                    basis: index === 1 ? 'model_assessment' : 'unassessed',
+                    timeScope: 'unknown',
+                    ...(index === 1 ? { assessment } : {}),
+                })),
+            };
+            const document = await render(format, parseContract(ReportSchema, report));
+            expect(text(document, '.answers')).toContain('主要结论');
+            expect(text(document, '.answer')).toContain('仅限申请阶段');
+            expect(document.querySelector('#question-q1')?.textContent).toContain('尚无直接回答');
+            expect(document.querySelectorAll('.references .claim')).toHaveLength(3);
+            expect(document.getElementById(`claim-${id(14)}`)).toBeNull();
+            expect(document.querySelectorAll('.answers script')).toHaveLength(0);
+            const ids = [...document.querySelectorAll('[id]')].map((node) => node.id);
+            expect(new Set(ids).size).toBe(ids.length);
+        },
+    );
+
+    it.each(formats)(
+        '%s groups source viewpoints without losing citation ownership or shared-answer anchors',
+        async (format) => {
+            const report = fixture();
+            report.evidence.find((entry) => entry.id === id(21))!.sourceId = id(101);
+            report.claims[0]!.evidenceIds = [id(20)];
+            report.claims[1]!.evidenceIds = [id(21)];
+            report.claims[3]!.evidenceIds = [id(20), id(21)];
+            report.claims.push({
+                ...report.claims[4]!,
+                id: id(15),
+                text: '同一来源在另一问题的不同观点',
+            });
+            report.coverage.reportValue = {
+                version: 1,
+                questions: [
+                    {
+                        id: 'q0',
+                        text: '核心问题',
+                        priority: 'core',
+                        status: 'provisional',
+                        gap: '',
+                        claimIndexes: [0, 1, 3, 4],
+                    },
+                    {
+                        id: 'q1',
+                        text: '补充问题',
+                        priority: 'supporting',
+                        status: 'provisional',
+                        gap: '',
+                        claimIndexes: [0, 5],
+                    },
+                ],
+                selections: report.claims.map((_, claimIndex) => ({
+                    claimIndex,
+                    questionIds:
+                        claimIndex === 0
+                            ? ['q0', 'q1']
+                            : claimIndex === 2
+                              ? []
+                              : claimIndex === 5
+                                ? ['q1']
+                                : ['q0'],
+                    placement: claimIndex === 2 ? 'reference' : 'main',
+                    reason: '对应问题',
+                    basis: 'model_assessment',
+                    timeScope: 'unknown',
+                    assessment: {
+                        relevance: 'direct',
+                        support: 'partial',
+                        role: 'answer',
+                        sourceRelation: 'unknown',
+                        reason: '与问题相关，仍需补充适用范围',
+                        conditions: '',
+                        gap: '适用范围尚未核对',
+                    },
+                })),
+            };
+            const before = structuredClone(report);
+            const document = await render(format, parseContract(ReportSchema, report));
+            const groups = [...document.querySelectorAll('#question-q0 > .answer-source')];
+            expect(
+                groups.map((group) => [...group.querySelectorAll('.claim')].map((node) => node.id)),
+            ).toEqual([
+                [10, 14].map((n) => `claim-${id(n)}`),
+                [`claim-${id(11)}`],
+                [`claim-${id(13)}`],
+            ]);
+            expect(
+                groups.map((group) =>
+                    [...group.querySelectorAll('blockquote')].map((node) => node.textContent),
+                ),
+            ).toEqual([
+                [quote(report, id(20))],
+                [quote(report, id(21))],
+                [quote(report, id(20)), quote(report, id(21))],
+            ]);
+            expect(groups[0]!.querySelectorAll('.claim-sources a')).toHaveLength(2);
+            expect(document.querySelector(`#claim-${id(12)} .evidence`)).toBeNull();
+            for (const link of document.querySelectorAll('.claim-sources a')) {
+                expect(document.getElementById(link.getAttribute('href')!.slice(1))).not.toBeNull();
+            }
+            const other = document.querySelector('#question-q1')!;
+            expect(other.querySelector(`a[href="#claim-${id(10)}"]`)).not.toBeNull();
+            expect(other.querySelectorAll('.claim')).toHaveLength(1);
+            expect(other.querySelectorAll('blockquote')).toHaveLength(1);
+            const ids = [...document.querySelectorAll('[id]')].map((node) => node.id);
+            expect(new Set(ids).size).toBe(ids.length);
+            expect(report).toEqual(before);
+        },
+    );
 
     it.each(formats)(
         '%s retains every claim, original text/confidence and ordered claim citations',
@@ -263,8 +410,10 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
                 report.publishedAt,
             );
             expect(text(document, '.mode')).toContain('演示报告');
-            expect(text(document, '.report-warning')).toContain('原始限制');
-            expect(text(document, '.report-warning')).toContain('原始覆盖缺口');
+            expect(text(document, '.report-warning')).toContain('结果已整理当前查阅到的内容');
+            expect(text(document, '.report-warning a')).toBe('查看完整限制与缺口');
+            expect(text(document, '.coverage details')).toContain('原始限制');
+            expect(text(document, '.coverage details')).toContain('原始覆盖缺口');
             expect(
                 document
                     .querySelector('.report-warning')!
@@ -272,6 +421,22 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
                     Node.DOCUMENT_POSITION_FOLLOWING,
             ).toBeTruthy();
             expect(text(document, '.coverage')).toContain('保存的查询');
+        },
+    );
+    it.each(formats)(
+        '%s retains uncertain content without attributing unrelated sources as supporting quotes',
+        async (format) => {
+            const report = fixture();
+            report.coverage.notes = ['只筛选部分候选，不代表引擎失败。'];
+            const claim = report.claims.find((c) => c.kind === 'insufficient')!;
+            claim.text = '待核实的模型判断 <script>doNotRun()</script>';
+            const document = await render(format, report);
+            const node = document.getElementById(`claim-${claim.id}`)!;
+            expect(node.textContent).toContain('待核实');
+            expect(node.textContent).toContain(claim.text);
+            expect(node.querySelectorAll('.citation')).toHaveLength(0);
+            expect(node.querySelector('script')).toBeNull();
+            expect(document.body.textContent).toContain('只筛选部分候选，不代表引擎失败。');
         },
     );
 
@@ -315,7 +480,7 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
             });
             const document = await render(format, partial);
             expect(text(document, '.comparison-summary')).toContain('不能据此认定没有重要变化');
-            expect(text(document, '.report-warning')).toContain('部分交付');
+            expect(text(document, '.report-warning')).toContain('查阅范围说明');
         },
     );
 

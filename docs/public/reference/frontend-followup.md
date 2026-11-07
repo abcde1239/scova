@@ -1,6 +1,6 @@
 # 报告问题的后续研究
 
-已保存回答下的“后续研究”操作需单独确认，普通提问、刷新、打开或取消确认都不会创建执行。确认弹窗先读取原报告 Run，核对任务、不可变配置版本和模式，并展示真实五项预算；读取失败或不一致时不能确认。演示保持 demo，真实 live 可能使用部署者配置的搜索与模型额度，没有自动升级模式或金额估算。
+已保存回答下的“后续研究”操作需单独确认，普通提问、刷新、打开或取消确认都不会创建执行。确认弹窗先读取原报告 Run，核对任务、不可变配置版本和模式，并展示真实五项预算；读取失败或不一致时不能确认。仅真实报告可创建后续研究，可能使用已配置的搜索与模型额度。历史演示报告及已有的后续关联可继续读取，但不能新建后续研究。
 
 确认只发送 `{confirm:true}`。服务端为问题建立独立 followup Run，沿用原报告的任务版本、模式和预算；配置目标改为保存的问题原文，清空重点条目，计划改为手动，其余原配置限制沿用。原报告和 TaskVersion 保留，原任务计划不改，后续比较与普通监控基线隔离。
 
@@ -8,4 +8,4 @@
 
 暂时报告读取失败会禁用写入并保留同账号、同问题未知请求。离开、换问题或刷新会丢失本地恢复记录，已有离开保护会说明后果；换号、路由身份改变和卸载隔离迟到响应。取消客户端请求不保证服务器回滚。已有 question.followupRunId 或命令复用时提供关联执行入口，可能指向活动或已结束 Run，不创建第二个执行、不自动跳转抢占当前页面。状态从真实详情读取；命令快照不覆盖 Run Query 或 SSE 的权威状态。
 
-验证：`vp test apps/web/tests/followup.test.ts apps/web/tests/report-questions.test.ts apps/web/tests/run-actions.test.ts`、`vp check`、`vp run web#build`。独立浏览器专项为 `vp run test:e2e tests/e2e/followup.spec.ts`，核对确认/取消/Escape、焦点、重复触发、未知结果恢复、原报告失败、跨账号与窄屏文字放大。受控 HTTP 测试不能替代真实 API/数据库的唯一 Run、配置覆盖、outbox 和监控基线验证，也不表示真实搜索或模型已完成。
+验证：`vp test apps/web/tests/followup.test.ts apps/web/tests/report-questions.test.ts apps/web/tests/run-actions.test.ts`、`vp check`、`vp run build:frontend`。独立浏览器专项为 `vp run test:e2e tests/e2e/followup.spec.ts`，核对确认/取消/Escape、焦点、重复触发、未知结果恢复、原报告失败、跨账号与窄屏文字放大。受控 HTTP 测试不能替代真实 API/数据库的唯一 Run、配置覆盖、outbox 和监控基线验证，也不表示真实搜索或模型已完成。

@@ -7,7 +7,7 @@ export async function openAccountMenu(page: Page) {
         if ((await trigger.getAttribute('aria-expanded')) !== 'true') await trigger.click();
         await expect(page.getByRole('navigation', { name: '账号操作', exact: true })).toBeVisible();
     } else {
-        const menu = page.getByRole('button', { name: '菜单', exact: true });
+        const menu = page.getByRole('button', { name: /^打开(个人侧栏|导航菜单)$/, exact: true });
         if ((await menu.getAttribute('aria-expanded')) !== 'true') await menu.click();
         await expect(page.getByRole('dialog', { name: '工作台侧边栏' })).toBeVisible();
     }

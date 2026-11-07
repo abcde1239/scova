@@ -58,7 +58,12 @@ function eventDto(event: StoredRunEvent) {
 
 function commandBody(input: RunCommandInput | undefined) {
     const parsed = parseContract(RunCommandInputSchema, input ?? {});
-    return { mode: parsed.mode ?? 'demo' } as const;
+    return {
+        mode: parsed.mode ?? 'live',
+        ...(parsed.agentProviderId !== undefined
+            ? { agentProviderId: parsed.agentProviderId }
+            : {}),
+    } as const;
 }
 
 /** Run 业务规则与事务编排；不包含请求对象、Elysia 或数据库查询。 */
@@ -148,7 +153,7 @@ export function createRunService(services: ApiServices) {
                     TaskConfigSchema,
                     inheritedConfig ?? version.configJson,
                 );
-                const config = question
+                let config = question
                     ? parseContract(TaskConfigSchema, {
                           ...baseConfig,
                           goal: question.question,
@@ -156,6 +161,22 @@ export function createRunService(services: ApiServices) {
                           schedule: { frequency: 'manual' },
                       })
                     : baseConfig;
+                if (command.agentProviderId !== undefined) {
+                    const { agentProviderId: _previous, ...rest } = config;
+                    config =
+                        command.agentProviderId === null
+                            ? rest
+                            : { ...rest, agentProviderId: command.agentProviderId };
+                }
+                if (
+                    config.agentProviderId &&
+                    !(await store.findAgentProvider(userId, config.agentProviderId))
+                )
+                    throw new ApiError(
+                        422,
+                        'AGENT_PROVIDER_UNAVAILABLE',
+                        '所选执行Agent配置不可用，请重新选择',
+                    );
                 const idempotency = await store.createIdempotency({
                     userId,
                     scope,
@@ -194,7 +215,9 @@ export function createRunService(services: ApiServices) {
                         ),
                     mode: command.mode,
                     trigger: followup ? 'followup' : parentRunId ? 'retry' : 'manual',
-                    ...(question || inheritedConfig ? { followupConfigJson: config } : {}),
+                    ...(question || inheritedConfig || command.agentProviderId !== undefined
+                        ? { followupConfigJson: config }
+                        : {}),
                     parentRunId,
                     budgetJson: config.budget,
                     feedbackSnapshotJson: await store.feedbackSnapshot(userId, task.id),
@@ -298,6 +321,12 @@ export function createRunService(services: ApiServices) {
         },
         async followup(userId: string, reportRunId: string, questionId: string, key: string) {
             const parent = await requireRun(userId, reportRunId);
+            if (parent.mode !== 'live')
+                throw new ApiError(
+                    409,
+                    'LEGACY_DEMO_RUN',
+                    '历史演示报告不能创建后续研究，请从任务页启动真实执行',
+                );
             const result = await createRun(
                 parent.taskId,
                 userId,

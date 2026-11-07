@@ -55,7 +55,6 @@ export function createWorkerResources(
                 scheduler = createSchedulerHandler(
                     new SchedulerService({
                         repository: createSchedulerRepository(database),
-                        mode: config.scheduledRunMode,
                         concurrency: config.schedulerConcurrency,
                     }),
                     config.batchSize,
@@ -85,6 +84,7 @@ export function createWorkerResources(
                     agent = createAgentRuntime({
                         databaseUrl: config.databaseUrl,
                         database,
+                        redis,
                         enableDelivery: true,
                     });
                     await agent.connect();

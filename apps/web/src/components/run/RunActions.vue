@@ -2,35 +2,19 @@
     <section class="run-actions scova-surface" aria-labelledby="run-actions-title">
         <h2 id="run-actions-title">{{ run ? '执行操作' : '立即执行' }}</h2>
         <p v-if="!run && taskStatus === 'archived'">归档任务不能启动执行。</p>
-        <template v-else-if="canChoose">
+        <template v-else-if="canStart">
             <p v-if="run">
                 原执行：{{
                     run.mode === 'live' ? '真实 live' : '演示 demo'
                 }}。重试使用原任务版本与预算，创建关联的新执行。
             </p>
-            <fieldset :disabled="actions.locked.value">
-                <legend>本次执行模式</legend>
-                <label
-                    ><input
-                        v-model="actions.mode.value"
-                        type="radio"
-                        value="demo"
-                        name="run-mode"
-                    />演示 demo</label
-                >
-                <label
-                    ><input
-                        v-model="actions.mode.value"
-                        type="radio"
-                        value="live"
-                        name="run-mode"
-                    />真实 live</label
-                >
-            </fieldset>
-            <p v-if="actions.mode.value === 'live'">
-                真实执行可能调用部署者配置的外部搜索与模型并产生计量费用；缺少配置或服务失败时不会自动切换演示模式。
-            </p>
-            <p v-else>演示使用示例数据，不代表真实联网研究。</p>
+            <p>执行会调用已配置的搜索与模型，可能产生服务费用；缺少配置时会明确报错。</p>
+            <execution-agent-select
+                v-model="agentSelection"
+                inherit
+                :disabled="actions.locked.value || actions.pending.value"
+                hint="仅影响本次新执行，重试仍保留原任务版本和预算。"
+            />
             <action-button
                 :disabled="actions.locked.value && !actions.pending.value"
                 :busy="actions.pending.value"
@@ -77,9 +61,7 @@
                     actions.phase.value === 'uncertain'
                 "
             >
-                原命令模式：{{
-                    actions.attempt.value.mode === 'live' ? '真实 live' : '演示 demo'
-                }}。离开或刷新页面会清除此处的重发记录。
+                离开或刷新页面会清除此处的重发记录。
             </p>
             <action-button
                 v-if="actions.phase.value === 'uncertain'"
@@ -110,15 +92,29 @@ import { RouterLink } from 'vue-router';
 import type { Run, Task } from '@scova/models';
 import ActionButton from '@/components/common/ActionButton.vue';
 import AppIcon from '@/components/common/AppIcon.vue';
+import ExecutionAgentSelect from '@/components/tasks/ExecutionAgentSelect.vue';
 import { useRunActions } from '@/composables/useRunActions';
 import { executionStates } from '@/composables/useExecution';
 const props = defineProps<{ taskId: string; run?: Run; taskStatus?: Task['status'] }>();
+const agentSelection = ref('');
 const actions = useRunActions(() => ({
     taskId: props.taskId,
     run: props.run,
     taskStatus: props.taskStatus,
+    agentProviderId:
+        agentSelection.value === ''
+            ? undefined
+            : agentSelection.value === '__default'
+              ? null
+              : agentSelection.value,
 }));
-const canChoose = computed(() => !props.run || ['failed', 'canceled'].includes(props.run.status));
+watch(
+    () => props.taskId,
+    () => {
+        agentSelection.value = '';
+    },
+);
+const canStart = computed(() => !props.run || ['failed', 'canceled'].includes(props.run.status));
 const feedback = ref<HTMLElement>();
 watch(actions.phase, async (phase) => {
     if (!['success', 'uncertain', 'rejected'].includes(phase)) return;
@@ -141,38 +137,6 @@ h2 {
     font-size: 1.25rem;
     line-height: 1.5;
 }
-fieldset {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem 1.5rem;
-    min-inline-size: 0;
-    margin: 0;
-    padding: 0;
-    border: 0;
-}
-legend {
-    padding: 0 0 0.5rem;
-    font-weight: 600;
-}
-label {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    min-block-size: 2.75rem;
-    cursor: pointer;
-}
-input {
-    margin: 0;
-    inline-size: 1.125rem;
-    block-size: 1.125rem;
-    accent-color: var(--scova-primary);
-    cursor: inherit;
-    flex-shrink: 0;
-}
-fieldset:disabled label {
-    cursor: not-allowed;
-}
-input:focus-visible,
 .open-run:focus-visible,
 .command-result:focus-visible {
     outline: 0.125rem solid var(--scova-primary);

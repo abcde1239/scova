@@ -38,15 +38,27 @@ const redis = new Redis(config.redisUrl, {
     maxRetriesPerRequest: 1,
 });
 redis.on('error', () => undefined);
+const fixtureBundle = scenarioConnectors(scenario, phase, {
+    queryForGoal: process.env.SCOVA_ACCEPTANCE_QUERY_FOR_GOAL === '1',
+    browserScenarios: true,
+});
 const agent = createAgentRuntime({
     database,
     databaseUrl: config.databaseUrl,
     checkpointSchema,
     env: process.env,
-    bundle: scenarioConnectors(scenario, phase, {
-        queryForGoal: process.env.SCOVA_ACCEPTANCE_QUERY_FOR_GOAL === '1',
-        browserScenarios: true,
-    }),
+    bundle:
+        process.env.SCOVA_ACCEPTANCE_TRUNCATED === '1'
+            ? {
+                  ...fixtureBundle,
+                  reader: {
+                      async read(...args) {
+                          const page = await fixtureBundle.reader.read(...args);
+                          return { ...page, truncated: true };
+                      },
+                  },
+              }
+            : fixtureBundle,
     enableDelivery: true,
 });
 let publisher: ReturnType<typeof createOutboxQueue> | undefined;

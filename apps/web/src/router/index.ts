@@ -4,11 +4,20 @@ import type { RouteLocationNormalizedLoaded, RouteRecordRaw, RouterHistory } fro
 declare module 'vue-router' {
     interface RouteMeta {
         title?: string;
+        layout?: 'auth' | 'status';
+        contentWidth?: 'form';
         section?: string;
         navigation?: 'primary' | 'tool';
         pending?: boolean;
     }
 }
+
+const fixtureModules =
+    import.meta.env.MODE === 'test'
+        ? import.meta.glob<{ default: RouteRecordRaw[] }>('../../tests/fixtures/routes.ts', {
+              eager: true,
+          })
+        : {};
 
 const modules = import.meta.glob<{ default: RouteRecordRaw[] }>('./pages/*.ts', { eager: true });
 
@@ -40,13 +49,21 @@ export function pageTitle(route: Pick<RouteLocationNormalizedLoaded, 'meta'>): s
 
 export function createWorkbenchRouter(
     history: RouterHistory = createWebHistory(import.meta.env.BASE_URL),
-    pages = collectPages(Object.values(modules).map((module) => module.default)),
+    pages = collectPages(
+        Object.values({ ...modules, ...fixtureModules }).map((module) => module.default),
+    ),
 ) {
     return createRouter({
         history,
         routes: [
             { path: '/', redirect: '/tasks' },
             ...pages,
+            {
+                path: '/service-unavailable',
+                name: 'service-unavailable',
+                component: () => import('@/views/ServiceUnavailableView.vue'),
+                meta: { title: '暂时无法连接服务', layout: 'status' },
+            },
             {
                 path: '/:pathMatch(.*)*',
                 name: 'not-found',

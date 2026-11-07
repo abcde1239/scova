@@ -8,6 +8,7 @@ import type {
     Usage,
     FeedbackSnapshot,
     FeedbackEffect,
+    ClaimAssessment,
 } from '@scova/models';
 import type { ModelResponse, ReadPage, SearchResponse, StructuredInput } from '@scova/connectors';
 
@@ -18,6 +19,8 @@ export interface AgentTools {
 }
 
 export interface AgentContext {
+    answerSupplementEnabled?: boolean;
+    adaptiveSearchDisabled?: boolean;
     runId: string;
     userId: string;
     taskVersionId: string;
@@ -97,10 +100,23 @@ export interface AgentCitation {
 }
 
 export interface AgentClaim {
+    assessment?: ClaimAssessment;
     kind: 'fact' | 'inference' | 'conflict' | 'insufficient';
     text: string;
     citations: AgentCitation[];
     questionIds: string[];
+    /** Fixed explanations for content retained under the soft evidence policy. */
+    uncertainty?: (
+        | 'quote_unmatched'
+        | 'missing_citation'
+        | 'question_scope'
+        | 'conflict_incomplete'
+    )[];
+}
+
+export interface ComparisonExtraction {
+    operationKey: string;
+    response: ModelResponse;
 }
 
 export interface AgentPage extends ReadPage {
@@ -132,6 +148,7 @@ export interface AgentDependencies {
     config: RunnableConfig;
     promote: (config: RunnableConfig) => Promise<void>;
     onStep?: (step: string, phase: 'started' | 'completed') => Promise<void>;
+    onClaimsRepair?: () => Promise<void>;
     /** True only when config explicitly identifies the legal checkpoint copied into this epoch. */
     resume?: boolean;
     now?: () => number;

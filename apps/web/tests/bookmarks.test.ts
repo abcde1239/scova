@@ -176,7 +176,7 @@ describe('bookmark actions', () => {
             await action.write();
             expect(action.bookmark.value?.sourceId).toBe(sourceId);
             expect(action.notice.value).toContain(reused ? '复用' : '已收藏');
-            expect(calls[0]?.credentials).toBe('same-origin');
+            expect(calls[0]?.credentials).toBe('include');
             expect(new Headers(calls[0]?.headers).get('x-csrf-token')).toBe('test-only');
             expect(calls[0]?.body).toBe(JSON.stringify({ sourceId }));
             expect(fetcher).toHaveBeenCalledTimes(1);

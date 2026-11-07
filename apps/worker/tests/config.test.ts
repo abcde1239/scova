@@ -20,7 +20,6 @@ describe('Worker 配置与脱敏校验', () => {
             runConcurrency: 2,
             schedulerIntervalMs: 30_000,
             schedulerConcurrency: 2,
-            scheduledRunMode: 'demo',
         });
         expect(
             readWorkerConfig({
@@ -73,16 +72,9 @@ describe('Worker 配置与脱敏校验', () => {
             );
     });
 
-    it('周期执行 mode 仅由显式部署配置决定，不随模型凭据自动切换', () => {
-        expect(readWorkerConfig({ ...base, MODEL_API_KEY: 'secret' }).scheduledRunMode).toBe(
-            'demo',
+    it('旧执行模式环境变量不再控制调度', () => {
+        expect(readWorkerConfig({ ...base, WORKER_SCHEDULED_RUN_MODE: 'demo' })).toEqual(
+            readWorkerConfig(base),
         );
-        expect(
-            readWorkerConfig({ ...base, WORKER_SCHEDULED_RUN_MODE: 'live' }).scheduledRunMode,
-        ).toBe('live');
-        for (const mode of ['', 'auto', 'LIVE'])
-            expect(() => readWorkerConfig({ ...base, WORKER_SCHEDULED_RUN_MODE: mode })).toThrow(
-                'WORKER_SCHEDULED_RUN_MODE',
-            );
     });
 });

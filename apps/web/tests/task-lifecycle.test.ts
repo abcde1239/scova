@@ -87,6 +87,45 @@ const ready = async (actions: ReturnType<typeof useTaskLifecycle>) =>
 afterEach(() => cleanups.splice(0).forEach((cleanup) => cleanup()));
 
 describe('任务生命周期命令', () => {
+    it('清除必须显式确认，冻结quoted ETag且双击不重复派发，归档任务也能清除', async () => {
+        const calls: RequestInit[] = [];
+        let finish!: (value: Response) => void;
+        const { actions } = setup(async (_url, init) => {
+            if (init?.method === 'DELETE') {
+                calls.push(init);
+                return new Promise((resolve) => (finish = resolve));
+            }
+            return http(detail('archived'));
+        });
+        await ready(actions);
+        expect(await actions.remove()).toBe(false);
+        expect(calls).toHaveLength(0);
+        expect(actions.prepareDelete()).toBe(true);
+        actions.cancelArchive();
+        expect(await actions.remove()).toBe(false);
+        expect(actions.prepareDelete()).toBe(true);
+        const pending = actions.remove();
+        await vi.waitFor(() => expect(calls).toHaveLength(1));
+        await actions.remove();
+        expect(calls).toHaveLength(1);
+        expect(new Headers(calls[0]!.headers).get('if-match')).toBe('"1"');
+        expect(new Headers(calls[0]!.headers).get('x-csrf-token')).toBe('local-csrf');
+        finish(new Response(null, { status: 204 }));
+        expect(await pending).toBe(true);
+        expect(actions.removed.value).toBe(true);
+    });
+    it('活动执行拒绝清除后保持锁定，刷新才能重新确认', async () => {
+        const { actions } = setup(async (_url, init) =>
+            init?.method === 'DELETE' ? failure(409, 'TASK_RUN_ACTIVE') : http(),
+        );
+        await ready(actions);
+        actions.prepareDelete();
+        expect(await actions.remove()).toBe(false);
+        expect(actions.message.value).toContain('活动执行');
+        expect(actions.prepareDelete()).toBe(false);
+        await actions.refresh();
+        expect(actions.prepareDelete()).toBe(true);
+    });
     it('先实际GET后允许动作；暂停使用原quoted ETag、Cookie/CSRF、无body/key且不调用Run', async () => {
         let finish!: (value: Response) => void;
         let state = detail();
@@ -111,7 +150,7 @@ describe('任务生命周期命令', () => {
         expect(new Headers(post.init?.headers).get('if-match')).toBe('"1"');
         expect(new Headers(post.init?.headers).get('x-csrf-token')).toBe('local-csrf');
         expect(new Headers(post.init?.headers).get('idempotency-key')).toBeNull();
-        expect(post.init?.credentials).toBe('same-origin');
+        expect(post.init?.credentials).toBe('include');
         expect(post.init?.body).toBeUndefined();
         expect(calls.every((call) => !call.path.includes('/runs'))).toBe(true);
         expect(actions.snapshot.value?.data.task.status).toBe('paused');

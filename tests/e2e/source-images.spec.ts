@@ -1,4 +1,7 @@
 import { expect, test } from '@playwright/test';
+import { mockFixtureSession } from './support/session-sample.ts';
+
+test.beforeEach(async ({ page }) => mockFixtureSession(page));
 
 for (const width of [320, 390, 768, 1024, 1440, 1920]) {
     test(`来源图片与纯文字回退：${width}`, async ({ page, baseURL }, testInfo) => {

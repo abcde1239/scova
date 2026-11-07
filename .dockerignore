@@ -2,6 +2,13 @@
 .pnpm-store
 **/node_modules
 **/dist
+**/dist-ssr
+**/.vite
+**/.vite-temp
+**/.cache
+**/*.tsbuildinfo
+**/__pycache__
+**/*.py[cod]
 .env
 .env.*
 !.env.example

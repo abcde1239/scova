@@ -25,7 +25,6 @@ export interface ScheduledTaskResult {
 }
 export interface SchedulerRepository {
     scheduleNext(
-        mode: 'demo' | 'live',
         excludedTaskIds: readonly string[],
         signal?: AbortSignal,
     ): Promise<ScheduledTaskResult | null>;
@@ -34,7 +33,8 @@ export interface SchedulerRepository {
 /** Task 锁协调手动命令与生命周期；不锁旧 Run，允许交付事务写 Task 外键。 */
 export function createSchedulerRepository(database: DatabaseClient): SchedulerRepository {
     return {
-        async scheduleNext(mode, excludedTaskIds, signal) {
+        async scheduleNext(excludedTaskIds, signal) {
+            const mode = 'live' as const;
             if (signal?.aborted) return null;
             let taskId: string | undefined;
             try {

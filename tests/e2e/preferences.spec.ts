@@ -1,5 +1,7 @@
+import { chooseOption, chooseTimezone } from './support/select.ts';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { logoutFromAccount } from './support/account-menu.ts';
 
 // Local HTTP samples exercise the real Web bundle, not database persistence or task creation.
 async function sampleAccount(page: Page) {
@@ -48,20 +50,141 @@ async function sampleAccount(page: Page) {
 const failure = { code: 'TEST_FAILURE', message: 'sample', requestId: 'sample' };
 const save = (page: Page) => page.getByRole('button', { name: '保存默认偏好', exact: true });
 
+for (const width of [1440, 320]) {
+    test(`Naive操作通知：保存成功、失败保留表单、关闭与账号清理 ${width}`, async ({
+        page,
+    }, info) => {
+        const state = await sampleAccount(page);
+        await page.setViewportSize({ width, height: 1000 });
+        await page.emulateMedia({
+            colorScheme: width === 320 ? 'dark' : 'light',
+            reducedMotion: 'reduce',
+        });
+        await page.goto('/account');
+        if (width === 320)
+            await page.evaluate(() => {
+                document.documentElement.style.fontSize = '200%';
+            });
+        await chooseTimezone(page, 'Asia/Tokyo');
+        await save(page).click();
+        const notices = page.locator('.scova-notifications .n-notification');
+        await expect(notices).toHaveCount(1);
+        await expect(notices).toContainText('默认偏好已保存');
+        await notices.hover();
+        const bounds = await notices.boundingBox();
+        expect(bounds!.x).toBeGreaterThanOrEqual(0);
+        expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width + 1);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+            true,
+        );
+        await page.screenshot({
+            path: info.outputPath(`notice-success-${width}.png`),
+            animations: 'disabled',
+        });
+        await notices.locator('.n-notification__close').click();
+        await expect(notices).toHaveCount(0);
+        await chooseTimezone(page, 'Europe/London');
+        state.offline = true;
+        await save(page).click();
+        await expect(notices).toContainText('默认偏好未保存');
+        await expect(page.locator('.preferences-form').getByRole('alert')).toContainText(
+            '暂时无法连接',
+        );
+        await expect(page.getByLabel('默认时区', { exact: true })).toContainText('Europe/London');
+        await page.screenshot({
+            path: info.outputPath(`notice-error-${width}.png`),
+            animations: 'disabled',
+        });
+        state.offline = false;
+        await page.route('**/api/v1/auth/logout', (route) => route.fulfill({ status: 204 }));
+        await logoutFromAccount(page);
+        await expect(page).toHaveURL(/\/login/);
+        await expect(notices).toHaveCount(0);
+        expect(state.patches).toBe(2);
+    });
+}
+
+test('账号下拉框：浅暗主题、搜索、提醒选中和细焦点', async ({ page }, testInfo) => {
+    const state = await sampleAccount(page);
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto('/account');
+    const timezone = page.getByLabel('默认时区', { exact: true });
+    const notification = page.getByRole('combobox', { name: '结果提醒', exact: true });
+    await expect(timezone).toContainText('UTC');
+    for (const colorScheme of ['light', 'dark'] as const) {
+        await page.emulateMedia({ colorScheme });
+        await timezone.focus();
+        const focus = await timezone.evaluate((node) => {
+            const style = getComputedStyle(node);
+            return { border: parseFloat(style.borderTopWidth), outline: style.outlineStyle };
+        });
+        expect(focus.border).toBe(1);
+        expect(focus.outline).toBe('none');
+        await timezone.click();
+        const search = page.getByRole('combobox', { name: '搜索默认时区' });
+        await search.fill('北京');
+        await expect(page.getByRole('option')).toHaveCount(1);
+        await expect(page.getByRole('option')).toContainText('Asia/Shanghai');
+        await page.screenshot({
+            path: testInfo.outputPath(`account-timezone-${colorScheme}.png`),
+            animations: 'disabled',
+            fullPage: true,
+        });
+        await search.press('Escape');
+        await notification.click();
+        await expect(page.getByRole('option', { selected: true })).toContainText('每次汇总');
+        await page.screenshot({
+            path: testInfo.outputPath(`account-notification-${colorScheme}.png`),
+            animations: 'disabled',
+            fullPage: true,
+        });
+        await page.keyboard.press('Escape');
+    }
+    await chooseOption(page, '结果提醒', '仅重要变化');
+    await expect(notification).toContainText('仅重要变化');
+    expect(state.patches).toBe(0);
+});
+
+for (const width of [1024, 1440, 1920]) {
+    test(`页面主体${width}：账号、外观与新建任务的标题和内容共同居中`, async ({ page }) => {
+        await sampleAccount(page);
+        await page.setViewportSize({ width, height: 1000 });
+        for (const [path, body] of [
+            ['/account', '.settings'],
+            ['/account/appearance', '.appearance-selector'],
+            ['/tasks/new', '.task-config-form'],
+        ] as const) {
+            await page.goto(path);
+            await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+            const main = await page.getByRole('main').boundingBox();
+            const content = await page.locator(body!).boundingBox();
+            const heading = await page.locator('.page-heading').boundingBox();
+            expect(main).not.toBeNull();
+            expect(content).not.toBeNull();
+            expect(Math.abs(main!.x + main!.width / 2 - width / 2)).toBeLessThan(1);
+            expect(Math.abs(content!.x + content!.width / 2 - width / 2)).toBeLessThan(1);
+            expect(Math.abs(heading!.x - content!.x)).toBeLessThan(1);
+            expect(content!.width).toBeLessThanOrEqual(704);
+        }
+    });
+}
+
 test('本地 HTTP 样本：保存偏好刷新保留，本机外观与阅读不提交账号偏好', async ({ page }) => {
     const state = await sampleAccount(page);
     await page.goto('/account');
     await expect(save(page)).toBeDisabled();
-    await page.getByLabel('默认时区', { exact: true }).fill('Asia/Shanghai');
-    await page.getByLabel('结果提醒', { exact: true }).selectOption('important_change');
+    await chooseTimezone(page, 'Asia/Shanghai');
+    await chooseOption(page, '结果提醒', '仅重要变化');
     await page.getByLabel('提醒失败或不完整的执行').uncheck();
     await save(page).focus();
     await page.keyboard.press('Enter');
-    await expect(page.getByRole('status').filter({ hasText: '默认偏好已保存' })).toBeVisible();
+    await expect(
+        page.locator('.preferences-form').getByRole('status').filter({ hasText: '默认偏好已保存' }),
+    ).toBeVisible();
     expect(state.patches).toBe(1);
     await page.reload();
-    await expect(page.getByLabel('默认时区', { exact: true })).toHaveValue('Asia/Shanghai');
-    await expect(page.getByLabel('结果提醒', { exact: true })).toHaveValue('important_change');
+    await expect(page.getByLabel('默认时区', { exact: true })).toContainText('Asia/Shanghai');
+    await expect(page.getByLabel('结果提醒', { exact: true })).toContainText('仅重要变化');
     await expect(page.getByLabel('提醒失败或不完整的执行')).not.toBeChecked();
     await expect(page.getByText('不会改动已保存任务', { exact: false })).toBeVisible();
     await page.getByRole('link', { name: '外观与阅读设置' }).click();
@@ -81,12 +204,14 @@ test('本地 HTTP 样本：非法时区、字段错误、限流、拒绝与断�
     const state = await sampleAccount(page);
     await page.goto('/account');
     const timezone = page.getByLabel('默认时区', { exact: true });
-    await timezone.fill('Moon/Base');
-    await save(page).click();
-    await expect(timezone).toBeFocused();
-    await expect(timezone).toHaveAttribute('aria-invalid', 'true');
+    await timezone.click();
+    const search = page.getByRole('combobox', { name: '搜索默认时区' });
+    await search.fill('Moon/Base');
+    await expect(page.getByText('没有找到匹配项，请换个关键词')).toBeVisible();
+    await search.press('Escape');
+    await expect(save(page)).toBeDisabled();
     expect(state.patches).toBe(0);
-    await timezone.fill('Europe/London');
+    await chooseTimezone(page, 'Europe/London');
     for (const [status, text] of [
         [422, '请检查标出的偏好设置'],
         [429, '保存过于频繁，请稍后重试'],
@@ -95,19 +220,21 @@ test('本地 HTTP 样本：非法时区、字段错误、限流、拒绝与断�
         state.status = status;
         await save(page).click();
         await expect(page.getByRole('alert')).toHaveText(text);
-        await expect(timezone).toHaveValue('Europe/London');
+        await expect(timezone).toContainText('Europe/London');
         if (status === 422) await expect(timezone).toBeFocused();
         else await expect(page.getByRole('alert')).toBeFocused();
     }
     state.offline = true;
     await save(page).click();
     await expect(page.getByRole('alert')).toHaveText('暂时无法连接，请检查网络后重试');
-    await expect(timezone).toHaveValue('Europe/London');
+    await expect(timezone).toContainText('Europe/London');
     expect(state.patches).toBe(4);
     state.offline = false;
     state.status = 200;
     await save(page).press('Enter');
-    await expect(page.getByRole('status').filter({ hasText: '默认偏好已保存' })).toBeVisible();
+    await expect(
+        page.locator('.preferences-form').getByRole('status').filter({ hasText: '默认偏好已保存' }),
+    ).toBeVisible();
     expect(state.patches).toBe(5);
 });
 
@@ -124,11 +251,11 @@ test('本地 HTTP 样本：延迟读取不覆盖编辑、保存期间锁定、�
     });
     await page.goto('/account');
     const timezone = page.getByLabel('默认时区', { exact: true });
-    await expect(timezone).toHaveValue('UTC');
-    await timezone.fill('Asia/Tokyo');
+    await expect(timezone).toContainText('UTC');
+    await chooseTimezone(page, 'Asia/Tokyo');
     releaseRead();
     await expect(save(page)).toBeEnabled();
-    await expect(timezone).toHaveValue('Asia/Tokyo');
+    await expect(timezone).toContainText('Asia/Tokyo');
     let releaseSave!: () => void;
     const saveGate = new Promise<void>((resolve) => {
         releaseSave = resolve;
@@ -139,10 +266,12 @@ test('本地 HTTP 样本：延迟读取不覆盖编辑、保存期间锁定、�
     });
     await save(page).click();
     await expect(page.getByRole('button', { name: '正在保存' })).toBeDisabled();
-    await expect(timezone).toHaveAttribute('readonly', '');
+    await expect(timezone).toBeDisabled();
     await page.locator('form.preferences-form').dispatchEvent('submit');
     releaseSave();
-    await expect(page.getByRole('status').filter({ hasText: '默认偏好已保存' })).toBeVisible();
+    await expect(
+        page.locator('.preferences-form').getByRole('status').filter({ hasText: '默认偏好已保存' }),
+    ).toBeVisible();
     expect(state.patches).toBe(1);
     await page.unroute('**/api/v1/me');
     let reads = 0;
@@ -180,7 +309,7 @@ for (const width of [320, 390, 768, 1024, 1280, 1440]) {
         await sampleAccount(page);
         await page.setViewportSize({ width, height: 1000 });
         await page.goto('/account');
-        await expect(page.getByLabel('默认时区', { exact: true })).toHaveValue('UTC');
+        await expect(page.getByLabel('默认时区', { exact: true })).toContainText('UTC');
         for (const enlarged of [false, true]) {
             if (enlarged)
                 await page.evaluate(() => {

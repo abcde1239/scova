@@ -1,5 +1,6 @@
 import {
     AddOutline,
+    HelpCircleOutline,
     ArchiveOutline,
     ArrowBackOutline,
     BookmarkOutline,
@@ -11,11 +12,13 @@ import {
     ColorPaletteOutline,
     CreateOutline,
     DocumentTextOutline,
+    DesktopOutline,
     LibraryOutline,
     ListOutline,
     LogOutOutline,
     MailOutline,
     MenuOutline,
+    MoonOutline,
     NotificationsOutline,
     OpenOutline,
     PauseOutline,
@@ -26,16 +29,25 @@ import {
     StopOutline,
     TrashOutline,
     PersonCircleOutline,
+    PersonAddOutline,
+    SunnyOutline,
+    GlobeOutline,
+    AlertCircleOutline,
 } from '@vicons/ionicons5';
 
 /** 只注册实际导航和用户动作；状态仍须有文字表达。 */
 export const icons = {
+    help: HelpCircleOutline,
     tasks: ListOutline,
     inbox: MailOutline,
     library: LibraryOutline,
     report: DocumentTextOutline,
     notifications: NotificationsOutline,
     appearance: ColorPaletteOutline,
+    light: SunnyOutline,
+    dark: MoonOutline,
+    system: DesktopOutline,
+    register: PersonAddOutline,
     account: PersonCircleOutline,
     settings: SettingsOutline,
     create: AddOutline,
@@ -57,6 +69,8 @@ export const icons = {
     expand: ChevronDownOutline,
     confirm: CheckmarkOutline,
     chevron: ChevronForwardOutline,
+    timezone: GlobeOutline,
+    warning: AlertCircleOutline,
 } as const;
 
 export type IconName = keyof typeof icons;

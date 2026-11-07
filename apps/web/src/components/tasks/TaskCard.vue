@@ -1,5 +1,5 @@
 <template>
-    <article class="task-card" :aria-labelledby="headingId">
+    <article class="task-card" :class="{ 'task-row': link }" :aria-labelledby="headingId">
         <h2 :id="headingId">
             <router-link
                 v-if="link"
@@ -96,11 +96,46 @@ const runLabels: Record<RunStatus, string> = {
 
 <style scoped>
 .task-card {
-    padding: 1rem;
+    padding: 1rem 0;
     border-block-start: 0.0625rem solid color-mix(in srgb, var(--scova-border) 30%, transparent);
     min-inline-size: 0;
     overflow-wrap: anywhere;
     cursor: default;
+}
+.task-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(15rem, 0.6fr) auto;
+    gap: 0.75rem 1.5rem;
+    align-items: center;
+}
+.task-row h2 {
+    margin: 0;
+    font-size: 1.125rem;
+}
+.task-row .task-history-link {
+    margin: 0;
+}
+.task-row dl {
+    display: grid;
+    grid-template-columns: minmax(4rem, 0.6fr) minmax(0, 1fr);
+    gap: 0.75rem;
+    font-size: 0.875rem;
+}
+@media (max-width: 53.999rem) {
+    .task-row {
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
+    .task-row h2 {
+        grid-column: 1 / -1;
+    }
+}
+@media (max-width: 29.999rem) {
+    .task-row {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .task-row .task-history-link {
+        justify-self: start;
+    }
 }
 h2 {
     margin: 0 0 0.75rem;

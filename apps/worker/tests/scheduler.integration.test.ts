@@ -156,10 +156,7 @@ describe('PostgreSQL 周期调度事务', () => {
 
     it('双调度器只创建一个 Occurrence/Run/首事件/Outbox，重复扫描为空', async () => {
         const s = await seed();
-        const results = await Promise.all([
-            repository.scheduleNext('demo', []),
-            second.scheduleNext('demo', []),
-        ]);
+        const results = await Promise.all([repository.scheduleNext([]), second.scheduleNext([])]);
         expect(results.filter(Boolean)).toHaveLength(1);
         const occurrence = await db.query.scheduleOccurrences
             .findFirst({ where: eq(dbScheduleOccurrences.taskId, s.task.id) })
@@ -177,11 +174,11 @@ describe('PostgreSQL 周期调度事务', () => {
         expect(run).toMatchObject({
             occurrenceId: occurrence.id,
             trigger: 'scheduled',
-            mode: 'demo',
+            mode: 'live',
             status: 'queued',
             taskVersionId: s.version.id,
             budgetJson: s.config.budget,
-            comparisonScopeHash: effectiveRunScopeHash(s.version.comparisonScopeHash, 'demo'),
+            comparisonScopeHash: effectiveRunScopeHash(s.version.comparisonScopeHash, 'live'),
         });
         expect(
             await db
@@ -217,7 +214,7 @@ describe('PostgreSQL 周期调度事务', () => {
                     .then((row) => requiredDatabaseValue(row))
             ).nextRunAt!.getTime(),
         ).toBeGreaterThan((await databaseNow()).getTime());
-        expect(await repository.scheduleNext('demo', [])).toBeNull();
+        expect(await repository.scheduleNext([])).toBeNull();
     });
 
     it('真实 Server 手动命令与周期调度同时起跑，仅一个活动 Run 和入队事务', async () => {
@@ -249,7 +246,7 @@ describe('PostgreSQL 周期调度事务', () => {
                 child.once('message', () => {
                     ready = true;
                     child.send({ phase: 'go' });
-                    void repository.scheduleNext('demo', []).then(resolve, reject);
+                    void repository.scheduleNext([]).then(resolve, reject);
                 });
                 child.once('error', reject);
                 child.once('close', () => {
@@ -267,7 +264,7 @@ describe('PostgreSQL 周期调度事务', () => {
         try {
             const [first] = await Promise.all([scheduled, completed]);
             // 手动事务先拿锁时，本轮 SKIP LOCKED；完成后下一次扫描记录 overlap。
-            const result = first ?? (await repository.scheduleNext('demo', []));
+            const result = first ?? (await repository.scheduleNext([]));
             expect(result?.status).toMatch(/^(created|skipped_overlap)$/);
             const manual = JSON.parse(stdout) as { run: { id: string }; reused: boolean };
             const run = await db.query.runs
@@ -325,11 +322,11 @@ describe('PostgreSQL 周期调度事务', () => {
         });
         await entered.promise;
         try {
-            expect(await repository.scheduleNext('demo', [])).toMatchObject({
+            expect(await repository.scheduleNext([])).toMatchObject({
                 taskId: available.task.id,
                 status: 'created',
             });
-            expect(await repository.scheduleNext('demo', [])).toBeNull();
+            expect(await repository.scheduleNext([])).toBeNull();
             expect(
                 await db
                     .select({ count: dbCount() })
@@ -341,7 +338,7 @@ describe('PostgreSQL 周期调度事务', () => {
             release.resolve();
             await holding;
         }
-        await Promise.all([repository.scheduleNext('demo', []), second.scheduleNext('demo', [])]);
+        await Promise.all([repository.scheduleNext([]), second.scheduleNext([])]);
         expect(
             await db
                 .select({ count: dbCount() })
@@ -353,7 +350,7 @@ describe('PostgreSQL 周期调度事务', () => {
 
     it('多日停机只补最近一次，较早时点记录 missedCount，live 模式显式快照', async () => {
         const s = await seed(7);
-        expect(await repository.scheduleNext('live', [])).toMatchObject({ status: 'created' });
+        expect(await repository.scheduleNext([])).toMatchObject({ status: 'created' });
         expect(
             await db.query.scheduleOccurrences
                 .findFirst({ where: eq(dbScheduleOccurrences.taskId, s.task.id) })
@@ -378,7 +375,7 @@ describe('PostgreSQL 周期调度事务', () => {
 
     it('同计划时点重放复用 Occurrence；新 scheduleRevision 拥有独立唯一键', async () => {
         const s = await seed();
-        await repository.scheduleNext('demo', []);
+        await repository.scheduleNext([]);
         const first = await db.query.runs
             .findFirst({ where: eq(dbRuns.taskId, s.task.id) })
             .then((row) => requiredDatabaseValue(row));
@@ -394,7 +391,7 @@ describe('PostgreSQL 周期调度事务', () => {
             .where(eq(dbTasks.id, s.task.id))
             .returning()
             .then((rows) => requiredDatabaseValue(rows[0]));
-        expect(await repository.scheduleNext('demo', [])).toMatchObject({ status: 'reused' });
+        expect(await repository.scheduleNext([])).toMatchObject({ status: 'reused' });
         expect(
             await db
                 .select({ count: dbCount() })
@@ -411,7 +408,7 @@ describe('PostgreSQL 周期调度事务', () => {
             .where(eq(dbTasks.id, s.task.id))
             .returning()
             .then((rows) => requiredDatabaseValue(rows[0]));
-        expect(await repository.scheduleNext('demo', [])).toMatchObject({ status: 'created' });
+        expect(await repository.scheduleNext([])).toMatchObject({ status: 'created' });
         expect(
             await db
                 .select({ count: dbCount() })
@@ -432,14 +429,14 @@ describe('PostgreSQL 周期调度事务', () => {
         const s = await seed();
         const controller = new AbortController();
         controller.abort();
-        expect(await repository.scheduleNext('demo', [], controller.signal)).toBeNull();
+        expect(await repository.scheduleNext([], controller.signal)).toBeNull();
         await db
             .update(dbTasks)
             .set({ nextRunAt: new Date(s.today.getTime() + 86_400_000) })
             .where(eq(dbTasks.id, s.task.id))
             .returning()
             .then((rows) => requiredDatabaseValue(rows[0]));
-        expect(await repository.scheduleNext('demo', [])).toBeNull();
+        expect(await repository.scheduleNext([])).toBeNull();
         expect(
             await db
                 .select({ count: dbCount() })
@@ -454,7 +451,7 @@ describe('PostgreSQL 周期调度事务', () => {
         async (status) => {
             const s = await seed(2);
             const run = await activeRun(s, status);
-            expect(await repository.scheduleNext('demo', [])).toMatchObject({
+            expect(await repository.scheduleNext([])).toMatchObject({
                 status: 'skipped_overlap',
             });
             expect(
@@ -488,7 +485,7 @@ describe('PostgreSQL 周期调度事务', () => {
             .where(eq(dbTasks.id, s.task.id))
             .returning()
             .then((rows) => requiredDatabaseValue(rows[0]));
-        expect(await repository.scheduleNext('demo', [])).toBeNull();
+        expect(await repository.scheduleNext([])).toBeNull();
         expect(
             await db
                 .select({ count: dbCount() })
@@ -518,7 +515,7 @@ describe('PostgreSQL 周期调度事务', () => {
             ),
         );
         try {
-            await expect(repository.scheduleNext('demo', [])).rejects.toThrow('调度任务事务失败');
+            await expect(repository.scheduleNext([])).rejects.toThrow('调度任务事务失败');
             expect(
                 await db
                     .select({ count: dbCount() })
@@ -544,7 +541,7 @@ describe('PostgreSQL 周期调度事务', () => {
             await db.execute(sql.raw('DROP TRIGGER scheduler_fail_outbox ON outbox'));
             await db.execute(sql.raw('DROP FUNCTION scheduler_fail_outbox()'));
         }
-        expect(await repository.scheduleNext('demo', [])).toMatchObject({ status: 'created' });
+        expect(await repository.scheduleNext([])).toMatchObject({ status: 'created' });
     });
 
     it('坏配置不堵住同批其他任务，并保留坏任务 nextRunAt 供后续修复', async () => {
@@ -556,7 +553,7 @@ describe('PostgreSQL 周期调度事务', () => {
             .where(eq(dbTaskVersions.id, bad.version.id))
             .returning()
             .then((rows) => requiredDatabaseValue(rows[0]));
-        const service = new SchedulerService({ repository, mode: 'demo', concurrency: 1 });
+        const service = new SchedulerService({ repository, concurrency: 1 });
         await expect(service.scheduleOnce(5)).rejects.toThrow('调度批次部分任务失败');
         expect(
             await db

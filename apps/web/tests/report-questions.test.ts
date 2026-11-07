@@ -283,7 +283,7 @@ describe('actual requestlane report question endpoints', () => {
         });
         const [url, init] = fetcher.mock.calls[0]!;
         expect(url).toContain(`/api/v1/reports/${id(1)}/questions`);
-        expect(init?.credentials).toBe('same-origin');
+        expect(init?.credentials).toBe('include');
         expect(new Headers(init?.headers).get('x-csrf-token')).toBe('test-only');
         expect(new Headers(init?.headers).get('idempotency-key')).toBe(attempt.key);
         expect(typeof init?.body === 'string' && JSON.parse(init.body)).toEqual({

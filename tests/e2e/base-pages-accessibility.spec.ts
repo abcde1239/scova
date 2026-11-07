@@ -4,7 +4,7 @@ import type { Report, Run } from '@scova/models';
 import { expect, test } from './support/environment.ts';
 import type { Owner } from './support/environment.ts';
 
-// Real same-origin services and demo delivery. Text enlargement is measured separately
+// Real same-origin services and controlled supplier delivery. Text enlargement is measured separately
 // from browser zoom and actual screen-reader output, which require manual verification.
 async function tabTo(page: Page, target: Locator) {
     for (let index = 0; index < 160; index++) {
@@ -82,7 +82,7 @@ test('基础页面真实服务六宽、文字放大和浅暗矩阵（实际读�
         `https://example.test/${'long-original-source-path-'.repeat(12)}`,
     ];
     const task = await environment.task(owner, config);
-    const delivered = await environment.execute(owner, task.id, 'demo');
+    const delivered = await environment.execute(owner, task.id, 'live');
     const page = owner.page;
     const errors: string[] = [];
     const outside: string[] = [];
@@ -135,7 +135,7 @@ test('基础页面真实服务六宽、文字放大和浅暗矩阵（实际读�
                         const inputs = await checkLayout(page, scale);
                         if (entry.selector === '.report-frame') {
                             await expect(
-                                page.getByRole('note', { name: '部分交付警告' }),
+                                page.getByRole('note', { name: '查阅范围说明' }),
                             ).toBeVisible();
                             const citation = page.locator('.report-frame details.evidence').first();
                             await citation.locator('summary').press('Enter');
@@ -158,7 +158,7 @@ test('基础页面真实服务六宽、文字放大和浅暗矩阵（实际读�
     await info.attach('base-page-matrix', {
         body: JSON.stringify({
             browser: browser.version(),
-            provenance: 'real-services-demo-delivery',
+            provenance: 'real-services-supplier-fixture',
             rootTextEnlargement: true,
             browserZoomVerified: false,
             screenReaderVerified: false,
@@ -271,7 +271,7 @@ test('键盘注册、登录、创建、执行、报告引用及菜单返回；�
             page.locator('.report-frame details.evidence[open] blockquote').first(),
         ).toBeVisible();
         await page.setViewportSize({ width: 390, height: 844 });
-        const menu = page.getByRole('button', { name: '菜单', exact: true });
+        const menu = page.getByRole('button', { name: /^打开(个人侧栏|导航菜单)$/, exact: true });
         await tabTo(page, menu);
         await page.keyboard.press('Enter');
         await page.keyboard.press('Escape');

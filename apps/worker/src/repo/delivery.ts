@@ -1,4 +1,5 @@
 import { requiredDatabaseValue } from '@/utils/database.ts';
+import { reportSummary } from '@/utils/report-summary.ts';
 import {
     type DatabaseClient,
     type Run,
@@ -30,6 +31,7 @@ import {
     manifestFromModel,
     type AgentCandidate,
     type AgentContext,
+    type ComparisonExtraction,
 } from '@scova/agent-core';
 import {
     BudgetSchema,
@@ -183,6 +185,19 @@ export function createDeliveryRepository(db: DatabaseClient) {
                         if (!isDeepStrictEqual(supplied, candidate)) invalid();
                         if (!candidate.pages.length || !candidate.claims.length)
                             throw new RunExecutionError('NO_EVIDENCE');
+                        // Quality assessments are accepted only with this Run's immutable model receipt.
+                        for (const receipt of (
+                            proof.research as { synthesisExtractions?: ComparisonExtraction[] }
+                        )?.synthesisExtractions ?? [])
+                            if (
+                                !successful.some(
+                                    (call) =>
+                                        call.tool === 'model' &&
+                                        call.operationKey.startsWith(`${receipt.operationKey}:`) &&
+                                        isDeepStrictEqual(output(call), receipt.response),
+                                )
+                            )
+                                invalid();
                         for (const page of candidate.pages) {
                             if (
                                 typeof page.title !== 'string' ||
@@ -205,21 +220,45 @@ export function createDeliveryRepository(db: DatabaseClient) {
                                 invalid();
                         }
                         if (candidate.manifest) {
-                            const extraction = successful.find(
-                                (call) =>
-                                    call.tool === 'model' &&
-                                    call.operationKey.startsWith('compare-facts-v1:'),
-                            );
-                            // Decode the immutable wire output with the same domain rules as the Agent.
-                            const manifest = extraction
-                                ? manifestFromModel(
-                                      (output(extraction) as { data?: unknown }).data,
-                                      context,
-                                      candidate.pages,
-                                  )
-                                : null;
-                            if (!manifest || !isDeepStrictEqual(candidate.manifest, manifest))
-                                invalid();
+                            const extractions = (
+                                proof.research as { comparisonExtractions?: ComparisonExtraction[] }
+                            )?.comparisonExtractions;
+                            if (extractions) {
+                                for (const receipt of extractions) {
+                                    const extraction = successful.find(
+                                        (call) =>
+                                            call.tool === 'model' &&
+                                            call.operationKey.startsWith(
+                                                `${receipt.operationKey}:`,
+                                            ) &&
+                                            isDeepStrictEqual(output(call), receipt.response),
+                                    );
+                                    if (!extraction) invalid();
+                                }
+                                // candidateFromCheckpoint has already rebuilt all pages, valid facts,
+                                // uncertainty and coverage from these independently authenticated receipts.
+                            } else {
+                                const extractionKey = (
+                                    proof.research as { comparisonRetried?: boolean }
+                                )?.comparisonRetried
+                                    ? 'compare-facts-repair-v1:'
+                                    : 'compare-facts-v1:';
+                                const extraction = successful.find(
+                                    (call) =>
+                                        call.tool === 'model' &&
+                                        call.operationKey.startsWith(extractionKey),
+                                );
+                                // Decode the immutable wire output with the same domain rules as the Agent.
+                                const manifest = extraction
+                                    ? manifestFromModel(
+                                          (output(extraction) as { data?: unknown }).data,
+                                          context,
+                                          candidate.pages,
+                                      )
+                                    : null;
+                                if (!manifest || !isDeepStrictEqual(candidate.manifest, manifest))
+                                    invalid();
+                            }
                         }
                         const gaps = [...candidate.coverage.gaps];
                         // These checks are independent of a model/caller's completeness flag.
@@ -503,7 +542,10 @@ export function createDeliveryRepository(db: DatabaseClient) {
                                 taskVersionId: run.taskVersionId,
                                 baselineRunId: run.baselineRunId,
                                 title: candidate.title,
-                                summary: candidate.claims.map((claim) => claim.text).join('\n\n'),
+                                summary: reportSummary(
+                                    candidate.claims,
+                                    candidate.coverage.reportValue,
+                                ),
                                 format: config.outputFormat,
                                 completeness: candidate.coverage.completeness,
                                 limitationsJson: candidate.coverage.gaps,
@@ -567,12 +609,15 @@ export function createDeliveryRepository(db: DatabaseClient) {
                                     kind: item.kind,
                                     text: item.text,
                                     order: order,
-                                    confidenceLabel: {
-                                        fact: '采集原文事实',
-                                        inference: '基于来源的推断',
-                                        conflict: '来源存在冲突，待核验',
-                                        insufficient: '证据不足',
-                                    }[item.kind],
+                                    confidenceLabel: item.uncertainty?.length
+                                        ? `待核实：${item.uncertainty.map((code) => ({ quote_unmatched: '部分引用未能定位到原文', missing_citation: '缺少直接引用', question_scope: '引用与问题的对应关系未确认', conflict_incomplete: '冲突双方证据不齐' })[code]).join('；')}。保留模型结论供参考，不作为已核验事实`
+                                        : {
+                                              fact: '采集原文事实',
+                                              inference:
+                                                  '模型归纳与推断，引用不代表推理已经独立核实',
+                                              conflict: '来源存在冲突，待核验',
+                                              insufficient: '待核实：证据不足，内容仅供参考',
+                                          }[item.kind],
                                 })
                                 .returning()
                                 .then((rows) => requiredDatabaseValue(rows[0]));
@@ -739,7 +784,13 @@ export function createDeliveryRepository(db: DatabaseClient) {
                                     .returning()
                                     .then((rows) => requiredDatabaseValue(rows[0]));
                         }
-                        if (!evidence.size) throw new RunExecutionError('NO_EVIDENCE');
+                        // An uncertain model conclusion need not have a direct citation. Keep a real
+                        // source excerpt in the appendix without falsely linking it as claim support.
+                        if (!evidence.size)
+                            await saveEvidence({
+                                pageId: candidate.pages[0]!.id,
+                                quote: Array.from(candidate.pages[0]!.text).slice(0, 300).join(''),
+                            });
                         await tx
                             .insert(dbInboxItems)
                             .values({ userId: run.userId, reportId: report.id })

@@ -23,7 +23,6 @@ export function useRunActions(
     target: MaybeRefOrGetter<RunActionTarget>,
     lifecycle: SessionLifecycle = useSessionLifecycle(),
 ) {
-    const mode = ref<'demo' | 'live'>('demo');
     const attempt = shallowRef<Readonly<RunAttempt>>();
     const result = shallowRef<RunCommandResponse>();
     const message = ref('');
@@ -45,7 +44,6 @@ export function useRunActions(
         result.value = undefined;
         message.value = '';
         phase.value = 'idle';
-        mode.value = 'demo';
     }
     watch(
         [
@@ -114,7 +112,7 @@ export function useRunActions(
                     message.value =
                         frozen.action === 'cancel'
                             ? '尚不能确认取消结果，可使用同一命令重新确认取消；不影响任务未来计划。'
-                            : '尚不能确认命令结果。请使用同一命令重发，模式与 key 将保持不变。';
+                            : '尚不能确认命令结果。请使用同一命令重发，请求与 key 将保持不变。';
                 } else {
                     phase.value = 'rejected';
                     message.value =
@@ -148,7 +146,10 @@ export function useRunActions(
             runId: run?.id,
             taskVersionId: run?.taskVersionId,
             budget: run ? Object.freeze({ ...run.budget }) : undefined,
-            mode: mode.value,
+            mode: 'live',
+            ...(action !== 'cancel' && value.agentProviderId !== undefined
+                ? { agentProviderId: value.agentProviderId }
+                : {}),
             key: crypto.randomUUID(),
         });
         result.value = undefined;
@@ -158,7 +159,6 @@ export function useRunActions(
         if (phase.value === 'uncertain') await send();
     }
     return {
-        mode,
         attempt,
         result,
         message,

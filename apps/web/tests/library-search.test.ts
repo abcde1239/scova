@@ -183,7 +183,7 @@ describe('unified requestlane transport', () => {
         expect(url.searchParams.get('cursor')).toBe(cursor);
         expect(url.searchParams.get('bookmarked')).toBe('false');
         expect(fetcher.mock.calls[0]![1]?.method).toBe('GET');
-        expect(fetcher.mock.calls[0]![1]?.credentials).toBe('same-origin');
+        expect(fetcher.mock.calls[0]![1]?.credentials).toBe('include');
     });
     it('rejects invalid input before transport and impossible DTO before display', async () => {
         const fetcher = vi.fn<typeof fetch>(async () =>
@@ -439,7 +439,7 @@ describe('actual results SFC plain excerpt', () => {
             plugins: [vue()],
             optimizeDeps: { noDiscovery: true, include: [] },
             resolve: { alias: { '@': fileURLToPath(new URL('../src', import.meta.url)) } },
-            server: { middlewareMode: true, watch: null },
+            server: { middlewareMode: true, watch: null, hmr: false },
             appType: 'custom',
         });
         component = (await server.ssrLoadModule('/src/components/library/LibrarySearchResults.vue'))

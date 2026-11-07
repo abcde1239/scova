@@ -22,6 +22,38 @@ const sample = {
     csrfToken: 'browser-sample-only',
 };
 const api = http.createServer((request, response) => {
+    response.setHeader('access-control-allow-origin', 'http://127.0.0.1:4189');
+    response.setHeader('access-control-allow-credentials', 'true');
+    if (request.method === 'OPTIONS') {
+        response.writeHead(204, {
+            'access-control-allow-methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+            'access-control-allow-headers':
+                'content-type, x-csrf-token, idempotency-key, if-match, last-event-id',
+        });
+        response.end();
+        return;
+    }
+    if (request.url === '/api/v1/__sample/session' && request.method === 'POST') {
+        response.writeHead(204, {
+            'set-cookie': 'scova_connection_sample=accepted; Path=/; HttpOnly; SameSite=Lax',
+        });
+        response.end();
+        return;
+    }
+    if (request.url === '/api/v1/__sample/events' && request.method === 'GET') {
+        if (!request.headers.cookie?.includes('scova_connection_sample=accepted')) {
+            response.writeHead(401);
+            response.end();
+            return;
+        }
+        response.writeHead(200, {
+            'content-type': 'text/event-stream',
+            etag: '"sample"',
+            'access-control-expose-headers': 'ETag',
+        });
+        response.end('data: cookie-accepted\n\n');
+        return;
+    }
     if (request.method === 'GET' && request.url === '/api/v1/me') {
         response.writeHead(200, {
             'content-type': 'application/json',
@@ -33,7 +65,7 @@ const api = http.createServer((request, response) => {
     response.writeHead(404);
     response.end();
 });
-api.listen(0, '127.0.0.1');
+api.listen(4190, '127.0.0.1');
 await once(api, 'listening');
 let server;
 async function close() {
@@ -50,7 +82,6 @@ try {
             host: '127.0.0.1',
             port: 4189,
             strictPort: true,
-            proxy: { '/api/v1': `http://127.0.0.1:${api.address().port}` },
         },
     });
 } catch (error) {

@@ -6,13 +6,13 @@ export default [
         name: 'task-create',
         path: '/tasks/new',
         component: () => import('@/views/CreateTaskView.vue'),
-        meta: { title: '新建任务', section: 'tasks' },
+        meta: { title: '新建任务', section: 'tasks', contentWidth: 'form' },
     },
     {
         name: 'task-edit',
         path: '/tasks/:taskId/edit',
         component: () => import('@/views/EditTaskView.vue'),
-        meta: { title: '编辑任务', section: 'tasks' },
+        meta: { title: '编辑任务', section: 'tasks', contentWidth: 'form' },
     },
     {
         name: 'task-summary',

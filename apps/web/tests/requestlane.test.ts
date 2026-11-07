@@ -72,7 +72,7 @@ describe('requestlane HTTP 契约', () => {
         expect(url).toBe('/api/v1/me');
         expect(init).toMatchObject({
             method: 'GET',
-            credentials: 'same-origin',
+            credentials: 'include',
             cache: 'no-store',
         });
         expect(new Headers(init?.headers).get('authorization')).toBeNull();
@@ -310,7 +310,7 @@ describe('requestlane HTTP 契约', () => {
         await api.request(currentSessionEndpoint, {});
         const controller = new AbortController();
         const response = await api.transport.native('/api/v1/runs/example/events', {
-            credentials: 'same-origin',
+            credentials: 'include',
             signal: controller.signal,
             headers: { accept: 'text/event-stream' },
         });

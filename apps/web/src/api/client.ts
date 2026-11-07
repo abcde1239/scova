@@ -16,6 +16,7 @@ import {
 import { createFetchTransport, type Fetcher } from 'requestlane/fetch';
 import { assertApiPath } from '@/api/endpoints';
 import { toApiError } from '@/api/errors';
+import { apiBaseUrl, apiCredentials } from '@/api/config';
 
 export interface ApiRequestOptions {
     signal?: AbortSignal;
@@ -39,8 +40,8 @@ export function createApi(options: { fetcher?: Fetcher } = {}) {
     const transport = createFetchTransport(options);
     const client = createClient({
         transport,
-        baseURL: '/api/v1',
-        credentials: 'same-origin',
+        baseURL: apiBaseUrl,
+        credentials: apiCredentials,
         codec: identityCodec,
     });
 
@@ -114,7 +115,7 @@ export function createApi(options: { fetcher?: Fetcher } = {}) {
                         headers,
                         signal: lifetime.signal,
                         timeout: options.timeout ?? spec.timeout,
-                        credentials: 'same-origin',
+                        credentials: apiCredentials,
                         responseType: 'json',
                         bypassCache: true,
                     });

@@ -1,4 +1,8 @@
 .scova-theme {
+    --scova-select-radius: 0.5rem;
+    --scova-select-border: color-mix(in srgb, var(--scova-border) 65%, var(--scova-surface));
+    --scova-select-hover-border: color-mix(in srgb, var(--scova-primary) 60%, var(--scova-border));
+    --scova-select-focus-ring: color-mix(in srgb, var(--scova-primary) 12%, transparent);
     min-block-size: 100%;
     color: var(--scova-text);
     background: var(--scova-canvas);
@@ -32,6 +36,105 @@
     color: var(--scova-partial);
 }
 
+.empty-copy {
+    margin: 0;
+    padding-block: 1.5rem;
+    color: var(--scova-muted);
+    font-size: 0.9375rem;
+}
+
+.scova-pagination {
+    display: flex;
+    justify-content: center;
+    inline-size: 100%;
+    min-inline-size: 0;
+    padding-block: 1rem;
+}
+
+.scova-theme select:not([multiple]) {
+    appearance: none;
+    min-block-size: 2.75rem;
+    min-inline-size: 0;
+    max-inline-size: 100%;
+    padding: 0.625rem 2.5rem 0.625rem 0.875rem;
+    border: 0.0625rem solid var(--scova-select-border);
+    border-radius: var(--scova-select-radius);
+    background-color: var(--scova-surface);
+    background-image:
+        linear-gradient(45deg, transparent 50%, var(--scova-muted) 50%),
+        linear-gradient(135deg, var(--scova-muted) 50%, transparent 50%);
+    background-position:
+        calc(100% - 1.0625rem) 50%,
+        calc(100% - 0.75rem) 50%;
+    background-size: 0.3125rem 0.3125rem;
+    background-repeat: no-repeat;
+    color: var(--scova-text);
+    font: inherit;
+    line-height: 1.5;
+    cursor: pointer;
+    transition:
+        border-color 150ms,
+        box-shadow 150ms;
+}
+
+.scova-theme select:not(:disabled):hover {
+    border-color: var(--scova-select-hover-border);
+}
+
+.scova-theme select:not(:disabled):focus-visible {
+    border-color: var(--scova-primary);
+    outline: 0.0625rem solid var(--scova-primary);
+    outline-offset: 0.0625rem;
+    box-shadow: 0 0 0 0.1875rem var(--scova-select-focus-ring);
+}
+
+.scova-theme select:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.scova-theme select[aria-invalid='true']:not(:disabled) {
+    border-color: var(--scova-danger);
+}
+.scova-theme select[aria-invalid='true']:focus-visible {
+    outline-color: var(--scova-danger);
+    box-shadow: 0 0 0 0.1875rem color-mix(in srgb, var(--scova-danger) 12%, transparent);
+}
+
+.scova-theme select option {
+    background: var(--scova-surface);
+    color: var(--scova-text);
+}
+
 .scova-failure {
     color: var(--scova-danger);
+}
+
+.scova-notifications.n-notification-container {
+    max-inline-size: calc(100vw - 2rem);
+}
+.scova-notifications .n-notification {
+    max-inline-size: 100%;
+    overflow-wrap: anywhere;
+    font-family: var(--scova-font-interface);
+}
+.scova-notifications .n-notification-main {
+    min-inline-size: 0;
+}
+@media (max-width: 40rem) {
+    .scova-notifications.n-notification-container {
+        inset-inline-end: 1rem;
+        inset-block-start: 1rem;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .scova-theme select {
+        transition: none;
+    }
+    .scova-notifications *,
+    .scova-notifications *::before,
+    .scova-notifications *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+    }
 }

@@ -324,7 +324,7 @@ describe('actual same-origin requestlane source history', () => {
         expect(url.searchParams.get('cursor')).toBe(cursor);
         expect(url.searchParams.get('limit')).toBe('20');
         expect(fetcher.mock.calls.map((call) => call[1]?.method)).toEqual(['GET', 'GET']);
-        expect(fetcher.mock.calls[0]?.[1]?.credentials).toBe('same-origin');
+        expect(fetcher.mock.calls[0]?.[1]?.credentials).toBe('include');
     });
     it('rejects malformed request IDs before transport and malformed detail body before rendering', async () => {
         const fetcher = vi.fn<typeof fetch>(async () =>

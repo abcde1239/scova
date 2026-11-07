@@ -1,10 +1,12 @@
-# A private, low-concurrency instance. Do not expose this profile to the Internet.
+# Private SearxNG instance; explicit regions and engines verified with the pinned image.
 use_default_settings:
     engines:
         keep_only:
             - bing
             - duckduckgo
             - brave
+            - google
+            - google cse
 
 general:
     instance_name: Scova Search
@@ -13,11 +15,15 @@ general:
 search:
     autocomplete: ''
     favicon_resolver: ''
-    default_lang: all
+    default_lang: zh-CN
     safe_search: 1
-    formats:
-        - html
-        - json
+    max_page: 1
+    formats: [html, json]
+    # Conservative starting values; no promise that upstream will unblock.
+    suspended_times:
+        SearxEngineTooManyRequests: 1800
+        SearxEngineAccessDenied: 1800
+        SearxEngineCaptcha: 3600
 
 server:
     limiter: false
@@ -31,4 +37,25 @@ outgoing:
     request_timeout: 5.0
     max_request_timeout: 8.0
     pool_connections: 10
-    pool_maxsize: 5
+    retries: 0
+
+engines:
+    - name: bing
+      engine: bing_international
+      disabled: false
+      # www.bing.com redirects this exit to cn.bing.com. Use its international mode.
+      base_url: https://cn.bing.com
+      search_locale: en-US
+    - name: duckduckgo
+      disabled: false
+    - name: google cse
+      disabled: false
+      timeout: 8.0
+      # Optional: replace the built-in CX with an independently tested own CX.
+      # CX: your_cse_id
+    - name: brave
+      # Retained for explicit diagnostics while its current upstream returns 429.
+      disabled: true
+    - name: google
+      # Retained; current native WML requests return Google HTTP 403.
+      disabled: true

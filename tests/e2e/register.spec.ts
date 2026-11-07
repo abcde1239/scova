@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
+import { chooseTimezone } from './support/select.ts';
 
-const password = 'browser-registration-password-6db53';
+const password = '12345678';
 const account = {
     user: {
         id: '00000000-0000-4000-8000-000000000001',
@@ -39,11 +40,10 @@ test('本地注册样本：字段/重复邮箱/限流、原生提交和一次在
     await page.getByRole('button', { name: '注册', exact: true }).click();
     await expect(page.getByLabel('密码', { exact: true })).toBeFocused();
     await page.getByLabel('密码', { exact: true }).fill(password);
-    await page.getByLabel('默认时区').fill('Invalid/Zone');
-    await page.getByRole('button', { name: '注册', exact: true }).click();
-    await expect(page.getByLabel('默认时区')).toBeFocused();
+    await expect(page.getByText('密码至少需要 8 位', { exact: true })).toBeVisible();
     expect(attempts).toBe(0);
-    await page.getByLabel('默认时区').fill('Asia/Shanghai');
+    await chooseTimezone(page, 'Asia/Shanghai');
+    await page.getByLabel('密码', { exact: true }).focus();
     await page.keyboard.press('Enter');
     await page.keyboard.press('Enter');
     await expect(page.getByText('该邮箱已注册，请返回登录', { exact: true })).toBeVisible();
@@ -79,7 +79,8 @@ test('本地注册样本：关闭注册可返回登录，320宽200%文字可达'
     });
     await page.getByLabel('邮箱', { exact: true }).fill(account.user.email);
     await page.getByLabel('密码', { exact: true }).fill(password);
-    await page.getByLabel('默认时区').fill('UTC');
+    await chooseTimezone(page, 'UTC');
+    await page.getByLabel('密码', { exact: true }).focus();
     await page.keyboard.press('Enter');
     await expect(page.getByRole('alert')).toHaveText('当前部署已关闭注册，请返回登录');
     await expect(page.getByRole('alert')).toBeFocused();

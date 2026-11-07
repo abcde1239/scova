@@ -3,10 +3,13 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { mockFixtureSession } from './support/session-sample.ts';
+
+test.beforeEach(async ({ page }) => mockFixtureSession(page));
 
 const sourcePaths = [
-    'apps/web/src/views/examples/VisualFoundationExample.vue',
-    'apps/web/src/router/pages/examples.ts',
+    'apps/web/tests/fixtures/pages/VisualFoundationExample.vue',
+    'apps/web/tests/fixtures/routes.ts',
     'apps/web/src/theme/tokens.ts',
     'apps/web/src/theme/glass.css',
     'apps/web/src/theme/theme.css',

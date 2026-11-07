@@ -16,6 +16,7 @@ import { toApiError } from '@/api/errors';
 import { taskKeys } from '@/api/tasks';
 import {
     requestTaskLifecycle,
+    requestTaskDeletion,
     taskLifecycleOptions,
     type TaskLifecycleAction,
 } from '@/api/task-lifecycle';
@@ -34,6 +35,7 @@ export function useTaskLifecycle(
     const message = ref('');
     const blocked = ref(true);
     const refreshing = ref(false);
+    const removed = ref(false);
     const confirmation = shallowRef<ApiResponse<TaskDetailResponse>>();
     let generation = 0;
     let controller = new AbortController();
@@ -50,7 +52,12 @@ export function useTaskLifecycle(
         return value?.data.task.id === toValue(target) ? value : undefined;
     });
     const disabled = computed(
-        () => blocked.value || refreshing.value || command.pending.value || !snapshot.value,
+        () =>
+            removed.value ||
+            blocked.value ||
+            refreshing.value ||
+            command.pending.value ||
+            !snapshot.value,
     );
     function clear() {
         generation++;
@@ -60,6 +67,7 @@ export function useTaskLifecycle(
         message.value = '';
         blocked.value = true;
         refreshing.value = false;
+        removed.value = false;
     }
     async function refresh(keepMessage = false) {
         if (refreshing.value || !lifecycle.session.user || (command.pending.value && !keepMessage))
@@ -108,6 +116,48 @@ export function useTaskLifecycle(
     }
     function cancelArchive() {
         confirmation.value = undefined;
+    }
+    function prepareDelete() {
+        if (disabled.value) return false;
+        confirmation.value = snapshot.value;
+        return true;
+    }
+    async function remove() {
+        if (disabled.value || !confirmation.value) return false;
+        const source = confirmation.value;
+        const current = generation;
+        const scope = lifecycle.capture();
+        const signal = controller.signal;
+        return command.run(async () => {
+            confirmation.value = undefined;
+            blocked.value = true;
+            message.value = '';
+            try {
+                await requestTaskDeletion(scope, source, signal);
+                if (current !== generation || !scope.isCurrent() || signal.aborted) return false;
+                removed.value = true;
+                await lifecycle.queryClient.cancelQueries({ queryKey: scope.queryKey([]) });
+                lifecycle.queryClient.removeQueries({
+                    queryKey: scope.queryKey(taskKeys.detail(source.data.task.id)),
+                });
+                void lifecycle.queryClient.invalidateQueries({ queryKey: scope.queryKey([]) });
+                return true;
+            } catch (cause) {
+                if (current !== generation || !scope.isCurrent() || signal.aborted) return false;
+                const error = toApiError(cause);
+                message.value =
+                    error.code === 'TASK_RUN_ACTIVE'
+                        ? '任务仍有活动执行，请先请求取消，等待执行结束后再清除。'
+                        : [409, 412, 428].includes(error.status ?? 0)
+                          ? '任务状态已变化，请刷新后重新确认清除。'
+                          : !error.status ||
+                              error.status >= 500 ||
+                              ['validation', 'protocol'].includes(error.kind)
+                            ? '尚不能确认清除结果，不会自动重发。请刷新任务列表核对。'
+                            : `清除未完成（${error.status}），请刷新后核对任务与权限。`;
+                return false;
+            }
+        });
     }
     async function submit(action: TaskLifecycleAction) {
         if (disabled.value) return;
@@ -176,6 +226,9 @@ export function useTaskLifecycle(
         cancelArchive,
         submit,
         refresh,
+        removed,
+        prepareDelete,
+        remove,
         read,
     };
 }

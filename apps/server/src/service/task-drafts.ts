@@ -112,7 +112,7 @@ export function createTaskDraftService(services: ApiServices) {
                     if (resolvedTimezone.ambiguous) return manual('ambiguous_timezone');
                     let model;
                     try {
-                        model = services.taskDraftModel();
+                        model = await services.taskDraftModel(session.userId);
                     } catch {
                         return manual('model_unavailable');
                     }

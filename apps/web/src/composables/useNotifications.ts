@@ -34,7 +34,7 @@ export function notificationTarget(item: Notification) {
         : { name: 'run-detail', params: { runId: item.runId } };
 }
 export function notificationMessage(item: Notification) {
-    if (item.runStatus === 'partial') return '部分交付，结论仍有缺口，不能据此认定没有重要变化。';
+    if (item.runStatus === 'partial') return '结果已生成，未覆盖项目见报告详情。';
     if (item.runStatus === 'failed') return '本次执行失败，未完成查阅，不能据此判断资料是否变化。';
     if (item.runStatus === 'canceled') return '本次执行已取消，不能据此判断查阅结论。';
     if (item.kind === 'important_change') return '本次报告包含已确认的重要变化，请阅读报告与引用。';
@@ -55,7 +55,7 @@ export const notificationStatus: Record<Notification['runStatus'], string> = {
     recovering: '正在恢复',
     cancel_requested: '已请求取消',
     succeeded: '执行完成',
-    partial: '部分交付',
+    partial: '有范围说明',
     failed: '执行失败',
     canceled: '已取消',
 };

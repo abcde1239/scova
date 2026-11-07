@@ -32,7 +32,7 @@ vp run api:openapi:check
 
 报告证据问答：`POST /reports/:reportId/questions` 提交问题，`GET /reports/:reportId/questions/:questionId` 读取已保存回答。创建要求会话、CSRF 与稳定 `Idempotency-Key`，同键异问题返回 409；处理中重放返回 409 且不重复付费调用。问答仅使用此报告内已授权引用，事实回答采用逐字原文摘录，每条带 `evidenceId/quote`；缺模型、缺资料或无效输出明确标记不足。它使用独立 Redis 用户/全局请求与 token 额度，最多一次模型尝试，不调用搜索或网页阅读。
 
-只有另行 `POST /reports/:reportId/questions/:questionId/followup` 并提交 `{ "confirm": true }` 才启动新研究。该接口要求 CSRF 与幂等键，固定原报告的模式、配置与预算，以问题为目标生成独立 Run；Task 锁内原子写入执行、事件、Outbox 和问题关联。已有活动执行时返回 409，重复确认返回原关联执行。后续研究及其重试有独立比较范围，不覆盖原报告、任务配置或普通监控基线。取消及已撤销会话的晚返回不保存事实回答。问答仅支持报告内引用；额外资料应先进入受授权报告。
+只有另行 `POST /reports/:reportId/questions/:questionId/followup` 并提交 `{ "confirm": true }` 才启动新研究。该接口要求 CSRF 与幂等键，仅接受真实报告，固定原报告的配置与预算；历史演示报告返回 409 LEGACY_DEMO_RUN，以问题为目标生成独立 Run；Task 锁内原子写入执行、事件、Outbox 和问题关联。已有活动执行时返回 409，重复确认返回原关联执行。后续研究及其重试有独立比较范围，不覆盖原报告、任务配置或普通监控基线。取消及已撤销会话的晚返回不保存事实回答。问答仅支持报告内引用；额外资料应先进入受授权报告。
 
 `GET /api/v1/tasks/:taskId/runs` 返回当前账号指定任务的执行历史，按排队时间倒序游标分页，`limit` 最大 100。公开字段包含固定任务版本、模式、预算、状态和覆盖情况，不返回租约、checkpoint、工具正文或反馈内部快照。历史游标绑定账号、任务与数据库原始时间；Task、Report、Inbox 列表同样使用数据库微秒精度边界。
 

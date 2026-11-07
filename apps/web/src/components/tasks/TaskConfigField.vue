@@ -1,18 +1,17 @@
 <template>
     <div class="config-field">
         <label :for="id">{{ label }}</label>
-        <select
+        <app-select
             v-if="kind === 'select'"
             :id="id"
             v-model="value"
             :disabled="disabled"
-            :aria-invalid="error ? 'true' : undefined"
-            :aria-describedby="error ? `${id}-error` : undefined"
-        >
-            <option v-for="option in options" :key="option.value" :value="option.value">
-                {{ option.label }}
-            </option>
-        </select>
+            :label="label"
+            :options="options ?? []"
+            :searchable="searchable"
+            :invalid="!!error"
+            :describedby="error ? `${id}-error` : undefined"
+        />
         <input
             v-else-if="kind === 'checkbox'"
             :id="id"
@@ -45,10 +44,12 @@
 <script setup lang="ts">
 import { useId } from 'vue';
 import { NInput } from 'naive-ui';
+import AppSelect from '@/components/common/AppSelect.vue';
 defineProps<{
     label: string;
     kind?: 'text' | 'textarea' | 'select' | 'checkbox' | 'number' | 'date' | 'time';
-    options?: { value: string; label: string }[];
+    options?: { value: string; label: string; description?: string }[];
+    searchable?: boolean;
     error?: string;
     disabled?: boolean;
 }>();
@@ -74,18 +75,6 @@ label {
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
     min-block-size: 2.75rem;
-}
-select {
-    inline-size: 100%;
-    min-inline-size: 0;
-    min-block-size: 2.75rem;
-    padding: 0.625rem 0.75rem;
-    border: 0.0625rem solid var(--scova-border);
-    border-radius: 0.375rem;
-    color: var(--scova-text);
-    background: var(--scova-surface);
-    font: inherit;
-    cursor: pointer;
 }
 input[type='checkbox'] {
     inline-size: 1.25rem;
@@ -136,12 +125,10 @@ input[type='checkbox'] {
     color: var(--scova-danger);
     overflow-wrap: anywhere;
 }
-select:focus-visible,
 input:focus-visible {
     outline: 0.125rem solid var(--scova-primary);
     outline-offset: 0.1875rem;
 }
-select:disabled,
 input:disabled {
     cursor: not-allowed;
 }

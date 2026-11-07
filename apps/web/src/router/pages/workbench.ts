@@ -31,12 +31,18 @@ export default [
         path: '/account',
         name: 'account',
         component: () => import('@/views/SettingsView.vue'),
-        meta: { title: '账号', section: 'account', navigation: 'tool' },
+        meta: { title: '账号', section: 'account', navigation: 'tool', contentWidth: 'form' },
+    },
+    {
+        path: '/account/agent',
+        name: 'agent-settings',
+        component: () => import('@/views/AgentSettingsView.vue'),
+        meta: { title: 'Agent 配置', section: 'account', contentWidth: 'form' },
     },
     {
         path: '/account/appearance',
         name: 'appearance',
         component: statusView,
-        meta: { title: '外观', section: 'account' },
+        meta: { title: '外观', section: 'account', contentWidth: 'form' },
     },
 ] satisfies RouteRecordRaw[];

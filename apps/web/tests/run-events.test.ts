@@ -142,7 +142,7 @@ describe('native run stream lifecycle', () => {
         await subscription.done;
         expect(events.map((event) => event.seq)).toEqual([1, 2]);
         expect(subscription.state.value).toBe('complete');
-        expect(fetcher.mock.calls[0]![1]?.credentials).toBe('same-origin');
+        expect(fetcher.mock.calls[0]![1]?.credentials).toBe('include');
         expect(fetcher.mock.calls[0]![1]?.cache).toBe('no-store');
         expect(new Headers(fetcher.mock.calls[0]![1]?.headers).get('accept')).toBe(
             'text/event-stream',

@@ -128,6 +128,40 @@ export const users = pgTable(
 );
 export type User = typeof users.$inferSelect;
 
+export const agentProviders = pgTable(
+    'agent_providers',
+    {
+        id: uuid('id').notNull().primaryKey().$defaultFn(randomUUID),
+        userId: uuid('user_id')
+            .notNull()
+            .references(() => users.id, { onDelete: 'cascade' }),
+        name: text('name').notNull(),
+        baseUrl: text('base_url').notNull(),
+        model: text('model').notNull(),
+        protocol: text('protocol')
+            .$type<'openai_chat_completions' | 'openai_json' | 'anthropic_messages' | 'gemini'>()
+            .notNull()
+            .default('openai_chat_completions'),
+        encryptedApiKey: text('encrypted_api_key').notNull(),
+        active: boolean('active').notNull().default(false),
+        draftActive: boolean('draft_active').notNull().default(false),
+        revision: integer('revision').notNull().default(1),
+        updatedAt: timestamp('updated_at', { withTimezone: true, precision: 6, mode: 'date' })
+            .notNull()
+            .defaultNow(),
+    },
+    (table) => [
+        index('agent_providers_user_id_idx').on(table.userId),
+        uniqueIndex('agent_providers_one_active_per_user')
+            .on(table.userId)
+            .where(sql`${table.active} = true`),
+        uniqueIndex('agent_providers_one_draft_active_per_user')
+            .on(table.userId)
+            .where(sql`${table.draftActive} = true`),
+        check('agent_provider_revision_positive', sql`${table.revision} > 0`),
+    ],
+);
+
 export const sessions = pgTable(
     'sessions',
     {
@@ -582,7 +616,7 @@ export const runEvents = pgTable(
         check(
             'event_type_valid',
             sql.raw(
-                "type IN (\r\n  'run.queued', 'run.started', 'run.recovering', 'step.started', 'step.completed',\r\n  'tool.started', 'tool.completed', 'tool.failed', 'budget.updated', 'coverage.updated',\r\n  'report.published', 'run.completed', 'run.failed', 'run.canceled'\r\n)",
+                "type IN (\r\n  'run.queued', 'run.started', 'run.recovering', 'step.started', 'step.completed',\r\n  'tool.started', 'tool.completed', 'tool.failed', 'budget.updated', 'coverage.updated', 'research.updated',\r\n  'report.published', 'run.completed', 'run.failed', 'run.canceled'\r\n)",
             ),
         ),
     ],

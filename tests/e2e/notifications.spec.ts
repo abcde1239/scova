@@ -101,6 +101,7 @@ async function samples(context: BrowserContext) {
         patchWait: undefined as Promise<void> | undefined,
         getWait: undefined as Promise<void> | undefined,
         getWaitFilter: 'all:all',
+        firstPageSize: 3,
     };
     const calls: {
         method: string;
@@ -171,7 +172,9 @@ async function samples(context: BrowserContext) {
                 (unread === null ||
                     (unread === 'true' ? entry.readAt === null : entry.readAt !== null)),
         );
-        const pageItems = structuredClone(pageCursor ? visible.slice(3) : visible.slice(0, 3));
+        const pageItems = structuredClone(
+            pageCursor ? visible.slice(3) : visible.slice(0, state.firstPageSize),
+        );
         // Identical timestamps and duplicate rows; distinct notices sharing a report must survive.
         if (pageCursor && visible.length > 3) pageItems.unshift(structuredClone(visible[1]!));
         const nextCursor = !pageCursor && visible.length > 3 ? cursor : null;
@@ -208,6 +211,63 @@ const more = (page: Page) => region(page).getByRole('button', { name: '加载更
 const refresh = (page: Page) => region(page).getByRole('button', { name: '刷新', exact: true });
 const patches = (calls: Awaited<ReturnType<typeof samples>>['calls']) =>
     calls.filter((call) => call.method === 'PATCH');
+
+test('顶部通知悬浮预览四条，支持键盘、快捷进入与全部通知', async ({ page }, info) => {
+    const { state, calls } = await samples(page.context());
+    state.firstPageSize = 8;
+    await page.goto('/account/appearance');
+    const trigger = page.getByRole('button', { name: '通知', exact: true });
+    const preview = page.getByRole('dialog', { name: '通知预览', exact: true });
+    await expect(preview).not.toBeVisible();
+    expect(calls).toHaveLength(0);
+    await trigger.hover();
+    await expect(preview.getByRole('listitem')).toHaveCount(4);
+    await expect(preview).toContainText('不能据此判断资料是否变化');
+    await expect(preview.locator('a').first()).toHaveAttribute('href', `/reports/${id(301)}`);
+    await preview.screenshot({ path: info.outputPath('notification-hover.png') });
+    await preview.locator('a').nth(2).click();
+    await expect(page).toHaveURL(new RegExp(`/runs/${id(103)}$`));
+    await trigger.focus();
+    await expect(preview).toBeVisible();
+    await preview.getByRole('link', { name: '查看全部通知' }).focus();
+    await page.keyboard.press('Escape');
+    await expect(preview).not.toBeVisible();
+    await expect(trigger).toBeFocused();
+    await trigger.press('Enter');
+    await expect(preview).toBeVisible();
+    await page.locator('#main-content').focus();
+    await expect(preview).not.toBeVisible();
+    await trigger.press('Enter');
+    await expect(preview).toBeVisible();
+    await preview.getByRole('link', { name: '查看全部通知' }).click();
+    await expect(page).toHaveURL(/\/notifications$/);
+    expect(patches(calls)).toHaveLength(0);
+});
+
+test('顶部通知预览有就地加载、错误重试与空状态', async ({ page }) => {
+    const { state } = await samples(page.context());
+    let release!: () => void;
+    state.getWait = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    await page.goto('/account/appearance');
+    await page.getByRole('button', { name: '通知', exact: true }).hover();
+    const preview = page.getByRole('dialog', { name: '通知预览', exact: true });
+    await expect(preview.getByRole('status')).toContainText('正在读取通知');
+    const image = preview.locator('.loading-animation');
+    await expect(image).toBeVisible();
+    const imageBox = await image.boundingBox();
+    const textBox = await preview.getByRole('status').boundingBox();
+    expect(imageBox!.x + imageBox!.width).toBeLessThanOrEqual(textBox!.x);
+    state.failure = 503;
+    release();
+    await expect(preview.getByRole('status')).toContainText('通知暂时无法读取');
+    state.failure = null;
+    state.items = [];
+    await preview.getByRole('button', { name: '重试', exact: true }).click();
+    await expect(preview.getByRole('status')).toHaveText('暂无通知');
+    await expect(preview.getByRole('link', { name: '查看全部通知' })).toBeVisible();
+});
 async function noOverflow(page: Page) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
         true,

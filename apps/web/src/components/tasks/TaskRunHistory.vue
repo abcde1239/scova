@@ -41,13 +41,11 @@
                 retryable
                 @retry="retry"
             />
-            <action-button
-                v-if="query.hasNextPage.value"
-                :busy="query.isFetchingNextPage.value"
-                @click="more"
-            >
-                {{ query.isFetchingNextPage.value ? '正在加载历史' : '加载更早的执行' }}
-            </action-button>
+            <div v-if="query.hasNextPage.value" class="scova-pagination">
+                <action-button :busy="query.isFetchingNextPage.value" @click="more">
+                    {{ query.isFetchingNextPage.value ? '正在加载历史' : '加载更早的执行' }}
+                </action-button>
+            </div>
         </template>
     </section>
 </template>

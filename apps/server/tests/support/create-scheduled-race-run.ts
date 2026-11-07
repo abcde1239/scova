@@ -18,7 +18,7 @@ try {
     const result = await createRunService(createDefaultServices({ db: () => database })).create(
         userId,
         taskId,
-        { mode: 'demo' },
+        { mode: 'live' },
         randomUUID(),
     );
     process.stdout.write(JSON.stringify(result));

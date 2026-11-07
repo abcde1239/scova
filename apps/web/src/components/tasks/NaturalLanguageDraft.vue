@@ -4,39 +4,63 @@
         class="natural-language-draft scova-surface"
         aria-labelledby="natural-draft-title"
     >
-        <h2 id="natural-draft-title">从描述生成草稿</h2>
-        <p>可选。先描述需求，再检查草稿；也可以直接手工填写。解析不会保存任务或开始研究。</p>
+        <div class="draft-heading">
+            <h2 id="natural-draft-title">用 AI 整理需求</h2>
+            <info-dialog label="如何创建任务" title="AI 整理与手动填写">
+                <p>
+                    AI 整理：描述想研究的内容，由需求整理 Agent
+                    建议标题、关注重点和执行计划，再由你检查、修改。
+                </p>
+                <p>
+                    手动填写：直接填写下方的任务配置，不调用需求整理
+                    Agent。两种方式最终创建的是同一种任务。
+                </p>
+                <p>
+                    生成和应用草稿都不会保存任务或开始研究。检查表单并保存后，任务才会创建；研究由研究执行
+                    Agent 负责。
+                </p>
+                <p>
+                    需求时区用于理解描述中的时间，默认沿用当前任务时区；也可以从列表另选。应用草稿后仍可修改执行计划。
+                </p>
+            </info-dialog>
+        </div>
+        <p>描述你想研究的内容，AI 会帮你填写下方配置。</p>
         <task-config-field
             v-model="task.inputText.value"
-            label="原始需求描述"
+            label="需求描述"
             kind="textarea"
             :error="draft.inputError.value"
             :disabled="draft.unavailable.value"
         />
-        <p>最多 2000 个字符、8000 UTF-8 字节，原文会保留，不会自动重发解析请求。</p>
-        <div @keydown.enter.prevent="parse">
-            <task-config-field
-                v-model="draft.timezone.value"
-                label="解析时区（可选，IANA）"
-                :error="draft.timezoneError.value"
-                :disabled="draft.unavailable.value"
-            />
-        </div>
-        <p>留空时按原文明确时区或账号默认时区解析，应用后仍可在表单中修改。</p>
+        <p class="input-hint">最多 2000 字</p>
+        <task-config-field
+            v-model="draft.timezone.value"
+            label="需求时区"
+            kind="select"
+            searchable
+            :options="timezones"
+            :error="draft.timezoneError.value"
+            :disabled="draft.unavailable.value"
+        />
         <div class="draft-buttons">
             <action-button
                 :disabled="draft.unavailable.value"
                 :busy="draft.pending.value"
                 @click="parse"
                 ><app-icon name="edit" />{{
-                    draft.pending.value ? '正在解析' : '解析为草稿'
+                    draft.pending.value ? '正在整理' : '生成任务草稿'
                 }}</action-button
             >
             <action-button v-if="draft.pending.value" @click="cancel">停止解析</action-button>
             <action-button :disabled="draft.unavailable.value" @click="emit('manual')"
-                >直接手工填写</action-button
+                >手动填写</action-button
             >
         </div>
+        <state-panel
+            v-if="draft.pending.value"
+            state="loading"
+            message="正在整理需求与生成建议配置，可随时停止解析。"
+        />
         <div
             v-if="draft.message.value"
             ref="feedback"
@@ -53,13 +77,10 @@
             aria-labelledby="draft-result-title"
         >
             <h3 id="draft-result-title">
-                {{ draft.result.value.mode === 'model' ? '模型解析草稿' : '手工编辑草稿' }}
+                {{ draft.result.value.mode === 'model' ? '建议配置' : '待完善的配置' }}
             </h3>
             <p v-if="draft.result.value.manualReason">
                 {{ manualReasons[draft.result.value.manualReason] }}
-            </p>
-            <p v-if="draft.result.value.mode === 'manual'">
-                这是待手工确认的配置，未使用演示研究资料。
             </p>
             <details>
                 <summary>本次解析原文</summary>
@@ -90,8 +111,7 @@
                     </dd>
                 </div>
             </dl>
-            <section aria-label="独立解析用量" class="parsing-usage">
-                <h3>独立解析用量</h3>
+            <info-dialog label="查看生成详情" title="本次草稿生成详情">
                 <p>
                     模型调用 {{ draft.result.value.parsingUsage.attempts }} 次 · 输入
                     {{ draft.result.value.parsingUsage.inputTokens }} token · 输出
@@ -102,9 +122,9 @@
                         draft.result.value.parsingUsage.estimated
                             ? '包含保守预留或估算用量。'
                             : '当前解析用量未标记估算。'
-                    }}不计入任何 Run 预算。
+                    }}用量独立统计，不计入后续研究预算。
                 </p>
-            </section>
+            </info-dialog>
             <p v-if="draft.stale.value" class="stale-warning">
                 原文、解析时区或表单已变化，此结果不能覆盖当前配置。请重新解析或继续手工填写。
             </p>
@@ -116,16 +136,20 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, ref } from 'vue';
+import { computed, nextTick, ref } from 'vue';
 import type { createTaskController } from '@/composables/useCreateTask';
 import { taskScheduleDescription } from '@/composables/useCreateTask';
 import { useNaturalLanguageDraft } from '@/composables/useNaturalLanguageDraft';
 import TaskConfigField from '@/components/tasks/TaskConfigField.vue';
 import ActionButton from '@/components/common/ActionButton.vue';
 import AppIcon from '@/components/common/AppIcon.vue';
+import InfoDialog from '@/components/common/InfoDialog.vue';
+import StatePanel from '@/components/common/StatePanel.vue';
+import { timezoneOptions } from '@/utils/timezones';
 const props = defineProps<{ task: ReturnType<typeof createTaskController> }>();
 const emit = defineEmits<{ applied: []; manual: [] }>();
 const draft = useNaturalLanguageDraft(props.task);
+const timezones = computed(() => timezoneOptions(draft.timezone.value));
 const panel = ref<HTMLElement>();
 const feedback = ref<HTMLElement>();
 const manualReasons = {
@@ -180,8 +204,7 @@ async function cancel() {
 
 <style scoped>
 .natural-language-draft,
-.draft-result,
-.parsing-usage {
+.draft-result {
     display: grid;
     gap: 1rem;
     min-inline-size: 0;
@@ -208,6 +231,17 @@ h3 {
     display: flex;
     flex-wrap: wrap;
     gap: 0.75rem;
+}
+.draft-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+.input-hint {
+    color: var(--scova-muted);
+    font-size: 0.875rem;
 }
 .draft-result {
     border-block-start: 0.0625rem solid var(--scova-border);

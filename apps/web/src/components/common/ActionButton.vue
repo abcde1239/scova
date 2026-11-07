@@ -3,11 +3,18 @@
         :attr-type="attrType"
         :disabled="disabled"
         :quaternary="quaternary"
+        :text="text"
+        :type="type"
         v-bind="accessibility"
-        :class="{ 'scova-action--disabled': disabled, 'scova-action--busy': busy && !disabled }"
+        :class="{
+            'scova-action--disabled': disabled,
+            'scova-action--busy': busy && !disabled,
+            'scova-action--text': text,
+        }"
         class="scova-action-button"
         @click="activate"
     >
+        <span v-if="busy" class="action-spinner" aria-hidden="true" />
         <slot />
     </n-button>
 </template>
@@ -20,12 +27,16 @@ const props = withDefaults(
         disabled?: boolean;
         busy?: boolean;
         quaternary?: boolean;
+        text?: boolean;
+        type?: 'default' | 'primary';
         attrType?: 'button' | 'submit' | 'reset';
     }>(),
     {
         disabled: false,
         busy: false,
         quaternary: false,
+        text: false,
+        type: 'default',
         attrType: 'button',
     },
 );
@@ -45,6 +56,26 @@ function activate(event: MouseEvent) {
 </script>
 
 <style scoped>
+.action-spinner {
+    display: inline-block;
+    flex: 0 0 1em;
+    inline-size: 1em;
+    block-size: 1em;
+    border: 0.125em solid currentColor;
+    border-inline-end-color: transparent;
+    border-radius: 50%;
+    animation: action-spin 0.8s linear infinite;
+}
+@keyframes action-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .action-spinner {
+        animation: none;
+    }
+}
 .scova-action-button {
     min-inline-size: 2.75rem;
     min-block-size: 2.75rem;
@@ -58,6 +89,13 @@ function activate(event: MouseEvent) {
 }
 .scova-action-button.scova-action--busy {
     cursor: progress;
+}
+.scova-action-button[aria-busy='true'] :deep(.app-icon) {
+    display: none;
+}
+.scova-action-button.scova-action--text {
+    min-inline-size: 0;
+    padding: 0.375rem 0;
 }
 .scova-action-button.scova-action--disabled {
     cursor: not-allowed;

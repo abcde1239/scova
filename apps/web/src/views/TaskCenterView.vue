@@ -1,10 +1,12 @@
 <template>
     <div class="task-center">
         <template v-if="!taskId">
-            <navigation-button class="back-link" icon="create" :to="{ name: 'task-create' }"
-                >新建任务</navigation-button
-            >
-            <task-filters :value="filter" @change="changeFilter" />
+            <div class="task-toolbar">
+                <task-filters :value="filter" @change="changeFilter" />
+                <navigation-button class="back-link" icon="create" :to="{ name: 'task-create' }"
+                    >新建任务</navigation-button
+                >
+            </div>
             <p class="scope-note">筛选已加载任务 · 时间按 {{ timezone }} 显示</p>
             <state-panel v-if="query.isPending.value" state="loading" />
             <state-panel
@@ -47,12 +49,15 @@
                     retryable
                     @retry="query.refetch()"
                 />
-                <action-button
-                    v-if="query.hasNextPage.value"
-                    :busy="query.isFetchingNextPage.value"
-                    @click="query.fetchNextPage()"
-                    >{{ query.isFetchingNextPage.value ? '正在加载' : '加载更多' }}</action-button
-                >
+                <div v-if="query.hasNextPage.value" class="scova-pagination">
+                    <action-button
+                        :busy="query.isFetchingNextPage.value"
+                        @click="query.fetchNextPage()"
+                        >{{
+                            query.isFetchingNextPage.value ? '正在加载' : '加载更多'
+                        }}</action-button
+                    >
+                </div>
             </template>
         </template>
         <template v-else>
@@ -167,11 +172,20 @@ function changeFilter(value: TaskFilter) {
 }
 .scope-note {
     color: var(--scova-muted);
+    margin: 0;
+    font-size: 0.875rem;
+}
+.task-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem 1.5rem;
 }
 .task-list {
     display: grid;
-    gap: 1rem;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
+    gap: 0;
+    grid-template-columns: minmax(0, 1fr);
     align-items: start;
 }
 .task-center > :deep(.scova-action-button) {
@@ -201,5 +215,13 @@ function changeFilter(value: TaskFilter) {
 }
 .task-summary dd {
     margin: 0 0 1rem;
+}
+.task-center > :deep(.run-actions),
+.task-center > :deep(.task-lifecycle) {
+    padding-inline: 0;
+    padding-block: 2rem 0;
+    border-block-start: 0.0625rem solid var(--scova-border);
+    border-radius: 0;
+    background: transparent;
 }
 </style>

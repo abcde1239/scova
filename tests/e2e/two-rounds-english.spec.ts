@@ -10,14 +10,14 @@ import {
     openReport,
 } from './support/two-rounds.ts';
 
-test('英语两轮：默认演示真实交付、模式可见、同key重放不重复交付', async ({
+test('英语两轮：固定供应商真实管线交付、模式可见、同key重放不重复交付', async ({
     environment,
     browser,
 }, info) => {
     console.log(`Browser: Chromium ${browser.version()}`);
     const owner = await environment.owner();
     const config = environment.config('english');
-    config.title = '英语材料演示运行与幂等';
+    config.title = '英语材料受控运行与幂等';
     const task = await createTaskThroughUI(owner, config);
     expect(await deliveryCounts(environment, owner, task.task.id)).toEqual({
         runs: 0,
@@ -27,12 +27,14 @@ test('英语两轮：默认演示真实交付、模式可见、同key重放不�
     });
     const rounds = [];
     for (let index = 0; index < 2; index++) {
-        const result = await executeThroughUI(environment, owner, task.task.id, { mode: 'demo' });
-        expect(result.report.mode).toBe('demo');
-        expect(result.report.coverage.completeness).toBe('partial');
-        expect(result.report.outcome).toBe('inconclusive');
+        const result = await executeThroughUI(environment, owner, task.task.id, {
+            mode: 'live',
+            scenario: 'english',
+            phase: index === 0 ? 'A' : 'B',
+        });
+        expect(result.report.mode).toBe('live');
+        expect(result.report.coverage.completeness).toBe('complete');
         await openReport(owner.page, result.report);
-        await expect(owner.page.getByRole('note', { name: '部分交付警告' })).toBeVisible();
         rounds.push(result);
     }
     await assertAtomicDelivery(
@@ -46,7 +48,7 @@ test('英语两轮：默认演示真实交付、模式可见、同key重放不�
     const replay = await environment.request<{ run: Run; reused: boolean }>(
         owner,
         `/api/v1/tasks/${task.task.id}/runs`,
-        { method: 'POST', body: { mode: 'demo' }, headers: { 'idempotency-key': second.key } },
+        { method: 'POST', body: { mode: 'live' }, headers: { 'idempotency-key': second.key } },
     );
     expect(replay.reused).toBe(true);
     expect(replay.run.id).toBe(second.run.id);

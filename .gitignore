@@ -13,10 +13,20 @@ dist
 dist-ssr
 *.local
 
+# Rebuildable tool caches and compiler output (fixtures remain versioned)
+.vite/
+.vite-temp/
+.cache/
+*.tsbuildinfo
+__pycache__/
+*.py[cod]
+
 # dotenv environment variable files
 .env
 .env.*
 !.env.example
+!.env.local.example
+!.env.test
 
 # Editor directories and files
 .vscode/*

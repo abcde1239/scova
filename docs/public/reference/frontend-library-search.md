@@ -10,4 +10,4 @@
 
 过期正文不参与新的检索，标题与笔记仍可能命中。搜索 DTO 没有正文到期或当前正文状态字段，页面不伪造逐项状态/倒计时；已显示摘录反映本次检索时的内容，当前正文状态由来源详情确认。重新检索会从服务器读取。读取统一使用 requestlane 和同源 Cookie 会话，Vue Query 是唯一服务端缓存；换号会清理输入、分页及旧结果。
 
-验证命令：`vp test apps/web/tests/library-search.test.ts`、`vp check`、`vp run web#build`。浏览器专项为 `vp run test:e2e tests/e2e/library-search.spec.ts`。受控 HTTP 验证前端交互、纯文本、目标和隔离；真实中文/英文召回、数据库到期及分页仍需独立 API/数据库验证，不以空列表或 HTTP 200 代替召回验收。
+验证命令：`vp test apps/web/tests/library-search.test.ts`、`vp check`、`vp run build:frontend`。浏览器专项为 `vp run test:e2e tests/e2e/library-search.spec.ts`。受控 HTTP 验证前端交互、纯文本、目标和隔离；真实中文/英文召回、数据库到期及分页仍需独立 API/数据库验证，不以空列表或 HTTP 200 代替召回验收。

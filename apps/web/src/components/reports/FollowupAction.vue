@@ -12,6 +12,9 @@
         <action-button v-if="state.canOpen.value" @click="open"
             >确认后建立独立后续执行</action-button
         >
+        <p v-if="state.available.value && report?.mode === 'demo' && !state.candidateId.value">
+            历史演示报告仅供查阅，请从任务页启动真实研究。
+        </p>
         <p v-if="state.message.value" role="status">{{ state.message.value }}</p>
         <template v-if="state.protectedState.value">
             <p>离开或刷新会清除此页面的原请求标识；取消客户端读取不代表服务器回滚。</p>
@@ -68,18 +71,14 @@
             <header><h3 id="followup-dialog-title">确认建立独立后续执行</h3></header>
             <div class="dialog-body">
                 <p id="followup-dialog-consequences">
-                    将为这个已保存的问题建立独立后续执行。沿用原报告的模式、配置版本与预算上限，以问题原文为目标，清空重点条目并改为手动执行。原报告与任务配置版本保留，原任务计划不改，普通监控基线不变。
+                    将为这个已保存的问题建立独立后续执行。沿用原报告的配置版本与预算上限，以问题原文为目标，清空重点条目并改为手动执行。原报告与任务配置版本保留，原任务计划不改，普通监控基线不变。
                 </p>
                 <p class="question-text">{{ question?.question }}</p>
                 <p v-if="state.parentQuery.isFetching.value" role="status">
                     正在读取原报告执行的模式与预算。
                 </p>
                 <template v-if="state.parent.value">
-                    <p v-if="state.parent.value.mode === 'live'">
-                        真实
-                        live：可能调用部署者配置的搜索与模型并使用服务额度；不会自动切换模式，不显示虚构金额。
-                    </p>
-                    <p v-else>演示 demo：使用演示数据，不代表真实联网研究；本次不会升级为 live。</p>
+                    <p>真实研究可能调用已配置的搜索与模型并使用服务额度。</p>
                     <dl>
                         <div>
                             <dt>原配置版本</dt>

@@ -10,6 +10,7 @@ import {
 } from '@scova/db';
 import * as tables from '@scova/db';
 import { randomUUID } from 'node:crypto';
+import { effectiveRunScopeHash } from '@scova/shared';
 
 import { Redis as RedisClient } from 'ioredis';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vite-plus/test';
@@ -141,16 +142,17 @@ describe('Run API、事务 Outbox 与事件回放', () => {
         const first = await request(`/api/v1/tasks/${task.id}/runs`, {
             method: 'POST',
             headers: authHeaders(auth, { 'idempotency-key': key }),
-            body: JSON.stringify({ mode: 'demo' }),
+            body: JSON.stringify({}),
         });
         expect(first.status).toBe(202);
         const firstBody = await json(first);
         expect(firstBody.reused).toBe(false);
+        expect(firstBody.run.mode).toBe('live');
         expect(firstBody.run.taskVersionId).toBe(task.currentVersionId);
         const second = await request(`/api/v1/tasks/${task.id}/runs`, {
             method: 'POST',
             headers: authHeaders(auth, { 'idempotency-key': key }),
-            body: JSON.stringify({ mode: 'demo' }),
+            body: JSON.stringify({ mode: 'live' }),
         });
         expect(second.status).toBe(202);
         expect((await json(second)).reused).toBe(true);
@@ -188,6 +190,65 @@ describe('Run API、事务 Outbox 与事件回放', () => {
         await reader.cancel();
     });
 
+    it('拒绝 demo 创建与重试，不写入新执行或 Outbox', async () => {
+        const auth = await register();
+        const task = await createTask(auth);
+        const rejected = await request(`/api/v1/tasks/${task.id}/runs`, {
+            method: 'POST',
+            headers: authHeaders(auth, { 'idempotency-key': randomUUID() }),
+            body: JSON.stringify({ mode: 'demo' }),
+        });
+        expect(rejected.status).toBe(422);
+        expect(
+            await db.select().from(tables.runs).where(eq(tables.runs.taskId, task.id)),
+        ).toHaveLength(0);
+        expect(
+            await db
+                .select()
+                .from(tables.outbox)
+                .where(
+                    eq(
+                        tables.outbox.userId,
+                        (await db.query.tasks.findFirst({ where: eq(tables.tasks.id, task.id) }))!
+                            .userId,
+                    ),
+                ),
+        ).toHaveLength(0);
+        const accepted = await json(
+            await request(`/api/v1/tasks/${task.id}/runs`, {
+                method: 'POST',
+                headers: authHeaders(auth, { 'idempotency-key': randomUUID() }),
+                body: '{}',
+            }),
+        );
+        await db
+            .update(tables.runs)
+            .set({ status: 'failed', mode: 'demo' })
+            .where(eq(tables.runs.id, accepted.run.id));
+        const retry = await request(`/api/v1/runs/${accepted.run.id}/retry`, {
+            method: 'POST',
+            headers: authHeaders(auth, { 'idempotency-key': randomUUID() }),
+            body: JSON.stringify({ mode: 'demo' }),
+        });
+        expect(retry.status).toBe(422);
+        expect(
+            await db.select().from(tables.runs).where(eq(tables.runs.taskId, task.id)),
+        ).toHaveLength(1);
+        const liveRetry = await json(
+            await request(`/api/v1/runs/${accepted.run.id}/retry`, {
+                method: 'POST',
+                headers: authHeaders(auth, { 'idempotency-key': randomUUID() }),
+                body: '{}',
+            }),
+        );
+        expect(liveRetry.run).toMatchObject({
+            mode: 'live',
+            parentRunId: accepted.run.id,
+            taskVersionId: accepted.run.taskVersionId,
+            budget: accepted.run.budget,
+        });
+    });
+
     it('活动执行互斥、幂等 payload 冲突和跨账号访问隔离', async () => {
         const auth = await register();
         const other = await register();
@@ -195,9 +256,14 @@ describe('Run API、事务 Outbox 与事件回放', () => {
         const first = await request(`/api/v1/tasks/${task.id}/runs`, {
             method: 'POST',
             headers: authHeaders(auth, { 'idempotency-key': 'run-key-abcdefghijk' }),
-            body: JSON.stringify({ mode: 'demo' }),
+            body: JSON.stringify({ mode: 'live' }),
         });
         const run = await json(first);
+        // 模拟升级前同一个 key 已记录不同命令的历史幂等冲突。
+        await db
+            .update(tables.idempotencyRecords)
+            .set({ payloadHash: 'f'.repeat(64) })
+            .where(eq(tables.idempotencyRecords.resourceId, run.run.id));
         const mismatch = await request(`/api/v1/tasks/${task.id}/runs`, {
             method: 'POST',
             headers: authHeaders(auth, { 'idempotency-key': 'run-key-abcdefghijk' }),
@@ -207,7 +273,7 @@ describe('Run API、事务 Outbox 与事件回放', () => {
         const otherKey = await request(`/api/v1/tasks/${task.id}/runs`, {
             method: 'POST',
             headers: authHeaders(auth, { 'idempotency-key': 'run-key-different1' }),
-            body: JSON.stringify({ mode: 'demo' }),
+            body: JSON.stringify({ mode: 'live' }),
         });
         expect(otherKey.status).toBe(202);
         expect(await json(otherKey)).toMatchObject({ reused: true, run: { id: run.run.id } });
@@ -230,7 +296,7 @@ describe('Run API、事务 Outbox 与事件回放', () => {
             request(`/api/v1/tasks/${task.id}/runs`, {
                 method: 'POST',
                 headers: authHeaders(auth, { 'idempotency-key': key }),
-                body: JSON.stringify({ mode: 'demo' }),
+                body: JSON.stringify({ mode: 'live' }),
             });
         const started = await Promise.all([
             start('concurrent-start-one'),
@@ -312,7 +378,7 @@ describe('Run API、事务 Outbox 与事件回放', () => {
         const created = await request(`/api/v1/tasks/${task.id}/runs`, {
             method: 'POST',
             headers: authHeaders(auth, { 'idempotency-key': 'run-original-version' }),
-            body: JSON.stringify({ mode: 'demo' }),
+            body: JSON.stringify({ mode: 'live' }),
         });
         expect(created.status).toBe(202);
         const original = (await json(created)).run;
@@ -341,7 +407,7 @@ describe('Run API、事务 Outbox 与事件回放', () => {
             request(`/api/v1/runs/${original.id}/retry`, {
                 method: 'POST',
                 headers: authHeaders(auth, { 'idempotency-key': 'run-retry-pinned-version' }),
-                body: JSON.stringify({ mode: 'demo' }),
+                body: JSON.stringify({ mode: 'live' }),
             });
         const retried = await retry();
         expect(retried.status).toBe(202);
@@ -389,7 +455,7 @@ describe('Run API、事务 Outbox 与事件回放', () => {
         const fresh = await request(`/api/v1/tasks/${task.id}/runs`, {
             method: 'POST',
             headers: authHeaders(auth, { 'idempotency-key': 'run-current-version' }),
-            body: JSON.stringify({ mode: 'demo' }),
+            body: JSON.stringify({ mode: 'live' }),
         });
         expect(fresh.status).toBe(202);
         expect((await json(fresh)).run).toMatchObject({
@@ -442,7 +508,7 @@ describe('Run API、事务 Outbox 与事件回放', () => {
         ).toBe(3);
     });
 
-    it('同一任务版本的 demo/live 使用独立比较范围，重试同模式保持范围', async () => {
+    it('历史演示仍可读取且与新真实执行范围隔离，重试保持真实范围', async () => {
         const auth = await register();
         const task = await createTask(auth);
         const start = async (mode: 'demo' | 'live', key: string) => {
@@ -454,7 +520,21 @@ describe('Run API、事务 Outbox 与事件回放', () => {
             expect(response.status).toBe(202);
             return (await json(response)).run;
         };
-        const demo = await start('demo', 'mode-scope-demo-key');
+        const demo = await start('live', 'mode-scope-demo-key');
+        const version = await db.query.taskVersions
+            .findFirst({ where: eq(tables.taskVersions.id, task.currentVersionId) })
+            .then(requireRow);
+        await db
+            .update(tables.runs)
+            .set({
+                mode: 'demo',
+                comparisonScopeHash: effectiveRunScopeHash(version.comparisonScopeHash, 'demo'),
+            })
+            .where(eq(tables.runs.id, demo.id));
+        const history = await json(
+            await request(`/api/v1/runs/${demo.id}`, { headers: { cookie: auth.cookie } }),
+        );
+        expect(history.mode).toBe('demo');
         const demoStored = await db.query.runs
             .findFirst({ where: and(eq(tables.runs.id, demo.id)) })
             .then(requireRow);

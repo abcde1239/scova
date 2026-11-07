@@ -43,6 +43,14 @@ const fixtureHttp = (body: unknown = searchResponse(), status = 200) => {
 };
 
 describe('SearxNG structured search and source authenticity', () => {
+    it.each([429, 403])('retains a trusted later Retry-After on HTTP %i', async (status) => {
+        const http: SafeHttpClient = {
+            request: async () => ({ ...response({}, status), headers: { 'retry-after': '7200' } }),
+        };
+        await expect(
+            createSearxngSearch({ http, maxAttempts: 1 }).search('agent'),
+        ).rejects.toMatchObject({ status, retryAfterMs: 7_200_000 });
+    });
     it('sends a bounded JSON form query to the fixed deployment endpoint', async () => {
         const { http, request } = fixtureHttp();
         const beforeAttempt = vi.fn();
@@ -122,7 +130,7 @@ describe('SearxNG structured search and source authenticity', () => {
         );
         await expect(
             createSearxngSearch({ http: failed.http }).search('deadline'),
-        ).rejects.toMatchObject({ code: 'invalid_response' });
+        ).rejects.toMatchObject({ code: 'search_unavailable' });
     });
 
     it('records discarded unsafe URLs as a gap without turning them into collected evidence', async () => {

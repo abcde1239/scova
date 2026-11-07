@@ -5,14 +5,21 @@
             :style="variables"
             :class="{ 'scova-theme--dark': appearance.scheme === 'dark' }"
         >
-            <slot />
+            <n-notification-provider
+                placement="top-right"
+                :max="3"
+                keep-alive-on-hover
+                container-class="scova-notifications"
+            >
+                <slot />
+            </n-notification-provider>
         </div>
     </n-config-provider>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { darkTheme, NConfigProvider } from 'naive-ui';
+import { darkTheme, NConfigProvider, NNotificationProvider } from 'naive-ui';
 import { useAppearanceStore } from '@/store/appearance';
 import { useReadingStore } from '@/store/reading';
 import { themeOverrides, themeVariables } from '@/theme/tokens';

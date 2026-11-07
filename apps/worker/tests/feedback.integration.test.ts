@@ -621,7 +621,7 @@ describe('可撤销资料反馈与实际后续执行（真实PG/checkpoint）', 
             .where(eq(dbTasks.id, seed.task.id))
             .returning()
             .then((rows) => requiredDatabaseValue(rows[0]));
-        expect(await createSchedulerRepository(db).scheduleNext('live', [])).toMatchObject({
+        expect(await createSchedulerRepository(db).scheduleNext([])).toMatchObject({
             taskId: seed.task.id,
             status: 'created',
         });

@@ -36,7 +36,7 @@ describe('login submission', () => {
         expect(url).toBe('/api/v1/auth/login');
         expect(typeof init?.body).toBe('string');
         expect(JSON.parse(init!.body as string)).toEqual({ email: 'a@example.org', password: 'x' });
-        expect(init?.credentials).toBe('same-origin');
+        expect(init?.credentials).toBe('include');
         expect(JSON.stringify(lifecycle.pinia.state.value)).not.toContain('password');
         expect(JSON.stringify(lifecycle.pinia.state.value)).not.toContain(account.csrfToken);
     });

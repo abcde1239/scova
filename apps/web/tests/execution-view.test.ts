@@ -158,9 +158,9 @@ describe('Run detail facts and isolation', () => {
             });
             const label = executionOutcome(snapshot);
             if (status === 'succeeded') expect(label).toBe('本次范围内未发现重要变化');
-            else if (status === 'partial') expect(label).toBe('结果不完整');
+            else if (status === 'partial') expect(label).toBe('已生成结果');
             else expect(label).toBeUndefined();
-            if (status === 'partial') expect(label).toBe('结果不完整');
+            if (status === 'partial') expect(label).toBe('已生成结果');
         },
     );
     it('keeps only safe tool facts, merges a completed call and bounds retained activity', () => {
@@ -352,9 +352,11 @@ describe('Run detail facts and isolation', () => {
         await vi.waitFor(() => expect(execution.subscription.value?.state.value).toBe('open'));
         controller.enqueue(frame(event(1)));
         await vi.waitFor(() => expect(execution.tools.value).toHaveLength(1));
+        expect(execution.log.value.entries).toHaveLength(1);
         id.value = otherId;
         await vi.waitFor(() => expect(cancel).toHaveBeenCalledTimes(1));
         expect(execution.tools.value).toHaveLength(0);
+        expect(execution.log.value.entries).toHaveLength(0);
         await vi.waitFor(() => expect(release).toBeTypeOf('function'));
         lifecycle.replaceSession(null);
         scope.stop();

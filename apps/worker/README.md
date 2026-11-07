@@ -15,30 +15,42 @@ vp run worker#start:node  # Node.js
 
 ## 配置
 
-| 环境变量                       | 默认值       | 用途                                        |
-| ------------------------------ | ------------ | ------------------------------------------- |
-| `WORKER_QUEUE_NAME`            | `scova-runs` | BullMQ 队列名                               |
-| `WORKER_POLL_INTERVAL_MS`      | `1000`       | 批次间隔                                    |
-| `WORKER_FAILURE_DELAY_MS`      | `5000`       | 批次失败等待                                |
-| `WORKER_BATCH_SIZE`            | `50`         | 单批领取上限                                |
-| `WORKER_LEASE_SECONDS`         | `30`         | 单条投递租约                                |
-| `WORKER_RUN_LEASE_SECONDS`     | `30`         | Run 租约；续期间隔为其三分之一，最多 10 秒  |
-| `WORKER_RUN_CONCURRENCY`       | `2`          | Run 消费并发数，最大 32                     |
-| `WORKER_SCHEDULER_INTERVAL_MS` | `30000`      | 周期任务扫描间隔                            |
-| `WORKER_SCHEDULER_CONCURRENCY` | `2`          | 同批调度事务并发数，最大 8                  |
-| `WORKER_SCHEDULED_RUN_MODE`    | `demo`       | 周期执行固定模式；真实研究需显式配置 `live` |
+| 环境变量                             | 默认值       | 用途                                                 |
+| ------------------------------------ | ------------ | ---------------------------------------------------- |
+| `WORKER_QUEUE_NAME`                  | `scova-runs` | BullMQ 队列名                                        |
+| `WORKER_POLL_INTERVAL_MS`            | `1000`       | 批次间隔                                             |
+| `WORKER_FAILURE_DELAY_MS`            | `5000`       | 批次失败等待                                         |
+| `WORKER_BATCH_SIZE`                  | `50`         | 单批领取上限                                         |
+| `WORKER_LEASE_SECONDS`               | `30`         | 单条投递租约                                         |
+| `WORKER_RUN_LEASE_SECONDS`           | `30`         | Run 租约；续期间隔为其三分之一，最多 10 秒           |
+| `WORKER_RUN_CONCURRENCY`             | `2`          | Run 消费并发数，最大 32                              |
+| `WORKER_SCHEDULER_INTERVAL_MS`       | `30000`      | 周期任务扫描间隔                                     |
+| `WORKER_SCHEDULER_CONCURRENCY`       | `2`          | 同批调度事务并发数，最大 8                           |
+| `SEARCH_ENGINE_INTERVAL_MS`          | `10000`      | 每引擎共享启动间隔（毫秒）                           |
+| `SEARCH_CONFIG_VERSION`              | `1`          | 搜索实例出口、地区或 CX 配置指纹版本                 |
+| `SEARCH_CACHE_ENABLED`               | `true`       | 同账号候选缓存与在途复用                             |
+| `SEARCH_ADAPTIVE_ENABLED`            | `true`       | Agent 最多两次预算内补搜                             |
+| `RESEARCH_ANSWER_SUPPLEMENT_ENABLED` | `false`      | 核心问题缺口的可选一轮定向补证；复用原有综合修复预算 |
 
 Run 从数据库固定 owner、版本、模式和预算，队列只能选择 runId。同一 Run 只有一个有效租约，接管递增 epoch，最多恢复三次；恢复保留首次开始时间和 deadline。数据库恢复扫描独立于原始 job，能处理消息丢失和保留的 completed/failed job。
 
 调度以 IANA 时区的每日/每周当地时间计算 UTC 时点。DST 缺失时刻取首个有效时刻，重复时刻取较早一次。停机只补最近一次到期，较早时点计入 `missedCount`；已有活动执行则记 `skipped_overlap`。Occurrence、Run、首事件、Outbox 与下一时点在一个 PostgreSQL 事务内提交，多 Worker 通过任务行锁和唯一约束去重。暂停保留当前执行且允许显式手动运行，恢复只安排未来时点；归档阻止新执行并请求取消当前执行。
 
-`AGENT_CHECKPOINT_SCHEMA` 默认为 `scova_agent`，启动时在独立表空间串行运行 saver 迁移。真实执行使用 `SEARXNG_BASE_URL`（默认 `http://127.0.0.1:8080`）、`MODEL_API_KEY`、`MODEL_NAME` 和可选 `MODEL_BASE_URL`。`SEARCH_PROVIDER` 默认为 `searxng`，只有显式选择 `tavily` 时才读取 `TAVILY_API_KEY`。详情见[搜索部署](../../docs/public/guides/search.md)。密钥仅来自部署者环境，不写入任务或事件。真实 Run 缺配置以 `AGENT_CONFIGURATION_INVALID` 失败，禁止静默转为演示；demo Run 始终使用固定演示资料。
+`AGENT_CHECKPOINT_SCHEMA` 默认为 `scova_agent`，启动时在独立表空间串行运行 saver 迁移。真实执行使用 `SEARXNG_BASE_URL`（默认 `http://127.0.0.1:8080`）、`MODEL_API_KEY`、`MODEL_NAME` 和可选 `MODEL_BASE_URL`。`SEARCH_PROVIDER` 默认为 `searxng`，只有显式选择 `tavily` 时才读取 `TAVILY_API_KEY`。详情见[搜索部署](../../docs/public/guides/search.md)。密钥仅来自部署者环境，不写入任务或事件。真实 Run 缺配置以 `AGENT_CONFIGURATION_INVALID` 失败，生产 Worker 不接受 demo 队列；历史演示报告仍可读取，测试可显式注入固定供应商。
 
 执行层通过受限上下文发出进度事件并检查执行权限；受信领域 repository 必须通过 `withRunFence` 在同一 Run 行锁事务内写入。普通写入拒绝取消、超期或失效租约；失败/取消终结有单独入口。执行器返回本身不代表已交付成果。
 
+SearxNG 搜索在出站前通过 Redis 原子申请引擎资格，跨 Worker 保持并发 1，验证码和限流独立冷却；Redis 故障不退回无限制调用。同账号相同条件查询合并在途请求，候选缓存保持原始查询时间，命中仍记逻辑预算，真正重试另记。出站前重新检查 Run 租约与取消，等待不延长 deadline；共享状态与缓存细节见搜索部署说明。
+
 每个供应商 attempt 先提交 ToolCall 和累计预留，再调用外部服务。成功结果与可信用量原子结算；unknown/失败尝试保留预留。恢复按逻辑操作和输入指纹复用成功结果，即使用量恰已耗尽也无需再次付费调用。checkpoint 只从数据库已提升的明确引用恢复，新 epoch 不继承旧线程的未提升 pending writes。截止后不调用搜索、阅读或模型，只允许读取截止前已合法保存的正文构造 partial 候选；取消仍禁止交付。停止等待已开始的领域写和 checkpoint 操作后关闭连接。
 
+模型明确额度不足记录为 `TOOL_MODEL_QUOTA_EXCEEDED`；同一 Run 后续模型预留会被拒绝，跨进程恢复仍有效，已成功操作可重放。该状态只限制当前 Run，补充额度后可新建执行，不会永久停用账号模型。失败预留仍保留，供应商错误原文不会公开。
+
 交付重新读取明确提升的 checkpoint，并将正文与当前 Run 成功工具记录比对，逐条校验原文引用、owner、版本和模式。在同一 Run 行锁事务内保存快照、证据、结论、报告、收件箱和终态事件；重投返回已交付报告，取消先获锁则不交付。没有可引用正文时失败。
+
+证据质量采用软约束：结论可保留为有引用的模型归纳或待核实内容，报告逐条说明不确定性；不匹配原文的文字不会作为引用保存。全部结论均待核实时，真实正文摘录单独放入来源附录，不与无直接依据的结论关联。比较按最多 3 页分批并局部修复，交付逐批核对成功账本；部分比较值未核实也可交付，只有完整结果才能推进基线。筛选说明与真正覆盖缺口分别记录，原有预算和权限约束继续生效。
+
+报告先冻结目标和焦点问题，再为结论记录问题关联、支持关系、时间适用性、来源关系和内容作用。`coverage.reportValue` 将问题展示为已回答、主要结论、不同来源或暂无直接回答，并将结论分为主回答、参考线索或省略。模型评估只是自评，引用定位不代表语义已独立核实；同一问题内同源观点与引用集中展示，条件与缺口保留在对应说明；旧报告没有该字段时兼容读取。启用 `RESEARCH_ANSWER_SUPPLEMENT_ENABLED` 后，核心问题仍有具体缺口时最多补搜一次、读取两页并复用原第二次综合调用；预算、期限、账本和恢复不放宽，无新增信息即停止。默认关闭。
 
 首次领取固定同 owner/task/有效范围/mode 的完整基线，恢复不重新选择。比较清单随报告保存，交付事务重新验证成功模型账本、事实原文和双方证据后保存变化；完整执行推进基线，partial 保留原指针。范围包含比较策略版本，演示与真实基线隔离。图与当前引用校验边界见 [Agent Core](../../packages/agent-core/README.md)；未核验新来源发布日期、官方身份、来源失败或正文截断均显示覆盖缺口。
 

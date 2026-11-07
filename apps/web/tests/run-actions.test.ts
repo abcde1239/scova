@@ -49,7 +49,7 @@ const run: Run = {
 const queued = {
     ...run,
     id: nextId,
-    mode: 'demo',
+    mode: 'live',
     status: 'queued',
     finishedAt: null,
 } satisfies Run;
@@ -75,13 +75,42 @@ const failure = (status: number, code = 'LOCAL_FAILURE') =>
 afterEach(() => cleanups.splice(0).forEach((cleanup) => cleanup()));
 
 describe('显式 Run 命令与冻结重发', () => {
+    it('未知结果重发冻结原Agent选择，更改页面选择不会改变原请求', async () => {
+        const calls: { body: string; key: string | null }[] = [];
+        const { actions, target } = setup(
+            async (_url, init) => {
+                calls.push({
+                    body: init?.body as string,
+                    key: new Headers(init?.headers).get('idempotency-key'),
+                });
+                if (calls.length === 1) throw new TypeError('network');
+                return success();
+            },
+            { taskId, agentProviderId: otherId },
+        );
+        await actions.submit('start');
+        expect(actions.phase.value).toBe('uncertain');
+        target.value.agentProviderId = null;
+        await actions.replay();
+        expect(calls[1]).toEqual(calls[0]);
+        expect(JSON.parse(calls[0]!.body)).toEqual({ mode: 'live', agentProviderId: otherId });
+    });
+    it('显式账号默认以null覆盖任务配置，省略选择仍兼容原请求', async () => {
+        const fetcher = vi.fn<typeof fetch>(async () => success());
+        const { actions } = setup(fetcher, { taskId, agentProviderId: null });
+        await actions.submit('start');
+        expect(JSON.parse(fetcher.mock.calls[0]![1]?.body as string)).toEqual({
+            mode: 'live',
+            agentProviderId: null,
+        });
+    });
     it.each(['archived', 'paused'] as const)('任务%s按真实权限决定手动执行', async (taskStatus) => {
         const fetcher = vi.fn<typeof fetch>(async () => success());
         const { actions } = setup(fetcher, { taskId, taskStatus });
         await actions.submit('start');
         expect(fetcher).toHaveBeenCalledTimes(taskStatus === 'archived' ? 0 : 1);
     });
-    it('不会因安装或修改模式而启动，demo默认，写请求带Cookie/CSRF/key；双击或键盘重复只派发一次', async () => {
+    it('安装不会启动，统一真实执行，写请求带Cookie/CSRF/key；双击或键盘重复只派发一次', async () => {
         let finish!: (value: Response) => void;
         const fetcher = vi.fn<typeof fetch>(
             () =>
@@ -90,7 +119,6 @@ describe('显式 Run 命令与冻结重发', () => {
                 }),
         );
         const { actions } = setup(fetcher);
-        expect(actions.mode.value).toBe('demo');
         await nextTick();
         expect(fetcher).not.toHaveBeenCalled();
         const first = actions.submit('start');
@@ -98,10 +126,10 @@ describe('显式 Run 命令与冻结重发', () => {
         await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
         const [url, init] = fetcher.mock.calls[0]!;
         expect(addressOf(url!)).toContain(`/tasks/${taskId}/runs`);
-        expect(init?.credentials).toBe('same-origin');
+        expect(init?.credentials).toBe('include');
         expect(new Headers(init?.headers).get('x-csrf-token')).toBe('local-only');
         expect(new Headers(init?.headers).get('idempotency-key')).toBe(actions.attempt.value?.key);
-        expect(JSON.parse(init?.body as string)).toEqual({ mode: 'demo' });
+        expect(JSON.parse(init?.body as string)).toEqual({ mode: 'live' });
         finish(success());
         await first;
         await actions.submit('start');
@@ -124,17 +152,16 @@ describe('显式 Run 命令与冻结重发', () => {
         await actions.submit('retry');
         expect(actions.phase.value).toBe('uncertain');
         const frozen = actions.attempt.value;
-        actions.mode.value = 'live';
         target.value = { taskId, run: { ...run } };
         await nextTick();
         expect(actions.attempt.value).toBe(frozen);
         await actions.replay();
         expect(calls).toHaveLength(2);
         expect(calls[1]).toEqual(calls[0]);
-        expect(calls[0]?.body).toEqual({ mode: 'demo' });
+        expect(calls[0]?.body).toEqual({ mode: 'live' });
         expect(actions.result.value?.run.parentRunId).toBe(runId);
     });
-    it('live必须显式选择，重试live源仍默认demo并创建原版本关联新Run', async () => {
+    it('重试使用真实研究并创建原版本关联新Run', async () => {
         const calls: string[] = [];
         const { actions } = setup(
             async (_url, init) => {
@@ -143,8 +170,6 @@ describe('显式 Run 命令与冻结重发', () => {
             },
             { taskId, run },
         );
-        expect(actions.mode.value).toBe('demo');
-        actions.mode.value = 'live';
         await actions.submit('retry');
         expect(JSON.parse(calls[0]!)).toEqual({ mode: 'live' });
         expect(actions.result.value?.run.id).toBe(nextId);
@@ -165,15 +190,15 @@ describe('显式 Run 命令与冻结重发', () => {
             expect(actions.message.value).not.toContain('活动');
         },
     );
-    it('活动复用接受不同mode/version/parent，以真实返回为准', async () => {
+    it('活动复用接受不同历史mode/version/parent，以真实返回为准', async () => {
         const snapshot: Run = {
             ...queued,
+            mode: 'demo',
             taskVersionId: otherId,
             parentRunId: otherId,
             budget: { ...queued.budget, maxPages: 99 },
         };
         const { actions } = setup(async () => success(snapshot, true), { taskId, run });
-        actions.mode.value = 'live';
         await actions.submit('retry');
         expect(actions.phase.value).toBe('success');
         expect(actions.result.value?.run).toEqual(snapshot);
@@ -197,10 +222,9 @@ describe('显式 Run 命令与冻结重发', () => {
                         status: 202,
                         headers: { 'content-type': 'application/json' },
                     });
-                return success(queued);
+                return success({ ...queued, mode: 'demo' });
             });
             const { actions } = setup(fetcher);
-            actions.mode.value = 'live';
             await actions.submit('start');
             const attempt = actions.attempt.value;
             expect(actions.phase.value).toBe('uncertain');
@@ -260,7 +284,7 @@ describe('显式 Run 命令与冻结重发', () => {
                 ...(field === 'parent' ? { parentRunId: otherId } : {}),
                 ...(field === 'version' ? { taskVersionId: otherId } : {}),
                 ...(field === 'id' ? { id: runId } : {}),
-                ...(field === 'mode' ? { mode: 'live' } : {}),
+                ...(field === 'mode' ? { mode: 'demo' } : {}),
                 ...(field === 'trigger' ? { trigger: 'manual' } : {}),
             };
             const { actions } = setup(async () => success(snapshot), { taskId, run });
@@ -340,7 +364,6 @@ describe('显式 Run 命令与冻结重发', () => {
         expect(actions.locked.value).toBe(true);
         target.value = { taskId, run: { ...run, status: 'canceled' } };
         expect(actions.locked.value).toBe(false);
-        expect(actions.mode.value).toBe('demo');
         await actions.submit('retry');
         expect(urls).toHaveLength(2);
         expect(urls[1]).toContain(`/runs/${runId}/retry`);

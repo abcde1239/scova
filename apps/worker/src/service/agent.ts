@@ -1,9 +1,16 @@
 import { type DatabaseClient } from '@scova/db';
+import { openCredential } from '@scova/shared/credentials';
+import { activeAgentProvider } from '@/repo/agent-providers.ts';
 import { installedCheckpointVersion } from '@/utils/checkpoint-version.ts';
+import { classifyToolFailure } from '@/utils/tool-failure.ts';
 import { createHash } from 'node:crypto';
 import type { RunnableConfig } from '@langchain/core/runnables';
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import pg from 'pg';
+import { Redis } from 'ioredis';
+import { createSearchStateRepository } from '@/repo/search.ts';
+import { createManagedSearch } from '@/service/search.ts';
+import { searchScope } from '@/utils/search-scope.ts';
 import {
     runResearchAgent,
     deterministicPartial,
@@ -13,6 +20,7 @@ import {
 } from '@scova/agent-core';
 import {
     ConnectorError,
+    MODEL_CALL_TIMEOUT_MS,
     createConnectorBundle,
     estimateModelInputTokens,
     withDeadline,
@@ -77,6 +85,8 @@ function readPage(value: unknown, mode: 'demo' | 'live'): ReadPage {
 }
 
 export interface AgentSessionOptions {
+    answerSupplementEnabled?: boolean;
+    adaptiveSearchDisabled?: boolean;
     repository: AgentRepository;
     saver: PostgresSaver;
     token: RunLeaseToken;
@@ -86,6 +96,8 @@ export interface AgentSessionOptions {
 
 /** Trusted worker adapter; only bound tools and graph state reach agent-core. */
 export function createAgentSession({
+    answerSupplementEnabled,
+    adaptiveSearchDisabled: optionsAdaptiveSearchDisabled,
     repository: rawRepository,
     saver: rawSaver,
     token,
@@ -200,11 +212,17 @@ export function createAgentSession({
                   }
                 : input;
         const key = `${operationKey}:${digest(JSON.stringify(keyInput))}`;
-        let held: AgentReservation = await repository.reserve({
-            operationKey: key,
-            tool,
-            reserved,
-        });
+        let held: AgentReservation;
+        try {
+            held = await repository.reserve({ operationKey: key, tool, reserved });
+        } catch (error) {
+            if (error instanceof AgentPersistenceError && error.code === 'MODEL_QUOTA_EXCEEDED')
+                throw new ConnectorError(
+                    'model_quota_exceeded',
+                    '模型服务额度不足，请补充额度后新建执行',
+                );
+            throw error;
+        }
         Object.assign(currentUsage, held.usage);
         if (held.kind === 'reused') {
             const result = held.output as T;
@@ -213,7 +231,10 @@ export function createAgentSession({
         }
         let attempts = 0;
         try {
-            const remaining = Math.min(15_000, context.deadlineAt.getTime() - Date.now());
+            const remaining = Math.min(
+                tool === 'model' ? MODEL_CALL_TIMEOUT_MS : 15_000,
+                context.deadlineAt.getTime() - Date.now(),
+            );
             if (remaining <= 0) throw new ConnectorError('timeout', '时间预算已耗尽');
             const result = await withDeadline(
                 Math.max(1, Math.ceil(remaining)),
@@ -222,13 +243,23 @@ export function createAgentSession({
                     invoke({
                         signal,
                         timeoutMs: Math.max(1, Math.ceil(remaining)),
-                        beforeAttempt: async (kind) => {
+                        beforeDispatch: async () => {
+                            await guard();
+                        },
+                        onSearchState: async (state) => {
+                            await guard();
+                            await context.emit({ type: 'research.updated', payload: { state } });
+                        },
+                        beforeAttempt: async (kind, previousFailure) => {
                             await guard();
                             if (signal.aborted) throw new ConnectorError('aborted', '调用已停止');
                             if (kind !== tool || attempts >= 3)
                                 throw new AgentPersistenceError('INVALID_TOOL_CALL');
                             if (attempts > 0) {
-                                await repository.fail({ toolCallId: held.toolCallId });
+                                await repository.fail({
+                                    toolCallId: held.toolCallId,
+                                    failureCode: classifyToolFailure(previousFailure),
+                                });
                                 held = await repository.reserve({
                                     operationKey: key,
                                     tool,
@@ -263,7 +294,9 @@ export function createAgentSession({
             if (error instanceof ConnectorError && error.code === 'budget_exceeded')
                 tokenBudgetInvalid = true;
             // Failed/aborted external requests may have been billed. Never refund their reservation.
-            await repository.fail({ toolCallId: held.toolCallId }).catch(() => undefined);
+            await repository
+                .fail({ toolCallId: held.toolCallId, failureCode: classifyToolFailure(error) })
+                .catch(() => undefined);
             if (error instanceof AgentPersistenceError && error.code === 'BUDGET_EXCEEDED')
                 throw new ConnectorError('budget_exceeded', '执行预算不足');
             throw error;
@@ -340,6 +373,8 @@ export function createAgentSession({
         },
     };
     const agentContext: AgentContext = {
+        answerSupplementEnabled,
+        adaptiveSearchDisabled: optionsAdaptiveSearchDisabled,
         runId: context.runId,
         userId: context.userId,
         taskVersionId: context.taskVersionId,
@@ -371,6 +406,8 @@ export function createAgentSession({
                 tools,
                 checkpointer: saver,
                 promote,
+                onClaimsRepair: () =>
+                    context.emit({ type: 'research.updated', payload: { state: 'claims_repair' } }),
                 onStep: async (step, phase) => {
                     const name = step as Extract<
                         RunProgressEvent,
@@ -427,6 +464,7 @@ export function createAgentSession({
 }
 
 export interface AgentRuntimeOptions {
+    redis?: Redis;
     databaseUrl: string;
     database: DatabaseClient;
     env?: NodeJS.ProcessEnv;
@@ -466,33 +504,91 @@ export function createAgentRuntime(options: AgentRuntimeOptions) {
         ? createDeliveryService(options.database, saver)
         : undefined;
     let ready = false;
+    let searchRedis = options.redis;
+    let ownsRedis = false;
     let closing: Promise<void> | undefined;
-    let liveBundle: ConnectorBundle | undefined;
-    const demoBundle = createConnectorBundle();
-    function bundle(mode: 'demo' | 'live') {
+    async function bundle(context: RunExecutionContext) {
+        const { mode, userId } = context;
         if (options.bundle) return options.bundle;
-        if (mode === 'demo')
-            return { ...demoBundle, reason: '本次执行已固定为演示模式，使用固定演示资料' };
-        if (!liveBundle) {
+        if (mode !== 'live') throw new RunExecutionError('AGENT_CONFIGURATION_INVALID');
+        {
             if (
                 env.SEARCH_PROVIDER !== undefined &&
                 !['searxng', 'tavily'].includes(env.SEARCH_PROVIDER)
             )
                 throw new RunExecutionError('AGENT_CONFIGURATION_INVALID');
-            liveBundle = createConnectorBundle({
+            const own = await activeAgentProvider(
+                options.database,
+                userId,
+                context.config.agentProviderId,
+            );
+            if (context.config.agentProviderId && !own)
+                throw new RunExecutionError('AGENT_CONFIGURATION_INVALID');
+            let modelApiKey = env.MODEL_API_KEY;
+            if (own) {
+                try {
+                    modelApiKey = openCredential(
+                        own.encryptedApiKey,
+                        userId,
+                        own.id,
+                        env.AGENT_CREDENTIAL_KEY,
+                    );
+                } catch {
+                    throw new RunExecutionError('AGENT_CONFIGURATION_INVALID');
+                }
+            }
+            const liveBundle = createConnectorBundle({
                 searchProvider: env.SEARCH_PROVIDER as 'searxng' | 'tavily' | undefined,
                 searxngBaseUrl: env.SEARXNG_BASE_URL,
+                managedSearch: true,
                 tavilyApiKey: env.TAVILY_API_KEY,
-                modelApiKey: env.MODEL_API_KEY,
-                model: env.MODEL_NAME,
-                modelBaseUrl: env.MODEL_BASE_URL,
+                modelApiKey,
+                model: own?.model ?? env.MODEL_NAME,
+                modelBaseUrl: own?.baseUrl ?? env.MODEL_BASE_URL,
+                modelProtocol: own?.protocol,
             });
+            if (liveBundle.mode !== 'live')
+                throw new RunExecutionError('AGENT_CONFIGURATION_INVALID');
+            if ((env.SEARCH_PROVIDER ?? 'searxng') === 'searxng') {
+                if (!searchRedis) throw new RunExecutionError('AGENT_CONFIGURATION_INVALID');
+                const namespace = `scova:search:v1:${digest(
+                    JSON.stringify([
+                        env.SEARXNG_BASE_URL ?? 'http://127.0.0.1:8080',
+                        env.SEARCH_CONFIG_VERSION ?? '1',
+                    ]),
+                )}`;
+                const scope = context.startedAt
+                    ? searchScope(userId, context.config, context.startedAt)
+                    : { key: JSON.stringify([userId, context.runId]), ttlMs: 0 };
+                liveBundle.search = createManagedSearch({
+                    source: liveBundle.search,
+                    repository: createSearchStateRepository(
+                        searchRedis,
+                        namespace,
+                        Number(env.SEARCH_ENGINE_INTERVAL_MS ?? 10_000),
+                    ),
+                    scope: scope.key,
+                    cacheTtlMs: env.SEARCH_CACHE_ENABLED === 'false' ? 0 : scope.ttlMs,
+                    cacheExpiresAt: 'expiresAt' in scope ? scope.expiresAt : undefined,
+                });
+            }
+            return liveBundle;
         }
-        if (liveBundle.mode !== 'live') throw new RunExecutionError('AGENT_CONFIGURATION_INVALID');
-        return liveBundle;
     }
     return {
         async connect() {
+            if (!options.bundle && !searchRedis && env.REDIS_URL) {
+                searchRedis = new Redis(env.REDIS_URL, {
+                    lazyConnect: true,
+                    enableOfflineQueue: false,
+                    maxRetriesPerRequest: 1,
+                    connectTimeout: 5000,
+                    commandTimeout: 5000,
+                });
+                searchRedis.on('error', () => undefined);
+                ownsRedis = true;
+                await searchRedis.connect();
+            }
             const client = await pool.connect();
             try {
                 // Serialize saver migrations across worker processes; no business transaction spans setup.
@@ -524,11 +620,13 @@ export function createAgentRuntime(options: AgentRuntimeOptions) {
                 async execute(context) {
                     if (!ready) throw new RunExecutionError('AGENT_CONFIGURATION_INVALID');
                     session = createAgentSession({
+                        answerSupplementEnabled: env.RESEARCH_ANSWER_SUPPLEMENT_ENABLED === 'true',
+                        adaptiveSearchDisabled: env.SEARCH_ADAPTIVE_ENABLED === 'false',
                         repository: createAgentRepository(options.database, token),
                         saver,
                         token,
                         context,
-                        bundle: bundle(context.mode),
+                        bundle: await bundle(context),
                     });
                     let candidate: AgentCandidate;
                     try {
@@ -552,6 +650,8 @@ export function createAgentRuntime(options: AgentRuntimeOptions) {
                     });
                 },
                 async onDeadline(context) {
+                    if (!options.bundle && context.mode !== 'live')
+                        throw new RunExecutionError('AGENT_CONFIGURATION_INVALID');
                     if (!session) {
                         // A restarted Run may already be past its fixed deadline. Only persisted evidence
                         // is needed; remote credentials and providers must never be consulted here.
@@ -584,6 +684,16 @@ export function createAgentRuntime(options: AgentRuntimeOptions) {
                 drain: () => session?.drain() ?? Promise.resolve(),
             };
         },
-        close: () => (closing ??= saver.end()),
+        close: () =>
+            (closing ??= (async () => {
+                await saver.end();
+                if (ownsRedis && searchRedis) {
+                    try {
+                        if (searchRedis.status === 'ready') await searchRedis.quit();
+                    } finally {
+                        searchRedis.disconnect();
+                    }
+                }
+            })()),
     };
 }

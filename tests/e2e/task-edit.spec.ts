@@ -1,5 +1,6 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import type { taskInput } from '../../apps/web/src/composables/useCreateTask.ts';
+import { fillList } from './support/list-input.ts';
 
 test.use({ timezoneId: 'Asia/Tokyo' });
 
@@ -111,7 +112,7 @@ async function samples(context: BrowserContext) {
             state.config = body.config as TaskConfig;
             state.revision++;
             return route.fulfill({
-                headers: { etag: `"${state.revision}"` },
+                headers: { etag: `"${state.revision}"`, 'access-control-expose-headers': 'ETag' },
                 json: { ...detail(), baselineResetRequired: state.baseline },
             });
         }
@@ -119,10 +120,37 @@ async function samples(context: BrowserContext) {
         if (path === '/api/v1/tasks')
             return route.fulfill({ json: { items: [detail().task], nextCursor: null } });
         if (state.getFailure) return failure(503, 'READ_FAILURE');
-        return route.fulfill({ headers: { etag: `"${state.revision}"` }, json: detail() });
+        return route.fulfill({
+            headers: { etag: `"${state.revision}"`, 'access-control-expose-headers': 'ETag' },
+            json: detail(),
+        });
     });
     return { calls, state };
 }
+test('编辑任务的列表逐项保真：只修改一个关注点和链接', async ({ page }) => {
+    const { calls, state } = await samples(page.context());
+    await page.goto(editPath);
+    await page.getByText('关注范围与来源偏好', { exact: true }).click();
+    const focus = page.getByRole('region', { name: '重点关注（可选）', exact: true });
+    await expect(focus.getByRole('textbox').first()).toHaveValue('资格\n费用');
+    await focus.getByRole('textbox').nth(1).fill('申请流程，时间节点\n保留为一项');
+    await fillList(page, '优先来源网址（可选）', [
+        'https://example.test/admission',
+        'https://example.test/new',
+    ]);
+    await page.getByRole('button', { name: '确认保存修改', exact: true }).click();
+    await expect(page.locator('.task-config-form').getByRole('status')).toContainText('已保存');
+    expect(state.config).toEqual({
+        ...original,
+        focusPoints: [original.focusPoints[0], '申请流程，时间节点\n保留为一项'],
+        sourcePreferences: {
+            ...original.sourcePreferences,
+            preferredUrls: ['https://example.test/admission', 'https://example.test/new'],
+        },
+    });
+    expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(1);
+});
+
 const save = (page: Page) => page.getByRole('button', { name: '确认保存修改', exact: true });
 const reload = (page: Page) => page.getByRole('button', { name: '重新读取最新版本', exact: true });
 const confirmReload = (page: Page) =>
@@ -161,7 +189,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         await expect(page).toHaveURL(new RegExp(`${editPath}$`));
         const title = page.getByLabel('任务标题', { exact: true });
         await expect(title).toHaveValue(original.title);
-        await expect(page.getByLabel('任务时区（IANA）', { exact: true })).toHaveValue(
+        await expect(page.getByLabel('任务时区', { exact: true })).toContainText(
             'America/New_York',
         );
         await expect(page.getByLabel('开始时间', { exact: true })).toHaveValue(
@@ -230,7 +258,10 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         await expect(title).toHaveValue(state.config.title);
         await title.fill('手动合并后的标题');
         await save(page).click();
-        const success = page.getByRole('status').filter({ hasText: '修改已保存' });
+        const success = page
+            .locator('.task-config-form')
+            .getByRole('status')
+            .filter({ hasText: '修改已保存' });
         await expect(success).toContainText('下一次完整执行将建立新基线');
         await expect(success).toBeFocused();
         await expect(page).toHaveURL(new RegExp(`${editPath}$`));
@@ -252,7 +283,7 @@ test('两个标签页同读一版本：B冲突不覆盖A且可复制草稿', asy
     await page.getByLabel('任务标题', { exact: true }).fill('标签页A已保存');
     await other.getByLabel('任务标题', { exact: true }).fill('标签页B未保存');
     await save(page).click();
-    await expect(page.getByRole('status')).toContainText('修改已保存');
+    await expect(page.locator('.task-config-form').getByRole('status')).toContainText('修改已保存');
     await save(other).click();
     await expect(other.getByRole('alert')).toContainText('其他页面修改');
     await expect(other.getByLabel('任务标题', { exact: true })).toHaveValue('标签页B未保存');
@@ -275,7 +306,7 @@ test('摘要缓存不能替代编辑初读，进入编辑取得最新配置和ET
     expect(reads(calls).length).toBeGreaterThan(before);
     await title.fill('基于最新版本的修改');
     await save(page).click();
-    await expect(page.getByRole('status')).toContainText('修改已保存');
+    await expect(page.locator('.task-config-form').getByRole('status')).toContainText('修改已保存');
     expect(patches(calls).map((call) => call.etag)).toEqual(['"3"']);
 });
 
@@ -316,7 +347,7 @@ test('412保留草稿，重读失败与取消不丢内容或修订依据', async
     await expect(title).toHaveValue(original.title);
     await title.fill('重读后的修改');
     await save(page).click();
-    await expect(page.getByRole('status')).toContainText('修改已保存');
+    await expect(page.locator('.task-config-form').getByRole('status')).toContainText('修改已保存');
     expect(patches(calls).map((call) => call.etag)).toEqual(['"1"', '"1"']);
 });
 

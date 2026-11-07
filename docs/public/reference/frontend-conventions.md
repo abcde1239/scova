@@ -34,7 +34,7 @@ community 中存在 Service/store 组合和 JWT 持久化；Scova 借用分层�
 
 核实的源码基线：[requestlane commit e9f5147](https://github.com/abcde1239/requestlane/tree/e9f5147a73b6b8dee6b672dac6b6b23356f92183)，package.json 版本 0.1.3。实现时通过 Vite+ 安装并锁定已验证发行版，确认浏览器构建和 API 行为；若发行版与所读源码不符，先核实兼容性，不退回另一套请求封装。
 
-- 在模块作用域创建共享 Client 与 Fetch transport，baseURL=/api/v1，credentials=same-origin；端点在模块作用域用 defineEndpoint 定义，输入/输出通过共享 models schema 验证。
+- 在模块作用域创建共享 Client 与 Fetch transport，baseURL 由根环境文件的 VITE_API_BASE_URL 决定，credentials=include；开发直连 API，不使用 Vite proxy，生产默认 /api/v1；Server 仅允许 APP_ORIGIN 来源的 credentialed CORS，保留 SameSite Cookie、Origin 与 CSRF 校验；端点在模块作用域用 defineEndpoint 定义，输入/输出通过共享 models schema 验证。
 - 使用普通 JSON 数据和真实 HTTP 状态。requestlane 默认 identity codec，sendsCodec 是可选且不属于 Scova API 协议。错误经 classifyError 和 Scova 错误体映射，保留 status、code、requestId、fieldErrors。
 - 通过请求选项/统一 beforeRequest 注入 CSRF、Idempotency-Key 和 If-Match。请求 key 对同一用户动作重发保持稳定，不能每次网络重试生成新 key；写请求不自动重试。
 - Vue Query 的 signal 传入 requestlane；取消不显示失败 toast。每个用户会话持有独立客户端生命周期/epoch，退出或换号时 dispose、清空 Query 缓存并停止 SSE；旧会话迟到的 401 不能清掉新登录会话。
@@ -59,6 +59,8 @@ native 会跳过 Client 的 endpoint、session、cache 和错误 hook，必须�
 EOF 不代替空行，不输出部分消息；错误或 finish 后不能复用实例。连接、重连、去重、游标推进和 Query 失效由订阅层实现，reset 不推进 Last-Event-ID。
 
 ## 5. 验收
+
+应用与共享包的测试实现放各工作区 `tests/`，固定输入和辅助代码放 `tests/fixtures/` 或 `tests/support/`。Web 组件展示页、素材、报告 HTML 与测试路由定义统一位于 `apps/web/tests/fixtures/`，仅在 test 构建启用；`src/` 保存生产应用代码。根 `tests/` 负责跨工作区与浏览器验证，运行产物写入忽略的 `artifacts/`。
 
 新增的 apps/web 配置、示例页面和通信测试应通过 `vp check`、`vp test` 与 `vp run -r build`。重点测试 Cookie、CSRF/幂等头、校验失败、401/403、取消、Query 失效、换号迟到响应，以及 SSE 分片/重连；Playwright 检查页面状态、键盘操作与两账号隔离。
 

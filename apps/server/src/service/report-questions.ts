@@ -99,7 +99,7 @@ export function createReportQuestionService(services: ApiServices) {
                         const budget = await write(budgets.begin(userId, signal));
                         alive();
                         if (!report.evidence.length) return insufficient('insufficient_evidence');
-                        const model = services.reportQuestionModel();
+                        const model = await services.reportQuestionModel(userId);
                         if (!model) return insufficient('model_unavailable');
                         // 限制上下文；截断只会减少可用引用，不会引入未授权资料。
                         const evidence = report.evidence

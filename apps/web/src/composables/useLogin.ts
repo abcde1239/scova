@@ -37,7 +37,9 @@ export function createLoginController(lifecycle: SessionLifecycle) {
                             fields.value[field] =
                                 field === 'email'
                                     ? '请输入有效邮箱地址'
-                                    : '请输入1至128个字符的密码';
+                                    : input.password.length > 128
+                                      ? '密码最多支持 128 位'
+                                      : '请输入密码';
                     }
                     firstField.value = fields.value.email
                         ? 'email'
@@ -45,7 +47,7 @@ export function createLoginController(lifecycle: SessionLifecycle) {
                           ? 'password'
                           : undefined;
                     if (firstField.value) {
-                        message.value = '请检查标出的字段';
+                        message.value = '';
                         return 'invalid';
                     }
                     message.value =

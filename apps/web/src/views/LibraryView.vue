@@ -27,8 +27,11 @@
             </nav>
         </header>
         <div v-show="section === 'bookmarks'" class="bookmark-content">
-            <p>保存报告中已有的来源；取消收藏不会删除来源、报告或引用证据。</p>
-            <div class="library-toolbar scova-interface">
+            <p v-if="items.length">保存报告中已有的来源；取消收藏不会删除来源、报告或引用证据。</p>
+            <div
+                v-if="!query.isSuccess.value || items.length || previous.length"
+                class="library-toolbar scova-interface"
+            >
                 <action-button :disabled="pending || query.isFetching.value" @click="reload"
                     ><app-icon name="retry" />重新读取本页</action-button
                 >
@@ -44,8 +47,8 @@
             <p v-if="query.isError.value && items.length">
                 以下保留上次读取值，请重新读取以确认当前状态。
             </p>
-            <p v-if="query.isSuccess.value && !items.length">
-                这一页没有收藏。可以从报告选择来源收藏。
+            <p v-if="query.isSuccess.value && !items.length" class="empty-copy" role="status">
+                暂无收藏
             </p>
             <p v-if="paginationError" role="alert">{{ paginationError }}</p>
             <ul class="bookmark-list">
@@ -53,44 +56,64 @@
                     <h2 class="scova-content-title">
                         {{ item.source.title ?? item.source.canonicalUrl }}
                     </h2>
-                    <p v-if="item.source.title" class="scova-interface">
-                        {{ item.source.canonicalUrl }}
+                    <p class="source-summary scova-interface">
+                        {{ sourceDomain(item.source.canonicalUrl) }} · 收藏于
+                        <time :datetime="item.createdAt">{{ shortDate(item.createdAt) }}</time>
                     </p>
-                    <dl class="scova-interface">
-                        <div>
-                            <dt>收藏时间</dt>
-                            <dd>
-                                <time :datetime="item.createdAt">{{ item.createdAt }}</time>
-                            </dd>
-                        </div>
-                        <div>
-                            <dt>最近查阅</dt>
-                            <dd>
-                                <time
-                                    v-if="item.source.lastObservedAt"
-                                    :datetime="item.source.lastObservedAt"
-                                    >{{ item.source.lastObservedAt }}</time
-                                ><span v-else>未记录</span>
-                            </dd>
-                        </div>
-                    </dl>
-                    <a
-                        v-if="sourceLink(item.source.canonicalUrl)"
-                        :href="sourceLink(item.source.canonicalUrl)"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        class="scova-interface"
-                        ><app-icon name="source" />打开原始来源（新窗口）</a
-                    >
-                    <navigation-button :to="historyLink(item.sourceId)" class="scova-interface"
-                        >查看来源历史</navigation-button
-                    >
-                    <navigation-button
-                        v-if="origin?.sourceId === item.sourceId.toLowerCase()"
-                        :to="origin.path"
-                        class="scova-interface"
-                        >返回刚才的报告</navigation-button
-                    >
+                    <div class="source-actions scova-interface">
+                        <details class="source-details">
+                            <summary>来源详情</summary>
+                            <p v-if="item.source.title">
+                                {{ item.source.canonicalUrl }}
+                            </p>
+                            <dl class="scova-interface">
+                                <div>
+                                    <dt>收藏时间</dt>
+                                    <dd>
+                                        <time :datetime="item.createdAt">{{ item.createdAt }}</time>
+                                    </dd>
+                                </div>
+                                <div>
+                                    <dt>最近查阅</dt>
+                                    <dd>
+                                        <time
+                                            v-if="item.source.lastObservedAt"
+                                            :datetime="item.source.lastObservedAt"
+                                            >{{ item.source.lastObservedAt }}</time
+                                        ><span v-else>未记录</span>
+                                    </dd>
+                                </div>
+                            </dl>
+                        </details>
+                        <a
+                            v-if="sourceLink(item.source.canonicalUrl)"
+                            :href="sourceLink(item.source.canonicalUrl)"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="scova-interface"
+                            ><app-icon name="source" />打开原始来源（新窗口）</a
+                        >
+                        <navigation-button :to="historyLink(item.sourceId)" class="scova-interface"
+                            >查看来源历史</navigation-button
+                        >
+                        <navigation-button
+                            v-if="origin?.sourceId === item.sourceId.toLowerCase()"
+                            :to="origin.path"
+                            class="scova-interface"
+                            >返回刚才的报告</navigation-button
+                        >
+                        <action-button
+                            quaternary
+                            @click="
+                                showNotes({
+                                    kind: 'source',
+                                    id: item.sourceId,
+                                    label: item.source.title ?? item.source.canonicalUrl,
+                                })
+                            "
+                            >为此来源记笔记</action-button
+                        >
+                    </div>
                     <bookmark-action
                         :key="`${accountId}-${item.id}`"
                         :source-id="item.sourceId"
@@ -98,16 +121,6 @@
                         @started="bookmarkFocus = true"
                         @settled="bookmarkSettled"
                     />
-                    <action-button
-                        @click="
-                            showNotes({
-                                kind: 'source',
-                                id: item.sourceId,
-                                label: item.source.title ?? item.source.canonicalUrl,
-                            })
-                        "
-                        >为此来源记笔记</action-button
-                    >
                 </li>
             </ul>
             <nav class="pagination scova-interface" aria-label="收藏分页">
@@ -158,6 +171,16 @@ const route = useRoute();
 const accountId = computed(() => lifecycle.session.user?.id);
 const { reading } = useReadingTypography();
 const section = ref<'bookmarks' | 'notes'>('bookmarks');
+function sourceDomain(url: string) {
+    try {
+        return new URL(url).hostname;
+    } catch {
+        return '来源地址待核对';
+    }
+}
+function shortDate(value: string) {
+    return new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium' }).format(new Date(value));
+}
 const notes = ref<InstanceType<typeof NotesPanel>>();
 const noteTarget = ref<NoteTarget>();
 const {
@@ -305,8 +328,41 @@ header nav button:focus-visible {
     min-inline-size: 0;
 }
 .bookmark-entry {
-    padding-block: 1.5rem;
-    border-block-end: 0.0625rem solid var(--scova-border);
+    gap: 0.5rem;
+    padding-block: 1.25rem;
+    border-block-end: 0.0625rem solid color-mix(in srgb, var(--scova-border) 55%, transparent);
+}
+.source-summary {
+    color: var(--scova-muted);
+    font-size: 0.875rem;
+}
+.source-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: start;
+    gap: 0.25rem 1rem;
+}
+.source-details {
+    min-inline-size: 0;
+    max-inline-size: 100%;
+}
+.source-details[open] {
+    flex-basis: 100%;
+}
+summary {
+    display: list-item;
+    padding-block: 0.625rem;
+    min-block-size: 2.75rem;
+    box-sizing: border-box;
+    cursor: pointer;
+    color: var(--scova-muted);
+}
+summary:focus-visible {
+    outline: 0.125rem solid var(--scova-primary);
+    outline-offset: 0.25rem;
+}
+.source-details dl {
+    margin-block: 0.75rem;
 }
 dl {
     display: flex;

@@ -50,7 +50,7 @@ export function createAuthPlugin(services: ApiServices) {
                     tags: ['账号'],
                     summary: '邮箱密码注册',
                     description:
-                        '同源注册并创建安全 Cookie 会话；密码以 Argon2id 哈希保存，不要求邮件服务。',
+                        '校验 APP_ORIGIN 来源并创建安全 Cookie 会话；密码以 Argon2id 哈希保存，不要求邮件服务。',
                 },
             },
         )
@@ -78,7 +78,8 @@ export function createAuthPlugin(services: ApiServices) {
                 operationId: 'logoutAccount',
                 tags: ['账号'],
                 summary: '注销当前会话',
-                description: '要求同源 Origin 与 CSRF 校验，撤销持久化会话并清理 Cookie。',
+                description:
+                    '要求配置的 APP_ORIGIN 来源与 CSRF 校验，撤销持久化会话并清理 Cookie。',
                 responses: { 204: { description: '会话已注销，无响应体' } },
             },
         })

@@ -3,6 +3,13 @@
         <summary>{{ evidence.title }} · 查看原文引用</summary>
         <div class="evidence-body">
             <blockquote>{{ evidence.quote }}</blockquote>
+            <p v-if="evidence.snapshot?.truncated" class="scova-warning">
+                采集正文曾截断，引用仅代表已保存片段。
+            </p>
+            <a v-if="link" :href="link" target="_blank" rel="noopener noreferrer"
+                >打开原始来源（新窗口）</a
+            >
+            <p v-else>原始来源链接不可用。</p>
             <dl>
                 <div>
                     <dt>原文定位</dt>
@@ -27,12 +34,9 @@
                     <dd>{{ evidence.snapshot.publishedAt ?? '未确认' }}</dd>
                 </div>
             </dl>
-            <p v-if="evidence.snapshot?.truncated">采集正文曾截断，引用仅代表已保存片段。</p>
-            <p>这里展示已保存的引用；来源网页的当前内容可能变化，完整采集正文过期后引用仍保留。</p>
-            <a v-if="link" :href="link" target="_blank" rel="noopener noreferrer"
-                >打开原始来源（新窗口）</a
-            >
-            <p v-else>原始来源链接不可用。</p>
+            <p class="citation-history">
+                这里展示已保存的引用；来源网页的当前内容可能变化，完整采集正文过期后引用仍保留。
+            </p>
         </div>
     </details>
 </template>
@@ -59,7 +63,7 @@ summary {
 }
 .evidence-body {
     display: grid;
-    gap: 1rem;
+    gap: 0.625rem;
     padding-block-end: 0.75rem;
 }
 blockquote {
@@ -73,6 +77,15 @@ dl {
     display: grid;
     gap: 0.75rem;
     margin: 0;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+    font-size: 0.875rem;
+}
+.citation-history,
+dt {
+    color: var(--scova-muted);
+}
+.citation-history {
+    font-size: 0.875rem;
 }
 dt {
     font-weight: 500;

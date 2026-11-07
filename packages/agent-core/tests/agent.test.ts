@@ -2,8 +2,15 @@ import { createHash } from 'node:crypto';
 import { MemorySaver } from '@langchain/langgraph';
 import type { RunnableConfig } from '@langchain/core/runnables';
 import { describe, expect, it, vi } from 'vite-plus/test';
-import type { ReadPage, SearchResponse } from '@scova/connectors';
+import { DEFAULT_TASK_BUDGET } from '@scova/models';
+import {
+    ConnectorError,
+    estimateModelInputTokens,
+    type ReadPage,
+    type SearchResponse,
+} from '@scova/connectors';
 import { deterministicPartial, runResearchAgent } from '../src/index.ts';
+import { researchWindow, scopedQuery } from '../src/research-context.ts';
 import type { AgentContext, AgentDependencies, AgentTools } from '../src/index.ts';
 
 const text = 'The application deadline is 15 November 2026. Other claims require more evidence.';
@@ -94,6 +101,15 @@ function fixture() {
                       claims: [
                           {
                               kind: 'fact',
+                              assessment: {
+                                  relevance: 'direct',
+                                  support: 'direct',
+                                  role: 'answer',
+                                  sourceRelation: 'unknown',
+                                  reason: '日期来自原文',
+                                  conditions: '',
+                                  gap: '',
+                              },
                               text: 'The application deadline is 15 November 2026.',
                               questionIds: ['q0'],
                               citations: [
@@ -119,6 +135,662 @@ function fixture() {
 }
 
 describe('persistent bounded research Agent', () => {
+    it('keeps adaptive queries on the task topic instead of adding Agent architecture terms', async () => {
+        const { context, deps, tools, searchResponse } = fixture();
+        context.config.topic = 'Vue computed watchers';
+        context.config.focusPoints = ['响应式依赖与清理'];
+        let searches = 0;
+        tools.search = vi.fn(async (_key, query) => ({
+            ...structuredClone(searchResponse),
+            query,
+            results: ++searches <= 2 ? [] : searchResponse.results,
+        }));
+        const output = await runResearchAgent(context, deps);
+        const queries = vi.mocked(tools.search).mock.calls.map(([, query]) => query);
+        expect(queries.some((q) => q.includes('原理 适用条件'))).toBe(true);
+        expect(queries.join(' ')).not.toMatch(/architecture research|official research evidence/);
+        expect(
+            queries
+                .filter((q) => /原理 适用条件|官方文档 原始资料/.test(q))
+                .every((q) => q.includes(context.config.topic)),
+        ).toBe(true);
+        expect(output.coverage.research!.supplementalSearches).toBeLessThanOrEqual(2);
+        expect(tools.search).toHaveBeenCalledTimes(4);
+    });
+    it.each([false, true])(
+        'optional answer-gap round reuses the second synthesis slot and stops without new information (%s)',
+        async (sameContent) => {
+            const { context, deps, tools, searchResponse } = fixture();
+            context.answerSupplementEnabled = true;
+            context.budget.maxPages = 3;
+            context.comparisonScopeHash = 'bounded-supplement';
+            const extraUrl = 'https://extra.example/deadline';
+            const extraText = sameContent ? text : 'The deadline is 15 November 2026 at 18:00 UTC.';
+            const firstModel = tools.model;
+            tools.search = vi.fn(async (_key, query) => ({
+                ...structuredClone(searchResponse),
+                query,
+                results: [
+                    {
+                        ...searchResponse.results[0],
+                        originalUrl: query.includes('原始资料') ? extraUrl : url,
+                        url: query.includes('原始资料') ? extraUrl : url,
+                    },
+                ],
+            }));
+            tools.read = vi.fn(async (_key, requestedUrl) => ({
+                ...page,
+                originalUrl: requestedUrl,
+                fetchedUrl: requestedUrl,
+                url: requestedUrl,
+                text: requestedUrl === extraUrl ? extraText : text,
+                contentHash: createHash('sha256')
+                    .update(requestedUrl === extraUrl ? extraText : text)
+                    .digest('hex'),
+            }));
+            tools.model = vi.fn<AgentTools['model']>(async (key, input) => {
+                if (key.startsWith('compare-facts'))
+                    return {
+                        mode: 'live',
+                        usage: { inputTokens: 1, outputTokens: 1, estimated: false },
+                        data: { pages: [{ pageId: 'read-0', facts: [] }] },
+                    };
+                const result = await firstModel(key, input);
+                if (key === 'synthesize-0') {
+                    const data = result.data as {
+                        claims: { assessment: { support: string; gap: string } }[];
+                    };
+                    data.claims[0].assessment.support = 'partial';
+                    data.claims[0].assessment.gap = '具体时区未说明';
+                }
+                if (key === 'synthesize-1')
+                    return {
+                        ...result,
+                        data: {
+                            claims: [
+                                {
+                                    kind: 'fact',
+                                    text: extraText,
+                                    citations: [{ pageId: 'read-1', quote: extraText }],
+                                    questionIds: ['q0'],
+                                    assessment: {
+                                        relevance: 'direct',
+                                        support: 'direct',
+                                        role: 'answer',
+                                        sourceRelation: 'unknown',
+                                        reason: '新增材料给出时间',
+                                        conditions: '',
+                                        gap: '',
+                                    },
+                                },
+                            ],
+                        },
+                    };
+                return result;
+            });
+            const output = await runResearchAgent(context, deps);
+            expect(tools.search).toHaveBeenCalledTimes(2);
+            expect(tools.read).toHaveBeenCalledTimes(2);
+            expect(
+                vi
+                    .mocked(tools.model)
+                    .mock.calls.filter(([key]) => key.startsWith('compare-facts')),
+            ).toHaveLength(1);
+            expect(
+                vi.mocked(tools.model).mock.calls.filter(([key]) => key.startsWith('synthesize')),
+            ).toHaveLength(sameContent ? 1 : 2);
+            expect(output.coverage.research?.supplementalSearches).toBe(1);
+            expect(output.manifest?.pages).toHaveLength(2);
+            expect(output.coverage.gaps.join(' ')).toContain('补证新增正文未重复执行事实比较');
+            if (sameContent) expect(output.coverage.notes?.join(' ')).toContain('停止追加模型调用');
+            else expect(output.claims[0].text).toBe(extraText);
+        },
+    );
+    it('counts cited inference as an answer and separates local candidate truncation from search failure', async () => {
+        const { context, deps, tools, searchResponse } = fixture();
+        context.startedAt = new Date('2026-10-26T00:00:00Z');
+        searchResponse.coverage = {
+            ...searchResponse.coverage,
+            complete: false,
+            truncated: true,
+            gaps: ['搜索结果已按调用上限截断'],
+            receivedResults: 40,
+        };
+        vi.mocked(tools.read).mockResolvedValue({
+            ...page,
+            publication: {
+                parserVersion: 'scova-publication-v1',
+                status: 'known',
+                instant: '2026-10-25T00:00:00Z',
+                observations: [
+                    {
+                        field: 'article:published_time',
+                        rawValue: '2026-10-25T00:00:00Z',
+                        locator: 'meta[0]',
+                    },
+                ],
+            },
+        });
+        const original = tools.model;
+        tools.model = vi.fn<AgentTools['model']>(async (key, input) => {
+            const response = await original(key, input);
+            if (key.startsWith('synthesize'))
+                return {
+                    ...response,
+                    data: {
+                        claims: [
+                            {
+                                kind: 'inference',
+                                text: 'Applications should be prepared before the November deadline.',
+                                assessment: {
+                                    relevance: 'direct',
+                                    support: 'direct',
+                                    role: 'answer',
+                                    sourceRelation: 'unknown',
+                                    reason: '明确回答截止时间',
+                                    conditions: '',
+                                    gap: '',
+                                },
+                                questionIds: ['q0'],
+                                citations: [{ pageId: 'read-0', quote: text }],
+                            },
+                        ],
+                    },
+                };
+            return response;
+        });
+        const result = await runResearchAgent(context, deps);
+        expect(result.coverage.completeness).toBe('complete');
+        expect(result.coverage.gaps).toEqual([]);
+        expect(result.coverage.notes?.join(' ')).toContain('不代表搜索引擎故障');
+        expect(result.coverage.notes?.join(' ')).toContain('仍属于推断');
+    });
+    it('uses remaining read attempts for alternative hosts after source failures', async () => {
+        const { context, deps, tools, searchResponse } = fixture();
+        context.budget.maxSearches = 1;
+        context.budget.maxPages = 5;
+        searchResponse.results = ['bad', 'bad', 'bad', 'good', 'good', 'good'].map((host, i) => ({
+            ...searchResponse.results[0],
+            title: 'Application deadline',
+            url: `https://${host}.example/${i}`,
+            originalUrl: `https://${host}.example/${i}`,
+        }));
+        tools.read = vi.fn(async (_key, target) => {
+            if (new URL(target).hostname === 'bad.example')
+                throw new ConnectorError('http', 'fixture', false, 403);
+            return { ...page, originalUrl: target, fetchedUrl: target, url: target };
+        });
+        const result = await runResearchAgent(context, deps);
+        const attempts = vi.mocked(tools.read).mock.calls.map(([, target]) => target);
+        expect(attempts).toHaveLength(5);
+        expect(new Set(attempts).size).toBe(5);
+        expect(attempts).toEqual([
+            'https://bad.example/0',
+            'https://good.example/3',
+            'https://good.example/4',
+            'https://good.example/5',
+            'https://bad.example/1',
+        ]);
+        expect(result.pages).toHaveLength(3);
+    });
+    it.each(['plan-0', 'compare-facts-v1', 'synthesize-0'])(
+        'stops remaining model stages after quota failure in %s, including checkpoint resume',
+        async (stage) => {
+            const { context, deps, tools, promote } = fixture();
+            context.comparisonScopeHash = 'scope';
+            const original = tools.model;
+            tools.model = vi.fn<AgentTools['model']>(async (key, input) => {
+                if (key === stage)
+                    throw new ConnectorError('model_quota_exceeded', 'DO_NOT_RENDER');
+                if (key === 'compare-facts-v1')
+                    return {
+                        mode: 'live',
+                        usage: { inputTokens: 1, outputTokens: 1, estimated: false },
+                        data: { pages: [{ pageId: 'read-0', facts: [] }] },
+                    };
+                return original(key, input);
+            });
+            const result = await runResearchAgent(context, deps);
+            const keys = vi.mocked(tools.model).mock.calls.map(([key]) => key);
+            expect(keys.at(-1)).toBe(stage);
+            expect(keys.filter((key) => key === stage)).toHaveLength(1);
+            expect(result.coverage.completeness).toBe('partial');
+            expect(result.coverage.gaps.join(' ')).toContain('额度不足');
+            expect(result.pages.length).toBeGreaterThan(0);
+            expect(result.claims.every((claim) => claim.kind === 'insufficient')).toBe(true);
+            expect(JSON.stringify(result)).not.toContain('DO_NOT_RENDER');
+            await runResearchAgent(context, {
+                ...deps,
+                resume: true,
+                config: promote.mock.calls.at(-1)![0],
+            });
+            expect(vi.mocked(tools.model).mock.calls.map(([key]) => key)).toEqual(keys);
+        },
+    );
+
+    it('retains intermediate historical years and freezes a cross-year rolling window', () => {
+        const { context } = fixture();
+        context.startedAt = new Date('2026-01-02T00:00:00Z');
+        context.config.timeRange = { kind: 'rolling', days: 7 };
+        expect(researchWindow(context).start).toBe('2025-12-26T00:00:00.000Z');
+        expect(scopedQuery('2025 2026 2024 evidence', context)).toBe('2025 2026 evidence');
+        context.config.timeRange = {
+            kind: 'fixed',
+            start: '2010-01-01T00:00:00Z',
+            end: '2020-12-31T00:00:00Z',
+        };
+        expect(scopedQuery('2015 2025 evidence', context)).toBe('2015 evidence');
+        context.config.focusPoints = ['1945 年的历史背景'];
+        expect(scopedQuery('1945 evidence', context)).toBe('1945 evidence');
+    });
+    it('gives equal-score sources from different hosts a first-batch opportunity', async () => {
+        const { context, deps, tools, searchResponse } = fixture();
+        context.budget.maxSearches = 1;
+        context.budget.maxPages = 3;
+        searchResponse.results = ['one', 'one', 'one', 'two', 'three'].map((host, i) => ({
+            ...searchResponse.results[0],
+            title: 'Application deadline',
+            originalUrl: `https://${host}.example/notice-${i}`,
+            url: `https://${host}.example/notice-${i}`,
+        }));
+        tools.read = vi.fn(async (_key, url) => ({
+            ...page,
+            originalUrl: url,
+            fetchedUrl: url,
+            url,
+        }));
+        await runResearchAgent(context, deps);
+        expect(vi.mocked(tools.read).mock.calls.map(([, url]) => new URL(url).hostname)).toEqual([
+            'one.example',
+            'two.example',
+            'three.example',
+        ]);
+    });
+    it('preserves a valid short conclusion when another brief item is too long and its repair fails', async () => {
+        const { context, deps, tools } = fixture();
+        const original = tools.model;
+        tools.model = vi.fn<AgentTools['model']>(async (key, input) => {
+            if (key === 'synthesize-1') {
+                expect(input.prompt).toContain('brief_too_long');
+                throw new ConnectorError('network', 'failed repair');
+            }
+            const response = await original(key, input);
+            if (key === 'synthesize-0')
+                return {
+                    ...response,
+                    data: {
+                        claims: [
+                            ...(response.data as { claims: unknown[] }).claims,
+                            {
+                                kind: 'inference',
+                                text: 'A long interpretation. '.repeat(25),
+                                questionIds: ['q0'],
+                                citations: [{ pageId: 'read-0', quote: text }],
+                            },
+                        ],
+                    },
+                };
+            return response;
+        });
+        const output = await runResearchAgent(context, deps);
+        expect(output.claims).toHaveLength(1);
+        expect(output.claims[0].kind).toBe('fact');
+        expect(output.coverage.completeness).toBe('partial');
+        expect(
+            vi.mocked(tools.model).mock.calls.filter(([key]) => key.startsWith('synthesize')),
+        ).toHaveLength(2);
+    });
+    it('preserves paraphrased facts as cited inference without spending a repair call', async () => {
+        const { context, deps, tools } = fixture();
+        context.config.outputFormat = 'research_report';
+        const original = tools.model;
+        tools.model = vi.fn<AgentTools['model']>(async (key, input) => {
+            if (key === 'synthesize-1') {
+                expect(input.prompt).toContain('fact_text_not_in_quote');
+                throw new ConnectorError('network', 'secret fixture');
+            }
+            const response = await original(key, input);
+            if (key === 'synthesize-0')
+                return {
+                    ...response,
+                    data: {
+                        claims: [
+                            ...(response.data as { claims: unknown[] }).claims,
+                            {
+                                kind: 'fact',
+                                text: 'A paraphrased deadline',
+                                questionIds: ['q0'],
+                                citations: [{ pageId: 'read-0', quote: text }],
+                            },
+                        ],
+                    },
+                };
+            return response;
+        });
+        const output = await runResearchAgent(context, deps);
+        expect(output.claims).toHaveLength(2);
+        expect(output.claims[0].text).toBe('The application deadline is 15 November 2026.');
+        expect(output.claims[1]).toMatchObject({
+            kind: 'inference',
+            text: 'A paraphrased deadline',
+        });
+        expect(output.coverage.completeness).toBe('partial');
+        expect(output.coverage.research?.acceptedClaims).toBe(2);
+        expect(vi.mocked(tools.model).mock.calls.map(([key]) => key)).toEqual([
+            'plan-0',
+            'synthesize-0',
+        ]);
+    });
+
+    it('freezes the absolute window in planning and removes an invented conflicting year', async () => {
+        const { context, deps, tools } = fixture();
+        context.startedAt = new Date('2026-11-05T00:00:00Z');
+        context.config.timeRange = { kind: 'rolling', days: 7 };
+        const original = tools.model;
+        tools.model = vi.fn<AgentTools['model']>(async (key, input) => {
+            if (key === 'plan-0') {
+                expect(input.prompt).toContain('2026-10-29T00:00:00.000Z');
+                return {
+                    mode: 'live',
+                    usage: { inputTokens: 1, outputTokens: 1, estimated: false },
+                    data: {
+                        queries: [{ query: 'Application deadline 2025', questionIds: ['q0'] }],
+                    },
+                };
+            }
+            return original(key, input);
+        });
+        await runResearchAgent(context, deps);
+        expect(vi.mocked(tools.search).mock.calls[0][1]).toBe('Application deadline');
+    });
+
+    it('reads in batches and bounds supplemental searches without rereading failed URLs', async () => {
+        const { context, deps, tools, searchResponse } = fixture();
+        context.budget.maxSearches = 5;
+        tools.search = vi.fn(async (_key, query) => ({
+            ...structuredClone(searchResponse),
+            query,
+            results: Array.from({ length: 3 }, (_, i) => ({
+                ...searchResponse.results[0],
+                url: `https://official.example/notice-${i}`,
+                originalUrl: `https://official.example/notice-${i}`,
+            })),
+        }));
+        tools.read = vi.fn(async () => {
+            throw new ConnectorError('http', 'forbidden', false, 403);
+        });
+        await expect(runResearchAgent(context, deps)).rejects.toMatchObject({
+            code: 'NO_EVIDENCE',
+        });
+        expect(tools.search).toHaveBeenCalledTimes(3);
+        expect(tools.read).toHaveBeenCalledTimes(3);
+        expect(new Set(vi.mocked(tools.read).mock.calls.map((call) => call[1])).size).toBe(3);
+    });
+    it.each([8000, DEFAULT_TASK_BUDGET.maxOutputTokens])(
+        'repairs comparison truncation once within total %i output',
+        async (maxOutputTokens) => {
+            const { context, deps, tools } = fixture();
+            context.budget.maxOutputTokens = maxOutputTokens;
+            context.comparisonScopeHash = 'scope';
+            const original = tools.model;
+            tools.model = vi.fn<AgentTools['model']>(async (key, input) => {
+                if (key === 'compare-facts-v1')
+                    throw new ConnectorError('output_truncated', 'secret');
+                if (key === 'compare-facts-repair-v1')
+                    return {
+                        mode: 'live',
+                        usage: { inputTokens: 1, outputTokens: 1, estimated: false },
+                        data: { pages: [{ pageId: 'read-0', facts: [] }] },
+                    };
+                return original(key, input);
+            });
+            const result = await runResearchAgent(context, deps);
+            expect(result.comparison).toBe('completed');
+            const calls = vi.mocked(tools.model).mock.calls;
+            const comparison = calls.filter(([key]) => key.startsWith('compare'));
+            expect(comparison.map(([key]) => key)).toEqual([
+                'compare-facts-v1',
+                'compare-facts-repair-v1',
+            ]);
+            expect(comparison[1][1].maxOutputTokens).toBe(comparison[0][1].maxOutputTokens * 2);
+            for (const [, input] of comparison) {
+                expect(input.prompt.match(/本次调用输出硬上限为/g)).toHaveLength(1);
+                expect(input.prompt).toContain(
+                    `本次调用输出硬上限为${input.maxOutputTokens} tokens`,
+                );
+            }
+            expect(
+                calls.reduce((sum, [, input]) => sum + input.maxOutputTokens, 0),
+            ).toBeLessThanOrEqual(maxOutputTokens);
+            expect(comparison[1][1].untrustedSources).toEqual(comparison[0][1].untrustedSources);
+        },
+    );
+    it.each(['network', 'output_truncated'] as const)(
+        'bounds comparison %s and reserves failed planning/comparison/synthesis within the old budget',
+        async (code) => {
+            const { context, deps, tools } = fixture();
+            context.comparisonScopeHash = 'scope';
+            const original = tools.model;
+            tools.model = vi.fn<AgentTools['model']>(async (key, input) => {
+                if (key === 'plan-0' || key === 'synthesize-0')
+                    throw new ConnectorError('output_truncated', 'secret');
+                if (key.startsWith('compare')) throw new ConnectorError(code, 'secret');
+                return original(key, input);
+            });
+            const result = await runResearchAgent(context, deps);
+            const calls = vi.mocked(tools.model).mock.calls;
+            expect(calls.filter(([key]) => key.startsWith('compare'))).toHaveLength(
+                code === 'network' ? 1 : 2,
+            );
+            expect(
+                calls.reduce((sum, [, input]) => sum + input.maxOutputTokens, 0),
+            ).toBeLessThanOrEqual(8000);
+            expect(result.comparison).toBe('not_performed');
+            expect(result.claims.some((claim) => claim.kind === 'fact')).toBe(true);
+            expect(result.coverage.completeness).toBe('partial');
+        },
+    );
+    it('refits comparison repair instructions inside a nearly full input reservation', async () => {
+        const { context, deps, tools, searchResponse } = fixture();
+        Object.assign(context.budget, DEFAULT_TASK_BUDGET, { maxSearches: 1, maxPages: 4 });
+        context.comparisonScopeHash = 'scope';
+        searchResponse.results = Array.from({ length: 4 }, (_, i) => ({
+            ...searchResponse.results[0],
+            originalUrl: `${url}/${i}`,
+            url: `${url}/${i}`,
+        }));
+        const body = text + ' source context'.repeat(4000);
+        tools.read = vi.fn(async (_key, target) => ({
+            ...page,
+            url: target,
+            fetchedUrl: target,
+            originalUrl: target,
+            text: body,
+            contentHash: createHash('sha256').update(body).digest('hex'),
+        }));
+        const original = tools.model;
+        tools.model = vi.fn<AgentTools['model']>(async (key, input) => {
+            expect(estimateModelInputTokens(input)).toBeLessThanOrEqual(input.maxInputTokens);
+            if (key === 'compare-facts-v1') throw new ConnectorError('output_truncated', 'fixture');
+            if (key === 'compare-facts-repair-v1')
+                return {
+                    mode: 'live',
+                    usage: { inputTokens: 1, outputTokens: 1, estimated: false },
+                    data: {
+                        pages: (input.untrustedSources as { pageId: string }[]).map((p) => ({
+                            pageId: p.pageId,
+                            facts: [],
+                        })),
+                    },
+                };
+            return original(key, input);
+        });
+        const result = await runResearchAgent(context, deps);
+        expect(result.comparison).toBe('completed');
+        const comparison = vi
+            .mocked(tools.model)
+            .mock.calls.filter(([key]) => key.startsWith('compare'));
+        expect(comparison).toHaveLength(4);
+        expect(comparison.every(([, input]) => input.untrustedSources!.length <= 3)).toBe(true);
+        expect(estimateModelInputTokens(comparison[0][1])).toBeGreaterThan(95_900);
+        expect(estimateModelInputTokens(comparison[1][1])).toBeLessThanOrEqual(96_000);
+        expect(
+            comparison.reduce((sum, [, input]) => sum + input.maxOutputTokens, 0),
+        ).toBeLessThanOrEqual(63_999);
+        expect(result.coverage.gaps.join(' ')).toContain('比较修复输入受预算限制');
+    });
+    it.each([8000, DEFAULT_TASK_BUDGET.maxOutputTokens])(
+        'repairs a truncated plan once within the fixed %i output budget, including synthesis repair',
+        async (maxOutputTokens) => {
+            const { context, deps, tools } = fixture();
+            context.budget.maxOutputTokens = maxOutputTokens;
+            context.comparisonScopeHash = 'scope';
+            const original = tools.model;
+            tools.model = vi.fn<AgentTools['model']>(async (key, input) => {
+                if (key === 'plan-0' || key === 'synthesize-0')
+                    throw new ConnectorError('output_truncated', 'fixture secret');
+                if (key === 'compare-facts-v1')
+                    return {
+                        mode: 'live',
+                        usage: { inputTokens: 1, outputTokens: 1, estimated: false },
+                        data: { pages: [{ pageId: 'read-0', facts: [] }] },
+                    };
+                return original(key, input);
+            });
+            const result = await runResearchAgent(context, deps);
+            const calls = vi.mocked(tools.model).mock.calls;
+            expect(calls.map(([key]) => key)).toEqual([
+                'plan-0',
+                'plan-1',
+                'compare-facts-v1',
+                'synthesize-0',
+                'synthesize-1',
+            ]);
+            expect(calls[0][1].maxOutputTokens).toBeGreaterThanOrEqual(1000);
+            expect(calls[1][1].maxOutputTokens).toBe(calls[0][1].maxOutputTokens * 2);
+            expect(
+                calls.reduce((sum, [, input]) => sum + input.maxOutputTokens, 0),
+            ).toBeLessThanOrEqual(maxOutputTokens);
+            expect(result.claims[0].kind).toBe('fact');
+            expect(JSON.stringify(result)).not.toContain('fixture secret');
+        },
+    );
+
+    it.each(['output_truncated', 'network'] as const)(
+        'falls back to bounded task queries after plan %s and never retries indefinitely',
+        async (code) => {
+            const { context, deps, tools } = fixture();
+            const original = tools.model;
+            tools.model = vi.fn<AgentTools['model']>(async (key, input) => {
+                if (key.startsWith('plan')) throw new ConnectorError(code, 'fixture secret');
+                return original(key, input);
+            });
+            const result = await runResearchAgent(context, deps);
+            expect(
+                vi.mocked(tools.model).mock.calls.filter(([key]) => key.startsWith('plan')),
+            ).toHaveLength(code === 'output_truncated' ? 2 : 1);
+            expect(result.coverage.gaps.join(' ')).toContain('任务原文');
+            expect(result.claims[0].kind).toBe('fact');
+        },
+    );
+
+    it.each([false, true])(
+        'reserves weighted comparison attempts before synthesis (repair=%s)',
+        async (repair) => {
+            const { context, deps, tools, searchResponse } = fixture();
+            Object.assign(context.budget, DEFAULT_TASK_BUDGET, { maxSearches: 1, maxPages: 10 });
+            context.comparisonScopeHash = 'scope';
+            searchResponse.results = Array.from({ length: 10 }, (_, i) => ({
+                ...searchResponse.results[0],
+                url: `${url}/${i}`,
+                originalUrl: `${url}/${i}`,
+            }));
+            tools.read = vi.fn(async (_key, target) => ({
+                ...page,
+                url: target,
+                originalUrl: target,
+                fetchedUrl: target,
+            }));
+            const original = tools.model;
+            tools.model = vi.fn<AgentTools['model']>(async (key, input) => {
+                if (key.startsWith('compare')) {
+                    if (repair && !key.startsWith('compare-facts-repair'))
+                        throw new ConnectorError('output_truncated', 'fixture');
+                    const sources = input.untrustedSources as { pageId: string }[];
+                    expect(input.maxOutputTokens).toBe(
+                        sources.length === 3
+                            ? 9599
+                            : key.startsWith('compare-facts-repair')
+                              ? 3200
+                              : 3199,
+                    );
+                    return {
+                        mode: 'live',
+                        usage: { inputTokens: 1, outputTokens: 1, estimated: false },
+                        data: { pages: sources.map((p) => ({ pageId: p.pageId, facts: [] })) },
+                    };
+                }
+                if (key === 'synthesize-0') throw new ConnectorError('output_truncated', 'fixture');
+                return original(key, input);
+            });
+            const result = await runResearchAgent(context, deps);
+            expect(result.comparison).toBe('completed');
+            const calls = vi.mocked(tools.model).mock.calls;
+            const comparisons = calls.filter(([key]) => key.startsWith('compare'));
+            expect(comparisons).toHaveLength(repair ? 8 : 4);
+            expect(comparisons.reduce((sum, [, input]) => sum + input.maxOutputTokens, 0)).toBe(
+                repair ? 63993 : 31996,
+            );
+            expect(
+                calls.reduce((sum, [, input]) => sum + input.maxOutputTokens, 0),
+            ).toBeLessThanOrEqual(context.budget.maxOutputTokens);
+            expect(calls.filter(([key]) => key.startsWith('synthesize'))).toHaveLength(2);
+        },
+    );
+    it('allocates larger stage limits and doubles synthesis output on repair without exceeding the total', async () => {
+        const { context, deps, tools } = fixture();
+        Object.assign(context.budget, DEFAULT_TASK_BUDGET);
+        context.comparisonScopeHash = 'scope';
+        const body = `${'Source context. '.repeat(9000)}The application deadline is 15 November 2026.`;
+        vi.mocked(tools.read).mockResolvedValue({
+            ...page,
+            text: body,
+            contentHash: createHash('sha256').update(body).digest('hex'),
+        });
+        const original = tools.model;
+        tools.model = vi.fn<AgentTools['model']>(async (key, input) => {
+            if (key === 'compare-facts-v1')
+                return {
+                    mode: 'live',
+                    usage: { inputTokens: 1, outputTokens: 1, estimated: false },
+                    data: { pages: [{ pageId: 'read-0', facts: [] }] },
+                };
+            if (key === 'synthesize-0') throw new ConnectorError('output_truncated', 'fixture');
+            return original(key, input);
+        });
+        const result = await runResearchAgent(context, deps);
+        const calls = vi.mocked(tools.model).mock.calls;
+        expect(calls.map(([key, input]) => [key, input.maxOutputTokens])).toEqual([
+            ['plan-0', 4000],
+            ['compare-facts-v1', 21333],
+            ['synthesize-0', 32000],
+            ['synthesize-1', 64000],
+        ]);
+        expect(
+            calls.reduce((sum, [, input]) => sum + input.maxOutputTokens, 0),
+        ).toBeLessThanOrEqual(context.budget.maxOutputTokens);
+        expect(calls.reduce((sum, [, input]) => sum + input.maxInputTokens, 0)).toBeLessThanOrEqual(
+            context.budget.maxInputTokens,
+        );
+        for (const [, input] of calls.filter(([key]) => key.startsWith('synthesize'))) {
+            expect(input.prompt).toContain(`本次调用输出硬上限为${input.maxOutputTokens} tokens`);
+            expect(input.prompt.match(/本次调用输出硬上限为/g)).toHaveLength(1);
+            expect(input.maxInputTokens).toBe(256000);
+            expect(estimateModelInputTokens(input)).toBeGreaterThan(96000);
+            expect(JSON.stringify(input.untrustedSources)).toContain(body);
+        }
+        expect(result.claims[0].kind).toBe('fact');
+    });
     it.each([
         ['2026-10-25T00:00:00Z', 'complete'],
         ['2026-09-01T00:00:00Z', 'partial'],
@@ -192,7 +864,7 @@ describe('persistent bounded research Agent', () => {
         expect(output.coverage.completeness).toBe('partial');
         expect(output.coverage.gaps.join(' ')).toContain('时间窗口尚未固定');
         expect(output.comparison).toBe('not_performed');
-        expect(promote).toHaveBeenCalledTimes(9);
+        expect(promote).toHaveBeenCalledTimes(10);
         expect(
             promote.mock.calls.every(([config]) => Boolean(config.configurable?.checkpoint_id)),
         ).toBe(true);
@@ -207,7 +879,7 @@ describe('persistent bounded research Agent', () => {
         expect(tools.model).toHaveBeenCalledTimes(1);
     });
 
-    it('bounds repair of fabricated page IDs or quotes, then returns labelled partial excerpts', async () => {
+    it('retains a claim with fabricated citations as uncertain content without saving the fake quote', async () => {
         const { context, deps, tools } = fixture();
         vi.mocked(tools.model).mockImplementation(async (key) => ({
             mode: 'live',
@@ -227,10 +899,98 @@ describe('persistent bounded research Agent', () => {
                       },
         }));
         const output = await runResearchAgent(context, deps);
-        expect(tools.model).toHaveBeenCalledTimes(3);
+        expect(tools.model).toHaveBeenCalledTimes(2);
         expect(output.coverage.completeness).toBe('partial');
-        expect(output.coverage.gaps.join(' ')).toContain('引用校验失败');
-        expect(output.claims[0].text).toBe(text);
+        expect(output.coverage.gaps.join(' ')).toContain('证据不足');
+        expect(output.claims[0].kind).toBe('insufficient');
+        expect(output.claims[0].text).toBe('invented');
+        expect(output.claims[0].text).not.toContain(text);
+        expect(output.claims[0].citations).toEqual([]);
+        expect(output.claims[0].uncertainty).toContain('quote_unmatched');
+    });
+
+    it('gives synthesis its own output allocation and includes the end of a long source', async () => {
+        const { context, deps, tools } = fixture();
+        const body = `${'这是背景资料。'.repeat(600)}最后结论：申请需提前准备。`;
+        vi.mocked(tools.read).mockResolvedValue({
+            ...page,
+            text: body,
+            contentHash: createHash('sha256').update(body).digest('hex'),
+        });
+        const original = tools.model;
+        tools.model = vi.fn<AgentTools['model']>(async (key, input) => {
+            if (key.startsWith('plan')) return original(key, input);
+            expect(input.maxOutputTokens).toBeGreaterThan(1500);
+            expect(input.prompt).toContain('使用自己的话');
+            expect(JSON.stringify(input.untrustedSources)).toContain('最后结论');
+            expect(estimateModelInputTokens(input)).toBeLessThanOrEqual(input.maxInputTokens);
+            return {
+                mode: 'live',
+                usage: { inputTokens: 100, outputTokens: 100, estimated: false },
+                data: {
+                    claims: [
+                        {
+                            kind: 'inference',
+                            text: '申请准备应前置，预留充足办理时间。',
+                            questionIds: ['q0'],
+                            citations: [{ pageId: 'read-0', quote: '申请需提前准备。' }],
+                        },
+                    ],
+                },
+            };
+        });
+        const result = await runResearchAgent(context, deps);
+        expect(result.claims[0].text).toBe('申请准备应前置，预留充足办理时间。');
+        expect(result.coverage.gaps.join(' ')).not.toContain('综合输入受预算限制');
+    });
+
+    it('discards length-limited output and does not publish source text as a summary', async () => {
+        const { context, deps, tools } = fixture();
+        const original = tools.model;
+        tools.model = vi.fn<AgentTools['model']>(async (key, input) => {
+            if (key.startsWith('plan')) return original(key, input);
+            throw new ConnectorError('output_truncated', 'fixture secret content');
+        });
+        const result = await runResearchAgent(context, deps);
+        expect(tools.model).toHaveBeenCalledTimes(3);
+        expect(result.coverage.completeness).toBe('partial');
+        expect(result.coverage.gaps.join(' ')).toContain('输出达到长度上限');
+        expect(result.claims[0].kind).toBe('insufficient');
+        expect(result.claims[0].text).not.toContain(text);
+        expect(JSON.stringify(result)).not.toContain('fixture secret');
+    });
+
+    it('rejects a long copied brief even with a valid source quote', async () => {
+        const { context, deps, tools } = fixture();
+        const body = 'This is a sentence about application preparation. '.repeat(12);
+        vi.mocked(tools.read).mockResolvedValue({
+            ...page,
+            text: body,
+            contentHash: createHash('sha256').update(body).digest('hex'),
+        });
+        const original = tools.model;
+        tools.model = vi.fn<AgentTools['model']>(async (key, input) =>
+            key.startsWith('plan')
+                ? original(key, input)
+                : {
+                      mode: 'live',
+                      usage: { inputTokens: 10, outputTokens: 10, estimated: false },
+                      data: {
+                          claims: [
+                              {
+                                  kind: 'fact',
+                                  text: body,
+                                  questionIds: ['q0'],
+                                  citations: [{ pageId: 'read-0', quote: body }],
+                              },
+                          ],
+                      },
+                  },
+        );
+        const result = await runResearchAgent(context, deps);
+        expect(result.claims[0].kind).toBe('insufficient');
+        expect(result.claims[0].citations[0].quote.endsWith('.')).toBe(true);
+        expect(result.claims[0].text).not.toContain('This is a sentence');
     });
 
     it('requires paraphrased conclusions to be marked inference', async () => {

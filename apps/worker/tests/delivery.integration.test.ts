@@ -29,10 +29,15 @@ import type { NotificationPreference, Report } from '@scova/models';
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vite-plus/test';
-import { candidateFromCheckpoint, type AgentCandidate } from '@scova/agent-core';
+import {
+    candidateFromCheckpoint,
+    type AgentCandidate,
+    type ComparisonExtraction,
+} from '@scova/agent-core';
 import {
     createConnectorBundle,
     createPageReader,
+    ConnectorError,
     type ConnectorBundle,
     type StructuredInput,
     type CallContext,
@@ -136,6 +141,10 @@ async function liveResearch(
         skipExecute?: boolean;
         notificationPreference?: NotificationPreference;
         nullableRelation?: boolean;
+        truncatedComparison?: boolean;
+        badComparisonQuote?: boolean;
+        badClaimQuote?: boolean;
+        pageCount?: number;
     } = {},
 ) {
     const initial = options.previous ?? (await seedRun(fixture.db, { mode: 'live' }));
@@ -190,6 +199,7 @@ async function liveResearch(
         },
     });
     const base = createConnectorBundle();
+    let comparisonAttempts = 0;
     const bundle: ConnectorBundle = {
         mode: 'live',
         reader: {
@@ -209,6 +219,10 @@ async function liveResearch(
                     provider: 'searxng',
                     results: [
                         url,
+                        ...Array.from(
+                            { length: (options.pageCount ?? 1) - 1 },
+                            (_, i) => `${url}/source-${i}`,
+                        ),
                         ...(options.claimKind === 'conflict' ? [url + '/alternate'] : []),
                     ].map((pageUrl) => ({
                         kind: 'search_snippet' as const,
@@ -231,7 +245,9 @@ async function liveResearch(
                     | { pageId: string; text: string }[]
                     | undefined;
                 const claimKind = options.claimKind ?? 'fact';
-                if (Object.hasOwn((input.schema.properties ?? {}) as object, 'pages'))
+                if (Object.hasOwn((input.schema.properties ?? {}) as object, 'pages')) {
+                    if (options.truncatedComparison && comparisonAttempts++ === 0)
+                        throw new ConnectorError('output_truncated', 'DO_NOT_RENDER');
                     return {
                         mode: 'live',
                         usage: { inputTokens: 1, outputTokens: 1, estimated: false },
@@ -246,7 +262,9 @@ async function liveResearch(
                                                   subject: '公开公告',
                                                   predicate: '公告内容',
                                                   value: options.factValue ?? page.text,
-                                                  quote: page.text,
+                                                  quote: options.badComparisonQuote
+                                                      ? 'UNLOCATABLE_MODEL_QUOTE'
+                                                      : page.text,
                                                   relevance: 'relevant',
                                                   importance: options.importance ?? 'important',
                                                   ...(options.nullableRelation
@@ -257,6 +275,7 @@ async function liveResearch(
                             })),
                         } as T,
                     };
+                }
                 return {
                     mode: 'live',
                     usage: { inputTokens: 1, outputTokens: 1, estimated: false },
@@ -265,6 +284,15 @@ async function liveResearch(
                               claims: [
                                   {
                                       kind: claimKind,
+                                      assessment: {
+                                          relevance: 'direct',
+                                          support: 'direct',
+                                          role: 'answer',
+                                          sourceRelation: 'unknown',
+                                          reason: '受控原文直接回答测试问题',
+                                          conditions: '',
+                                          gap: '',
+                                      },
                                       text:
                                           claimKind === 'fact'
                                               ? source.text
@@ -282,7 +310,9 @@ async function liveResearch(
                                                     : [source]
                                                 ).map((entry) => ({
                                                     pageId: entry.pageId,
-                                                    quote: entry.text,
+                                                    quote: options.badClaimQuote
+                                                        ? 'UNLOCATABLE_CLAIM_QUOTE'
+                                                        : entry.text,
                                                 })),
                                   },
                               ],
@@ -330,6 +360,140 @@ async function liveResearch(
 }
 
 describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）', () => {
+    it.each([false, true])(
+        'persists question answers and authenticates synthesis assessments (tampered=%s)',
+        async (tampered) => {
+            const seed = await liveResearch();
+            expect(seed.candidate.coverage.reportValue?.questions.map((q) => q.status)).toEqual([
+                'supported',
+                'supported',
+            ]);
+            const call = await fixture.db.query.toolCalls.findFirst({
+                where: and(
+                    eq(dbToolCalls.runId, seed.run.id),
+                    sql`${dbToolCalls.operationKey} LIKE 'synthesize-0:%'`,
+                ),
+            });
+            expect(call?.status).toBe('succeeded');
+            if (tampered) {
+                await fixture.db
+                    .update(dbToolCalls)
+                    .set({ status: 'unknown' })
+                    .where(eq(dbToolCalls.id, call!.id));
+                await expect(
+                    delivery.deliver(seed.claimed.token, seed.candidate),
+                ).rejects.toMatchObject({ code: 'INVALID_DELIVERY_EVIDENCE' });
+                await assertEmpty(seed.run.id);
+            } else {
+                const result = await delivery.deliver(seed.claimed.token, seed.candidate);
+                const row = await fixture.db.query.runs.findFirst({
+                    where: eq(dbRuns.id, seed.run.id),
+                });
+                expect((row!.coverageJson as Report['coverage']).reportValue).toEqual(
+                    seed.candidate.coverage.reportValue,
+                );
+                const report = await fixture.db.query.reports.findFirst({
+                    where: eq(dbReports.id, result.reportId),
+                });
+                expect(report?.summary).toContain('查找可追溯资料');
+            }
+        },
+    );
+    it('delivers uncertain claims and comparison values without promoting fabricated quotes or baselines', async () => {
+        const seed = await liveResearch({ badComparisonQuote: true, badClaimQuote: true });
+        expect(seed.candidate.claims[0]).toMatchObject({
+            kind: 'insufficient',
+            citations: [],
+            uncertainty: expect.arrayContaining(['quote_unmatched']),
+        });
+        expect(seed.candidate.changes).toContainEqual(
+            expect.objectContaining({ kind: 'uncertain', newCitations: [], important: false }),
+        );
+        const result = await delivery.deliver(seed.claimed.token, seed.candidate);
+        const report = await fixture.db.query.reports.findFirst({
+            where: eq(dbReports.id, result.reportId),
+        });
+        const claims = await fixture.db.query.claims.findMany({
+            where: eq(dbClaims.reportId, result.reportId),
+        });
+        const evidence = await fixture.db.query.evidence.findMany({
+            where: eq(dbEvidence.runId, seed.run.id),
+        });
+        const baseline = await fixture.db.query.baselines.findFirst({
+            where: eq(dbBaselines.taskId, seed.task.id),
+        });
+        expect(report?.completeness).toBe('partial');
+        expect(report?.summary).toContain('暂无直接回答');
+        expect(claims[0]?.confidenceLabel).toContain('引用未能定位');
+        expect(evidence).toHaveLength(1);
+        expect(evidence[0]!.quote).not.toContain('UNLOCATABLE');
+        expect(baseline).toBeUndefined();
+    });
+    it.each([false, true])(
+        'rebuilds every comparison batch from its successful ledger (tampered=%s)',
+        async (tampered) => {
+            const seed = await liveResearch({ pageCount: 4 });
+            expect(seed.candidate.manifest!.pages).toHaveLength(4);
+            const batch = await fixture.db.query.toolCalls.findFirst({
+                where: and(
+                    eq(dbToolCalls.runId, seed.run.id),
+                    sql`${dbToolCalls.operationKey} LIKE 'compare-facts-batch-1-v2:%'`,
+                ),
+            });
+            expect(batch?.status).toBe('succeeded');
+            if (tampered) {
+                await fixture.db
+                    .update(dbToolCalls)
+                    .set({ status: 'unknown' })
+                    .where(eq(dbToolCalls.id, batch!.id));
+                await expect(
+                    delivery.deliver(seed.claimed.token, seed.candidate),
+                ).rejects.toMatchObject({ code: 'INVALID_DELIVERY_EVIDENCE' });
+                await assertEmpty(seed.run.id);
+            } else {
+                const result = await delivery.deliver(seed.claimed.token, seed.candidate);
+                const report = await fixture.db.query.reports.findFirst({
+                    where: eq(dbReports.id, result.reportId),
+                });
+                expect(report?.comparisonJson).toEqual(seed.candidate.manifest);
+            }
+        },
+    );
+    it.each([false, true])(
+        'comparison repair delivery requires its own successful ledger (tampered=%s)',
+        async (tampered) => {
+            const seed = await liveResearch({ truncatedComparison: true });
+            expect(seed.candidate.comparison).toBe('completed');
+            const repair = await fixture.db.query.toolCalls.findFirst({
+                where: and(
+                    eq(dbToolCalls.runId, seed.run.id),
+                    sql`${dbToolCalls.operationKey} LIKE 'compare-facts-repair-v1:%'`,
+                ),
+            });
+            expect(repair?.status).toBe('succeeded');
+            if (tampered) {
+                await fixture.db
+                    .update(dbToolCalls)
+                    .set({ status: 'unknown' })
+                    .where(eq(dbToolCalls.id, repair!.id));
+                await expect(
+                    delivery.deliver(seed.claimed.token, seed.candidate),
+                ).rejects.toMatchObject({ code: 'INVALID_DELIVERY_EVIDENCE' });
+                await assertEmpty(seed.run.id);
+            } else {
+                const result = await delivery.deliver(seed.claimed.token, seed.candidate);
+                const report = await fixture.db.query.reports.findFirst({
+                    where: eq(dbReports.id, result.reportId),
+                });
+                expect(report?.comparisonJson).toEqual(seed.candidate.manifest);
+                expect(report?.completeness).toBe('partial');
+                expect(await delivery.deliver(seed.claimed.token, seed.candidate)).toEqual({
+                    reportId: result.reportId,
+                    reused: true,
+                });
+            }
+        },
+    );
     for (const mode of ['summary', 'important_change', 'off'] as const)
         for (const runIssues of [true, false])
             it(`通知${mode}/${runIssues}经真实完整/重要变化/partial交付，重放保留已读`, async () => {
@@ -977,8 +1141,22 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
         const checkpoint = structuredClone(tuple.checkpoint);
         const state = checkpoint.channel_values.research as {
             manifest: AgentCandidate['manifest'];
+            comparisonExtractions: ComparisonExtraction[];
         };
         state.manifest!.pages[0].facts[0].importance = 'important';
+        const comparisonBefore = await createAgentRepository(
+            fixture.db,
+            second.claimed.token,
+        ).comparison();
+        expect(() =>
+            candidateFromCheckpoint({ ...second.context, ...comparisonBefore }, state),
+        ).toThrow();
+        // Even forging both projections cannot bypass the independent committed tool result.
+        (
+            state.comparisonExtractions[0]!.response.data as {
+                pages: { facts: { importance: string }[] }[];
+            }
+        ).pages[0]!.facts[0]!.importance = 'important';
         checkpoint.id = crypto.randomUUID();
         const saved = await saver.put(
             config,
@@ -1017,8 +1195,21 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
             expect(claims).toHaveLength(1);
             expect(claims[0]).toMatchObject({
                 kind,
-                confidenceLabel: kind === 'inference' ? '基于来源的推断' : '来源存在冲突，待核验',
+                confidenceLabel:
+                    kind === 'inference'
+                        ? '模型归纳与推断，引用不代表推理已经独立核实'
+                        : '来源存在冲突，待核验',
             });
+            const report = await fixture.db.query.reports.findFirst({
+                where: eq(dbReports.id, result.reportId),
+            });
+            const status = kind === 'conflict' ? '不同来源' : '已回答';
+            const gap = kind === 'conflict' ? ' 补充说明：来源说法存在差异，尚未解决分歧。' : '';
+            expect(report!.summary).toBe(
+                `查找可追溯资料 · ${status}：${claims[0].text}${gap}` +
+                    `\n\n来源 · ${status}：相关回答已在前文列出，详情见正文。`,
+            );
+            expect(report!.summary.length).toBeLessThanOrEqual(600);
             expect(claims[0].citations).toHaveLength(kind === 'conflict' ? 2 : 1);
             if (kind === 'conflict') {
                 expect(new Set(claims[0].citations.map((citation) => citation.relation))).toEqual(
@@ -1033,20 +1224,37 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
         },
     );
 
-    it('只有insufficient且没有任何逐字引用时NO_EVIDENCE，所有业务写回滚', async () => {
+    it('only uncertain claims still deliver with an unlinked real source excerpt and no complete baseline', async () => {
         const seed = await liveResearch({ claimKind: 'insufficient' });
         expect(seed.candidate.claims[0]).toMatchObject({ kind: 'insufficient', citations: [] });
-        await expect(delivery.deliver(seed.claimed.token, seed.candidate)).rejects.toMatchObject({
-            code: 'NO_EVIDENCE',
+        const { reportId } = await delivery.deliver(seed.claimed.token, seed.candidate);
+        const report = await fixture.db.query.reports.findFirst({
+            where: eq(dbReports.id, reportId),
         });
-        await assertEmpty(seed.run.id);
+        expect(report?.completeness).toBe('partial');
+        expect(report?.summary).toContain('暂无直接回答');
+        const claims = await fixture.db.query.claims.findMany({
+            where: eq(dbClaims.reportId, reportId),
+            with: { citations: true },
+        });
+        expect(
+            claims.every((claim) => claim.kind === 'insufficient' && claim.citations.length === 0),
+        ).toBe(true);
+        expect(
+            await fixture.db.query.evidence.findMany({ where: eq(dbEvidence.runId, seed.run.id) }),
+        ).toHaveLength(1);
         expect(
             await fixture.db
                 .select({ count: dbCount() })
                 .from(dbSources)
                 .where(eq(dbSources.userId, seed.user.id))
                 .then((rows) => rows[0]!.count),
-        ).toBe(0);
+        ).toBe(1);
+        expect(
+            await fixture.db.query.baselines.findFirst({
+                where: eq(dbBaselines.taskId, seed.task.id),
+            }),
+        ).toBeUndefined();
     });
 
     it.each(['unknown', 'failed'] as const)('%s的read结果不可升级成报告证据', async (status) => {
@@ -1643,37 +1851,41 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
         }
     });
 
-    it('生产runtime的真实demo图完成后交付partial，而不被RunService改写成failed', async () => {
-        const seed = await seedRun(fixture.db);
-        const runtime = createAgentRuntime({
-            database: fixture.db,
-            databaseUrl: fixture.databaseUrl,
-            checkpointSchema: schema,
-            enableDelivery: true,
-        });
-        try {
-            await runtime.connect();
-            await new RunService({
-                repository: runs,
-                executorFactory: (token) => runtime.executorFactory(token),
-            }).execute(seed.run.id);
-            const run = await fixture.db.query.runs
-                .findFirst({ where: eq(dbRuns.id, seed.run.id) })
-                .then((row) => requiredDatabaseValue(row));
-            expect(run).toMatchObject({
-                status: 'partial',
-                outcome: 'inconclusive',
-                failureCode: null,
+    it.each(['demo', 'live'] as const)(
+        '生产runtime对%s缺配置明确失败，不交付演示报告',
+        async (mode) => {
+            const seed = await seedRun(fixture.db, { mode });
+            const runtime = createAgentRuntime({
+                database: fixture.db,
+                databaseUrl: fixture.databaseUrl,
+                checkpointSchema: schema,
+                enableDelivery: true,
+                env: {},
             });
-            expect(
-                await fixture.db
-                    .select({ count: dbCount() })
-                    .from(dbReports)
-                    .where(eq(dbReports.runId, seed.run.id))
-                    .then((rows) => rows[0]!.count),
-            ).toBe(1);
-        } finally {
-            await runtime.close();
-        }
-    });
+            try {
+                await runtime.connect();
+                await new RunService({
+                    repository: runs,
+                    executorFactory: (token) => runtime.executorFactory(token),
+                }).execute(seed.run.id);
+                const run = await fixture.db.query.runs
+                    .findFirst({ where: eq(dbRuns.id, seed.run.id) })
+                    .then((row) => requiredDatabaseValue(row));
+                expect(run).toMatchObject({
+                    status: 'failed',
+                    outcome: null,
+                    failureCode: 'AGENT_CONFIGURATION_INVALID',
+                });
+                expect(
+                    await fixture.db
+                        .select({ count: dbCount() })
+                        .from(dbReports)
+                        .where(eq(dbReports.runId, seed.run.id))
+                        .then((rows) => rows[0]!.count),
+                ).toBe(0);
+            } finally {
+                await runtime.close();
+            }
+        },
+    );
 });

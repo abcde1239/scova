@@ -24,7 +24,7 @@ import { useFollowup } from '@/composables/useFollowup';
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const time = '2026-10-31T00:00:00Z';
 const text = '  还需要什么已保存资料？\n保持原问题  ';
-function reportFixture(mode: 'demo' | 'live' = 'demo'): Report {
+function reportFixture(mode: 'demo' | 'live' = 'live'): Report {
     return parseContract(ReportSchema, {
         id: id(1),
         taskId: id(2),
@@ -80,7 +80,7 @@ function questionFixture(): ReportQuestion {
         createdAt: time,
     });
 }
-function parentFixture(mode: 'demo' | 'live' = 'demo'): Run {
+function parentFixture(mode: 'demo' | 'live' = 'live'): Run {
     return parseContract(RunSchema, {
         id: id(3),
         taskId: id(2),
@@ -111,7 +111,7 @@ function parentFixture(mode: 'demo' | 'live' = 'demo'): Run {
         failureCode: null,
     });
 }
-function nextFixture(status: Run['status'] = 'queued', mode: 'demo' | 'live' = 'demo'): Run {
+function nextFixture(status: Run['status'] = 'queued', mode: 'demo' | 'live' = 'live'): Run {
     return parseContract(RunSchema, {
         ...parentFixture(mode),
         id: id(40),
@@ -223,7 +223,7 @@ describe('followup contract and frozen parent identity', () => {
         { taskId: id(50) },
         { taskVersionId: id(50) },
         { parentRunId: id(50) },
-        { mode: 'live' },
+        { mode: 'demo' },
         { trigger: 'manual' },
         { id: id(3) },
         { budget: { ...parentFixture().budget, maxPages: 9 } },
@@ -243,7 +243,7 @@ describe('followup contract and frozen parent identity', () => {
         const [url, init] = calls.mock.calls[0]!;
         expect(urlText(url)).toBe(`/api/v1/reports/${id(1)}/questions/${id(30)}/followup`);
         expect(init?.method).toBe('POST');
-        expect(init?.credentials).toBe('same-origin');
+        expect(init?.credentials).toBe('include');
         expect(new Headers(init?.headers).get('x-csrf-token')).toBe('sample-csrf');
         expect(new Headers(init?.headers).get('idempotency-key')).toBe(attempt.key);
         expect(JSON.parse(init?.body as string)).toEqual({ confirm: true });
@@ -302,7 +302,7 @@ describe('explicit confirmation and original Run read', () => {
         state.close();
         expect(state.protectedState.value).toBe(false);
     });
-    it.each([{ taskId: id(8) }, { taskVersionId: id(8) }, { mode: 'live' }, { id: id(8) }])(
+    it.each([{ taskId: id(8) }, { taskVersionId: id(8) }, { mode: 'demo' }, { id: id(8) }])(
         'blocks confirmation on an invalid original Run %#',
         async (patch) => {
             const { state, calls } = mount(async () =>
@@ -332,7 +332,7 @@ describe('explicit confirmation and original Run read', () => {
         state.close();
         expect(calls.mock.calls.every((call) => call[1]?.method === 'GET')).toBe(true);
     });
-    it('freezes only on final explicit confirm, blocks duplicate clicks and preserves demo', async () => {
+    it('freezes only on final explicit confirm, blocks duplicate clicks and preserves live', async () => {
         const ack = deferred<Response>();
         const { state, calls } = mount(async (url, init) =>
             init?.method === 'POST'
@@ -349,7 +349,7 @@ describe('explicit confirmation and original Run read', () => {
         await state.confirm();
         await state.replay();
         expect(calls.mock.calls.filter((call) => call[1]?.method === 'POST')).toHaveLength(1);
-        expect(state.attempt.value?.mode).toBe('demo');
+        expect(state.attempt.value?.mode).toBe('live');
         expect(state.protectedState.value).toBe(true);
         state.close();
         expect(state.opened.value).toBe(true);
@@ -455,7 +455,7 @@ describe('unknown writes, preserved identity and explicit recovery', () => {
                     ...(kind === 'wrong-parent'
                         ? { parentRunId: id(99) }
                         : kind === 'wrong-mode'
-                          ? { mode: 'live' as const }
+                          ? { mode: 'demo' as const }
                           : kind === 'wrong-budget'
                             ? { budget: { ...parentFixture().budget, maxPages: 9 } }
                             : { status: 'running' as const }),
@@ -521,7 +521,7 @@ describe('unknown writes, preserved identity and explicit recovery', () => {
                             }
                           : urlText(url).endsWith(`/runs/${id(3)}`)
                             ? parentFixture()
-                            : { ...nextFixture(), mode: 'live' },
+                            : { ...nextFixture(), mode: 'demo' },
                   ),
         );
         await open(state);
@@ -640,4 +640,32 @@ describe('unknown writes, preserved identity and explicit recovery', () => {
             lifecycle.queryClient.getQueryData<{ data: Run }>(options.queryKey)?.data.status,
         ).toBe('succeeded');
     });
+});
+
+it('历史演示报告可核验，但不能创建新的演示后续研究', async () => {
+    expect(followupParent(parentFixture('demo'), reportFixture('demo')).mode).toBe('demo');
+    expect(() =>
+        followupAttempt(reportFixture('demo'), questionFixture(), parentFixture('demo')),
+    ).toThrow();
+    const { state, calls } = mount(undefined, questionFixture(), reportFixture('demo'));
+    state.open();
+    await state.confirm();
+    expect(state.canOpen.value).toBe(false);
+    expect(calls).not.toHaveBeenCalled();
+});
+
+it('历史演示问题已有的关联仍可按原模式读取', async () => {
+    const question = { ...questionFixture(), followupRunId: id(40) };
+    const { state, calls } = mount(
+        async (url) =>
+            Response.json(
+                urlText(url).endsWith('/' + id(3))
+                    ? parentFixture('demo')
+                    : nextFixture('succeeded', 'demo'),
+            ),
+        question,
+        reportFixture('demo'),
+    );
+    await vi.waitFor(() => expect(state.linkedRun.value?.mode).toBe('demo'));
+    expect(calls.mock.calls.every((call) => call[1]?.method === 'GET')).toBe(true);
 });

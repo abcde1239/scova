@@ -71,6 +71,13 @@ export function createSessionLifecycle(
                 assertCurrent();
                 replaceSession(session);
             },
+            refreshSession(session: SessionResponse) {
+                assertCurrent();
+                parseContract(SessionResponseSchema, session);
+                if (store.user?.id === session.user.id && currentCsrf === session.csrfToken)
+                    store.install(session.user);
+                else replaceSession(session);
+            },
             queryKey(key: readonly unknown[]) {
                 return ['session', accountId, epoch, ...key] as const;
             },

@@ -127,7 +127,7 @@ async function samples(context: BrowserContext) {
     });
     return { state, calls };
 }
-const section = (page: Page) => page.getByRole('region', { name: '任务计划与归档' });
+const section = (page: Page) => page.getByRole('region', { name: '任务管理', exact: true });
 const button = (page: Page, name: string) =>
     section(page).getByRole('button', { name, exact: true });
 const pause = (page: Page) => button(page, '暂停未来计划');
@@ -165,6 +165,13 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         await expect(pause(page)).toBeEnabled();
         expect(reads(calls).length).toBeGreaterThanOrEqual(2);
         await expect(section(page)).toContainText('暂停只停止未来计划，在途执行继续');
+        const leftEdges = await page
+            .locator('#run-history-title, #run-actions-title, #task-lifecycle-title')
+            .evaluateAll((elements) =>
+                elements.map((element) => element.getBoundingClientRect().left),
+            );
+        expect(leftEdges).toHaveLength(3);
+        expect(Math.max(...leftEdges) - Math.min(...leftEdges)).toBeLessThanOrEqual(1);
         for (const doubled of [false, true]) {
             if (doubled)
                 await page.evaluate(() => (document.documentElement.style.fontSize = '200%'));

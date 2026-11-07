@@ -10,13 +10,13 @@
 
 表格、事实值、原因与表内引用使用界面无衬线字体，结论正文继续遵循阅读偏好。正文不截断，长文本自然换行。表仅在自身容器横向滚动，不扩大整页；实际溢出时才提供区域焦点与提示，聚焦后可用原生左右方向键滚动，Tab 进入双方引用。控件最小尺寸以 rem 表达，键盘焦点可见。
 
-`apps/web/test-fixtures/report-comparison.html` 仅在 `mode=test` 构建，挂载真实组件、主题和样式。独立 `window.scovaComparisonFixture` 提供 `setReport`、`getReport`、`setView('brief'|'comparison')`、`getView`；ReportSchema 校验后依次卸挂真实简报/对比组件，不同时挂两套报告。该入口是受控组件验证，生产构建不含这些 fixture；生产选择器由报告路由测试另行验证，组件样本不代表真实 Agent 比较交付。
+`apps/web/tests/fixtures/reports/report-comparison.html` 仅在 `mode=test` 构建，挂载真实组件、主题和样式。独立 `window.scovaComparisonFixture` 提供 `setReport`、`getReport`、`setView('brief'|'comparison')`、`getView`；ReportSchema 校验后依次卸挂真实简报/对比组件，不同时挂两套报告。该入口是受控组件验证，生产构建不含这些 fixture；生产选择器由报告路由测试另行验证，组件样本不代表真实 Agent 比较交付。
 
 ```sh
 vp test apps/web/tests/report-comparison-table.test.ts apps/web/tests/report-changes.test.ts apps/web/tests/report-topic-list.test.ts apps/web/tests/report-view.test.ts
 vp check
-vp run web#build
-vp run web#build:e2e
+vp run build:frontend
+vp run build:e2e
 vp run test:e2e tests/e2e/report-comparison-table.spec.ts
 vp run harness-lint
 ```

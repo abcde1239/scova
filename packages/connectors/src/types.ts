@@ -1,7 +1,11 @@
 export type ConnectorKind = 'search' | 'model' | 'read';
+export const MODEL_CALL_TIMEOUT_MS = 120_000;
+export const MODEL_INPUT_TOKEN_LIMIT = 256_000;
+export const MODEL_OUTPUT_TOKEN_LIMIT = 64_000;
 
 export type ConnectorErrorCode =
     | 'configuration'
+    | 'balance_unsupported'
     | 'unsafe_url'
     | 'network'
     | 'timeout'
@@ -9,10 +13,16 @@ export type ConnectorErrorCode =
     | 'response_too_large'
     | 'http'
     | 'invalid_response'
+    | 'output_truncated'
+    | 'model_quota_exceeded'
+    | 'search_unavailable'
     | 'budget_exceeded'
     | 'extraction_failed';
 
 export class ConnectorError extends Error {
+    engineFailures?: { engine: string; error: string }[];
+    retryAfterMs?: number;
+    searchNetworkAttempts?: number;
     constructor(
         public readonly code: ConnectorErrorCode,
         message: string,
@@ -25,10 +35,14 @@ export class ConnectorError extends Error {
 }
 
 export interface CallContext {
+    /** Deployment-owned selection; never derived from task or model parameters. */
+    engines?: string[];
+    beforeDispatch?: () => Promise<void>;
+    onSearchState?: (state: 'waiting' | 'cooldown' | 'cache_hit') => Promise<void>;
     signal?: AbortSignal;
     timeoutMs?: number;
     /** Invoked before every attempt, including retries. The caller can persist a budget reservation. */
-    beforeAttempt?: (kind: ConnectorKind) => void | Promise<void>;
+    beforeAttempt?: (kind: ConnectorKind, previousFailure?: ConnectorError) => void | Promise<void>;
 }
 
 export interface SearchResult {
@@ -42,6 +56,12 @@ export interface SearchResult {
 }
 
 export interface SearchCoverage {
+    diagnostics?: {
+        cacheHit: boolean;
+        networkAttempts: number;
+        waitedMs: number;
+        skippedEngines: string[];
+    };
     /** No known gap in this provider response; never a claim of exhaustive internet coverage. */
     complete: boolean;
     gaps: string[];

@@ -31,7 +31,7 @@ const account = (owner = 100) => ({
     },
     csrfToken: 'followup-e2e',
 });
-function report(mode: 'demo' | 'live' = 'demo'): Report {
+function report(mode: 'demo' | 'live' = 'live'): Report {
     return {
         id: reportId,
         taskId: id(2),
@@ -356,7 +356,7 @@ test('普通提问、刷新、确认前预算GET、取消与Escape均零followup
     expect(posts(value)).toHaveLength(0);
 });
 
-for (const mode of ['demo', 'live'] as const) {
+for (const mode of ['live'] as const) {
     test(`${mode}显示原版本真实五项预算和配置后果，确认仅confirm:true`, async ({ page }) => {
         const value = state();
         value.report = report(mode);
@@ -367,11 +367,7 @@ for (const mode of ['demo', 'live'] as const) {
         await open(page);
         const original = await page.locator('.report-brief').textContent();
         await openModal(page);
-        await expect(modal(page)).toContainText(
-            mode === 'demo'
-                ? '本次不会升级为 live'
-                : '可能调用部署者配置的搜索与模型并使用服务额度',
-        );
+        await expect(modal(page)).toContainText('可能调用已配置的搜索与模型并使用服务额度');
         await expect(modal(page)).toContainText('清空重点条目并改为手动执行');
         await expect(modal(page)).toContainText('原任务计划不改，普通监控基线不变');
         for (const [label, text] of [
@@ -429,7 +425,7 @@ test('busy鼠标、Enter、Space重复确认只能发一POST且实际GET权威�
     await button.dispatchEvent('click');
     expect(posts(value)).toHaveLength(1);
     pending.release();
-    await expect(followup(page)).toContainText('关联执行：演示 demo · 已完成');
+    await expect(followup(page)).toContainText('关联执行：真实 live · 已完成');
     expect(gets(value, `/runs/${childId}`).length).toBeGreaterThan(0);
     expect(posts(value)).toHaveLength(1);
     await followup(page).getByRole('link', { name: '查看关联执行', exact: true }).click();
@@ -446,7 +442,7 @@ for (const badParent of ['503', 'wrong-task', 'wrong-mode', 'wrong-version'] as 
                 ...(badParent === 'wrong-task'
                     ? { taskId: id(999) }
                     : badParent === 'wrong-mode'
-                      ? { mode: 'live' }
+                      ? { mode: 'demo' }
                       : { taskVersionId: id(999) }),
             });
         await open(page);
@@ -544,7 +540,7 @@ for (const wrong of [
                 result = { ...run(value.report), parentRunId: id(999) };
             if (wrong === 'budget')
                 result = { ...run(value.report), budget: { ...budget, maxSearches: 99 } };
-            if (wrong === 'mode') result = { ...run(value.report), mode: 'live' };
+            if (wrong === 'mode') result = { ...run(value.report), mode: 'demo' };
             if (wrong === 'task') result = { ...run(value.report), taskId: id(999) };
             if (wrong === 'version') result = { ...run(value.report), taskVersionId: id(999) };
             if (wrong === 'trigger') result = { ...run(value.report), trigger: 'manual' };
@@ -873,3 +869,14 @@ for (const scheme of ['light', 'dark'] as const) {
         });
     }
 }
+
+test('历史演示报告保留阅读，但不再提供创建后续研究', async ({ page }) => {
+    const value = state();
+    value.report = report('demo');
+    value.question = savedQuestion(value.report);
+    await installApi(page, value);
+    await open(page);
+    await expect(followup(page)).toContainText('历史演示报告仅供查阅');
+    await expect(action(page, '确认后建立独立后续执行')).toHaveCount(0);
+    expect(posts(value)).toHaveLength(0);
+});
