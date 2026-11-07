@@ -12,6 +12,10 @@
         {
             "name": "0002_sharp_trauma",
             "hash": "8f6731b542476a0f661b21b62ac55bc302ee12d533f2b03c471e15f1541ed4ce"
+        },
+        {
+            "name": "0003_research_events",
+            "hash": "e5ffb2c67e47a2e06afdff5f3c4e5506ec7697013d20a381bbff986d82045d27"
         }
     ],
     "signature": {
@@ -3836,7 +3840,7 @@
                 "table_name": "run_events",
                 "name": "event_type_valid",
                 "type": "c",
-                "definition": "CHECK (type = ANY (ARRAY['run.queued'::text, 'run.started'::text, 'run.recovering'::text, 'step.started'::text, 'step.completed'::text, 'tool.started'::text, 'tool.completed'::text, 'tool.failed'::text, 'budget.updated'::text, 'coverage.updated'::text, 'report.published'::text, 'run.completed'::text, 'run.failed'::text, 'run.canceled'::text]))",
+                "definition": "CHECK (type = ANY (ARRAY['run.queued'::text, 'run.started'::text, 'run.recovering'::text, 'step.started'::text, 'step.completed'::text, 'tool.started'::text, 'tool.completed'::text, 'tool.failed'::text, 'budget.updated'::text, 'coverage.updated'::text, 'research.updated'::text, 'report.published'::text, 'run.completed'::text, 'run.failed'::text, 'run.canceled'::text]))",
                 "validated": true
             },
             {

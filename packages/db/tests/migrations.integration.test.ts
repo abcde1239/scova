@@ -147,7 +147,11 @@ describe('Drizzle SQL 迁移与旧库无损接管', () => {
                 'CREATE TABLE _scova_migrations (name text PRIMARY KEY, hash char(64) NOT NULL, applied_at timestamptz NOT NULL DEFAULT clock_timestamp())',
             );
             const migrations = await readDatabaseMigrations();
-            for (const migration of migrations.slice(0, -1)) {
+            const providerUseMigration = migrations.findIndex(
+                (migration) => migration.name === '0002_sharp_trauma',
+            );
+            expect(providerUseMigration).toBeGreaterThan(0);
+            for (const migration of migrations.slice(0, providerUseMigration)) {
                 await client.query(scopeMigrationSql(migration.sql, item.namespace));
                 await client.query('INSERT INTO _scova_migrations(name,hash) VALUES($1,$2)', [
                     migration.name,

@@ -616,7 +616,7 @@ export const runEvents = pgTable(
         check(
             'event_type_valid',
             sql.raw(
-                "type IN (\r\n  'run.queued', 'run.started', 'run.recovering', 'step.started', 'step.completed',\r\n  'tool.started', 'tool.completed', 'tool.failed', 'budget.updated', 'coverage.updated',\r\n  'report.published', 'run.completed', 'run.failed', 'run.canceled'\r\n)",
+                "type IN (\r\n  'run.queued', 'run.started', 'run.recovering', 'step.started', 'step.completed',\r\n  'tool.started', 'tool.completed', 'tool.failed', 'budget.updated', 'coverage.updated', 'research.updated',\r\n  'report.published', 'run.completed', 'run.failed', 'run.canceled'\r\n)",
             ),
         ),
     ],
