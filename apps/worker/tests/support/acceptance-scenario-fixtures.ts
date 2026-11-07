@@ -4,6 +4,7 @@ import {
     type ConnectorBundle,
     type StructuredInput,
 } from '@scova/connectors';
+import type { AgentClaim } from '@scova/agent-core';
 
 export const scenarioNames = ['english', 'admissions', 'research'] as const;
 export type ScenarioName = (typeof scenarioNames)[number];
@@ -188,14 +189,26 @@ export function scenarioConnectors(
                     };
                     query = (task.questions[0]!.text + ' acceptance sources').slice(0, 2000);
                 }
-                const claims = pages.flatMap((page) =>
+                const claims: AgentClaim[] = pages.flatMap((page) =>
                     (data.pages.get(page.url) ?? [])
                         .filter((entry) => entry.relevance !== 'excluded')
                         .map((entry) => ({
-                            kind: 'fact',
+                            kind: 'fact' as const,
                             text: entry.quote,
                             questionIds: ['q0'],
                             citations: [{ pageId: page.pageId, quote: entry.quote }],
+                            assessment: {
+                                relevance: 'direct' as const,
+                                support: 'direct' as const,
+                                role: 'answer' as const,
+                                sourceRelation:
+                                    entry.relation?.kind === 'secondary'
+                                        ? ('secondary' as const)
+                                        : ('original' as const),
+                                reason: '固定验收资料逐字记载本场景的目标事实；仅用于受控管线验收。',
+                                conditions: '',
+                                gap: '',
+                            },
                         })),
                 );
                 if (options.browserScenarios && name === 'research' && phase !== 'A') {

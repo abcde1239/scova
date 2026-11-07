@@ -28,6 +28,12 @@ test('完整工作台：反馈后的重要变化、收藏笔记真实冲突、�
         scenario: 'english',
         phase: 'A',
     });
+    await info.attach('baseline-report', {
+        body: JSON.stringify(first.report),
+        contentType: 'application/json',
+    });
+    expect(first.report.coverage.completeness).toBe('complete');
+    expect(first.report.outcome).toBe('baseline');
     await openReport(page, first.report);
     await openReportTool(page, 'feedback');
     const source = first.report.evidence.find((evidence) => evidence.quote.includes('free access'));
@@ -106,6 +112,10 @@ test('完整工作台：反馈后的重要变化、收藏笔记真实冲突、�
         mode: 'live',
         scenario: 'english',
         phase: 'B',
+    });
+    await info.attach('comparison-report', {
+        body: JSON.stringify(second.report),
+        contentType: 'application/json',
     });
     expect(second.report.outcome).toBe('important_change');
     expect(
