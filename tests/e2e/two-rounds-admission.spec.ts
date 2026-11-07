@@ -36,13 +36,17 @@ test('招生A/B/C：两组变化双方引用、每周时区计划、partial不�
     expect(local).toContain('09:15');
     await expect(owner.page.locator('.task-summary')).toContainText('Asia/Shanghai');
     await owner.page.getByRole('link', { name: '编辑任务配置', exact: true }).click();
-    await expect(owner.page.getByLabel('每周执行星期', { exact: true })).toHaveValue('3');
-    await expect(
-        owner.page.getByLabel('每周执行星期', { exact: true }).locator('option:checked'),
-    ).toHaveText(/周三/);
+    const weekday = owner.page.getByRole('combobox', { name: '每周执行星期', exact: true });
+    await expect(weekday).toHaveText('周三');
+    await weekday.click();
+    await expect(owner.page.getByRole('option', { name: '周三', exact: true })).toHaveAttribute(
+        'aria-selected',
+        'true',
+    );
+    await owner.page.keyboard.press('Escape');
     await owner.page.getByText('关注范围与来源偏好', { exact: true }).click();
     await expect(
-        owner.page.getByText('网址和条目每行一项；来源偏好不代表安全审核或官方身份认证。', {
+        owner.page.getByText('每项可单独修改或删除；来源偏好不代表安全审核或官方身份认证。', {
             exact: true,
         }),
     ).toBeVisible();

@@ -1,3 +1,4 @@
+* text=auto eol=lf
 scripts/vendor/harness-kit.mjs text eol=lf
 *.sh text eol=lf
 packages/db/drizzle/*.sql text eol=lf
