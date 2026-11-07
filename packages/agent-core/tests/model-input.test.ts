@@ -32,6 +32,24 @@ describe('model source coverage', () => {
     it('rejects input that cannot fit metadata instead of silently dropping pages', () => {
         expect(() => fitSources({ ...input, maxInputTokens: 10 }, pages)).toThrow(/预算不足/);
     });
+    it.each([false, true])(
+        'includes the current soft output target before fitting sources (comparison=%s)',
+        (comparison) => {
+            const result = fitSources(
+                { ...input, maxInputTokens: 6000, maxOutputTokens: 7200 },
+                pages,
+                comparison,
+            );
+            expect(result.input.prompt).toContain('本次调用输出硬上限为7200 tokens');
+            expect(result.input.prompt).toContain('目标不超过4320 tokens');
+            expect(result.input.prompt).toContain('不是必须写满的配额');
+            expect(result.input.prompt).toContain('完整JSON');
+            expect(result.input.prompt).toContain('不得为省篇幅删除关键条件');
+            expect(estimateModelInputTokens(result.input)).toBeLessThanOrEqual(6000);
+            expect(result.input.maxOutputTokens).toBe(7200);
+            expect(input.prompt).toBe('summarize');
+        },
+    );
     it('comparison includes content past 4000 characters when its larger budget fits', () => {
         const body = 'source '.repeat(1800) + 'Final important finding.';
         const result = fitSources(
@@ -43,6 +61,11 @@ describe('model source coverage', () => {
         expect(result.input.untrustedSources).toEqual([
             { pageId: 'a', url: 'https://example.com/a', questionIds: ['q0'], text: body },
         ]);
+    });
+    it('does not expand the requested output target to fill a large report allowance', () => {
+        const result = fitSources({ ...input, maxInputTokens: 10000, maxOutputTokens: 64000 }, []);
+        expect(result.input.prompt).toContain('软目标不超过8192 tokens');
+        expect(result.input.maxOutputTokens).toBe(64000);
     });
     it('ends evidence at a sentence boundary and preserves Unicode when none exists', () => {
         expect(evidenceExcerpt(`完整句子。${'后续'.repeat(400)}`)).toBe('完整句子。');

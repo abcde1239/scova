@@ -180,7 +180,7 @@ async function execute(
             data:
                 key === 'plan-0'
                     ? { queries: [{ query: 'facts', questionIds: ['q0'] }] }
-                    : key === 'compare-facts-v1'
+                    : key.startsWith('compare-facts')
                       ? {
                             pages: (
                                 input.untrustedSources as { pageId: string; url: string }[]
@@ -194,6 +194,15 @@ async function execute(
                       : {
                             claims: [...pages.entries()].map(([pageId, s]) => ({
                                 kind: 'fact',
+                                assessment: {
+                                    relevance: 'direct',
+                                    support: 'direct',
+                                    role: 'answer',
+                                    sourceRelation: 'unknown',
+                                    reason: '对比题的明确原文',
+                                    conditions: '',
+                                    gap: '',
+                                },
                                 text: s.facts[0]?.quote ?? s.text.slice(0, 100),
                                 citations: [
                                     { pageId, quote: s.facts[0]?.quote ?? s.text.slice(0, 100) },
@@ -483,7 +492,16 @@ describe('two-run continuous comparison through the persistent graph', () => {
         expect(empty.output.coverage.completeness).toBe('partial');
         expect(empty.output.coverage.gaps.join(' ')).toContain('空清单');
         const fabricated = await execute([page], frozen, { badCompare: true });
-        expect(fabricated.output.comparison).toBe('not_performed');
+        expect(fabricated.output.comparison).toBe('completed');
+        expect(fabricated.output.manifest!.pages[0]!.facts).toEqual([]);
+        expect(fabricated.output.changes).toContainEqual(
+            expect.objectContaining({
+                kind: 'uncertain',
+                newValue: 'fabricated value',
+                newCitations: [],
+                important: false,
+            }),
+        );
         expect(fabricated.output.coverage.completeness).toBe('partial');
         const unknown = await execute(
             [{ ...page, facts: [{ ...page.facts[0]!, importance: 'unknown' }] }],
