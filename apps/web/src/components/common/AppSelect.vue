@@ -41,6 +41,7 @@
                 :id="`${id}-panel`"
                 ref="panel"
                 class="select-panel"
+                :class="{ 'select-panel--short': shortViewport }"
                 :role="searchable ? 'dialog' : undefined"
                 :aria-label="searchable ? `选择${label}` : undefined"
                 :style="placement"
@@ -153,6 +154,7 @@ const panel = ref<HTMLDivElement>();
 const search = ref<HTMLInputElement>();
 const optionList = ref<HTMLUListElement>();
 const placement = ref<CSSProperties>({});
+const shortViewport = ref(false);
 const filtered = computed(() => {
     const keyword = query.value.trim().toLocaleLowerCase();
     return props.options.filter((option) =>
@@ -175,6 +177,7 @@ watch(
 );
 watch(filtered, (options) => {
     active.value = Math.max(0, Math.min(active.value, options.length - 1));
+    scrollActive();
 });
 
 async function show() {
@@ -189,6 +192,8 @@ async function show() {
     document.addEventListener('pointerdown', outside);
     window.addEventListener('resize', positionPanel);
     window.addEventListener('scroll', onScroll, true);
+    window.visualViewport?.addEventListener('resize', positionPanel);
+    window.visualViewport?.addEventListener('scroll', positionPanel);
     await nextTick();
     if (props.searchable) search.value?.focus({ preventScroll: true });
     scrollActive();
@@ -202,25 +207,36 @@ function positionPanel() {
     }
     const unit = parseFloat(getComputedStyle(document.documentElement).fontSize);
     const gap = unit * 0.5;
+    const viewport = window.visualViewport;
+    const left = (viewport?.offsetLeft ?? 0) + gap;
+    const top = (viewport?.offsetTop ?? 0) + gap;
+    const right = left + (viewport?.width ?? innerWidth) - 2 * gap;
+    const bottom = top + (viewport?.height ?? innerHeight) - 2 * gap;
     const width = Math.min(
         Math.max(rect.width, props.searchable ? 20 * unit : 14 * unit),
-        innerWidth - 2 * gap,
+        Math.max(0, right - left),
     );
-    const below = innerHeight - rect.bottom - 2 * gap;
-    const above = rect.top - 2 * gap;
+    const below = Math.max(0, bottom - Math.max(top, rect.bottom + gap));
+    const above = Math.max(0, Math.min(bottom, rect.top - gap) - top);
     const down = below >= Math.min(16 * unit, above);
     const useViewport = Math.max(below, above) < (props.searchable ? 12 : 6) * unit;
-    // 固定浮层使用实际视口坐标，避免窄屏/放大时被父级布局裁切。
+    const maxHeight = Math.max(
+        0,
+        useViewport ? bottom - top : Math.min(23 * unit, down ? below : above),
+    );
+    shortViewport.value = maxHeight < 12 * unit;
+    // DOM 几何使用 px；软键盘与缩放后的可见区偏移仍在布局视口坐标系中。
     placement.value = {
         width: `${width}px`,
-        left: `${Math.max(gap, Math.min(rect.left, innerWidth - width - gap))}px`,
-        maxHeight: `${useViewport ? innerHeight - 2 * gap : Math.max(unit * 3, Math.min(23 * unit, down ? below : above))}px`,
+        left: `${Math.max(left, Math.min(rect.left, right - width))}px`,
+        maxHeight: `${maxHeight}px`,
         ...(useViewport
-            ? { top: `${gap}px` }
+            ? { top: `${top}px` }
             : down
-              ? { top: `${rect.bottom + gap}px` }
-              : { bottom: `${innerHeight - rect.top + gap}px` }),
+              ? { top: `${Math.max(top, rect.bottom + gap)}px` }
+              : { bottom: `${innerHeight - Math.min(bottom, rect.top - gap)}px` }),
     };
+    scrollActive();
     return true;
 }
 function close(restoreFocus = false) {
@@ -228,6 +244,8 @@ function close(restoreFocus = false) {
     document.removeEventListener('pointerdown', outside);
     window.removeEventListener('resize', positionPanel);
     window.removeEventListener('scroll', onScroll, true);
+    window.visualViewport?.removeEventListener('resize', positionPanel);
+    window.visualViewport?.removeEventListener('scroll', positionPanel);
     if (restoreFocus) trigger.value?.focus({ preventScroll: true });
 }
 function onFocusout(event: FocusEvent) {
@@ -442,11 +460,14 @@ defineExpose({ focus: () => trigger.value?.focus() });
 .select-count {
     font-weight: 400;
 }
+.select-panel--short .select-heading {
+    display: none;
+}
 .select-options {
     padding: 0;
     margin: 0;
     list-style: none;
-    min-block-size: 0;
+    min-block-size: 2.75rem;
     overflow: auto;
     overscroll-behavior: contain;
     scrollbar-width: thin;
