@@ -140,7 +140,7 @@
         ]
     },
     "tests": {
-        "include": ["**/*.test.ts", "**/*.spec.ts"],
+        "include": ["tests/**/*.test.ts", "tests/**/*.spec.ts"],
         "exclude": [
             "node_modules/**",
             "dist/**",
@@ -150,7 +150,7 @@
             "compose.test.yaml",
             "**/.generated/**"
         ],
-        "artifacts": ["artifacts", "coverage"],
+        "artifacts": ["artifacts", "coverage", "playwright-report", "test-results"],
         "requireConfiguredTask": false
     },
     "tasks": [

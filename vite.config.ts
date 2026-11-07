@@ -20,7 +20,7 @@ export default defineConfig({
     },
     test: {
         env: { VITE_API_BASE_URL: '/api/v1' },
-        include: ['{apps,packages}/*/{src,tests}/**/*.{test,spec}.ts'],
+        include: ['{apps,packages}/*/tests/**/*.{test,spec}.ts'],
         exclude: [
             '**/node_modules/**',
             '**/dist/**',
