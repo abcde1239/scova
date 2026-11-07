@@ -123,3 +123,77 @@ export const AgentModelCatalogSchema = Type.Object(
 );
 export type AgentModelCatalogInput = Static<typeof AgentModelCatalogInputSchema>;
 export type AgentModelCatalog = Static<typeof AgentModelCatalogSchema>;
+
+export const AgentProviderBalanceInputSchema = Type.Object(
+    {
+        revision: Type.Integer({ minimum: 1, description: '查询时读取的供应商修订号' }),
+        template: Type.Optional(
+            Type.Union([Type.Literal('auto'), Type.Literal('new_api'), Type.Literal('sub2api')], {
+                description: '余额模板；默认仅识别已支持的官方供应商',
+            }),
+        ),
+    },
+    {
+        additionalProperties: false,
+        description: '手动读取本人已存供应商的余额或Key额度，不调用生成接口',
+    },
+);
+export const AgentProviderBalanceSchema = Type.Object(
+    {
+        adapter: Type.Union(
+            [
+                Type.Literal('deepseek'),
+                Type.Literal('openrouter'),
+                Type.Literal('siliconflow'),
+                Type.Literal('new_api'),
+                Type.Literal('sub2api'),
+            ],
+            { description: '实际使用的额度查询适配器' },
+        ),
+        checkedAt: InstantSchema,
+        items: Type.Array(
+            Type.Object(
+                {
+                    label: Type.String({
+                        minLength: 1,
+                        maxLength: 80,
+                        description: '额度类型说明',
+                    }),
+                    scope: Type.Union(
+                        [
+                            Type.Literal('account'),
+                            Type.Literal('key'),
+                            Type.Literal('subscription'),
+                        ],
+                        { description: '额度所属范围，Key上限不代表账号余额' },
+                    ),
+                    unit: Type.String({
+                        minLength: 1,
+                        maxLength: 24,
+                        description: '供应商计费币种或额度单位，不作汇率换算',
+                    }),
+                    remaining: Type.Optional(
+                        Type.Number({ description: '可用余额或额度，负数表示欠额' }),
+                    ),
+                    used: Type.Optional(
+                        Type.Number({ minimum: 0, description: '供应商返回的已用额度' }),
+                    ),
+                    total: Type.Optional(
+                        Type.Number({ minimum: 0, description: '供应商返回的总额度或上限' }),
+                    ),
+                    unlimited: Type.Optional(
+                        Type.Boolean({ description: 'Key没有单独限额，不表示账号免费或余额无限' }),
+                    ),
+                },
+                { additionalProperties: false, description: '一项供应商余额或额度' },
+            ),
+            { minItems: 1, maxItems: 10, description: '仅保留归一化额度，不公开上游原始响应' },
+        ),
+    },
+    {
+        additionalProperties: false,
+        description: '供应商额度查询结果快照，不保证执行时仍有相同余额',
+    },
+);
+export type AgentProviderBalanceInput = Static<typeof AgentProviderBalanceInputSchema>;
+export type AgentProviderBalance = Static<typeof AgentProviderBalanceSchema>;

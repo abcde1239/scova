@@ -154,6 +154,12 @@ export const TaskConfigSchema = Type.Object(
         timezone: TimezoneSchema,
         schedule: ScheduleSchema,
         outputFormat: OutputFormatSchema,
+        agentProviderId: Type.Optional(
+            Type.String({
+                ...UuidSchema,
+                description: '指定本账号执行Agent配置；省略时使用账号默认',
+            }),
+        ),
         budget: BudgetSchema,
         notificationPreference: NotificationPreferenceSchema,
     },

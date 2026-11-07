@@ -58,6 +58,21 @@ const ToolCallProperties = { toolCallId: UuidSchema, tool: ToolNameSchema };
 export const RunEventSchema = Type.Union(
     [
         eventSchema(
+            'research.updated',
+            Type.Object(
+                {
+                    state: Type.Union([
+                        Type.Literal('waiting'),
+                        Type.Literal('cooldown'),
+                        Type.Literal('cache_hit'),
+                        Type.Literal('claims_repair'),
+                    ]),
+                },
+                { additionalProperties: false },
+            ),
+            '研究阶段固定诊断，不包含提示词或上游原文',
+        ),
+        eventSchema(
             'run.queued',
             Type.Object(
                 { status: Type.Literal('queued'), taskVersionId: UuidSchema },

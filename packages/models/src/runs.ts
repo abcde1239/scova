@@ -10,6 +10,7 @@ import {
     describeProperties,
 } from './common.ts';
 import { BudgetSchema } from './tasks.ts';
+import { ReportValueSchema } from './report-value.ts';
 
 const CountSchema = Type.Integer({
     minimum: 0,
@@ -28,6 +29,35 @@ export const UsageSchema = Type.Object(
 );
 export const CoverageSchema = Type.Object(
     {
+        reportValue: Type.Optional(ReportValueSchema),
+        notes: Type.Optional(
+            Type.Array(NonEmptyTextSchema, {
+                maxItems: 1200,
+                description: '筛选策略与背景说明，不代表执行失败或已确认的事实',
+            }),
+        ),
+        research: Type.Optional(
+            Type.Object(
+                {
+                    candidates: CountSchema,
+                    selected: CountSchema,
+                    readAttempts: CountSchema,
+                    readSuccess: CountSchema,
+                    relatedPages: CountSchema,
+                    supplementalSearches: CountSchema,
+                    acceptedClaims: CountSchema,
+                    uncertainClaims: Type.Optional(CountSchema),
+                    rejectedClaims: CountSchema,
+                    cacheHits: CountSchema,
+                    networkAttempts: CountSchema,
+                },
+                {
+                    additionalProperties: false,
+                    description:
+                        '当前运行研究统计；相关性为启发式筛选，不代表事实认证；旧记录可缺省',
+                },
+            ),
+        ),
         completeness: Type.Union([Type.Literal('complete'), Type.Literal('partial')]),
         searchedQueries: Type.Array(NonEmptyTextSchema, {
             description: '已经执行的查询摘要，不包含完整提示词',
@@ -101,6 +131,11 @@ export const RunCommandResponseSchema = Type.Object(
 export const RunCommandInputSchema = Type.Object(
     {
         mode: Type.Optional(Type.Literal('live')),
+        agentProviderId: Type.Optional(
+            Type.Union([UuidSchema, Type.Null()], {
+                description: '本次执行使用的本人Agent配置；省略沿用任务配置，null使用账号默认',
+            }),
+        ),
     },
     {
         additionalProperties: false,
