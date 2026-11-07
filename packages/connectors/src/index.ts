@@ -7,6 +7,8 @@ export * from './reader.ts';
 export * from './dates.ts';
 export * from './pipeline.ts';
 export * from './searxng.ts';
+export * from './search-ranking.ts';
 export { listProviderModels, type ModelCatalogInput } from './model-catalog.ts';
+export * from './provider-balance.ts';
 export { createModelDnsResolver, createModelHttpClient } from './model-http.ts';
 export { createReaderDnsResolver, createReaderHttpClient } from './reader-http.ts';

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { JSDOM } from 'jsdom';
+import { JSDOM, VirtualConsole } from 'jsdom';
 import { Readability } from '@mozilla/readability';
 import { normalizeUrl, positiveLimit, withDeadline } from './http.ts';
 import { createReaderHttpClient } from './reader-http.ts';
@@ -57,7 +57,14 @@ export function createPageReader(
                     const charset = contentType.match(/charset\s*=\s*["']?([^;\s"']+)/i)?.[1];
                     if (charset && !/^utf-?8$/i.test(charset))
                         throw new ConnectorError('invalid_response', '网页字符编码不支持');
-                    const dom = new JSDOM(response.body, { url: response.url });
+                    // Reader extracts text, not rendered styles. Modern source CSS can be valid
+                    // in browsers while unsupported by jsdom's CSS parser. Keep other diagnostics.
+                    const virtualConsole = new VirtualConsole();
+                    virtualConsole.on('jsdomError', (error) => {
+                        if (Reflect.get(error, 'type') !== 'css parsing')
+                            console.error(error.message);
+                    });
+                    const dom = new JSDOM(response.body, { url: response.url, virtualConsole });
                     try {
                         const document = dom.window.document;
                         if (document.getElementsByTagName('*').length > 20_000)

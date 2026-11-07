@@ -12,6 +12,17 @@ import type { HttpTransport, ResolvedAddress, SafeHttpClient } from './http.ts';
 import { prepareProvider } from './providers.ts';
 import { ConnectorError } from './types.ts';
 import type { SearchProvider, SearchResult } from './types.ts';
+import { plainSearchQuery, rankSearchCandidates } from './search-ranking.ts';
+
+export const SEARXNG_ENGINES = ['bing', 'duckduckgo', 'google cse'] as const;
+function validEngines(value: string[]): boolean {
+    return (
+        value.length > 0 &&
+        value.length <= 3 &&
+        new Set(value).size === value.length &&
+        value.every((engine) => (SEARXNG_ENGINES as readonly string[]).includes(engine))
+    );
+}
 
 export const DEFAULT_SEARXNG_BASE_URL = 'http://127.0.0.1:8080';
 
@@ -73,7 +84,10 @@ export function createSearxngServiceClient(
             if (
                 form.get('format') !== 'json' ||
                 !form.get('q')?.trim() ||
-                [...form.keys()].some((key) => key !== 'q' && key !== 'format') ||
+                [...form.keys()].some((key) => !['q', 'format', 'engines'].includes(key)) ||
+                form.getAll('engines').length > 1 ||
+                (form.has('engines') && !validEngines(form.get('engines')!.split(','))) ||
+                plainSearchQuery(form.get('q')!) !== form.get('q')!.trim() ||
                 form.getAll('q').length !== 1 ||
                 form.getAll('format').length !== 1
             ) {
@@ -172,11 +186,18 @@ export function createSearxngSearch(
         async search(query, context = {}) {
             if (!query.trim() || query.length > 2_000)
                 throw new ConnectorError('configuration', '搜索词为空或超长');
+            const searchQuery = plainSearchQuery(query);
+            if (!searchQuery || (context.engines && !validEngines(context.engines)))
+                throw new ConnectorError('configuration', '搜索词或引擎范围无效');
             const response = await provider
                 .call('search', context, (signal) =>
                     provider.http.request(endpoint, {
                         method: 'POST',
-                        body: new URLSearchParams({ q: query, format: 'json' }).toString(),
+                        body: new URLSearchParams({
+                            q: searchQuery,
+                            format: 'json',
+                            ...(context.engines ? { engines: context.engines.join(',') } : {}),
+                        }).toString(),
                         headers: {
                             'content-type': 'application/x-www-form-urlencoded',
                             accept: 'application/json',
@@ -188,12 +209,14 @@ export function createSearxngSearch(
                 )
                 .catch((error: unknown) => {
                     if (error instanceof ConnectorError && error.status === 403) {
-                        throw new ConnectorError(
+                        const denied = new ConnectorError(
                             'http',
                             'SearxNG 拒绝请求，请检查 JSON 格式启用及访问控制配置',
                             false,
                             403,
                         );
+                        denied.retryAfterMs = error.retryAfterMs;
+                        throw denied;
                     }
                     throw error;
                 });
@@ -240,7 +263,9 @@ export function createSearxngSearch(
                       ? 'rate_limited'
                       : /captcha/i.test(item[1])
                         ? 'captcha'
-                        : 'unavailable';
+                        : /403|denied|forbidden/i.test(item[1])
+                          ? 'access_denied'
+                          : 'unavailable';
                 return { engine: item[0], error: reason };
             });
             const gaps = unresponsiveEngines.map(
@@ -269,7 +294,7 @@ export function createSearxngSearch(
                     gaps.push(`第 ${index + 1} 条来源 URL 不安全或无效，已排除`);
                     continue;
                 }
-                if (results.length >= maxResults) continue;
+                if (results.length >= 30) continue;
                 const engines = Array.isArray(item.engines)
                     ? item.engines
                           .filter(
@@ -289,13 +314,17 @@ export function createSearxngSearch(
                     ...(engines.length ? { engines } : {}),
                 });
             }
-            const truncated = parsed.results.length - discardedResults > results.length;
+            const selected = rankSearchCandidates(query, results).slice(0, maxResults);
+            const truncated = parsed.results.length - discardedResults > selected.length;
             if (truncated) gaps.push('搜索结果已按调用上限截断');
-            if (!results.length && gaps.length)
-                throw new ConnectorError(
+            if (!results.length && gaps.length) {
+                const error = new ConnectorError(
                     unresponsiveEngines.length ? 'search_unavailable' : 'invalid_response',
                     '搜索没有可用来源，存在引擎失败或无效条目',
                 );
+                error.engineFailures = unresponsiveEngines;
+                throw error;
+            }
             const totalResults =
                 Number.isSafeInteger(parsed.number_of_results) &&
                 (parsed.number_of_results as number) >= 0
@@ -307,13 +336,13 @@ export function createSearxngSearch(
                 provider: 'searxng',
                 query,
                 searchedAt: new Date().toISOString(),
-                results,
+                results: selected,
                 coverage: {
                     complete: gaps.length === 0,
                     gaps,
                     unresponsiveEngines,
                     receivedResults: parsed.results.length,
-                    returnedResults: results.length,
+                    returnedResults: selected.length,
                     discardedResults,
                     totalResults,
                     truncated,

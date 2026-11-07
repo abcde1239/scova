@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { createServer, type RequestListener, type Server } from 'node:http';
 import { once } from 'node:events';
+import { JSDOM, VirtualConsole } from 'jsdom';
 import { describe, expect, it, vi } from 'vite-plus/test';
 import {
     createSafeHttpClient,
@@ -412,6 +413,91 @@ describe('Tavily search and bounded attempts', () => {
 });
 
 describe('structured model output and usage', () => {
+    it.each([
+        [402, { message: 'DO_NOT_RENDER fixture-key' }],
+        [429, { error: { code: 'insufficient_quota', message: 'DO_NOT_RENDER' } }],
+        [403, { error: { type: 'insufficient_balance' } }],
+        [400, { code: 'balance_insufficient' }],
+    ])('stops model retries for explicit quota failure (%i)', async (status, body) => {
+        const { http, transport } = makeHttp(json(body, status));
+        const error = await createModelProvider({ apiKey: 'fixture-key', model: 'fixture', http })
+            .generateStructured(modelInput)
+            .catch((failure: unknown) => failure);
+        expect(error).toMatchObject({ code: 'model_quota_exceeded', retryable: false, status });
+        expect(String(error)).not.toMatch(/DO_NOT_RENDER|fixture-key/);
+        expect(transport).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps ordinary RPM limits retryable and does not infer quota from arbitrary messages', async () => {
+        const { http, transport } = makeHttp(
+            json(
+                {
+                    error: {
+                        code: 'rate_limit_exceeded',
+                        message: 'insufficient_quota DO_NOT_RENDER',
+                    },
+                },
+                429,
+            ),
+        );
+        await expect(
+            createModelProvider({
+                apiKey: 'fixture-key',
+                model: 'fixture',
+                http,
+                maxAttempts: 2,
+                retryDelayMs: 0,
+            }).generateStructured(modelInput),
+        ).rejects.toMatchObject({ code: 'http', retryable: true, status: 429 });
+        expect(transport).toHaveBeenCalledTimes(2);
+        const search = makeHttp(json({ error: { code: 'insufficient_quota' } }, 402));
+        await expect(
+            createTavilySearch({ apiKey: 'fixture-key', http: search.http }).search('test'),
+        ).rejects.toMatchObject({ code: 'http', status: 402 });
+    });
+
+    it.each([20_000, 200_000])(
+        'never retries before the model Retry-After (%i ms)',
+        async (wait) => {
+            vi.useFakeTimers();
+            try {
+                const transport = vi
+                    .fn<HttpTransport>()
+                    .mockResolvedValueOnce({
+                        status: 429,
+                        headers: { 'retry-after': String(wait / 1000) },
+                        body: '{}',
+                    })
+                    .mockResolvedValue(json(modelResponse()));
+                const http = createSafeHttpClient({
+                    resolve: async () => [publicAddress],
+                    transport,
+                });
+                const pending = createModelProvider({
+                    apiKey: 'fixture-key',
+                    model: 'fixture',
+                    http,
+                    retryDelayMs: 0,
+                }).generateStructured(modelInput, { timeoutMs: 30_000 });
+                const settled = pending.then(
+                    (value) => ({ value }),
+                    (error) => ({ error }),
+                );
+                await vi.advanceTimersByTimeAsync(19_999);
+                expect(transport).toHaveBeenCalledTimes(1);
+                await vi.advanceTimersByTimeAsync(wait > 30_000 ? 10_001 : 1);
+                expect(await settled).toMatchObject(
+                    wait > 30_000
+                        ? { error: { code: 'timeout' } }
+                        : { value: { data: { answer: 'supported' } } },
+                );
+                expect(transport).toHaveBeenCalledTimes(wait > 30_000 ? 1 : 2);
+            } finally {
+                vi.useRealTimers();
+            }
+        },
+    );
+
     it('rejects an insecure model endpoint before sending credentials', () => {
         const { http, transport } = makeHttp(json(modelResponse()));
         expect(() =>
@@ -534,6 +620,37 @@ describe('structured model output and usage', () => {
 });
 
 describe('Readability provenance and untrusted content', () => {
+    it('extracts identical text and provenance despite unsupported source CSS without noisy diagnostics', async () => {
+        const css =
+            '<style>.social-share{.dark &{color:var(--color)}} @layer source { p { color: red } }</style>';
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            const unsupportedCss = vi.fn();
+            const virtualConsole = new VirtualConsole();
+            virtualConsole.on('jsdomError', unsupportedCss);
+            const source = new JSDOM(css, { virtualConsole });
+            source.window.close();
+            expect(unsupportedCss).toHaveBeenCalled();
+            expect(Reflect.get(unsupportedCss.mock.calls[0][0], 'type')).toBe('css parsing');
+            const read = (body: string) => {
+                const { http } = makeHttp({
+                    status: 200,
+                    headers: { 'content-type': 'text/html' },
+                    body,
+                });
+                return createPageReader({ http }).read('https://public.example/notice');
+            };
+            const plain = await read(articleHtml);
+            const styled = await read(articleHtml.replace('</head>', `${css}</head>`));
+            expect(styled.text).toBe(plain.text);
+            expect(styled.contentHash).toBe(plain.contentHash);
+            expect(styled.url).toBe(plain.url);
+            expect(styled.extractionVersion).toBe(plain.extractionVersion);
+            expect(error).not.toHaveBeenCalled();
+        } finally {
+            error.mockRestore();
+        }
+    });
     it('rejects a document exceeding the DOM element ceiling', async () => {
         const { http } = makeHttp({
             status: 200,

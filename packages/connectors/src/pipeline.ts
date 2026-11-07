@@ -29,6 +29,7 @@ export function createConnectorBundle(
         tavilyApiKey?: string;
         searchProvider?: 'searxng' | 'tavily';
         searxngBaseUrl?: string;
+        managedSearch?: boolean;
         modelApiKey?: string;
         model?: string;
         modelBaseUrl?: string;
@@ -48,7 +49,12 @@ export function createConnectorBundle(
             mode: 'live',
             search:
                 searchProvider === 'searxng'
-                    ? createSearxngSearch({ baseUrl: options.searxngBaseUrl, http: options.http })
+                    ? createSearxngSearch({
+                          baseUrl: options.searxngBaseUrl,
+                          http: options.http,
+                          maxResults: options.managedSearch ? 10 : undefined,
+                          maxAttempts: options.managedSearch ? 1 : undefined,
+                      })
                     : createTavilySearch({ apiKey: options.tavilyApiKey!, http: options.http }),
             reader: createPageReader({ http: options.http }),
             model: createModelProvider({
