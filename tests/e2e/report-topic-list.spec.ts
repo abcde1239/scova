@@ -38,7 +38,7 @@ declare global {
         };
     }
 }
-const path = '/test-fixtures/report-topic-list.html';
+const path = '/tests/fixtures/reports/report-topic-list.html';
 const kinds = ['fact', 'inference', 'conflict', 'insufficient'];
 const labels = ['来源事实', 'Agent 推断', '冲突证据', '证据不足'];
 const article = (page: Page) => page.locator('article.report-frame');

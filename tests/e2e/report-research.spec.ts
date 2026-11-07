@@ -111,7 +111,7 @@ function researchReport(baselineOnly = false) {
 }
 
 type State = { baselineOnly: boolean; requests: { method: string; path: string }[] };
-const fixturePath = '/test-fixtures/report-research.html';
+const fixturePath = '/tests/fixtures/reports/report-research.html';
 interface ResearchFixture {
     setReport(value: ReturnType<typeof researchReport>): void;
     getReport(): ReturnType<typeof researchReport>;

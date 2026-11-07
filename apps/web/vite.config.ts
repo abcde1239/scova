@@ -25,18 +25,21 @@ export default defineConfig(({ mode }) => {
                               main: fileURLToPath(new URL('./index.html', import.meta.url)),
                               reportTopicList: fileURLToPath(
                                   new URL(
-                                      './test-fixtures/report-topic-list.html',
+                                      './tests/fixtures/reports/report-topic-list.html',
                                       import.meta.url,
                                   ),
                               ),
                               reportComparison: fileURLToPath(
                                   new URL(
-                                      './test-fixtures/report-comparison.html',
+                                      './tests/fixtures/reports/report-comparison.html',
                                       import.meta.url,
                                   ),
                               ),
                               reportResearch: fileURLToPath(
-                                  new URL('./test-fixtures/report-research.html', import.meta.url),
+                                  new URL(
+                                      './tests/fixtures/reports/report-research.html',
+                                      import.meta.url,
+                                  ),
                               ),
                           },
                       },

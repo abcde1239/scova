@@ -12,7 +12,7 @@ declare global {
         };
     }
 }
-const path = '/test-fixtures/report-comparison.html';
+const path = '/tests/fixtures/reports/report-comparison.html';
 const kinds = [
     'baseline',
     'new',

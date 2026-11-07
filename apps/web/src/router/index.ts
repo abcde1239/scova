@@ -12,6 +12,13 @@ declare module 'vue-router' {
     }
 }
 
+const fixtureModules =
+    import.meta.env.MODE === 'test'
+        ? import.meta.glob<{ default: RouteRecordRaw[] }>('../../tests/fixtures/routes.ts', {
+              eager: true,
+          })
+        : {};
+
 const modules = import.meta.glob<{ default: RouteRecordRaw[] }>('./pages/*.ts', { eager: true });
 
 /** 已接入的独立领域模块可按同名替换壳层入口，两个真实实现不能互相覆盖。 */
@@ -42,7 +49,9 @@ export function pageTitle(route: Pick<RouteLocationNormalizedLoaded, 'meta'>): s
 
 export function createWorkbenchRouter(
     history: RouterHistory = createWebHistory(import.meta.env.BASE_URL),
-    pages = collectPages(Object.values(modules).map((module) => module.default)),
+    pages = collectPages(
+        Object.values({ ...modules, ...fixtureModules }).map((module) => module.default),
+    ),
 ) {
     return createRouter({
         history,

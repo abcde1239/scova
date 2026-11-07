@@ -31,7 +31,7 @@ import ActionButton from '@/components/common/ActionButton.vue';
 import SourceItem from '@/components/source/SourceItem.vue';
 import SourceImage from '@/components/source/SourceImage.vue';
 import type { SourceImageInput } from '@/models/source-image';
-import mapUrl from '@/views/examples/source-map.svg?url&no-inline';
+import mapUrl from './source-map.svg?url&no-inline';
 
 const map: SourceImageInput = {
     src: mapUrl,
