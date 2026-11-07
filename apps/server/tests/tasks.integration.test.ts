@@ -726,6 +726,365 @@ describe('长期任务、不可变版本与并发编辑', () => {
         ).toBe(3);
     });
 
+    it('清除任务校验归属、CSRF、修订和活动执行，原子清理报告及历史并保留共享来源', async () => {
+        const owner = await register(),
+            other = await register();
+        const user = await json(await request('/api/v1/me', { headers: { cookie: owner.cookie } }));
+        const userId = user.user.id;
+        const created = await json(
+            await request('/api/v1/tasks', {
+                method: 'POST',
+                headers: authHeaders(owner),
+                body: JSON.stringify({ config: config() }),
+            }),
+        );
+        const path = `/api/v1/tasks/${created.task.id}`;
+        const remove = (who = owner, revision = '"1"') =>
+            request(path, {
+                method: 'DELETE',
+                headers: authHeaders(who, { 'if-match': revision }),
+            });
+        expect((await request(path, { method: 'DELETE' })).status).toBe(401);
+        expect(
+            (
+                await request(path, {
+                    method: 'DELETE',
+                    headers: { cookie: owner.cookie, origin, 'if-match': '"1"' },
+                })
+            ).status,
+        ).toBe(403);
+        expect(
+            (await request(path, { method: 'DELETE', headers: authHeaders(owner) })).status,
+        ).toBe(428);
+        expect((await remove(other)).status).toBe(404);
+        expect((await remove(owner, '"99"')).status).toBe(409);
+        const started = await request(`${path}/runs`, {
+            method: 'POST',
+            headers: authHeaders(owner, { 'idempotency-key': 'delete-test-run-0001' }),
+            body: '{}',
+        });
+        expect(started.status).toBe(202);
+        const run = (await json(started)).run;
+        const active = await remove();
+        expect(active.status).toBe(409);
+        expect((await json(active)).code).toBe('TASK_RUN_ACTIVE');
+        await db
+            .update(tables.runs)
+            .set({
+                status: 'partial',
+                finishedAt: now,
+                coverageJson: {
+                    completeness: 'partial',
+                    searchedQueries: [],
+                    gaps: ['fixture'],
+                    exhausted: [],
+                },
+            })
+            .where(eq(tables.runs.id, run.id));
+        const [report] = await db
+            .insert(tables.reports)
+            .values({
+                userId,
+                runId: run.id,
+                taskId: created.task.id,
+                taskVersionId: created.version.id,
+                title: '删除范围样本',
+                summary: '测试',
+                format: 'brief',
+                completeness: 'partial',
+            })
+            .returning();
+        const [source] = await db
+            .insert(tables.sources)
+            .values({
+                userId,
+                canonicalUrl: 'https://example.test/delete-scope',
+                canonicalUrlHash: 'a'.repeat(64),
+            })
+            .returning();
+        await db.insert(tables.bookmarks).values({ userId, sourceId: source!.id });
+        const [snapshot] = await db
+            .insert(tables.sourceSnapshots)
+            .values({
+                userId,
+                sourceId: source!.id,
+                contentHash: 'b'.repeat(64),
+                extractorVersion: 'fixture',
+                title: '共享快照',
+                textBody: '保留正文',
+            })
+            .returning();
+        await db.insert(tables.runSources).values({
+            userId,
+            runId: run.id,
+            sourceId: source!.id,
+            snapshotId: snapshot!.id,
+            requestedUrl: source!.canonicalUrl,
+            fetchStatus: 'succeeded',
+        });
+        const [evidence] = await db
+            .insert(tables.evidence)
+            .values({
+                userId,
+                runId: run.id,
+                snapshotId: snapshot!.id,
+                quote: '保留正文',
+                quoteHash: 'c'.repeat(64),
+                selectorJson: { start: 0, end: 4 },
+            })
+            .returning();
+        const [claim] = await db
+            .insert(tables.claims)
+            .values({
+                userId,
+                taskId: created.task.id,
+                reportId: report!.id,
+                kind: 'fact',
+                text: '样本结论',
+                confidenceLabel: '来源陈述',
+                order: 0,
+            })
+            .returning();
+        await db
+            .insert(tables.claimEvidence)
+            .values({ userId, claimId: claim!.id, evidenceId: evidence!.id, relation: 'supports' });
+        const [change] = await db
+            .insert(tables.changeRecords)
+            .values({
+                userId,
+                reportId: report!.id,
+                sourceId: source!.id,
+                kind: 'new',
+                newSnapshotId: snapshot!.id,
+                factKey: 'fixture',
+                newValue: '样本',
+                importance: 'normal',
+                reason: '测试',
+            })
+            .returning();
+        await db
+            .insert(tables.changeEvidence)
+            .values({ userId, changeRecordId: change!.id, evidenceId: evidence!.id, side: 'new' });
+        await db
+            .insert(tables.feedback)
+            .values({ userId, taskId: created.task.id, claimId: claim!.id, kind: 'known' });
+        const storedRun = (await db.query.runs.findFirst({ where: eq(tables.runs.id, run.id) }))!;
+        await db.insert(tables.baselines).values({
+            userId,
+            taskId: created.task.id,
+            completeRunId: run.id,
+            comparisonScopeHash: storedRun.comparisonScopeHash,
+        });
+        const [occurrence] = await db
+            .insert(tables.scheduleOccurrences)
+            .values({
+                userId,
+                taskId: created.task.id,
+                scheduleRevision: 1,
+                scheduledAt: now,
+                runId: run.id,
+            })
+            .returning();
+        await db
+            .update(tables.runs)
+            .set({ occurrenceId: occurrence!.id })
+            .where(eq(tables.runs.id, run.id));
+        await db.insert(tables.runs).values({
+            userId,
+            taskId: created.task.id,
+            taskVersionId: created.version.id,
+            comparisonScopeHash: storedRun.comparisonScopeHash,
+            mode: 'live',
+            trigger: 'retry',
+            status: 'failed',
+            parentRunId: run.id,
+            baselineRunId: run.id,
+            budgetJson: config().budget,
+        });
+        await db.insert(tables.toolCalls).values({
+            userId,
+            runId: run.id,
+            operationKey: 'fixture',
+            tool: 'read',
+            attemptNo: 1,
+            inputSummary: 'fixture',
+            reservedBudget: {},
+        });
+        await db.insert(tables.notes).values([
+            { userId, reportId: report!.id, body: '报告笔记' },
+            { userId, sourceId: source!.id, body: '来源笔记' },
+        ]);
+        await db.insert(tables.inboxItems).values({ userId, reportId: report!.id });
+        await db
+            .insert(tables.notifications)
+            .values({ userId, runId: run.id, reportId: report!.id, kind: 'summary' });
+        const [question] = await db
+            .insert(tables.reportQuestions)
+            .values({ userId, reportId: report!.id, question: '问题', followupRunId: run.id })
+            .returning();
+        await db
+            .insert(tables.questionEvidence)
+            .values({ userId, questionId: question!.id, evidenceId: evidence!.id });
+        const keep = await json(
+            await request('/api/v1/tasks', {
+                method: 'POST',
+                headers: authHeaders(owner),
+                body: JSON.stringify({ config: config({ title: '保留任务' }) }),
+            }),
+        );
+        const result = await remove();
+        expect(result.status).toBe(204);
+        expect(await result.text()).toBe('');
+        expect((await request(path, { headers: { cookie: owner.cookie } })).status).toBe(404);
+        expect(
+            (await request(`/api/v1/tasks/${keep.task.id}`, { headers: { cookie: owner.cookie } }))
+                .status,
+        ).toBe(200);
+        for (const table of [
+            tables.runs,
+            tables.reports,
+            tables.notifications,
+            tables.inboxItems,
+            tables.reportQuestions,
+            tables.outbox,
+            tables.idempotencyRecords,
+            tables.claims,
+            tables.claimEvidence,
+            tables.changeRecords,
+            tables.changeEvidence,
+            tables.evidence,
+            tables.questionEvidence,
+            tables.runSources,
+            tables.toolCalls,
+            tables.scheduleOccurrences,
+            tables.baselines,
+            tables.feedback,
+        ])
+            expect(await db.select().from(table).where(eq(table.userId, userId))).toHaveLength(0);
+        expect(
+            await db.select().from(tables.notes).where(eq(tables.notes.userId, userId)),
+        ).toMatchObject([{ body: '来源笔记' }]);
+        expect(
+            await db.select().from(tables.sources).where(eq(tables.sources.userId, userId)),
+        ).toHaveLength(1);
+        expect(
+            await db
+                .select()
+                .from(tables.sourceSnapshots)
+                .where(eq(tables.sourceSnapshots.userId, userId)),
+        ).toHaveLength(1);
+        expect(
+            await db.select().from(tables.bookmarks).where(eq(tables.bookmarks.userId, userId)),
+        ).toHaveLength(1);
+    });
+
+    it('任务和单次执行选择本人Agent，覆盖冻结、不改变账号默认，重发参数不可变化', async () => {
+        const owner = await register(),
+            other = await register();
+        const getId = async (who: typeof owner) =>
+            (await json(await request('/api/v1/me', { headers: { cookie: who.cookie } }))).user
+                .id as string;
+        const userId = await getId(owner),
+            otherId = await getId(other);
+        const makeProvider = async (uid: string, name: string, active = false) =>
+            (
+                await db
+                    .insert(tables.agentProviders)
+                    .values({
+                        userId: uid,
+                        name,
+                        protocol: 'openai_json',
+                        baseUrl: 'https://example.test/v1',
+                        model: name,
+                        encryptedApiKey: 'fixture-encrypted',
+                        active,
+                    })
+                    .returning()
+            )[0]!;
+        const a = await makeProvider(userId, 'A', true),
+            b = await makeProvider(userId, 'B'),
+            foreign = await makeProvider(otherId, 'C');
+        const create = (agentProviderId: string) =>
+            request('/api/v1/tasks', {
+                method: 'POST',
+                headers: authHeaders(owner),
+                body: JSON.stringify({ config: config({ agentProviderId }) }),
+            });
+        expect((await create(foreign.id)).status).toBe(422);
+        const created = await json(await create(b.id));
+        expect(created.version.config.agentProviderId).toBe(b.id);
+        const path = `/api/v1/tasks/${created.task.id}/runs`;
+        const start = (body: unknown, key: string) =>
+            request(path, {
+                method: 'POST',
+                headers: authHeaders(owner, { 'idempotency-key': `${key}-test-0001` }),
+                body: JSON.stringify(body),
+            });
+        expect((await start({ agentProviderId: foreign.id }, 'foreign-agent')).status).toBe(422);
+        const selected = await json(await start({ agentProviderId: a.id }, 'selected-agent'));
+        expect(selected.run.status).toBe('queued');
+        const row = await db.query.runs.findFirst({ where: eq(tables.runs.id, selected.run.id) });
+        expect(row!.followupConfigJson).toMatchObject({ agentProviderId: a.id });
+        expect((await start({ agentProviderId: b.id }, 'selected-agent')).status).toBe(409);
+        expect((await json(await start({ agentProviderId: a.id }, 'selected-agent'))).run.id).toBe(
+            selected.run.id,
+        );
+        await db
+            .update(tables.runs)
+            .set({ status: 'failed' })
+            .where(eq(tables.runs.id, selected.run.id));
+        const defaultRun = await json(await start({ agentProviderId: null }, 'default-agent'));
+        const defaultRow = await db.query.runs.findFirst({
+            where: eq(tables.runs.id, defaultRun.run.id),
+        });
+        expect(defaultRow!.followupConfigJson).not.toHaveProperty('agentProviderId');
+        expect(
+            (await db.query.agentProviders.findFirst({
+                where: eq(tables.agentProviders.id, a.id),
+            }))!.active,
+        ).toBe(true);
+        expect(
+            (await db.query.taskVersions.findFirst({
+                where: eq(tables.taskVersions.id, created.version.id),
+            }))!.configJson,
+        ).toMatchObject({ agentProviderId: b.id });
+        const { activeAgentProvider } = await import('../../worker/src/repo/agent-providers');
+        expect((await activeAgentProvider(db, userId, b.id))?.id).toBe(b.id);
+        expect(await activeAgentProvider(db, userId, foreign.id)).toBeNull();
+    });
+
+    it('清除与启动并发由同一任务锁串行，不留下孤立Run', async () => {
+        const owner = await register();
+        const created = await json(
+            await request('/api/v1/tasks', {
+                method: 'POST',
+                headers: authHeaders(owner),
+                body: JSON.stringify({ config: config() }),
+            }),
+        );
+        const path = `/api/v1/tasks/${created.task.id}`;
+        const [removed, started] = await Promise.all([
+            request(path, { method: 'DELETE', headers: authHeaders(owner, { 'if-match': '"1"' }) }),
+            request(`${path}/runs`, {
+                method: 'POST',
+                headers: authHeaders(owner, { 'idempotency-key': 'delete-start-race' }),
+                body: '{}',
+            }),
+        ]);
+        expect([
+            [204, 404],
+            [409, 202],
+        ]).toContainEqual([removed.status, started.status]);
+        const task = await db.query.tasks.findFirst({
+            where: eq(tables.tasks.id, created.task.id),
+        });
+        const runs = await db
+            .select()
+            .from(tables.runs)
+            .where(eq(tables.runs.taskId, created.task.id));
+        expect(runs).toHaveLength(task ? 1 : 0);
+    });
+
     it('并发计划控制与编辑共享修订互斥，只有一方生效', async () => {
         const owner = await register();
         const created = await json(

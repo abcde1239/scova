@@ -5,6 +5,8 @@ import {
     AgentProviderRevisionSchema,
     AgentProviderActivationSchema,
     AgentModelCatalogInputSchema,
+    AgentProviderBalanceInputSchema,
+    AgentProviderBalanceSchema,
     parseContract,
     type AgentProvider,
     type AgentProviderPurpose,
@@ -63,6 +65,93 @@ export function createAgentProviderService(services: ApiServices) {
             throw new ApiError(409, 'PROVIDER_CONFLICT', '配置已更新，请重新读取后再操作');
     }
     return {
+        async balance(userId: string, id: string, body: unknown, signal?: AbortSignal) {
+            const input = parseContract(AgentProviderBalanceInputSchema, body);
+            const row = await repo.get(userId, id);
+            revision(row, input.revision);
+            writable();
+            let apiKey: string;
+            try {
+                apiKey = openCredential(row.encryptedApiKey, userId, row.id);
+            } catch {
+                throw new ApiError(
+                    503,
+                    'CREDENTIAL_STORAGE_UNAVAILABLE',
+                    '模型密钥无法读取，请重新保存配置',
+                );
+            }
+            try {
+                const result = await services.providerBalance({
+                    baseUrl: row.baseUrl,
+                    apiKey,
+                    template: input.template,
+                    signal,
+                });
+                return parseContract(AgentProviderBalanceSchema, {
+                    ...result,
+                    checkedAt: services.clock().toISOString(),
+                });
+            } catch (cause) {
+                // 不向浏览器返回上游错误正文、URL或凭据。
+                if (cause instanceof ConnectorError) {
+                    if (
+                        cause.code === 'balance_unsupported' ||
+                        cause.status === 404 ||
+                        cause.status === 405
+                    )
+                        throw new ApiError(
+                            422,
+                            'PROVIDER_BALANCE_UNSUPPORTED',
+                            '该地址未提供所选额度接口；中转站可选择对应查询方式，其他供应商请查看其控制台',
+                        );
+                    if (cause.status === 401 || cause.status === 403)
+                        throw new ApiError(
+                            422,
+                            'PROVIDER_BALANCE_AUTH',
+                            '供应商拒绝额度查询，请检查密钥及额度接口权限',
+                        );
+                    const failures = {
+                        unsafe_url: [
+                            'PROVIDER_BALANCE_ADDRESS',
+                            '供应商地址未通过公网校验，请检查地址与DNS配置',
+                        ],
+                        timeout: ['PROVIDER_BALANCE_TIMEOUT', '读取供应商额度超时，请重试'],
+                        network: [
+                            'PROVIDER_BALANCE_NETWORK',
+                            '无法连接供应商额度接口，请检查网络、DNS与TLS后重试',
+                        ],
+                        invalid_response: [
+                            'PROVIDER_BALANCE_INVALID_RESPONSE',
+                            '供应商未返回可识别的额度，请核对查询方式；未将缺失值记为零',
+                        ],
+                        response_too_large: [
+                            'PROVIDER_BALANCE_TOO_LARGE',
+                            '供应商额度响应超过大小限制',
+                        ],
+                        aborted: ['PROVIDER_BALANCE_CANCELLED', '额度查询已取消'],
+                        configuration: [
+                            'PROVIDER_BALANCE_CONFIGURATION',
+                            '额度查询配置不可用，请检查服务端设置',
+                        ],
+                    } as const;
+                    if (cause.code in failures) {
+                        const [code, message] = failures[cause.code as keyof typeof failures];
+                        throw new ApiError(503, code, message);
+                    }
+                    if (cause.status === 429)
+                        throw new ApiError(
+                            503,
+                            'PROVIDER_BALANCE_RATE_LIMITED',
+                            '供应商额度查询过于频繁，请稍后重试',
+                        );
+                }
+                throw new ApiError(
+                    503,
+                    'PROVIDER_BALANCE_UNAVAILABLE',
+                    '暂时无法读取供应商额度，请稍后重试',
+                );
+            }
+        },
         async models(userId: string, body: unknown, signal?: AbortSignal) {
             const input = parseContract(AgentModelCatalogInputSchema, body);
             const baseUrl = providerBaseUrl(input.baseUrl);

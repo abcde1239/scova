@@ -1,7 +1,7 @@
 import { createDatabaseClient, closeDatabase, type DatabaseClient } from '@scova/db';
 import { createRequire } from 'node:module';
 import type { Redis } from 'ioredis';
-import { listProviderModels, type ModelProvider } from '@scova/connectors';
+import { listProviderModels, readProviderBalance, type ModelProvider } from '@scova/connectors';
 import {
     createTaskDraftModel,
     createTaskDraftPolicy,
@@ -35,6 +35,7 @@ export interface ApiServices {
     reportQuestionModel(userId?: string): ModelProvider | null | Promise<ModelProvider | null>;
     taskDraftModel(userId?: string): ModelProvider | null | Promise<ModelProvider | null>;
     providerModels: typeof listProviderModels;
+    providerBalance: typeof readProviderBalance;
     streams: ApiStreamRegistry;
     sse: SsePolicy;
     clock(): Date;
@@ -79,6 +80,7 @@ export function createDefaultServices(overrides: ApiServiceOverrides = {}): ApiS
     }
     const services: ApiServices = {
         providerModels: overrides.providerModels ?? listProviderModels,
+        providerBalance: overrides.providerBalance ?? readProviderBalance,
         origin,
         production: overrides.production ?? process.env.NODE_ENV === 'production',
         registrationEnabled:

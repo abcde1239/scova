@@ -31,6 +31,15 @@ export function createTaskHandlers(services: ApiServices) {
             return result;
         };
     return {
+        async remove(this: void, { request, set, params }: HttpContext & { params: TaskParams }) {
+            const session = await requireSession(request, services);
+            requireCsrf(request, session, services);
+            const ifMatch = request.headers.get('if-match');
+            if (!ifMatch)
+                throw new ApiError(428, 'REVISION_REQUIRED', '清除任务必须携带 If-Match 修订版本');
+            await tasks.remove(session.userId, params.taskId, parseRevisionEtag(ifMatch));
+            set.status = 204;
+        },
         pause: control('pause'),
         resume: control('resume'),
         archive: control('archive'),

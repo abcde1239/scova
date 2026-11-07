@@ -93,6 +93,17 @@ export function createTaskPlugin(services: ApiServices) {
                     '返回当前账号的任务摘要及不可变配置版本；不存在或跨账号资源统一返回404。',
             },
         })
+        .delete('/tasks/:taskId', handlers.remove, {
+            headers: OptionalRevisionHeadersSchema,
+            response: { 204: t.Void(), ...errors, 428: ApiErrorSchema },
+            detail: {
+                operationId: 'deleteTask',
+                tags: ['任务'],
+                summary: '永久清除任务及关联历史',
+                description:
+                    '需要会话、CSRF 和 If-Match。存在活动执行时返回409；原子删除任务版本、执行、报告、通知、报告笔记及问答，保留共享来源、快照和来源收藏。不可恢复。',
+            },
+        })
         .patch('/tasks/:taskId', handlers.update, {
             body: 'UpdateTaskInput',
             headers: OptionalRevisionHeadersSchema,

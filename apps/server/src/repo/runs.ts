@@ -19,6 +19,8 @@ import { firstRow, requireRow } from '@/utils/database.ts';
 function createRunStore(database: DatabaseExecutor) {
     const tasks = createTaskStore(database);
     return {
+        findAgentProvider: (userId: string, providerId: string) =>
+            tasks.findAgentProvider(userId, providerId),
         feedbackSnapshot(userId: string, taskId: string) {
             if (!('rollback' in database)) throw new Error('反馈快照必须在事务中读取');
             return captureFeedbackSnapshot(database, userId, taskId);

@@ -13,6 +13,7 @@ import {
 import { migrateDatabase } from '@scova/db/migrate';
 import { openCredential } from '@scova/shared/credentials';
 import type { AgentProvider } from '@scova/models';
+import type { readProviderBalance } from '@scova/connectors';
 import { createDefaultServices } from '../src/app/services';
 import { createApiErrorPlugin } from '../src/app/errors';
 import { createAgentProviderPlugin } from '../src/router/agent-providers';
@@ -43,7 +44,17 @@ const providerModels = vi.fn(async () => ({
     items: [{ id: 'model-a', name: 'Model A' }],
     truncated: false,
 }));
-const services = createDefaultServices({ origin, db: () => db, production: false, providerModels });
+const providerBalance = vi.fn<typeof readProviderBalance>(async () => ({
+    adapter: 'deepseek',
+    items: [{ label: '账号余额', scope: 'account', remaining: 6.88, unit: 'CNY' }],
+}));
+const services = createDefaultServices({
+    origin,
+    db: () => db,
+    production: false,
+    providerModels,
+    providerBalance,
+});
 const service = createAgentProviderService(services);
 const app = new Elysia().use(createApiErrorPlugin()).use(createAgentProviderPlugin(services));
 type Account = { id: string; token: string; csrf: string };
@@ -97,6 +108,11 @@ describe('账号供应商的 HTTP、数据库与模型选择', () => {
         await migrateDatabase({ connectionString: scopedUrl.toString() });
     }, 120_000);
     beforeEach(async () => {
+        providerBalance.mockReset();
+        providerBalance.mockResolvedValue({
+            adapter: 'deepseek',
+            items: [{ label: '账号余额', scope: 'account', remaining: 6.88, unit: 'CNY' }],
+        });
         providerModels.mockReset();
         providerModels.mockResolvedValue({
             items: [{ id: 'model-a', name: 'Model A' }],
@@ -112,6 +128,65 @@ describe('账号供应商的 HTTP、数据库与模型选择', () => {
         if (/^scova_providers_[0-9a-f]{32}$/.test(schema))
             await admin.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
         await admin.end();
+    });
+    it('额度读取要求本人会话、CSRF和修订号，复用密钥但不改配置', async () => {
+        const p = await create();
+        expect((await request('POST', `/${p.id}/balance`, { revision: 1 }, null)).status).toBe(401);
+        expect(
+            (
+                await request('POST', `/${p.id}/balance`, { revision: 1 }, owner, {
+                    'x-csrf-token': '',
+                })
+            ).status,
+        ).toBe(403);
+        expect((await request('POST', `/${p.id}/balance`, { revision: 1 }, other)).status).toBe(
+            404,
+        );
+        expect((await request('POST', `/${p.id}/balance`, { revision: 2 })).status).toBe(409);
+        expect(providerBalance).not.toHaveBeenCalled();
+        const before = (
+            await db.select().from(agentProviders).where(eq(agentProviders.id, p.id))
+        )[0];
+        const result = await request('POST', `/${p.id}/balance`, {
+            revision: 1,
+            template: 'new_api',
+        });
+        expect(result.status).toBe(200);
+        expect(result.headers.get('cache-control')).toBe('no-store');
+        const body = await result.json();
+        expect(body).toMatchObject({
+            adapter: 'deepseek',
+            items: [{ scope: 'account', remaining: 6.88, unit: 'CNY' }],
+        });
+        expect(JSON.stringify(body)).not.toContain(input.apiKey);
+        expect(providerBalance.mock.calls[0]?.[0]).toMatchObject({
+            baseUrl: input.baseUrl,
+            apiKey: input.apiKey,
+            template: 'new_api',
+        });
+        const after = (
+            await db.select().from(agentProviders).where(eq(agentProviders.id, p.id))
+        )[0];
+        expect(after).toEqual(before);
+    });
+    it.each([
+        ['balance_unsupported', undefined, 'PROVIDER_BALANCE_UNSUPPORTED', 422],
+        ['http', 403, 'PROVIDER_BALANCE_AUTH', 422],
+        ['http', 404, 'PROVIDER_BALANCE_UNSUPPORTED', 422],
+        ['network', undefined, 'PROVIDER_BALANCE_NETWORK', 503],
+        ['invalid_response', undefined, 'PROVIDER_BALANCE_INVALID_RESPONSE', 503],
+        ['http', 429, 'PROVIDER_BALANCE_RATE_LIMITED', 503],
+    ] as const)('额度错误脱敏：%s/%s', async (code, status, expectedCode, expectedStatus) => {
+        const p = await create();
+        providerBalance.mockRejectedValueOnce(
+            new ConnectorError(code, 'fixture-private-key UPSTREAM_SECRET', false, status),
+        );
+        const response = await request('POST', `/${p.id}/balance`, { revision: 1 });
+        expect(response.status).toBe(expectedStatus);
+        const body = await response.json();
+        expect(body.code).toBe(expectedCode);
+        expect(JSON.stringify(body)).not.toContain('UPSTREAM_SECRET');
+        expect(JSON.stringify(body)).not.toContain(input.apiKey);
     });
     it('加密存储且不回显密钥；不同账号列表、读取与写入均隔离', async () => {
         const provider = await create();

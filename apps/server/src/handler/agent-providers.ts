@@ -10,6 +10,10 @@ export function createAgentProviderHandlers(services: ApiServices) {
         return session;
     }
     return {
+        async balance(request: Request, id: string, body: unknown) {
+            const session = await writableSession(request);
+            return providers.balance(session.userId, id, body, request.signal);
+        },
         async models(request: Request, body: unknown) {
             const session = await writableSession(request);
             return providers.models(session.userId, body, request.signal);

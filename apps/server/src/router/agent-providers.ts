@@ -8,6 +8,8 @@ import {
     AgentProviderActivationSchema,
     AgentModelCatalogInputSchema,
     AgentModelCatalogSchema,
+    AgentProviderBalanceInputSchema,
+    AgentProviderBalanceSchema,
     ApiErrorSchema,
     UuidSchema,
 } from '@scova/models';
@@ -42,6 +44,22 @@ export function createAgentProviderPlugin(services: ApiServices) {
                 description: '仅返回当前账号的供应商和模型配置，不返回密钥。',
             },
         })
+        .post(
+            '/:id/balance',
+            ({ request, params, body }) => handlers.balance(request, params.id, body),
+            {
+                params,
+                body: AgentProviderBalanceInputSchema,
+                response: { 200: AgentProviderBalanceSchema, ...errors },
+                detail: {
+                    operationId: 'readAgentProviderBalance',
+                    tags: ['账号'],
+                    summary: '手动读取供应商余额与额度',
+                    description:
+                        '校验本人配置与修订号，服务端复用已存密钥读取固定同源额度接口；不生成内容、不保存或切换配置。区分账号余额和API Key额度，无接口或权限时明确报错。',
+                },
+            },
+        )
         .post('/models', ({ request, body }) => handlers.models(request, body), {
             body: AgentModelCatalogInputSchema,
             response: { 200: AgentModelCatalogSchema, ...errors },

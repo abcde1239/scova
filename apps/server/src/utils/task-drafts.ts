@@ -84,7 +84,10 @@ export const draftModelSchema = (() => {
                 .map(([key, nested]) => [key, removeFormats(nested)]),
         );
     };
-    return removeFormats(JSON.parse(JSON.stringify(TaskConfigSchema))) as Record<string, unknown>;
+    const schema = JSON.parse(JSON.stringify(TaskConfigSchema));
+    // 执行配置必须由账号显式选择，不允许自然语言模型生成供应商ID。
+    delete schema.properties.agentProviderId;
+    return removeFormats(schema) as Record<string, unknown>;
 })();
 
 export const draftPrompt = [
@@ -94,6 +97,7 @@ export const draftPrompt = [
     'Use only URLs literally present in the request. Do not invent URLs or sources.',
     'Keep the supplied server budget, timezone and notification preferences exactly.',
     'Default timeRange to rolling 7 days and outputFormat to brief when unspecified.',
+    'Choose only the requested output form: brief for 简报/摘要, list for 清单/条目, comparison for 对比/比较, research_report for 研究报告/详细研究. Do not propose multiple formats or extra deliverables.',
     'Only propose daily or weekly if the request explicitly says daily/每天/每日 or weekly/每周.',
     'A periodic schedule requires an explicitly specified localTime and weekday for weekly. Never guess either.',
     'Otherwise use manual. Hourly and other unsupported schedules must be manual.',

@@ -148,6 +148,26 @@ function decodeCursor(value: string | undefined): { updatedAt: string; id: strin
 export function createTaskService(services: ApiServices) {
     const repo = createTaskRepo(services);
     return {
+        async remove(userId: string, taskId: string, expectedRevision: number) {
+            await repo.transaction(async (store) => {
+                if (!UUID.test(taskId) || !(await store.lockTask(taskId, userId)).length)
+                    throw new ApiError(404, 'NOT_FOUND', '资源不存在');
+                const task = await ownedTask(taskId, userId, store);
+                if (task.revision !== expectedRevision)
+                    throw new ApiError(
+                        409,
+                        'REVISION_CONFLICT',
+                        '任务已变化，请刷新后重新确认清除',
+                    );
+                if (await store.lockActiveRun(taskId, userId))
+                    throw new ApiError(
+                        409,
+                        'TASK_RUN_ACTIVE',
+                        '任务仍有活动执行，请先取消执行，等待结束后再清除',
+                    );
+                await store.removeTaskData(taskId, userId);
+            });
+        },
         async list(userId: string, query: unknown) {
             const page = parseContract(PageQuerySchema, query);
             const take = Math.min(page.limit ?? 50, 100);
@@ -175,6 +195,15 @@ export function createTaskService(services: ApiServices) {
             const scopeHash = comparisonScopeHash(input.config);
             const next = nextRunAt(input.config, services.clock());
             const result = await repo.transaction(async (store) => {
+                if (
+                    input.config.agentProviderId &&
+                    !(await store.findAgentProvider(userId, input.config.agentProviderId))
+                )
+                    throw new ApiError(
+                        422,
+                        'AGENT_PROVIDER_UNAVAILABLE',
+                        '所选执行Agent配置不可用，请重新选择',
+                    );
                 const task = await store.createTask({
                     userId,
                     title: input.config.title,
@@ -208,6 +237,15 @@ export function createTaskService(services: ApiServices) {
                     if (!UUID.test(taskId) || !(await store.lockTask(taskId, userId)).length)
                         throw new ApiError(404, 'NOT_FOUND', '资源不存在');
                     const task = await ownedTask(taskId, userId, store);
+                    if (
+                        input.config.agentProviderId &&
+                        !(await store.findAgentProvider(userId, input.config.agentProviderId))
+                    )
+                        throw new ApiError(
+                            422,
+                            'AGENT_PROVIDER_UNAVAILABLE',
+                            '所选执行Agent配置不可用，请重新选择',
+                        );
                     if (task.status === 'archived')
                         throw new ApiError(409, 'TASK_ARCHIVED', '已归档任务不能再编辑');
                     if (task.revision !== expectedRevision)
