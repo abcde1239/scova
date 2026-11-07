@@ -3,6 +3,7 @@ import type { Locator, Page } from '@playwright/test';
 import type { Report, Run } from '@scova/models';
 import { expect, test } from './support/environment.ts';
 import type { Owner } from './support/environment.ts';
+import { auditInteractiveSemantics } from './support/accessibility-audit.ts';
 
 // Real same-origin services and controlled supplier delivery. Text enlargement is measured separately
 // from browser zoom and actual screen-reader output, which require manual verification.
@@ -279,4 +280,24 @@ test('键盘注册、登录、创建、执行、报告引用及菜单返回；�
     } finally {
         await context.close();
     }
+});
+
+test('代表工作台页面保持可访问名称、表单关联和状态播报契约', async ({ environment }) => {
+    const owner = await environment.owner();
+    for (const path of [
+        '/tasks',
+        '/inbox',
+        '/notifications',
+        '/library',
+        '/library/search',
+        '/account',
+        '/account/agent',
+        '/account/appearance',
+        '/tasks/reports',
+    ]) {
+        await owner.page.goto(path);
+        await expect(owner.page.getByRole('main')).toBeVisible();
+        expect(await auditInteractiveSemantics(owner.page), path).toEqual([]);
+    }
+    await owner.context.close();
 });
