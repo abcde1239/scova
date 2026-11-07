@@ -12,6 +12,7 @@ describe('公开工具错误分类', () => {
         ['response_too_large', 'TOOL_RESPONSE_TOO_LARGE'],
         ['invalid_response', 'TOOL_INVALID_RESPONSE'],
         ['output_truncated', 'TOOL_OUTPUT_TRUNCATED'],
+        ['model_quota_exceeded', 'TOOL_MODEL_QUOTA_EXCEEDED'],
         ['budget_exceeded', 'TOOL_BUDGET_EXCEEDED'],
         ['extraction_failed', 'TOOL_EXTRACTION_FAILED'],
     ] as const)('%s保留分类而不保存原始错误', (code, expected) => {

@@ -84,6 +84,7 @@ export function createWorkerResources(
                     agent = createAgentRuntime({
                         databaseUrl: config.databaseUrl,
                         database,
+                        redis,
                         enableDelivery: true,
                     });
                     await agent.connect();

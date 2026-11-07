@@ -11,6 +11,8 @@ import {
     inArray,
     lte,
     asc,
+    sql,
+    runEvents as dbRunEvents,
     type DatabaseTransaction,
     type JsonValue,
 } from '@scova/db';
@@ -88,6 +90,7 @@ export class AgentPersistenceError extends Error {
             | 'INVALID_TOOL_CALL'
             | 'TOOL_CALL_BUSY'
             | 'INVALID_TOOL_RESULT'
+            | 'MODEL_QUOTA_EXCEEDED'
             | 'INVALID_CHECKPOINT',
     ) {
         super(code);
@@ -276,6 +279,20 @@ export function createAgentRepository(db: DatabaseClient, token: RunLeaseToken):
                         usage: current,
                         output: completedOutput(completed),
                     };
+                // A confirmed billing failure is Run-local and survives lost checkpoints/epochs.
+                // Successful earlier operations remain replayable; a new Run starts unblocked.
+                if (input.tool === 'model') {
+                    const blocked = await tx.query.runEvents.findFirst({
+                        where: and(
+                            eq(dbRunEvents.runId, run.id),
+                            eq(dbRunEvents.userId, run.userId),
+                            eq(dbRunEvents.type, 'tool.failed'),
+                            sql`${dbRunEvents.payload}->>'tool' = 'model'`,
+                            sql`${dbRunEvents.payload}->>'code' = 'TOOL_MODEL_QUOTA_EXCEEDED'`,
+                        ),
+                    });
+                    if (blocked) throw new AgentPersistenceError('MODEL_QUOTA_EXCEEDED');
+                }
                 for (const call of calls) {
                     if (call.status !== 'reserved' && call.status !== 'running') continue;
                     if (heldReservation(call).leaseEpoch === token.leaseEpoch)

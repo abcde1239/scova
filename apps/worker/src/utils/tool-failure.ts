@@ -14,6 +14,7 @@ export const toolFailures = {
     TOOL_HTTP_ERROR: ['目标服务返回 HTTP 错误', true],
     TOOL_INVALID_RESPONSE: ['响应格式或内容类型不符合要求', false],
     TOOL_OUTPUT_TRUNCATED: ['模型输出达到长度上限，未完成生成', false],
+    TOOL_MODEL_QUOTA_EXCEEDED: ['模型服务额度不足，请补充额度后新建执行', false],
     TOOL_BUDGET_EXCEEDED: ['剩余调用预算不足', false],
     TOOL_EXTRACTION_FAILED: ['未能提取可用网页正文', false],
 } as const;

@@ -367,7 +367,11 @@ export function createRunRepository(db: DatabaseClient): RunRepository {
         },
         emit: (token, event) =>
             withRunFence(db, token, 'work', async (tx, run, now) => {
-                if (!/^(?:step\.|tool\.|budget\.updated$|coverage\.updated$)/.test(event.type))
+                if (
+                    !/^(?:step\.|tool\.|budget\.updated$|coverage\.updated$|research\.updated$)/.test(
+                        event.type,
+                    )
+                )
                     throw new Error('执行器只能写入进度事件');
                 await appendEvent(tx, run, now, event);
             }),
