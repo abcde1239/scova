@@ -10,6 +10,7 @@ export * from './reports.ts';
 export * from './report-value.ts';
 export * from './notifications.ts';
 export * from './events.ts';
+export * from './tool-diagnostics.ts';
 export * from './feedback.ts';
 export * from './validation.ts';
 

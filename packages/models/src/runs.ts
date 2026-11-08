@@ -5,6 +5,7 @@ import {
     NonEmptyTextSchema,
     RunOutcomeSchema,
     RunStatusSchema,
+    OutputFormatSchema,
     UuidSchema,
     refineSchema,
     describeProperties,
@@ -131,6 +132,7 @@ export const RunCommandResponseSchema = Type.Object(
 export const RunCommandInputSchema = Type.Object(
     {
         mode: Type.Optional(Type.Literal('live')),
+        outputFormat: Type.Optional(OutputFormatSchema),
         agentProviderId: Type.Optional(
             Type.Union([UuidSchema, Type.Null()], {
                 description: '本次执行使用的本人Agent配置；省略沿用任务配置，null使用账号默认',

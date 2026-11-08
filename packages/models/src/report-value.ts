@@ -45,6 +45,11 @@ export type ClaimAssessment = Static<typeof ClaimAssessmentSchema>;
 
 const ReportValueObject = Type.Object(
     {
+        researchMode: Type.Optional(
+            Type.Literal('collection', {
+                description: '以读取到的来源信息回答，不认证发布时间；timeScope保留真实判定',
+            }),
+        ),
         version: Type.Literal(1),
         questions: Type.Array(
             Type.Object(
@@ -122,7 +127,9 @@ export const ReportValueSchema = refineSchema(ReportValueObject, 'ScovaReportVal
                         q.claimIndexes.every((index) => {
                             const selection = selections.get(index);
                             return (
-                                selection?.timeScope === 'within' &&
+                                !!selection &&
+                                (selection.timeScope === 'within' ||
+                                    value.researchMode === 'collection') &&
                                 selection.assessment?.support === 'direct' &&
                                 !selection.assessment.conditions &&
                                 !selection.assessment.gap
