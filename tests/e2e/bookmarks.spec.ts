@@ -546,13 +546,13 @@ test('HTTP sample: delete completion does not steal focus moved by the user', as
     await page.goto('/library');
     await entries(page).getByRole('button', { name: '取消收藏', exact: true }).press('Enter');
     await expect.poll(() => deleting).toBe(true);
-    const appearance = page
+    const notification = page
         .getByRole('navigation', { name: '全局工具' })
-        .getByRole('link', { name: '通知', exact: true });
-    await appearance.focus();
+        .getByRole('button', { name: '通知', exact: true });
+    await notification.focus();
     release();
     await expect(entries(page)).toHaveCount(0);
-    await expect(appearance).toBeFocused();
+    await expect(notification).toBeFocused();
 });
 
 for (const old of ['null', 'old-id'] as const) {

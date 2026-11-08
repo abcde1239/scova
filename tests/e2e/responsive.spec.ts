@@ -34,6 +34,18 @@ for (const width of [1440, 1024, 768, 390, 360, 320]) {
                     link = page
                         .getByRole('navigation', { name: '账号操作' })
                         .getByRole('link', { name, exact: true });
+                } else if (name === '通知') {
+                    const notification = page
+                        .getByRole('navigation', { name: '全局工具', exact: true })
+                        .getByRole('button', { name: '通知', exact: true });
+                    const bounds = await notification.boundingBox();
+                    expect(bounds?.height).toBeGreaterThanOrEqual(44);
+                    expect(bounds?.width).toBeGreaterThanOrEqual(44);
+                    await notification.focus();
+                    await notification.press('Enter');
+                    link = page
+                        .getByRole('dialog', { name: '通知预览' })
+                        .getByRole('link', { name: '查看全部通知', exact: true });
                 } else {
                     link = page
                         .getByRole('navigation', {
