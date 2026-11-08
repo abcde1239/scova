@@ -157,6 +157,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         }
         await history.locator(`a[href="/runs/${id(11)}"]`).click();
         await expect(page.locator('.execution-detail')).toBeVisible();
+        await page.getByText('执行标识与时间', { exact: true }).click();
         await expect(
             page.locator('.execution-detail').getByText(id(211), { exact: true }),
         ).toBeVisible();
