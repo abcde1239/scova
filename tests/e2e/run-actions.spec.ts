@@ -115,6 +115,9 @@ async function samples(context: BrowserContext) {
             },
         }),
     );
+    await context.route('**/api/v1/me/agent-providers', (route) =>
+        route.fulfill({ json: { storageReady: true, systemConfigured: true, items: [] } }),
+    );
     await context.route('**/api/v1/reports**', (route) =>
         route.fulfill({ json: { items: [], nextCursor: null } }),
     );
@@ -192,7 +195,7 @@ async function samples(context: BrowserContext) {
     return { calls, state, runs, detail };
 }
 const actions = (page: Page) => page.locator('.run-actions');
-const commandStatus = (page: Page) => actions(page).getByRole('status');
+const commandStatus = (page: Page) => actions(page).locator('.command-result[role="status"]');
 const posts = (calls: Awaited<ReturnType<typeof samples>>['calls']) =>
     calls.filter((call) => call.method === 'POST');
 async function noOverflow(page: Page) {

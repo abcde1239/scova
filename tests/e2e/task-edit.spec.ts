@@ -90,6 +90,9 @@ async function samples(context: BrowserContext) {
             },
         }),
     );
+    await context.route('**/api/v1/me/agent-providers', (route) =>
+        route.fulfill({ json: { storageReady: true, systemConfigured: true, items: [] } }),
+    );
     await context.route('**/api/v1/tasks**', async (route) => {
         const request = route.request();
         const path = new URL(request.url()).pathname;
@@ -139,7 +142,9 @@ test('编辑任务的列表逐项保真：只修改一个关注点和链接', as
         'https://example.test/new',
     ]);
     await page.getByRole('button', { name: '确认保存修改', exact: true }).click();
-    await expect(page.locator('.task-config-form').getByRole('status')).toContainText('已保存');
+    await expect(page.locator('.task-config-form .save-success[role="status"]')).toContainText(
+        '已保存',
+    );
     expect(state.config).toEqual({
         ...original,
         focusPoints: [original.focusPoints[0], '申请流程，时间节点\n保留为一项'],
@@ -283,7 +288,9 @@ test('两个标签页同读一版本：B冲突不覆盖A且可复制草稿', asy
     await page.getByLabel('任务标题', { exact: true }).fill('标签页A已保存');
     await other.getByLabel('任务标题', { exact: true }).fill('标签页B未保存');
     await save(page).click();
-    await expect(page.locator('.task-config-form').getByRole('status')).toContainText('修改已保存');
+    await expect(page.locator('.task-config-form .save-success[role="status"]')).toContainText(
+        '修改已保存',
+    );
     await save(other).click();
     await expect(other.getByRole('alert')).toContainText('其他页面修改');
     await expect(other.getByLabel('任务标题', { exact: true })).toHaveValue('标签页B未保存');
@@ -306,7 +313,9 @@ test('摘要缓存不能替代编辑初读，进入编辑取得最新配置和ET
     expect(reads(calls).length).toBeGreaterThan(before);
     await title.fill('基于最新版本的修改');
     await save(page).click();
-    await expect(page.locator('.task-config-form').getByRole('status')).toContainText('修改已保存');
+    await expect(page.locator('.task-config-form .save-success[role="status"]')).toContainText(
+        '修改已保存',
+    );
     expect(patches(calls).map((call) => call.etag)).toEqual(['"3"']);
 });
 
@@ -316,7 +325,10 @@ test('编辑初读失败不展示摘要缓存表单，可显式重试', async ({
     await expect(page.getByRole('link', { name: '编辑任务配置', exact: true })).toBeVisible();
     state.getFailure = true;
     await page.getByRole('link', { name: '编辑任务配置', exact: true }).click();
-    await expect(page.getByRole('status')).toContainText('任务无法编辑');
+    await expect(page).toHaveURL(new RegExp(`${editPath}$`));
+    await expect(
+        page.getByRole('main').getByRole('status').filter({ hasText: '任务无法编辑' }),
+    ).toHaveText('加载失败：任务无法编辑，请检查权限、版本或稍后重试');
     await expect(page.locator('.task-config-form')).toHaveCount(0);
     expect(patches(calls)).toHaveLength(0);
     state.getFailure = false;
@@ -347,7 +359,9 @@ test('412保留草稿，重读失败与取消不丢内容或修订依据', async
     await expect(title).toHaveValue(original.title);
     await title.fill('重读后的修改');
     await save(page).click();
-    await expect(page.locator('.task-config-form').getByRole('status')).toContainText('修改已保存');
+    await expect(page.locator('.task-config-form .save-success[role="status"]')).toContainText(
+        '修改已保存',
+    );
     expect(patches(calls).map((call) => call.etag)).toEqual(['"1"', '"1"']);
 });
 
