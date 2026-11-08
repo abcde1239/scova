@@ -74,6 +74,15 @@ function setup(fetcher: typeof fetch) {
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe('手工任务配置', () => {
+    it('persists collection explicitly and preserves the choice when applying a draft', () => {
+        const draft = { ...validDraft(), researchMode: 'collection' };
+        expect(taskInput(draft).config.researchMode).toBe('collection');
+        expect(taskInput(validDraft()).config.researchMode).toBeUndefined();
+        const { controller } = setup(async () => Response.json(detail()));
+        controller.draft.researchMode = 'collection';
+        expect(controller.applyParsed(detail().version.config)).toBe(true);
+        expect(controller.draft.researchMode).toBe('collection');
+    });
     it('拒绝新填写的超额阶段分配，保留未改的历史低预算', () => {
         expect(() => taskInput({ ...validDraft(), maxOutputTokens: '1' })).toThrow();
         const original = {

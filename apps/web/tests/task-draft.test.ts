@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 import { effectScope } from 'vue';
-import type { SessionResponse, TaskConfig, TaskDraftResponse } from '@scova/models';
+import type { SessionResponse, TaskConfig, TaskDraftResponse, TaskDraftScope } from '@scova/models';
 import { createSessionLifecycle } from '@/api/session';
 import { validateDraftInput } from '@/api/task-drafts';
 import {
@@ -86,6 +86,64 @@ function setup(fetcher: typeof fetch, timeout?: number) {
 afterEach(() => cleanups.splice(0).forEach((cleanup) => cleanup()));
 
 describe('自然语言草稿与显式应用', () => {
+    it.each([false, true])('确认范围被完整发送，错配响应不能覆盖选择=%s', async (mismatch) => {
+        const scope: TaskDraftScope = { ...config(), researchMode: 'collection' };
+        const {
+            goal,
+            focusPoints,
+            exclusions,
+            sourcePreferences,
+            timeRange,
+            outputFormat,
+            researchMode,
+        } = scope;
+        const confirmed = {
+            goal,
+            focusPoints,
+            exclusions,
+            sourcePreferences,
+            timeRange,
+            outputFormat,
+            researchMode,
+        };
+        let body: unknown;
+        const { natural, task } = setup(async (_url, init) => {
+            body = JSON.parse(init?.body as string);
+            return Response.json({
+                ...response(),
+                config: {
+                    ...config(),
+                    ...confirmed,
+                    ...(mismatch ? { goal: '被扩大的目标' } : {}),
+                },
+            });
+        });
+        natural.searchScope.value = confirmed;
+        await natural.parse();
+        expect(body).toEqual({ inputText: originalText, timezone: 'UTC', searchScope: confirmed });
+        expect(natural.canApply.value).toBe(!mismatch);
+        if (!mismatch) {
+            natural.apply();
+            expect(task.draft.researchMode).toBe('collection');
+        } else expect(task.draft.title).toBe('');
+    });
+    it('更新搜索范围会使旧解析失效，修改原文清除上次范围', async () => {
+        const { natural, task } = setup(async () => Response.json(response()));
+        await natural.parse();
+        natural.searchScope.value = { ...config(), researchMode: 'analysis' };
+        expect(natural.stale.value).toBe(true);
+        expect(natural.apply()).toBe(false);
+        task.inputText.value = '新的需求';
+        expect(natural.searchScope.value).toBeUndefined();
+    });
+    it('显式分析模式应用后保存保真，旧配置仍保留省略的缺省语义', () => {
+        const original = { ...config(), researchMode: 'analysis' as const };
+        expect(taskInput(taskDraftFromConfig(original), original).config.researchMode).toBe(
+            'analysis',
+        );
+        const legacy = config();
+        expect(taskInput(taskDraftFromConfig(legacy), legacy).config.researchMode).toBeUndefined();
+    });
     it('解析401使会话过期时，在途保存不能阻止登录跳转', async () => {
         let finishParse!: (value: Response) => void;
         let savingStarted = false;

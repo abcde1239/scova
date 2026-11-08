@@ -24,114 +24,138 @@
                 </p>
             </info-dialog>
         </div>
-        <p>描述你想研究的内容，AI 会帮你填写下方配置。</p>
-        <task-config-field
-            v-model="task.inputText.value"
-            label="需求描述"
-            kind="textarea"
-            :error="draft.inputError.value"
-            :disabled="draft.unavailable.value"
-        />
-        <p class="input-hint">最多 2000 字</p>
-        <task-config-field
-            v-model="draft.timezone.value"
-            label="需求时区"
-            kind="select"
-            searchable
-            :options="timezones"
-            :error="draft.timezoneError.value"
-            :disabled="draft.unavailable.value"
-        />
-        <div class="draft-buttons">
+        <div v-if="manualMode" class="draft-result">
+            <p role="status">
+                已进入手工配置。直接填写下方标题、目标、范围和输出形式，再保存任务。
+            </p>
             <action-button
-                :disabled="draft.unavailable.value"
-                :busy="draft.pending.value"
-                @click="parse"
-                ><app-icon name="edit" />{{
-                    draft.pending.value ? '正在整理' : '生成任务草稿'
-                }}</action-button
-            >
-            <action-button v-if="draft.pending.value" @click="cancel">停止解析</action-button>
-            <action-button :disabled="draft.unavailable.value" @click="emit('manual')"
-                >手动填写</action-button
+                @click="
+                    manualMode = false;
+                    draft.message.value = '';
+                "
+                >返回 AI 整理需求</action-button
             >
         </div>
-        <state-panel
-            v-if="draft.pending.value"
-            state="loading"
-            message="正在整理需求与生成建议配置，可随时停止解析。"
+        <task-scope-questions
+            v-else-if="questionsVisible"
+            :input-text="task.inputText.value"
+            :format="task.draft.outputFormat"
+            :mode="task.draft.researchMode"
+            :initial="draft.searchScope.value"
+            :disabled="draft.unavailable.value || draft.pending.value"
+            @confirm="confirmScope"
+            @cancel="questionsVisible = false"
         />
-        <div
-            v-if="draft.message.value"
-            ref="feedback"
-            class="draft-feedback"
-            role="status"
-            aria-live="polite"
-            tabindex="-1"
-        >
-            <p>{{ draft.message.value }}</p>
-        </div>
-        <section
-            v-if="draft.result.value"
-            class="draft-result"
-            aria-labelledby="draft-result-title"
-        >
-            <h3 id="draft-result-title">
-                {{ draft.result.value.mode === 'model' ? '建议配置' : '待完善的配置' }}
-            </h3>
-            <p v-if="draft.result.value.manualReason">
-                {{ manualReasons[draft.result.value.manualReason] }}
-            </p>
-            <details>
-                <summary>本次解析原文</summary>
-                <p class="original-text">{{ draft.result.value.inputText }}</p>
-            </details>
-            <ul v-if="draft.result.value.warnings.length" aria-label="解析警告">
-                <li v-for="(warning, index) in draft.result.value.warnings" :key="index">
-                    {{ warningLabel(warning.path) }}：{{ warning.message }}
-                </li>
-            </ul>
-            <dl class="draft-preview">
-                <div>
-                    <dt>建议标题</dt>
-                    <dd>{{ draft.result.value.config.title }}</dd>
-                </div>
-                <div>
-                    <dt>建议计划</dt>
-                    <dd>{{ taskScheduleDescription(draft.result.value.config) }}</dd>
-                </div>
-                <div>
-                    <dt>执行预算</dt>
-                    <dd>
-                        搜索 {{ draft.result.value.config.budget.maxSearches }} 次，读取
-                        {{ draft.result.value.config.budget.maxPages }} 页，时长
-                        {{ draft.result.value.config.budget.maxDurationSeconds }} 秒，输入
-                        {{ draft.result.value.config.budget.maxInputTokens }} token，输出
-                        {{ draft.result.value.config.budget.maxOutputTokens }} token
-                    </dd>
-                </div>
-            </dl>
-            <info-dialog label="查看生成详情" title="本次草稿生成详情">
-                <p>
-                    模型调用 {{ draft.result.value.parsingUsage.attempts }} 次 · 输入
-                    {{ draft.result.value.parsingUsage.inputTokens }} token · 输出
-                    {{ draft.result.value.parsingUsage.outputTokens }} token
-                </p>
-                <p>
-                    {{
-                        draft.result.value.parsingUsage.estimated
-                            ? '包含保守预留或估算用量。'
-                            : '当前解析用量未标记估算。'
-                    }}用量独立统计，不计入后续研究预算。
-                </p>
-            </info-dialog>
-            <p v-if="draft.stale.value" class="stale-warning">
-                原文、解析时区或表单已变化，此结果不能覆盖当前配置。请重新解析或继续手工填写。
-            </p>
-            <action-button :disabled="!draft.canApply.value" @click="apply"
-                ><app-icon name="confirm" />应用草稿并替换当前配置</action-button
+        <template v-else>
+            <p>描述需求后，先通过三步问答确认搜索内容、来源与时间、交付形式，再由 AI 生成配置。</p>
+            <task-config-field
+                v-model="task.inputText.value"
+                label="需求描述"
+                kind="textarea"
+                :error="draft.inputError.value"
+                :disabled="draft.unavailable.value"
+            />
+            <p class="input-hint">最多 2000 字</p>
+            <task-config-field
+                v-model="draft.timezone.value"
+                label="需求时区"
+                kind="select"
+                searchable
+                :options="timezones"
+                :error="draft.timezoneError.value"
+                :disabled="draft.unavailable.value"
+            />
+            <div class="draft-buttons">
+                <action-button
+                    :disabled="draft.unavailable.value"
+                    :busy="draft.pending.value"
+                    @click="openQuestions"
+                    ><app-icon name="edit" />{{
+                        draft.pending.value ? '正在整理' : '生成任务草稿'
+                    }}</action-button
+                >
+                <action-button v-if="draft.pending.value" @click="cancel">停止解析</action-button>
+                <action-button :disabled="draft.unavailable.value" @click="enterManual"
+                    >手动填写</action-button
+                >
+            </div>
+            <state-panel
+                v-if="draft.pending.value"
+                state="loading"
+                message="正在整理需求与生成建议配置，可随时停止解析。"
+            />
+            <div
+                v-if="draft.message.value"
+                ref="feedback"
+                class="draft-feedback"
+                role="status"
+                aria-live="polite"
+                tabindex="-1"
             >
-        </section>
+                <p>{{ draft.message.value }}</p>
+            </div>
+            <section
+                v-if="draft.result.value"
+                class="draft-result"
+                aria-labelledby="draft-result-title"
+            >
+                <h3 id="draft-result-title">
+                    {{ draft.result.value.mode === 'model' ? '建议配置' : '待完善的配置' }}
+                </h3>
+                <p v-if="draft.result.value.manualReason">
+                    {{ manualReasons[draft.result.value.manualReason] }}
+                </p>
+                <details>
+                    <summary>本次解析原文</summary>
+                    <p class="original-text">{{ draft.result.value.inputText }}</p>
+                </details>
+                <ul v-if="draft.result.value.warnings.length" aria-label="解析警告">
+                    <li v-for="(warning, index) in draft.result.value.warnings" :key="index">
+                        {{ warningLabel(warning.path) }}：{{ warning.message }}
+                    </li>
+                </ul>
+                <dl class="draft-preview">
+                    <div>
+                        <dt>建议标题</dt>
+                        <dd>{{ draft.result.value.config.title }}</dd>
+                    </div>
+                    <div>
+                        <dt>建议计划</dt>
+                        <dd>{{ taskScheduleDescription(draft.result.value.config) }}</dd>
+                    </div>
+                    <div>
+                        <dt>执行预算</dt>
+                        <dd>
+                            搜索 {{ draft.result.value.config.budget.maxSearches }} 次，读取
+                            {{ draft.result.value.config.budget.maxPages }} 页，时长
+                            {{ draft.result.value.config.budget.maxDurationSeconds }} 秒，输入
+                            {{ draft.result.value.config.budget.maxInputTokens }} token，输出
+                            {{ draft.result.value.config.budget.maxOutputTokens }} token
+                        </dd>
+                    </div>
+                </dl>
+                <info-dialog label="查看生成详情" title="本次草稿生成详情">
+                    <p>
+                        模型调用 {{ draft.result.value.parsingUsage.attempts }} 次 · 输入
+                        {{ draft.result.value.parsingUsage.inputTokens }} token · 输出
+                        {{ draft.result.value.parsingUsage.outputTokens }} token
+                    </p>
+                    <p>
+                        {{
+                            draft.result.value.parsingUsage.estimated
+                                ? '包含保守预留或估算用量。'
+                                : '当前解析用量未标记估算。'
+                        }}用量独立统计，不计入后续研究预算。
+                    </p>
+                </info-dialog>
+                <p v-if="draft.stale.value" class="stale-warning">
+                    原文、解析时区或表单已变化，此结果不能覆盖当前配置。请重新解析或继续手工填写。
+                </p>
+                <action-button :disabled="!draft.canApply.value" @click="apply"
+                    ><app-icon name="confirm" />应用草稿并替换当前配置</action-button
+                >
+            </section>
+        </template>
     </section>
 </template>
 
@@ -145,6 +169,9 @@ import ActionButton from '@/components/common/ActionButton.vue';
 import AppIcon from '@/components/common/AppIcon.vue';
 import InfoDialog from '@/components/common/InfoDialog.vue';
 import StatePanel from '@/components/common/StatePanel.vue';
+import TaskScopeQuestions from '@/components/tasks/TaskScopeQuestions.vue';
+import { validateDraftInput } from '@/api/task-drafts';
+import type { TaskDraftScope } from '@scova/models';
 import { timezoneOptions } from '@/utils/timezones';
 const props = defineProps<{ task: ReturnType<typeof createTaskController> }>();
 const emit = defineEmits<{ applied: []; manual: [] }>();
@@ -152,6 +179,8 @@ const draft = useNaturalLanguageDraft(props.task);
 const timezones = computed(() => timezoneOptions(draft.timezone.value));
 const panel = ref<HTMLElement>();
 const feedback = ref<HTMLElement>();
+const questionsVisible = ref(false);
+const manualMode = ref(false);
 const manualReasons = {
     model_unavailable: '当前未配置可用模型，请手工编辑并确认配置。',
     ambiguous_timezone: '原文包含不同明确时区，请手工确认时区与计划。',
@@ -171,6 +200,7 @@ function warningLabel(path: string) {
         timeRange: '查阅范围',
         notificationPreference: '提醒',
         outputFormat: '输出形式',
+        researchMode: '任务方式',
         focusPoints: '重点关注',
         exclusions: '排除条件',
         title: '标题',
@@ -178,6 +208,29 @@ function warningLabel(path: string) {
         goal: '目标',
     };
     return labels[key ?? ''] ?? '配置';
+}
+async function openQuestions() {
+    if (draft.pending.value || draft.unavailable.value) return;
+    try {
+        validateDraftInput({ inputText: props.task.inputText.value });
+    } catch {
+        await parse();
+        return;
+    }
+    questionsVisible.value = true;
+    await nextTick();
+    panel.value?.querySelector<HTMLElement>('.scope-questions h3')?.focus();
+}
+async function confirmScope(scope: TaskDraftScope) {
+    draft.searchScope.value = scope;
+    questionsVisible.value = false;
+    await parse();
+}
+function enterManual() {
+    draft.cancel();
+    questionsVisible.value = false;
+    manualMode.value = true;
+    emit('manual');
 }
 async function parse() {
     const origin = document.activeElement;

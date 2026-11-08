@@ -81,7 +81,7 @@ const runs = useQuery(
     lifecycle.queryClient,
 );
 const latest = computed(() => runs.data.value?.data.items[0]);
-const labels = { active: '进行中', paused: '暂停', archived: '归档' };
+const labels = { active: '已启用', paused: '暂停', archived: '归档' };
 const runLabels: Record<RunStatus, string> = {
     queued: '排队中',
     running: '执行中',
@@ -89,7 +89,7 @@ const runLabels: Record<RunStatus, string> = {
     cancel_requested: '正在取消',
     canceled: '已取消',
     succeeded: '已完成',
-    partial: '部分完成',
+    partial: '已生成结果',
     failed: '失败',
 };
 </script>

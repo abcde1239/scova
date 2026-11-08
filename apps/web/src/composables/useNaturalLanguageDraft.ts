@@ -1,5 +1,5 @@
 import { computed, onScopeDispose, ref, shallowRef, watch } from 'vue';
-import type { TaskDraftResponse } from '@scova/models';
+import type { TaskDraftResponse, TaskDraftScope } from '@scova/models';
 import { ContractValidationError } from '@scova/models';
 import type { SessionLifecycle } from '@/api/session';
 import { requestTaskDraft, validateDraftInput } from '@/api/task-drafts';
@@ -21,6 +21,8 @@ export function useNaturalLanguageDraft(
     const timezoneError = ref('');
     const capturedRevision = ref(-1);
     const timezoneRevision = ref(0);
+    const searchScope = shallowRef<TaskDraftScope>();
+    let capturedScope: TaskDraftScope | undefined;
     let capturedTimezoneRevision = -1;
     const applied = ref(false);
     let generation = 0;
@@ -33,7 +35,8 @@ export function useNaturalLanguageDraft(
             !!result.value &&
             !applied.value &&
             (capturedRevision.value !== task.editRevision.value ||
-                capturedTimezoneRevision !== timezoneRevision.value),
+                capturedTimezoneRevision !== timezoneRevision.value ||
+                capturedScope !== searchScope.value),
     );
     const canApply = computed(
         () =>
@@ -47,6 +50,13 @@ export function useNaturalLanguageDraft(
         timezone,
         () => {
             timezoneRevision.value++;
+        },
+        { flush: 'sync' },
+    );
+    const stopInput = watch(
+        task.inputText,
+        () => {
+            searchScope.value = undefined;
         },
         { flush: 'sync' },
     );
@@ -64,6 +74,7 @@ export function useNaturalLanguageDraft(
         () => lifecycle.session.epoch,
         () => {
             clear();
+            searchScope.value = undefined;
             timezone.value = lifecycle.session.user?.preferences.defaultTimezone ?? 'Asia/Shanghai';
         },
         { flush: 'sync' },
@@ -72,6 +83,7 @@ export function useNaturalLanguageDraft(
         clear();
         controller.abort();
         stopTimezone();
+        stopInput();
         stopSession();
     });
 
@@ -84,10 +96,12 @@ export function useNaturalLanguageDraft(
             const signal = controller.signal;
             capturedRevision.value = task.editRevision.value;
             capturedTimezoneRevision = timezoneRevision.value;
+            capturedScope = searchScope.value;
             try {
                 const input = validateDraftInput({
                     inputText: task.inputText.value,
                     ...(timezone.value ? { timezone: timezone.value } : {}),
+                    ...(capturedScope ? { searchScope: capturedScope } : {}),
                 });
                 const response = await requestTaskDraft(scope, input, signal, options.timeout);
                 if (current !== generation || signal.aborted || !scope.isCurrent()) return;
@@ -139,6 +153,7 @@ export function useNaturalLanguageDraft(
     }
     return {
         timezone,
+        searchScope,
         result,
         message,
         inputError,

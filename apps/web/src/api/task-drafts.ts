@@ -3,6 +3,7 @@ import {
     TaskDraftResponseSchema,
     ContractValidationError,
     parseContract,
+    taskDraftScopeMatches,
     type TaskDraftInput,
     type TaskDraftResponse,
 } from '@scova/models';
@@ -36,6 +37,7 @@ export async function requestTaskDraft(
     const result = await scope.request(endpoint, { body: input }, { signal, timeout });
     if (
         result.data.inputText !== input.inputText ||
+        (input.searchScope && !taskDraftScopeMatches(input.searchScope, result.data.config)) ||
         (result.data.mode === 'model'
             ? result.data.manualReason !== null
             : result.data.manualReason === null)

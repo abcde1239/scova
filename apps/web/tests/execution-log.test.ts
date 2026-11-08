@@ -15,6 +15,30 @@ const start = (seq: number): RunEvent => ({
     payload: { step: 'read' },
 });
 describe('执行日志安全投影', () => {
+    it('keeps page warnings distinct from a later terminal error, including old events', () => {
+        const warning = appendExecutionLog(emptyExecutionLog(), {
+            ...common,
+            seq: 1,
+            type: 'tool.failed',
+            payload: {
+                toolCallId: common.eventId,
+                tool: 'read',
+                code: 'TOOL_HTTP_FORBIDDEN',
+                message: 'secret',
+                retryable: false,
+            },
+        });
+        expect(warning.entries[0].level).toBe('warning');
+        expect(warning.entries[0].guidance).toContain('公开页面');
+        const failed = appendExecutionLog(warning, {
+            ...common,
+            seq: 2,
+            type: 'run.failed',
+            payload: { status: 'failed', code: 'NO_EVIDENCE', message: 'secret' },
+        });
+        expect(failed.entries.map((e) => e.level)).toEqual(['warning', 'error']);
+        expect(JSON.stringify(failed)).not.toContain('secret');
+    });
     it('separates citation repair and search waiting from provider transport failure', () => {
         const state = appendExecutionLog(emptyExecutionLog(), {
             ...common,

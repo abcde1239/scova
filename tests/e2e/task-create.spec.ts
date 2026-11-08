@@ -83,6 +83,22 @@ async function noOverflow(page: Page) {
         true,
     );
 }
+test('资料收集方式保存到配置且任务显示已启用', async ({ page }) => {
+    const calls = await samples(page);
+    await page.goto('/tasks/new');
+    await fillMain(page);
+    await chooseOption(page, '任务方式', '资料收集：整理来源信息');
+    await chooseOption(page, '输出形式', '主题清单');
+    await page.getByRole('button', { name: '确认保存任务', exact: true }).click();
+    await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
+    const saved = calls.find((call) => call.method === 'POST')?.body;
+    expect(saved?.config).toMatchObject({ researchMode: 'collection', outputFormat: 'list' });
+    await expect(page.locator('.task-card')).toContainText('已启用');
+    await expect(page.getByRole('combobox', { name: '本次输出形式', exact: true })).toContainText(
+        '主题清单',
+    );
+});
+
 for (const width of [390, 1440]) {
     test(`Token 预算即时分配、超额阻止保存、修正后可保存 ${width}`, async ({ page }, info) => {
         const calls = await samples(page);
