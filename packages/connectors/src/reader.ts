@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { setTimeout as delay } from 'node:timers/promises';
 import { JSDOM, VirtualConsole } from 'jsdom';
 import { Readability } from '@mozilla/readability';
 import { normalizeUrl, positiveLimit, withDeadline } from './http.ts';
@@ -37,20 +38,41 @@ export function createPageReader(
                 async (signal) => {
                     await previous;
                     if (signal.aborted) throw signal.reason;
-                    await context.beforeAttempt?.('read');
-                    if (signal.aborted) throw signal.reason;
-                    const response = await http.request(url, {
-                        signal,
-                        maxBytes: 2 * 1024 * 1024,
-                        maxRedirects: 3,
-                    });
-                    if (response.status < 200 || response.status >= 300)
-                        throw new ConnectorError(
-                            'http',
-                            '网页采集失败',
-                            response.status === 429 || response.status >= 500,
-                            response.status,
-                        );
+                    const request = async (previousFailure?: ConnectorError) => {
+                        await context.beforeAttempt?.('read', previousFailure);
+                        if (signal.aborted) throw signal.reason;
+                        const response = await http.request(url, {
+                            signal,
+                            maxBytes: 2 * 1024 * 1024,
+                            maxRedirects: 3,
+                        });
+                        if (response.status < 200 || response.status >= 300)
+                            throw new ConnectorError(
+                                'http',
+                                '网页采集失败',
+                                response.status === 429 || response.status >= 500,
+                                response.status,
+                            );
+                        return response;
+                    };
+                    let response;
+                    try {
+                        response = await request();
+                    } catch (error) {
+                        // One retry shares the original deadline and reserves another page attempt.
+                        // Never retry access restrictions, rate limiting, parsing or security failures.
+                        if (
+                            !(error instanceof ConnectorError) ||
+                            !error.retryable ||
+                            !(
+                                error.code === 'network' ||
+                                (error.code === 'http' && (error.status ?? 0) >= 500)
+                            )
+                        )
+                            throw error;
+                        await delay(200, undefined, { signal });
+                        response = await request(error);
+                    }
                     const contentType = response.headers['content-type'] ?? '';
                     if (!/^(text\/html|application\/xhtml\+xml)(;|$)/i.test(contentType))
                         throw new ConnectorError('invalid_response', '网页不是 HTML 正文');
