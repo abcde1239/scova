@@ -86,6 +86,9 @@ export function buildReportValue(
     });
     return {
         version: 1,
+        ...(context.config.researchMode === 'collection'
+            ? { researchMode: 'collection' as const }
+            : {}),
         questions: questions.map((question, index) => {
             const selected = selections.filter(
                 (s) => s.placement === 'main' && s.questionIds.includes(question.id),
@@ -100,7 +103,7 @@ export function buildReportValue(
                         s.assessment?.support === 'direct' &&
                         !s.assessment.conditions &&
                         !s.assessment.gap &&
-                        s.timeScope === 'within'
+                        (s.timeScope === 'within' || context.config.researchMode === 'collection')
                     );
                 });
             const status = disputed

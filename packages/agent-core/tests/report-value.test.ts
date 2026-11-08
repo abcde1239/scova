@@ -52,6 +52,34 @@ const build = (claims: AgentClaim[], pages = [page]) =>
     );
 
 describe('question-first report selection', () => {
+    it('collection answers source content without certifying unknown publication dates', () => {
+        const collected = {
+            ...context,
+            config: { ...context.config, researchMode: 'collection' as const },
+        };
+        const value = parseContract(
+            ReportValueSchema,
+            buildReportValue(
+                collected,
+                taskQuestions(collected),
+                [claim()],
+                [{ ...page, publication: undefined }],
+            ),
+        );
+        expect(value.questions[0].status).toBe('supported');
+        expect(value.questions[0].gap).toBe('');
+        expect(value.selections[0].timeScope).toBe('unknown');
+        expect(() =>
+            parseContract(ReportValueSchema, { ...value, researchMode: undefined }),
+        ).toThrow();
+        const missing = buildReportValue(
+            collected,
+            taskQuestions(collected),
+            [claim({ assessment: { ...assessment, support: 'none' } })],
+            [page],
+        );
+        expect(missing.questions[0].status).toBe('unresolved');
+    });
     it('freezes original questions and explicit must-answer priorities', () => {
         const value = build([claim()]);
         expect(value.questions.map((q) => [q.id, q.priority, q.status])).toEqual([

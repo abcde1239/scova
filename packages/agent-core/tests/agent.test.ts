@@ -135,6 +135,20 @@ function fixture() {
 }
 
 describe('persistent bounded research Agent', () => {
+    it('collection keeps source content useful without requiring publication metadata', async () => {
+        const { context, deps, tools } = fixture();
+        context.config.researchMode = 'collection';
+        const result = await runResearchAgent(context, deps);
+        expect(result.coverage.completeness).toBe('complete');
+        expect(result.coverage.gaps).toEqual([]);
+        expect(result.coverage.reportValue?.questions[0].status).toBe('supported');
+        expect(result.coverage.notes?.join(' ')).toContain('不认定为查阅窗口内新发布');
+        const prompts = vi
+            .mocked(tools.model)
+            .mock.calls.map(([, input]) => input.prompt)
+            .join(' ');
+        expect(prompts).toContain('资料收集');
+    });
     it('keeps adaptive queries on the task topic instead of adding Agent architecture terms', async () => {
         const { context, deps, tools, searchResponse } = fixture();
         context.config.topic = 'Vue computed watchers';
@@ -901,7 +915,8 @@ describe('persistent bounded research Agent', () => {
         const output = await runResearchAgent(context, deps);
         expect(tools.model).toHaveBeenCalledTimes(2);
         expect(output.coverage.completeness).toBe('partial');
-        expect(output.coverage.gaps.join(' ')).toContain('证据不足');
+        expect(output.coverage.reportValue?.questions[0].status).toBe('unresolved');
+        expect(output.coverage.gaps.join(' ')).toContain('尚无直接回答');
         expect(output.claims[0].kind).toBe('insufficient');
         expect(output.claims[0].text).toBe('invented');
         expect(output.claims[0].text).not.toContain(text);
