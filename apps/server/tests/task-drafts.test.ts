@@ -76,6 +76,139 @@ function fixtureModel(
 afterEach(() => vi.unstubAllEnvs());
 
 describe('草稿解析与独立预算', () => {
+    it('AI按已回答内容继续追问并整理范围，不访问业务数据库', async () => {
+        const proposedScope = {
+            goal: '收集上海课程费用',
+            focusPoints: ['费用'],
+            exclusions: ['在线课程'],
+            sourcePreferences: { preferredUrls: [], excludedUrls: [], officialOnly: false },
+            timeRange: { kind: 'rolling' as const, days: 30 },
+            outputFormat: 'comparison' as const,
+            researchMode: 'collection' as const,
+        };
+        const fixture = fixtureModel((_index, input) => {
+            const context = input.untrustedSources?.[0] as { clarifications: { answer: string }[] };
+            return {
+                summary: '需要确认城市，再比较线下课程的费用。',
+                scope: proposedScope,
+                questions: context.clarifications.length
+                    ? []
+                    : [
+                          {
+                              id: 'q1',
+                              question: '查哪个城市的线下课程？',
+                              reason: '城市影响可报名课程。',
+                              options: ['上海', '杭州'],
+                          },
+                      ],
+            };
+        });
+        const { service } = setup(fixture.model);
+        const first = await service.questions(session, {
+            inputText: '对比课程',
+            clarifications: [],
+            round: 0,
+        });
+        expect(first.questions[0]?.question).toContain('城市');
+        expect(first.mode).toBe('model');
+        const transcript = [{ question: first.questions[0]!.question, answer: '上海，只查线下' }];
+        const next = await service.questions(session, {
+            inputText: '对比课程',
+            clarifications: transcript,
+            round: 1,
+        });
+        expect(next.questions).toEqual([]);
+        expect(next.scope).toEqual(proposedScope);
+        expect(fixture.inputs[1]?.untrustedSources).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ clarifications: transcript, round: 1 }),
+            ]),
+        );
+        expect(next.parsingUsage).toMatchObject({
+            attempts: 1,
+            inputTokens: 100,
+            outputTokens: 100,
+        });
+    });
+    it('AI问答不可用明确回退，重复问题或编造网址只修复一次', async () => {
+        const input = { inputText: '找课程', clarifications: [], round: 0 };
+        const manual = await setup().service.questions(session, input);
+        expect(manual).toMatchObject({
+            mode: 'manual',
+            manualReason: 'model_unavailable',
+            questions: [],
+            parsingUsage: { attempts: 0 },
+        });
+        for (const invalid of ['duplicate', 'url']) {
+            const fixture = fixtureModel(() => ({
+                summary: '需要确认',
+                scope: {
+                    ...manual.scope,
+                    ...(invalid === 'url'
+                        ? {
+                              sourcePreferences: {
+                                  preferredUrls: ['https://invented.example.com'],
+                                  excludedUrls: [],
+                                  officialOnly: false,
+                              },
+                          }
+                        : {}),
+                },
+                questions:
+                    invalid === 'duplicate'
+                        ? Array(2).fill({
+                              id: 'q1',
+                              question: '哪个城市？',
+                              reason: '范围不同',
+                              options: [],
+                          })
+                        : [],
+            }));
+            const result = await setup(fixture.model).service.questions(session, input);
+            expect(result).toMatchObject({
+                mode: 'manual',
+                manualReason: 'invalid_output',
+                questions: [],
+            });
+            expect(fixture.calls()).toBe(2);
+        }
+    });
+    it('第三轮强制结束追问，问答答案中的明确计划和网址可进入最终草稿', async () => {
+        const input = {
+            inputText: '找课程',
+            clarifications: [
+                { question: '如何执行？', answer: '每天09:00，https://courses.example.com' },
+            ],
+            round: 2,
+        };
+        const fallback = await setup().service.questions(session, input);
+        const fixture = fixtureModel(() => ({
+            summary: '请核对范围',
+            scope: fallback.scope,
+            questions: [{ id: 'q1', question: '更多信息？', reason: '补充', options: [] }],
+        }));
+        expect((await setup(fixture.model).service.questions(session, input)).questions).toEqual(
+            [],
+        );
+        const parsed = fixtureModel(() =>
+            draftConfig({
+                schedule: { frequency: 'daily', localTime: '09:00' },
+                sourcePreferences: {
+                    preferredUrls: ['https://courses.example.com'],
+                    excludedUrls: [],
+                    officialOnly: false,
+                },
+            }),
+        );
+        const draft = await setup(parsed.model).service.create(session, {
+            inputText: input.inputText,
+            clarifications: input.clarifications,
+        });
+        expect(draft.config.schedule.frequency).toBe('daily');
+        expect(draft.config.sourcePreferences.preferredUrls).toEqual([
+            'https://courses.example.com',
+        ]);
+    });
     it.each([true, false])('问答确认的范围不被模型扩大，模型可用=%s', async (available) => {
         const searchScope = {
             goal: '收集学费与申请条件',

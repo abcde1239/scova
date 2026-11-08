@@ -2,6 +2,11 @@ import {
     ContractValidationError,
     NotificationPreferenceSchema,
     TaskDraftInputSchema,
+    TaskDraftQuestionsInputSchema,
+    TaskDraftQuestionsResponseSchema,
+    TaskDraftQuestionsResultSchema,
+    TaskDraftScopeSchema,
+    type TaskDraftQuestionsResponse,
     TaskDraftResponseSchema,
     parseContract,
     type TaskDraftResponse,
@@ -17,6 +22,8 @@ import type { AuthenticatedSession } from '@/service/auth.ts';
 import { createTaskDraftRepo, type DraftReservation } from '@/repo/task-drafts.ts';
 import {
     draftModelSchema,
+    draftQuestionModelSchema,
+    draftQuestionPrompt,
     draftPrompt,
     manualDraft,
     normalizeDraft,
@@ -47,220 +54,307 @@ function failureReason(error: unknown): Reason {
 /** 仅生成待确认草稿；唯一持久化是独立Redis解析限流与预算预留。 */
 export function createTaskDraftService(services: ApiServices) {
     const repository = createTaskDraftRepo(services);
-    return {
-        async create(
-            session: Pick<AuthenticatedSession, 'userId' | 'user'>,
-            body: unknown,
-            requestSignal?: AbortSignal,
-        ) {
-            const input = parseContract(TaskDraftInputSchema, body);
-            if (Buffer.byteLength(input.inputText, 'utf8') > 8000)
-                throw new ContractValidationError([
-                    { path: '/inputText', message: '原始描述不得超过8000 UTF-8字节' },
-                ]);
-            const defaults = {
-                timezone: session.user.defaultTimezone,
-                notificationPreference: parseContract(
-                    NotificationPreferenceSchema,
-                    session.user.notificationPreference,
-                ),
-            };
-            const fallback = manualDraft(input, defaults);
-            const resolvedTimezone = resolveDraftTimezone(input, defaults.timezone);
-            const policy = services.taskDraftPolicy;
-            const ledger: { inputTokens: number; outputTokens: number; estimated: boolean }[] = [];
-            const pendingWrites = new Set<Promise<unknown>>();
-            const writeErrors: unknown[] = [];
-            const write = <T>(operation: Promise<T>) => {
-                pendingWrites.add(operation);
-                void operation.then(
-                    () => pendingWrites.delete(operation),
-                    (error: unknown) => {
-                        writeErrors.push(error);
-                        pendingWrites.delete(operation);
-                    },
-                );
-                return operation;
-            };
-            const usage = () => ({
-                attempts: ledger.length,
-                inputTokens: ledger.reduce((total, entry) => total + entry.inputTokens, 0),
-                outputTokens: ledger.reduce((total, entry) => total + entry.outputTokens, 0),
-                estimated: ledger.some((entry) => entry.estimated),
+    type Session = Pick<AuthenticatedSession, 'userId' | 'user'>;
+    function generate(
+        session: Session,
+        body: unknown,
+        requestSignal: AbortSignal | undefined,
+        kind: 'draft',
+    ): Promise<TaskDraftResponse>;
+    function generate(
+        session: Session,
+        body: unknown,
+        requestSignal: AbortSignal | undefined,
+        kind: 'questions',
+    ): Promise<TaskDraftQuestionsResponse>;
+    async function generate(
+        session: Pick<AuthenticatedSession, 'userId' | 'user'>,
+        body: unknown,
+        requestSignal: AbortSignal | undefined,
+        kind: 'draft' | 'questions',
+    ) {
+        const questionInput =
+            kind === 'questions' ? parseContract(TaskDraftQuestionsInputSchema, body) : undefined;
+        const input = questionInput
+            ? parseContract(TaskDraftInputSchema, {
+                  inputText: questionInput.inputText,
+                  ...(questionInput.timezone ? { timezone: questionInput.timezone } : {}),
+                  clarifications: questionInput.clarifications,
+              })
+            : parseContract(TaskDraftInputSchema, body);
+        if (Buffer.byteLength(input.inputText, 'utf8') > 8000)
+            throw new ContractValidationError([
+                { path: '/inputText', message: '原始描述不得超过8000 UTF-8字节' },
+            ]);
+        const defaults = {
+            timezone: session.user.defaultTimezone,
+            notificationPreference: parseContract(
+                NotificationPreferenceSchema,
+                session.user.notificationPreference,
+            ),
+        };
+        const fallback = manualDraft(input, defaults);
+        const resolvedTimezone = resolveDraftTimezone(input, defaults.timezone);
+        const policy = services.taskDraftPolicy;
+        const ledger: { inputTokens: number; outputTokens: number; estimated: boolean }[] = [];
+        const pendingWrites = new Set<Promise<unknown>>();
+        const writeErrors: unknown[] = [];
+        const write = <T>(operation: Promise<T>) => {
+            pendingWrites.add(operation);
+            void operation.then(
+                () => pendingWrites.delete(operation),
+                (error: unknown) => {
+                    writeErrors.push(error);
+                    pendingWrites.delete(operation);
+                },
+            );
+            return operation;
+        };
+        const usage = () => ({
+            attempts: ledger.length,
+            inputTokens: ledger.reduce((total, entry) => total + entry.inputTokens, 0),
+            outputTokens: ledger.reduce((total, entry) => total + entry.outputTokens, 0),
+            estimated: ledger.some((entry) => entry.estimated),
+        });
+        const fallbackScope = () =>
+            parseContract(TaskDraftScopeSchema, {
+                goal: fallback.goal,
+                focusPoints: fallback.focusPoints,
+                exclusions: fallback.exclusions,
+                sourcePreferences: fallback.sourcePreferences,
+                timeRange: fallback.timeRange,
+                outputFormat: fallback.outputFormat,
+                researchMode: fallback.researchMode ?? 'analysis',
             });
-            const manual = (reason: Reason) =>
-                parseContract(TaskDraftResponseSchema, {
-                    inputText: input.inputText,
-                    config: fallback,
-                    mode: 'manual',
-                    requiresConfirmation: true,
-                    manualReason: reason,
-                    warnings: [
-                        ...resolvedTimezone.warnings,
-                        { path: '/config', message: reasons[reason] },
-                    ],
-                    parsingUsage: usage(),
-                });
-            try {
-                return await withDeadline(policy.timeoutMs, requestSignal, async (signal) => {
-                    const alive = () => {
-                        if (signal.aborted) throw signal.reason;
-                    };
+        const manual = (reason: Reason) =>
+            kind === 'questions'
+                ? parseContract(TaskDraftQuestionsResponseSchema, {
+                      inputText: input.inputText,
+                      round: questionInput!.round,
+                      summary: reasons[reason],
+                      questions: [],
+                      scope: fallbackScope(),
+                      mode: 'manual',
+                      manualReason: reason,
+                      parsingUsage: usage(),
+                  })
+                : parseContract(TaskDraftResponseSchema, {
+                      inputText: input.inputText,
+                      config: fallback,
+                      mode: 'manual',
+                      requiresConfirmation: true,
+                      manualReason: reason,
+                      warnings: [
+                          ...resolvedTimezone.warnings,
+                          { path: '/config', message: reasons[reason] },
+                      ],
+                      parsingUsage: usage(),
+                  });
+        try {
+            return await withDeadline(policy.timeoutMs, requestSignal, async (signal) => {
+                const alive = () => {
+                    if (signal.aborted) throw signal.reason;
+                };
+                alive();
+                const budget = await write(repository.begin(session.userId, signal));
+                alive();
+                if (resolvedTimezone.ambiguous) return manual('ambiguous_timezone');
+                let model;
+                try {
+                    model = await services.taskDraftModel(session.userId);
+                } catch {
+                    return manual('model_unavailable');
+                }
+                if (!model) return manual('model_unavailable');
+                let repairPaths: string[] = [];
+                for (let call = 0; call < 2; call++) {
                     alive();
-                    const budget = await write(repository.begin(session.userId, signal));
-                    alive();
-                    if (resolvedTimezone.ambiguous) return manual('ambiguous_timezone');
-                    let model;
-                    try {
-                        model = await services.taskDraftModel(session.userId);
-                    } catch {
-                        return manual('model_unavailable');
-                    }
-                    if (!model) return manual('model_unavailable');
-                    let repairPaths: string[] = [];
-                    for (let call = 0; call < 2; call++) {
-                        alive();
-                        const currentUsage = usage();
-                        const outputTokens = Math.min(
-                            policy.outputTokensPerAttempt,
-                            policy.maxOutputTokens - currentUsage.outputTokens,
-                        );
-                        const modelInput: StructuredInput = {
-                            prompt:
-                                draftPrompt +
-                                (call
-                                    ? '\nRegenerate once, correcting invalid fields: ' +
-                                      repairPaths.join(', ')
-                                    : ''),
-                            schema: draftModelSchema,
-                            untrustedSources: [
-                                {
-                                    inputText: input.inputText,
-                                    defaults: fallback,
-                                    ...(input.searchScope
-                                        ? { confirmedSearchScope: input.searchScope }
-                                        : {}),
-                                },
-                            ],
-                            maxInputTokens: policy.maxInputTokens - currentUsage.inputTokens,
-                            maxOutputTokens: outputTokens,
-                        };
-                        const reservedInput = estimateModelInputTokens(modelInput);
-                        if (outputTokens < 1 || reservedInput > modelInput.maxInputTokens)
-                            throw new ConnectorError('budget_exceeded', '草稿解析预算不足');
-                        // Reserve the complete conservative input, then require actual usage to stay inside it.
-                        modelInput.maxInputTokens = reservedInput;
-                        let reservation: DraftReservation | undefined;
-                        let entry: (typeof ledger)[number] | undefined;
-                        let started = false;
-                        try {
-                            const result = await model.generateStructured(modelInput, {
-                                signal,
-                                timeoutMs: policy.timeoutMs,
-                                beforeAttempt: async (kind) => {
-                                    alive();
-                                    if (kind !== 'model' || started || ledger.length >= 2)
-                                        throw new ConnectorError(
-                                            'budget_exceeded',
-                                            '草稿解析最多两次模型尝试',
-                                        );
-                                    started = true;
-                                    await write(
-                                        (async () => {
-                                            reservation = await budget.reserveAttempt(
-                                                reservedInput,
-                                                outputTokens,
-                                            );
-                                            entry = {
-                                                inputTokens: reservedInput,
-                                                outputTokens,
-                                                estimated: true,
-                                            };
-                                            ledger.push(entry);
-                                        })(),
-                                    );
-                                    alive();
-                                },
-                            });
-                            alive();
-                            if (
-                                !reservation ||
-                                !entry ||
-                                result.mode !== 'live' ||
-                                !result.usage ||
-                                ![result.usage.inputTokens, result.usage.outputTokens].every(
-                                    (value) => Number.isSafeInteger(value) && value >= 0,
-                                ) ||
-                                result.usage.inputTokens > reservedInput ||
-                                result.usage.outputTokens > outputTokens ||
-                                typeof result.usage.estimated !== 'boolean'
-                            )
-                                throw new ConnectorError(
-                                    'invalid_response',
-                                    '模型解析用量或模式无效',
-                                );
-                            const settledEntry = entry;
-                            await write(
-                                (async () => {
-                                    await reservation!.settle(
-                                        result.usage.inputTokens,
-                                        result.usage.outputTokens,
-                                    );
-                                    Object.assign(settledEntry, result.usage);
-                                })(),
-                            );
-                            alive();
-                            const normalized = normalizeDraft(result.data, input, fallback);
-                            return parseContract(TaskDraftResponseSchema, {
+                    const currentUsage = usage();
+                    const outputTokens = Math.min(
+                        policy.outputTokensPerAttempt,
+                        policy.maxOutputTokens - currentUsage.outputTokens,
+                    );
+                    const modelInput: StructuredInput = {
+                        prompt:
+                            (kind === 'questions' ? draftQuestionPrompt : draftPrompt) +
+                            (call
+                                ? '\nRegenerate once, correcting invalid fields: ' +
+                                  repairPaths.join(', ')
+                                : ''),
+                        schema: kind === 'questions' ? draftQuestionModelSchema : draftModelSchema,
+                        untrustedSources: [
+                            {
                                 inputText: input.inputText,
-                                ...normalized,
+                                defaults: fallback,
+                                clarifications: input.clarifications ?? [],
+                                ...(questionInput
+                                    ? {
+                                          round: questionInput.round,
+                                          currentDate: services.clock().toISOString(),
+                                      }
+                                    : {}),
+                                ...(input.searchScope
+                                    ? { confirmedSearchScope: input.searchScope }
+                                    : {}),
+                            },
+                        ],
+                        maxInputTokens: policy.maxInputTokens - currentUsage.inputTokens,
+                        maxOutputTokens: outputTokens,
+                    };
+                    const reservedInput = estimateModelInputTokens(modelInput);
+                    if (outputTokens < 1 || reservedInput > modelInput.maxInputTokens)
+                        throw new ConnectorError('budget_exceeded', '草稿解析预算不足');
+                    // Reserve the complete conservative input, then require actual usage to stay inside it.
+                    modelInput.maxInputTokens = reservedInput;
+                    let reservation: DraftReservation | undefined;
+                    let entry: (typeof ledger)[number] | undefined;
+                    let started = false;
+                    try {
+                        const result = await model.generateStructured(modelInput, {
+                            signal,
+                            timeoutMs: policy.timeoutMs,
+                            beforeAttempt: async (kind) => {
+                                alive();
+                                if (kind !== 'model' || started || ledger.length >= 2)
+                                    throw new ConnectorError(
+                                        'budget_exceeded',
+                                        '草稿解析最多两次模型尝试',
+                                    );
+                                started = true;
+                                await write(
+                                    (async () => {
+                                        reservation = await budget.reserveAttempt(
+                                            reservedInput,
+                                            outputTokens,
+                                        );
+                                        entry = {
+                                            inputTokens: reservedInput,
+                                            outputTokens,
+                                            estimated: true,
+                                        };
+                                        ledger.push(entry);
+                                    })(),
+                                );
+                                alive();
+                            },
+                        });
+                        alive();
+                        if (
+                            !reservation ||
+                            !entry ||
+                            result.mode !== 'live' ||
+                            !result.usage ||
+                            ![result.usage.inputTokens, result.usage.outputTokens].every(
+                                (value) => Number.isSafeInteger(value) && value >= 0,
+                            ) ||
+                            result.usage.inputTokens > reservedInput ||
+                            result.usage.outputTokens > outputTokens ||
+                            typeof result.usage.estimated !== 'boolean'
+                        )
+                            throw new ConnectorError('invalid_response', '模型解析用量或模式无效');
+                        const settledEntry = entry;
+                        await write(
+                            (async () => {
+                                await reservation!.settle(
+                                    result.usage.inputTokens,
+                                    result.usage.outputTokens,
+                                );
+                                Object.assign(settledEntry, result.usage);
+                            })(),
+                        );
+                        alive();
+                        if (kind === 'questions') {
+                            const proposed = parseContract(
+                                TaskDraftQuestionsResultSchema,
+                                result.data,
+                            );
+                            if (
+                                new Set(proposed.questions.map((q) => q.id)).size !==
+                                proposed.questions.length
+                            )
+                                throw new ContractValidationError([
+                                    { path: '/questions', message: '问题编号必须唯一' },
+                                ]);
+                            const explicitText = [
+                                input.inputText,
+                                ...(input.clarifications ?? []).map((c) => c.answer),
+                            ].join('\n');
+                            for (const urls of [
+                                proposed.scope.sourcePreferences.preferredUrls,
+                                proposed.scope.sourcePreferences.excludedUrls,
+                            ]) {
+                                if (urls.some((url) => !explicitText.includes(url)))
+                                    throw new ContractValidationError([
+                                        {
+                                            path: '/scope/sourcePreferences',
+                                            message: '不得编造用户未提供的网址',
+                                        },
+                                    ]);
+                            }
+                            return parseContract(TaskDraftQuestionsResponseSchema, {
+                                ...proposed,
+                                questions: questionInput!.round === 2 ? [] : proposed.questions,
+                                inputText: input.inputText,
+                                round: questionInput!.round,
                                 mode: 'model',
-                                requiresConfirmation: true,
                                 manualReason: null,
-                                warnings: [
-                                    ...resolvedTimezone.warnings,
-                                    ...normalized.warnings,
-                                    ...(call
-                                        ? [
-                                              {
-                                                  path: '/config',
-                                                  message: '配置经过一次结构修复，请确认全部字段。',
-                                              },
-                                          ]
-                                        : []),
-                                ],
                                 parsingUsage: usage(),
                             });
-                        } catch (error) {
-                            if (error instanceof ApiError) throw error;
-                            alive();
-                            if (call === 0 && failureReason(error) === 'invalid_output') {
-                                repairPaths =
-                                    error instanceof ContractValidationError
-                                        ? [
-                                              ...new Set(
-                                                  error.fieldErrors.map((field) => field.path),
-                                              ),
-                                          ].slice(0, 20)
-                                        : ['/'];
-                                continue;
-                            }
-                            throw error;
                         }
+                        const normalized = normalizeDraft(result.data, input, fallback);
+                        return parseContract(TaskDraftResponseSchema, {
+                            inputText: input.inputText,
+                            ...normalized,
+                            mode: 'model',
+                            requiresConfirmation: true,
+                            manualReason: null,
+                            warnings: [
+                                ...resolvedTimezone.warnings,
+                                ...normalized.warnings,
+                                ...(call
+                                    ? [
+                                          {
+                                              path: '/config',
+                                              message: '配置经过一次结构修复，请确认全部字段。',
+                                          },
+                                      ]
+                                    : []),
+                            ],
+                            parsingUsage: usage(),
+                        });
+                    } catch (error) {
+                        if (error instanceof ApiError) throw error;
+                        alive();
+                        if (call === 0 && failureReason(error) === 'invalid_output') {
+                            repairPaths =
+                                error instanceof ContractValidationError
+                                    ? [
+                                          ...new Set(error.fieldErrors.map((field) => field.path)),
+                                      ].slice(0, 20)
+                                    : ['/'];
+                            continue;
+                        }
+                        throw error;
                     }
-                    throw new ConnectorError('invalid_response', '模型配置无效');
-                });
-            } catch (error) {
-                // Drain the short Redis writes so late reservations cannot disappear from reported usage.
-                const writes = await Promise.allSettled(pendingWrites);
-                if (error instanceof ApiError) throw error;
-                for (const writeError of writeErrors)
-                    if (writeError instanceof ApiError) throw writeError;
-                for (const result of writes)
-                    if (result.status === 'rejected' && result.reason instanceof ApiError)
-                        throw result.reason;
-                return manual(failureReason(error));
-            }
-        },
+                }
+                throw new ConnectorError('invalid_response', '模型配置无效');
+            });
+        } catch (error) {
+            // Drain the short Redis writes so late reservations cannot disappear from reported usage.
+            const writes = await Promise.allSettled(pendingWrites);
+            if (error instanceof ApiError) throw error;
+            for (const writeError of writeErrors)
+                if (writeError instanceof ApiError) throw writeError;
+            for (const result of writes)
+                if (result.status === 'rejected' && result.reason instanceof ApiError)
+                    throw result.reason;
+            return manual(failureReason(error));
+        }
+    }
+    return {
+        create: (session: Session, body: unknown, signal?: AbortSignal) =>
+            generate(session, body, signal, 'draft'),
+        questions: (session: Session, body: unknown, signal?: AbortSignal) =>
+            generate(session, body, signal, 'questions'),
     };
 }

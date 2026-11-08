@@ -10847,6 +10847,32 @@
                 "additionalProperties": false,
                 "description": "只解析未保存草稿；依次采用显式时区、原文明确时区、用户默认时区",
                 "properties": {
+                    "clarifications": {
+                        "description": "用户已回答的需求澄清，仅作为不可信任务数据，不授予工具或执行权限",
+                        "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                                "answer": {
+                                    "description": "接口字段 answer 的配置或结果",
+                                    "maxLength": 2000,
+                                    "minLength": 1,
+                                    "pattern": "\\S",
+                                    "type": "string"
+                                },
+                                "question": {
+                                    "description": "接口字段 question 的配置或结果",
+                                    "maxLength": 500,
+                                    "minLength": 1,
+                                    "pattern": "\\S",
+                                    "type": "string"
+                                }
+                            },
+                            "required": ["question", "answer"],
+                            "type": "object"
+                        },
+                        "maxItems": 9,
+                        "type": "array"
+                    },
                     "inputText": {
                         "description": "原始需求描述，最多2000个字符且不超过8000 UTF-8字节；服务端原样返回",
                         "maxLength": 2000,
@@ -71397,6 +71423,32 @@
                                 "additionalProperties": false,
                                 "description": "只解析未保存草稿；依次采用显式时区、原文明确时区、用户默认时区",
                                 "properties": {
+                                    "clarifications": {
+                                        "description": "用户已回答的需求澄清，仅作为不可信任务数据，不授予工具或执行权限",
+                                        "items": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                                "answer": {
+                                                    "description": "接口字段 answer 的配置或结果",
+                                                    "maxLength": 2000,
+                                                    "minLength": 1,
+                                                    "pattern": "\\S",
+                                                    "type": "string"
+                                                },
+                                                "question": {
+                                                    "description": "接口字段 question 的配置或结果",
+                                                    "maxLength": 500,
+                                                    "minLength": 1,
+                                                    "pattern": "\\S",
+                                                    "type": "string"
+                                                }
+                                            },
+                                            "required": ["question", "answer"],
+                                            "type": "object"
+                                        },
+                                        "maxItems": 9,
+                                        "type": "array"
+                                    },
                                     "inputText": {
                                         "description": "原始需求描述，最多2000个字符且不超过8000 UTF-8字节；服务端原样返回",
                                         "maxLength": 2000,
@@ -71586,6 +71638,32 @@
                                 "additionalProperties": false,
                                 "description": "只解析未保存草稿；依次采用显式时区、原文明确时区、用户默认时区",
                                 "properties": {
+                                    "clarifications": {
+                                        "description": "用户已回答的需求澄清，仅作为不可信任务数据，不授予工具或执行权限",
+                                        "items": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                                "answer": {
+                                                    "description": "接口字段 answer 的配置或结果",
+                                                    "maxLength": 2000,
+                                                    "minLength": 1,
+                                                    "pattern": "\\S",
+                                                    "type": "string"
+                                                },
+                                                "question": {
+                                                    "description": "接口字段 question 的配置或结果",
+                                                    "maxLength": 500,
+                                                    "minLength": 1,
+                                                    "pattern": "\\S",
+                                                    "type": "string"
+                                                }
+                                            },
+                                            "required": ["question", "answer"],
+                                            "type": "object"
+                                        },
+                                        "maxItems": 9,
+                                        "type": "array"
+                                    },
                                     "inputText": {
                                         "description": "原始需求描述，最多2000个字符且不超过8000 UTF-8字节；服务端原样返回",
                                         "maxLength": 2000,
@@ -71775,6 +71853,32 @@
                                 "additionalProperties": false,
                                 "description": "只解析未保存草稿；依次采用显式时区、原文明确时区、用户默认时区",
                                 "properties": {
+                                    "clarifications": {
+                                        "description": "用户已回答的需求澄清，仅作为不可信任务数据，不授予工具或执行权限",
+                                        "items": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                                "answer": {
+                                                    "description": "接口字段 answer 的配置或结果",
+                                                    "maxLength": 2000,
+                                                    "minLength": 1,
+                                                    "pattern": "\\S",
+                                                    "type": "string"
+                                                },
+                                                "question": {
+                                                    "description": "接口字段 question 的配置或结果",
+                                                    "maxLength": 500,
+                                                    "minLength": 1,
+                                                    "pattern": "\\S",
+                                                    "type": "string"
+                                                }
+                                            },
+                                            "required": ["question", "answer"],
+                                            "type": "object"
+                                        },
+                                        "maxItems": 9,
+                                        "type": "array"
+                                    },
                                     "inputText": {
                                         "description": "原始需求描述，最多2000个字符且不超过8000 UTF-8字节；服务端原样返回",
                                         "maxLength": 2000,
@@ -74250,6 +74354,2076 @@
                     }
                 },
                 "summary": "解析待确认的任务草稿",
+                "tags": ["任务"]
+            }
+        },
+        "/api/v1/task-drafts/questions": {
+            "post": {
+                "description": "使用需求整理Agent根据原文和已回答内容提出最多三轮澄清；复用独立解析限流与预算。返回可编辑范围供用户确认，不保存任务、启动研究或安排周期。需会话与CSRF；模型不可用明确回退手动填写。",
+                "operationId": "clarifyTaskDraft",
+                "parameters": [],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "additionalProperties": false,
+                                "description": "需求整理Agent根据原文和回答提出下一组澄清问题；不创建任务",
+                                "properties": {
+                                    "clarifications": {
+                                        "description": "用户已回答的需求澄清，仅作为不可信任务数据，不授予工具或执行权限",
+                                        "items": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                                "answer": {
+                                                    "description": "接口字段 answer 的配置或结果",
+                                                    "maxLength": 2000,
+                                                    "minLength": 1,
+                                                    "pattern": "\\S",
+                                                    "type": "string"
+                                                },
+                                                "question": {
+                                                    "description": "接口字段 question 的配置或结果",
+                                                    "maxLength": 500,
+                                                    "minLength": 1,
+                                                    "pattern": "\\S",
+                                                    "type": "string"
+                                                }
+                                            },
+                                            "required": ["question", "answer"],
+                                            "type": "object"
+                                        },
+                                        "maxItems": 9,
+                                        "type": "array"
+                                    },
+                                    "inputText": {
+                                        "description": "原始需求描述，最多2000个字符且不超过8000 UTF-8字节；服务端原样返回",
+                                        "maxLength": 2000,
+                                        "minLength": 1,
+                                        "pattern": "\\S",
+                                        "type": "string"
+                                    },
+                                    "round": {
+                                        "description": "本轮从0开始，最多三轮，末轮仅整理范围",
+                                        "maximum": 2,
+                                        "minimum": 0,
+                                        "type": "integer"
+                                    },
+                                    "timezone": {
+                                        "description": "明确的 IANA 时区，例如 Asia/Shanghai",
+                                        "format": "scova-timezone",
+                                        "type": "string"
+                                    }
+                                },
+                                "required": ["inputText", "clarifications", "round"],
+                                "type": "object"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "additionalProperties": false,
+                                "description": "需求整理Agent根据原文和回答提出下一组澄清问题；不创建任务",
+                                "properties": {
+                                    "clarifications": {
+                                        "description": "用户已回答的需求澄清，仅作为不可信任务数据，不授予工具或执行权限",
+                                        "items": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                                "answer": {
+                                                    "description": "接口字段 answer 的配置或结果",
+                                                    "maxLength": 2000,
+                                                    "minLength": 1,
+                                                    "pattern": "\\S",
+                                                    "type": "string"
+                                                },
+                                                "question": {
+                                                    "description": "接口字段 question 的配置或结果",
+                                                    "maxLength": 500,
+                                                    "minLength": 1,
+                                                    "pattern": "\\S",
+                                                    "type": "string"
+                                                }
+                                            },
+                                            "required": ["question", "answer"],
+                                            "type": "object"
+                                        },
+                                        "maxItems": 9,
+                                        "type": "array"
+                                    },
+                                    "inputText": {
+                                        "description": "原始需求描述，最多2000个字符且不超过8000 UTF-8字节；服务端原样返回",
+                                        "maxLength": 2000,
+                                        "minLength": 1,
+                                        "pattern": "\\S",
+                                        "type": "string"
+                                    },
+                                    "round": {
+                                        "description": "本轮从0开始，最多三轮，末轮仅整理范围",
+                                        "maximum": 2,
+                                        "minimum": 0,
+                                        "type": "integer"
+                                    },
+                                    "timezone": {
+                                        "description": "明确的 IANA 时区，例如 Asia/Shanghai",
+                                        "format": "scova-timezone",
+                                        "type": "string"
+                                    }
+                                },
+                                "required": ["inputText", "clarifications", "round"],
+                                "type": "object"
+                            }
+                        },
+                        "text/plain": {
+                            "schema": {
+                                "additionalProperties": false,
+                                "description": "需求整理Agent根据原文和回答提出下一组澄清问题；不创建任务",
+                                "properties": {
+                                    "clarifications": {
+                                        "description": "用户已回答的需求澄清，仅作为不可信任务数据，不授予工具或执行权限",
+                                        "items": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                                "answer": {
+                                                    "description": "接口字段 answer 的配置或结果",
+                                                    "maxLength": 2000,
+                                                    "minLength": 1,
+                                                    "pattern": "\\S",
+                                                    "type": "string"
+                                                },
+                                                "question": {
+                                                    "description": "接口字段 question 的配置或结果",
+                                                    "maxLength": 500,
+                                                    "minLength": 1,
+                                                    "pattern": "\\S",
+                                                    "type": "string"
+                                                }
+                                            },
+                                            "required": ["question", "answer"],
+                                            "type": "object"
+                                        },
+                                        "maxItems": 9,
+                                        "type": "array"
+                                    },
+                                    "inputText": {
+                                        "description": "原始需求描述，最多2000个字符且不超过8000 UTF-8字节；服务端原样返回",
+                                        "maxLength": 2000,
+                                        "minLength": 1,
+                                        "pattern": "\\S",
+                                        "type": "string"
+                                    },
+                                    "round": {
+                                        "description": "本轮从0开始，最多三轮，末轮仅整理范围",
+                                        "maximum": 2,
+                                        "minimum": 0,
+                                        "type": "integer"
+                                    },
+                                    "timezone": {
+                                        "description": "明确的 IANA 时区，例如 Asia/Shanghai",
+                                        "format": "scova-timezone",
+                                        "type": "string"
+                                    }
+                                },
+                                "required": ["inputText", "clarifications", "round"],
+                                "type": "object"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "inputText": {
+                                            "description": "原始需求描述，最多2000个字符且不超过8000 UTF-8字节；服务端原样返回",
+                                            "maxLength": 2000,
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "manualReason": {
+                                            "anyOf": [
+                                                {
+                                                    "const": "model_unavailable",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "ambiguous_timezone",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "invalid_output",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "timeout",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "aborted",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "budget_exceeded",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "model_failed",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "type": "null"
+                                                }
+                                            ],
+                                            "description": "手工回退的脱敏原因；模型解析成功时为空"
+                                        },
+                                        "mode": {
+                                            "anyOf": [
+                                                {
+                                                    "const": "model",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "manual",
+                                                    "type": "string"
+                                                }
+                                            ],
+                                            "description": "模型解析成功或需手工编辑；不使用固定演示资料冒充解析"
+                                        },
+                                        "parsingUsage": {
+                                            "$id": "#/components/schemas/TaskDraftUsage",
+                                            "additionalProperties": false,
+                                            "description": "不计入任何Run预算的本次草稿解析用量",
+                                            "properties": {
+                                                "attempts": {
+                                                    "description": "已预留的模型调用次数，含修复",
+                                                    "maximum": 2,
+                                                    "minimum": 0,
+                                                    "type": "integer"
+                                                },
+                                                "estimated": {
+                                                    "description": "是否含保守预留或估算用量",
+                                                    "type": "boolean"
+                                                },
+                                                "inputTokens": {
+                                                    "description": "独立解析输入用量；未知调用保留预留",
+                                                    "minimum": 0,
+                                                    "type": "integer"
+                                                },
+                                                "outputTokens": {
+                                                    "description": "独立解析输出用量；未知调用保留预留",
+                                                    "minimum": 0,
+                                                    "type": "integer"
+                                                }
+                                            },
+                                            "required": [
+                                                "attempts",
+                                                "inputTokens",
+                                                "outputTokens",
+                                                "estimated"
+                                            ],
+                                            "type": "object"
+                                        },
+                                        "questions": {
+                                            "description": "接口字段 questions 的配置或结果",
+                                            "items": {
+                                                "additionalProperties": false,
+                                                "properties": {
+                                                    "id": {
+                                                        "description": "资源标识",
+                                                        "pattern": "^q[1-3]$",
+                                                        "type": "string"
+                                                    },
+                                                    "options": {
+                                                        "description": "接口字段 options 的配置或结果",
+                                                        "items": {
+                                                            "maxLength": 200,
+                                                            "minLength": 1,
+                                                            "pattern": "\\S",
+                                                            "type": "string"
+                                                        },
+                                                        "maxItems": 4,
+                                                        "type": "array",
+                                                        "uniqueItems": true
+                                                    },
+                                                    "question": {
+                                                        "description": "接口字段 question 的配置或结果",
+                                                        "maxLength": 500,
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "reason": {
+                                                        "description": "分类或控制原因",
+                                                        "maxLength": 300,
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": ["id", "question", "reason", "options"],
+                                                "type": "object"
+                                            },
+                                            "maxItems": 3,
+                                            "type": "array"
+                                        },
+                                        "round": {
+                                            "description": "本轮从0开始，最多三轮，末轮仅整理范围",
+                                            "maximum": 2,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                        },
+                                        "scope": {
+                                            "additionalProperties": false,
+                                            "description": "生成草稿前经用户确认的搜索范围，模型不得扩大；不创建或执行任务",
+                                            "properties": {
+                                                "exclusions": {
+                                                    "description": "接口字段 exclusions 的配置或结果",
+                                                    "items": {
+                                                        "maxLength": 1000,
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "maxItems": 10,
+                                                    "type": "array"
+                                                },
+                                                "focusPoints": {
+                                                    "description": "接口字段 focusPoints 的配置或结果",
+                                                    "items": {
+                                                        "maxLength": 1000,
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "maxItems": 10,
+                                                    "type": "array"
+                                                },
+                                                "goal": {
+                                                    "description": "问答确认的查阅目标",
+                                                    "maxLength": 2000,
+                                                    "minLength": 1,
+                                                    "pattern": "\\S",
+                                                    "type": "string"
+                                                },
+                                                "outputFormat": {
+                                                    "anyOf": [
+                                                        {
+                                                            "const": "brief",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "list",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "comparison",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "research_report",
+                                                            "type": "string"
+                                                        }
+                                                    ],
+                                                    "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
+                                                },
+                                                "researchMode": {
+                                                    "anyOf": [
+                                                        {
+                                                            "const": "collection",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "analysis",
+                                                            "type": "string"
+                                                        }
+                                                    ],
+                                                    "description": "接口字段 researchMode 的配置或结果"
+                                                },
+                                                "sourcePreferences": {
+                                                    "additionalProperties": false,
+                                                    "description": "接口字段 sourcePreferences 的配置或结果",
+                                                    "properties": {
+                                                        "excludedUrls": {
+                                                            "description": "接口字段 excludedUrls 的配置或结果",
+                                                            "items": {
+                                                                "description": "HTTP/HTTPS 来源原文链接，不包含用户名或密码；实际抓取另行执行网络安全校验",
+                                                                "format": "scova-http-url",
+                                                                "maxLength": 4096,
+                                                                "type": "string"
+                                                            },
+                                                            "maxItems": 10,
+                                                            "type": "array",
+                                                            "uniqueItems": true
+                                                        },
+                                                        "officialOnly": {
+                                                            "description": "是否限定官方来源；Agent 仍需验证来源性质",
+                                                            "type": "boolean"
+                                                        },
+                                                        "preferredUrls": {
+                                                            "description": "接口字段 preferredUrls 的配置或结果",
+                                                            "items": {
+                                                                "description": "HTTP/HTTPS 来源原文链接，不包含用户名或密码；实际抓取另行执行网络安全校验",
+                                                                "format": "scova-http-url",
+                                                                "maxLength": 4096,
+                                                                "type": "string"
+                                                            },
+                                                            "maxItems": 10,
+                                                            "type": "array",
+                                                            "uniqueItems": true
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "preferredUrls",
+                                                        "excludedUrls",
+                                                        "officialOnly"
+                                                    ],
+                                                    "type": "object"
+                                                },
+                                                "timeRange": {
+                                                    "anyOf": [
+                                                        {
+                                                            "additionalProperties": false,
+                                                            "description": "滚动查阅范围",
+                                                            "properties": {
+                                                                "days": {
+                                                                    "description": "每次执行向前查阅的天数",
+                                                                    "maximum": 9007199254740991,
+                                                                    "minimum": 1,
+                                                                    "type": "integer"
+                                                                },
+                                                                "kind": {
+                                                                    "const": "rolling",
+                                                                    "description": "范围或记录分类",
+                                                                    "type": "string"
+                                                                }
+                                                            },
+                                                            "required": ["kind", "days"],
+                                                            "type": "object"
+                                                        },
+                                                        {
+                                                            "additionalProperties": false,
+                                                            "description": "固定查阅范围，结束时间不得早于开始时间",
+                                                            "properties": {
+                                                                "end": {
+                                                                    "description": "带 UTC 偏移的 ISO 8601 时间",
+                                                                    "format": "scova-instant",
+                                                                    "type": "string"
+                                                                },
+                                                                "kind": {
+                                                                    "const": "fixed",
+                                                                    "description": "范围或记录分类",
+                                                                    "type": "string"
+                                                                },
+                                                                "start": {
+                                                                    "description": "带 UTC 偏移的 ISO 8601 时间",
+                                                                    "format": "scova-instant",
+                                                                    "type": "string"
+                                                                }
+                                                            },
+                                                            "required": ["kind", "start", "end"],
+                                                            "type": "object"
+                                                        }
+                                                    ],
+                                                    "description": "滚动或固定时间范围"
+                                                }
+                                            },
+                                            "required": [
+                                                "goal",
+                                                "focusPoints",
+                                                "exclusions",
+                                                "sourcePreferences",
+                                                "timeRange",
+                                                "outputFormat",
+                                                "researchMode"
+                                            ],
+                                            "type": "object"
+                                        },
+                                        "summary": {
+                                            "description": "脱敏概述",
+                                            "maxLength": 1000,
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "summary",
+                                        "questions",
+                                        "scope",
+                                        "inputText",
+                                        "round",
+                                        "mode",
+                                        "manualReason",
+                                        "parsingUsage"
+                                    ],
+                                    "type": "object"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "properties": {
+                                        "inputText": {
+                                            "description": "原始需求描述，最多2000个字符且不超过8000 UTF-8字节；服务端原样返回",
+                                            "maxLength": 2000,
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "manualReason": {
+                                            "anyOf": [
+                                                {
+                                                    "const": "model_unavailable",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "ambiguous_timezone",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "invalid_output",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "timeout",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "aborted",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "budget_exceeded",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "model_failed",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "type": "null"
+                                                }
+                                            ],
+                                            "description": "手工回退的脱敏原因；模型解析成功时为空"
+                                        },
+                                        "mode": {
+                                            "anyOf": [
+                                                {
+                                                    "const": "model",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "manual",
+                                                    "type": "string"
+                                                }
+                                            ],
+                                            "description": "模型解析成功或需手工编辑；不使用固定演示资料冒充解析"
+                                        },
+                                        "parsingUsage": {
+                                            "$id": "#/components/schemas/TaskDraftUsage",
+                                            "additionalProperties": false,
+                                            "description": "不计入任何Run预算的本次草稿解析用量",
+                                            "properties": {
+                                                "attempts": {
+                                                    "description": "已预留的模型调用次数，含修复",
+                                                    "maximum": 2,
+                                                    "minimum": 0,
+                                                    "type": "integer"
+                                                },
+                                                "estimated": {
+                                                    "description": "是否含保守预留或估算用量",
+                                                    "type": "boolean"
+                                                },
+                                                "inputTokens": {
+                                                    "description": "独立解析输入用量；未知调用保留预留",
+                                                    "minimum": 0,
+                                                    "type": "integer"
+                                                },
+                                                "outputTokens": {
+                                                    "description": "独立解析输出用量；未知调用保留预留",
+                                                    "minimum": 0,
+                                                    "type": "integer"
+                                                }
+                                            },
+                                            "required": [
+                                                "attempts",
+                                                "inputTokens",
+                                                "outputTokens",
+                                                "estimated"
+                                            ],
+                                            "type": "object"
+                                        },
+                                        "questions": {
+                                            "description": "接口字段 questions 的配置或结果",
+                                            "items": {
+                                                "additionalProperties": false,
+                                                "properties": {
+                                                    "id": {
+                                                        "description": "资源标识",
+                                                        "pattern": "^q[1-3]$",
+                                                        "type": "string"
+                                                    },
+                                                    "options": {
+                                                        "description": "接口字段 options 的配置或结果",
+                                                        "items": {
+                                                            "maxLength": 200,
+                                                            "minLength": 1,
+                                                            "pattern": "\\S",
+                                                            "type": "string"
+                                                        },
+                                                        "maxItems": 4,
+                                                        "type": "array",
+                                                        "uniqueItems": true
+                                                    },
+                                                    "question": {
+                                                        "description": "接口字段 question 的配置或结果",
+                                                        "maxLength": 500,
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "reason": {
+                                                        "description": "分类或控制原因",
+                                                        "maxLength": 300,
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": ["id", "question", "reason", "options"],
+                                                "type": "object"
+                                            },
+                                            "maxItems": 3,
+                                            "type": "array"
+                                        },
+                                        "round": {
+                                            "description": "本轮从0开始，最多三轮，末轮仅整理范围",
+                                            "maximum": 2,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                        },
+                                        "scope": {
+                                            "additionalProperties": false,
+                                            "description": "生成草稿前经用户确认的搜索范围，模型不得扩大；不创建或执行任务",
+                                            "properties": {
+                                                "exclusions": {
+                                                    "description": "接口字段 exclusions 的配置或结果",
+                                                    "items": {
+                                                        "maxLength": 1000,
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "maxItems": 10,
+                                                    "type": "array"
+                                                },
+                                                "focusPoints": {
+                                                    "description": "接口字段 focusPoints 的配置或结果",
+                                                    "items": {
+                                                        "maxLength": 1000,
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "maxItems": 10,
+                                                    "type": "array"
+                                                },
+                                                "goal": {
+                                                    "description": "问答确认的查阅目标",
+                                                    "maxLength": 2000,
+                                                    "minLength": 1,
+                                                    "pattern": "\\S",
+                                                    "type": "string"
+                                                },
+                                                "outputFormat": {
+                                                    "anyOf": [
+                                                        {
+                                                            "const": "brief",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "list",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "comparison",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "research_report",
+                                                            "type": "string"
+                                                        }
+                                                    ],
+                                                    "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
+                                                },
+                                                "researchMode": {
+                                                    "anyOf": [
+                                                        {
+                                                            "const": "collection",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "analysis",
+                                                            "type": "string"
+                                                        }
+                                                    ],
+                                                    "description": "接口字段 researchMode 的配置或结果"
+                                                },
+                                                "sourcePreferences": {
+                                                    "additionalProperties": false,
+                                                    "description": "接口字段 sourcePreferences 的配置或结果",
+                                                    "properties": {
+                                                        "excludedUrls": {
+                                                            "description": "接口字段 excludedUrls 的配置或结果",
+                                                            "items": {
+                                                                "description": "HTTP/HTTPS 来源原文链接，不包含用户名或密码；实际抓取另行执行网络安全校验",
+                                                                "format": "scova-http-url",
+                                                                "maxLength": 4096,
+                                                                "type": "string"
+                                                            },
+                                                            "maxItems": 10,
+                                                            "type": "array",
+                                                            "uniqueItems": true
+                                                        },
+                                                        "officialOnly": {
+                                                            "description": "是否限定官方来源；Agent 仍需验证来源性质",
+                                                            "type": "boolean"
+                                                        },
+                                                        "preferredUrls": {
+                                                            "description": "接口字段 preferredUrls 的配置或结果",
+                                                            "items": {
+                                                                "description": "HTTP/HTTPS 来源原文链接，不包含用户名或密码；实际抓取另行执行网络安全校验",
+                                                                "format": "scova-http-url",
+                                                                "maxLength": 4096,
+                                                                "type": "string"
+                                                            },
+                                                            "maxItems": 10,
+                                                            "type": "array",
+                                                            "uniqueItems": true
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "preferredUrls",
+                                                        "excludedUrls",
+                                                        "officialOnly"
+                                                    ],
+                                                    "type": "object"
+                                                },
+                                                "timeRange": {
+                                                    "anyOf": [
+                                                        {
+                                                            "additionalProperties": false,
+                                                            "description": "滚动查阅范围",
+                                                            "properties": {
+                                                                "days": {
+                                                                    "description": "每次执行向前查阅的天数",
+                                                                    "maximum": 9007199254740991,
+                                                                    "minimum": 1,
+                                                                    "type": "integer"
+                                                                },
+                                                                "kind": {
+                                                                    "const": "rolling",
+                                                                    "description": "范围或记录分类",
+                                                                    "type": "string"
+                                                                }
+                                                            },
+                                                            "required": ["kind", "days"],
+                                                            "type": "object"
+                                                        },
+                                                        {
+                                                            "additionalProperties": false,
+                                                            "description": "固定查阅范围，结束时间不得早于开始时间",
+                                                            "properties": {
+                                                                "end": {
+                                                                    "description": "带 UTC 偏移的 ISO 8601 时间",
+                                                                    "format": "scova-instant",
+                                                                    "type": "string"
+                                                                },
+                                                                "kind": {
+                                                                    "const": "fixed",
+                                                                    "description": "范围或记录分类",
+                                                                    "type": "string"
+                                                                },
+                                                                "start": {
+                                                                    "description": "带 UTC 偏移的 ISO 8601 时间",
+                                                                    "format": "scova-instant",
+                                                                    "type": "string"
+                                                                }
+                                                            },
+                                                            "required": ["kind", "start", "end"],
+                                                            "type": "object"
+                                                        }
+                                                    ],
+                                                    "description": "滚动或固定时间范围"
+                                                }
+                                            },
+                                            "required": [
+                                                "goal",
+                                                "focusPoints",
+                                                "exclusions",
+                                                "sourcePreferences",
+                                                "timeRange",
+                                                "outputFormat",
+                                                "researchMode"
+                                            ],
+                                            "type": "object"
+                                        },
+                                        "summary": {
+                                            "description": "脱敏概述",
+                                            "maxLength": 1000,
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "summary",
+                                        "questions",
+                                        "scope",
+                                        "inputText",
+                                        "round",
+                                        "mode",
+                                        "manualReason",
+                                        "parsingUsage"
+                                    ],
+                                    "type": "object"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "properties": {
+                                        "inputText": {
+                                            "description": "原始需求描述，最多2000个字符且不超过8000 UTF-8字节；服务端原样返回",
+                                            "maxLength": 2000,
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "manualReason": {
+                                            "anyOf": [
+                                                {
+                                                    "const": "model_unavailable",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "ambiguous_timezone",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "invalid_output",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "timeout",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "aborted",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "budget_exceeded",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "model_failed",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "type": "null"
+                                                }
+                                            ],
+                                            "description": "手工回退的脱敏原因；模型解析成功时为空"
+                                        },
+                                        "mode": {
+                                            "anyOf": [
+                                                {
+                                                    "const": "model",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "manual",
+                                                    "type": "string"
+                                                }
+                                            ],
+                                            "description": "模型解析成功或需手工编辑；不使用固定演示资料冒充解析"
+                                        },
+                                        "parsingUsage": {
+                                            "$id": "#/components/schemas/TaskDraftUsage",
+                                            "additionalProperties": false,
+                                            "description": "不计入任何Run预算的本次草稿解析用量",
+                                            "properties": {
+                                                "attempts": {
+                                                    "description": "已预留的模型调用次数，含修复",
+                                                    "maximum": 2,
+                                                    "minimum": 0,
+                                                    "type": "integer"
+                                                },
+                                                "estimated": {
+                                                    "description": "是否含保守预留或估算用量",
+                                                    "type": "boolean"
+                                                },
+                                                "inputTokens": {
+                                                    "description": "独立解析输入用量；未知调用保留预留",
+                                                    "minimum": 0,
+                                                    "type": "integer"
+                                                },
+                                                "outputTokens": {
+                                                    "description": "独立解析输出用量；未知调用保留预留",
+                                                    "minimum": 0,
+                                                    "type": "integer"
+                                                }
+                                            },
+                                            "required": [
+                                                "attempts",
+                                                "inputTokens",
+                                                "outputTokens",
+                                                "estimated"
+                                            ],
+                                            "type": "object"
+                                        },
+                                        "questions": {
+                                            "description": "接口字段 questions 的配置或结果",
+                                            "items": {
+                                                "additionalProperties": false,
+                                                "properties": {
+                                                    "id": {
+                                                        "description": "资源标识",
+                                                        "pattern": "^q[1-3]$",
+                                                        "type": "string"
+                                                    },
+                                                    "options": {
+                                                        "description": "接口字段 options 的配置或结果",
+                                                        "items": {
+                                                            "maxLength": 200,
+                                                            "minLength": 1,
+                                                            "pattern": "\\S",
+                                                            "type": "string"
+                                                        },
+                                                        "maxItems": 4,
+                                                        "type": "array",
+                                                        "uniqueItems": true
+                                                    },
+                                                    "question": {
+                                                        "description": "接口字段 question 的配置或结果",
+                                                        "maxLength": 500,
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "reason": {
+                                                        "description": "分类或控制原因",
+                                                        "maxLength": 300,
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": ["id", "question", "reason", "options"],
+                                                "type": "object"
+                                            },
+                                            "maxItems": 3,
+                                            "type": "array"
+                                        },
+                                        "round": {
+                                            "description": "本轮从0开始，最多三轮，末轮仅整理范围",
+                                            "maximum": 2,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                        },
+                                        "scope": {
+                                            "additionalProperties": false,
+                                            "description": "生成草稿前经用户确认的搜索范围，模型不得扩大；不创建或执行任务",
+                                            "properties": {
+                                                "exclusions": {
+                                                    "description": "接口字段 exclusions 的配置或结果",
+                                                    "items": {
+                                                        "maxLength": 1000,
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "maxItems": 10,
+                                                    "type": "array"
+                                                },
+                                                "focusPoints": {
+                                                    "description": "接口字段 focusPoints 的配置或结果",
+                                                    "items": {
+                                                        "maxLength": 1000,
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "maxItems": 10,
+                                                    "type": "array"
+                                                },
+                                                "goal": {
+                                                    "description": "问答确认的查阅目标",
+                                                    "maxLength": 2000,
+                                                    "minLength": 1,
+                                                    "pattern": "\\S",
+                                                    "type": "string"
+                                                },
+                                                "outputFormat": {
+                                                    "anyOf": [
+                                                        {
+                                                            "const": "brief",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "list",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "comparison",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "research_report",
+                                                            "type": "string"
+                                                        }
+                                                    ],
+                                                    "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
+                                                },
+                                                "researchMode": {
+                                                    "anyOf": [
+                                                        {
+                                                            "const": "collection",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "analysis",
+                                                            "type": "string"
+                                                        }
+                                                    ],
+                                                    "description": "接口字段 researchMode 的配置或结果"
+                                                },
+                                                "sourcePreferences": {
+                                                    "additionalProperties": false,
+                                                    "description": "接口字段 sourcePreferences 的配置或结果",
+                                                    "properties": {
+                                                        "excludedUrls": {
+                                                            "description": "接口字段 excludedUrls 的配置或结果",
+                                                            "items": {
+                                                                "description": "HTTP/HTTPS 来源原文链接，不包含用户名或密码；实际抓取另行执行网络安全校验",
+                                                                "format": "scova-http-url",
+                                                                "maxLength": 4096,
+                                                                "type": "string"
+                                                            },
+                                                            "maxItems": 10,
+                                                            "type": "array",
+                                                            "uniqueItems": true
+                                                        },
+                                                        "officialOnly": {
+                                                            "description": "是否限定官方来源；Agent 仍需验证来源性质",
+                                                            "type": "boolean"
+                                                        },
+                                                        "preferredUrls": {
+                                                            "description": "接口字段 preferredUrls 的配置或结果",
+                                                            "items": {
+                                                                "description": "HTTP/HTTPS 来源原文链接，不包含用户名或密码；实际抓取另行执行网络安全校验",
+                                                                "format": "scova-http-url",
+                                                                "maxLength": 4096,
+                                                                "type": "string"
+                                                            },
+                                                            "maxItems": 10,
+                                                            "type": "array",
+                                                            "uniqueItems": true
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "preferredUrls",
+                                                        "excludedUrls",
+                                                        "officialOnly"
+                                                    ],
+                                                    "type": "object"
+                                                },
+                                                "timeRange": {
+                                                    "anyOf": [
+                                                        {
+                                                            "additionalProperties": false,
+                                                            "description": "滚动查阅范围",
+                                                            "properties": {
+                                                                "days": {
+                                                                    "description": "每次执行向前查阅的天数",
+                                                                    "maximum": 9007199254740991,
+                                                                    "minimum": 1,
+                                                                    "type": "integer"
+                                                                },
+                                                                "kind": {
+                                                                    "const": "rolling",
+                                                                    "description": "范围或记录分类",
+                                                                    "type": "string"
+                                                                }
+                                                            },
+                                                            "required": ["kind", "days"],
+                                                            "type": "object"
+                                                        },
+                                                        {
+                                                            "additionalProperties": false,
+                                                            "description": "固定查阅范围，结束时间不得早于开始时间",
+                                                            "properties": {
+                                                                "end": {
+                                                                    "description": "带 UTC 偏移的 ISO 8601 时间",
+                                                                    "format": "scova-instant",
+                                                                    "type": "string"
+                                                                },
+                                                                "kind": {
+                                                                    "const": "fixed",
+                                                                    "description": "范围或记录分类",
+                                                                    "type": "string"
+                                                                },
+                                                                "start": {
+                                                                    "description": "带 UTC 偏移的 ISO 8601 时间",
+                                                                    "format": "scova-instant",
+                                                                    "type": "string"
+                                                                }
+                                                            },
+                                                            "required": ["kind", "start", "end"],
+                                                            "type": "object"
+                                                        }
+                                                    ],
+                                                    "description": "滚动或固定时间范围"
+                                                }
+                                            },
+                                            "required": [
+                                                "goal",
+                                                "focusPoints",
+                                                "exclusions",
+                                                "sourcePreferences",
+                                                "timeRange",
+                                                "outputFormat",
+                                                "researchMode"
+                                            ],
+                                            "type": "object"
+                                        },
+                                        "summary": {
+                                            "description": "脱敏概述",
+                                            "maxLength": 1000,
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "summary",
+                                        "questions",
+                                        "scope",
+                                        "inputText",
+                                        "round",
+                                        "mode",
+                                        "manualReason",
+                                        "parsingUsage"
+                                    ],
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "AI澄清结果或明确的手工回退；范围必须由用户核对"
+                    },
+                    "400": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "fieldErrors": {
+                                            "description": "输入校验失败时的字段错误列表",
+                                            "items": {
+                                                "additionalProperties": false,
+                                                "description": "可定位的字段校验错误",
+                                                "properties": {
+                                                    "message": {
+                                                        "description": "至少包含一个非空白字符的文本",
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": ["path", "message"],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "message": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "requestId": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": ["code", "message", "requestId"],
+                                    "type": "object"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "fieldErrors": {
+                                            "description": "输入校验失败时的字段错误列表",
+                                            "items": {
+                                                "additionalProperties": false,
+                                                "description": "可定位的字段校验错误",
+                                                "properties": {
+                                                    "message": {
+                                                        "description": "至少包含一个非空白字符的文本",
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": ["path", "message"],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "message": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "requestId": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": ["code", "message", "requestId"],
+                                    "type": "object"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "fieldErrors": {
+                                            "description": "输入校验失败时的字段错误列表",
+                                            "items": {
+                                                "additionalProperties": false,
+                                                "description": "可定位的字段校验错误",
+                                                "properties": {
+                                                    "message": {
+                                                        "description": "至少包含一个非空白字符的文本",
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": ["path", "message"],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "message": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "requestId": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": ["code", "message", "requestId"],
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "401": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "fieldErrors": {
+                                            "description": "输入校验失败时的字段错误列表",
+                                            "items": {
+                                                "additionalProperties": false,
+                                                "description": "可定位的字段校验错误",
+                                                "properties": {
+                                                    "message": {
+                                                        "description": "至少包含一个非空白字符的文本",
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": ["path", "message"],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "message": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "requestId": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": ["code", "message", "requestId"],
+                                    "type": "object"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "fieldErrors": {
+                                            "description": "输入校验失败时的字段错误列表",
+                                            "items": {
+                                                "additionalProperties": false,
+                                                "description": "可定位的字段校验错误",
+                                                "properties": {
+                                                    "message": {
+                                                        "description": "至少包含一个非空白字符的文本",
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": ["path", "message"],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "message": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "requestId": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": ["code", "message", "requestId"],
+                                    "type": "object"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "fieldErrors": {
+                                            "description": "输入校验失败时的字段错误列表",
+                                            "items": {
+                                                "additionalProperties": false,
+                                                "description": "可定位的字段校验错误",
+                                                "properties": {
+                                                    "message": {
+                                                        "description": "至少包含一个非空白字符的文本",
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": ["path", "message"],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "message": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "requestId": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": ["code", "message", "requestId"],
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "403": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "fieldErrors": {
+                                            "description": "输入校验失败时的字段错误列表",
+                                            "items": {
+                                                "additionalProperties": false,
+                                                "description": "可定位的字段校验错误",
+                                                "properties": {
+                                                    "message": {
+                                                        "description": "至少包含一个非空白字符的文本",
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": ["path", "message"],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "message": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "requestId": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": ["code", "message", "requestId"],
+                                    "type": "object"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "fieldErrors": {
+                                            "description": "输入校验失败时的字段错误列表",
+                                            "items": {
+                                                "additionalProperties": false,
+                                                "description": "可定位的字段校验错误",
+                                                "properties": {
+                                                    "message": {
+                                                        "description": "至少包含一个非空白字符的文本",
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": ["path", "message"],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "message": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "requestId": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": ["code", "message", "requestId"],
+                                    "type": "object"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "fieldErrors": {
+                                            "description": "输入校验失败时的字段错误列表",
+                                            "items": {
+                                                "additionalProperties": false,
+                                                "description": "可定位的字段校验错误",
+                                                "properties": {
+                                                    "message": {
+                                                        "description": "至少包含一个非空白字符的文本",
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": ["path", "message"],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "message": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "requestId": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": ["code", "message", "requestId"],
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "422": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "fieldErrors": {
+                                            "description": "输入校验失败时的字段错误列表",
+                                            "items": {
+                                                "additionalProperties": false,
+                                                "description": "可定位的字段校验错误",
+                                                "properties": {
+                                                    "message": {
+                                                        "description": "至少包含一个非空白字符的文本",
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": ["path", "message"],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "message": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "requestId": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": ["code", "message", "requestId"],
+                                    "type": "object"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "fieldErrors": {
+                                            "description": "输入校验失败时的字段错误列表",
+                                            "items": {
+                                                "additionalProperties": false,
+                                                "description": "可定位的字段校验错误",
+                                                "properties": {
+                                                    "message": {
+                                                        "description": "至少包含一个非空白字符的文本",
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": ["path", "message"],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "message": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "requestId": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": ["code", "message", "requestId"],
+                                    "type": "object"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "fieldErrors": {
+                                            "description": "输入校验失败时的字段错误列表",
+                                            "items": {
+                                                "additionalProperties": false,
+                                                "description": "可定位的字段校验错误",
+                                                "properties": {
+                                                    "message": {
+                                                        "description": "至少包含一个非空白字符的文本",
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": ["path", "message"],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "message": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "requestId": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": ["code", "message", "requestId"],
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "429": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "fieldErrors": {
+                                            "description": "输入校验失败时的字段错误列表",
+                                            "items": {
+                                                "additionalProperties": false,
+                                                "description": "可定位的字段校验错误",
+                                                "properties": {
+                                                    "message": {
+                                                        "description": "至少包含一个非空白字符的文本",
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": ["path", "message"],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "message": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "requestId": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": ["code", "message", "requestId"],
+                                    "type": "object"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "fieldErrors": {
+                                            "description": "输入校验失败时的字段错误列表",
+                                            "items": {
+                                                "additionalProperties": false,
+                                                "description": "可定位的字段校验错误",
+                                                "properties": {
+                                                    "message": {
+                                                        "description": "至少包含一个非空白字符的文本",
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": ["path", "message"],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "message": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "requestId": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": ["code", "message", "requestId"],
+                                    "type": "object"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "fieldErrors": {
+                                            "description": "输入校验失败时的字段错误列表",
+                                            "items": {
+                                                "additionalProperties": false,
+                                                "description": "可定位的字段校验错误",
+                                                "properties": {
+                                                    "message": {
+                                                        "description": "至少包含一个非空白字符的文本",
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": ["path", "message"],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "message": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "requestId": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": ["code", "message", "requestId"],
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "503": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "fieldErrors": {
+                                            "description": "输入校验失败时的字段错误列表",
+                                            "items": {
+                                                "additionalProperties": false,
+                                                "description": "可定位的字段校验错误",
+                                                "properties": {
+                                                    "message": {
+                                                        "description": "至少包含一个非空白字符的文本",
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": ["path", "message"],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "message": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "requestId": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": ["code", "message", "requestId"],
+                                    "type": "object"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "fieldErrors": {
+                                            "description": "输入校验失败时的字段错误列表",
+                                            "items": {
+                                                "additionalProperties": false,
+                                                "description": "可定位的字段校验错误",
+                                                "properties": {
+                                                    "message": {
+                                                        "description": "至少包含一个非空白字符的文本",
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": ["path", "message"],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "message": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "requestId": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": ["code", "message", "requestId"],
+                                    "type": "object"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "fieldErrors": {
+                                            "description": "输入校验失败时的字段错误列表",
+                                            "items": {
+                                                "additionalProperties": false,
+                                                "description": "可定位的字段校验错误",
+                                                "properties": {
+                                                    "message": {
+                                                        "description": "至少包含一个非空白字符的文本",
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": ["path", "message"],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "message": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "requestId": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": ["code", "message", "requestId"],
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    }
+                },
+                "summary": "通过AI问答澄清任务需求",
                 "tags": ["任务"]
             }
         },

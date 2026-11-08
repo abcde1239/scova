@@ -158,6 +158,72 @@ async function counter() {
 }
 
 describe('HTTP任务草稿、真实Redis解析预算与手工回退', () => {
+    it('AI澄清接口校验会话和CSRF，共享解析账本且回答送入模型，无任务副作用', async () => {
+        const owner = await register();
+        const before = await businessCounts();
+        const scope = {
+            goal: '收集课程价格',
+            focusPoints: ['价格'],
+            exclusions: [],
+            sourcePreferences: { preferredUrls: [], excludedUrls: [], officialOnly: false },
+            timeRange: { kind: 'rolling', days: 30 },
+            outputFormat: 'comparison',
+            researchMode: 'collection',
+        };
+        model = fixture((_index, input) => {
+            const data = input.untrustedSources?.[0] as { clarifications: { answer: string }[] };
+            return {
+                summary: '按已确认城市查阅课程',
+                scope,
+                questions: data.clarifications.length
+                    ? []
+                    : [
+                          {
+                              id: 'q1',
+                              question: '哪个城市？',
+                              reason: '影响可报名课程',
+                              options: ['上海', '杭州'],
+                          },
+                      ],
+            };
+        });
+        const body = { inputText: '比较课程价格', clarifications: [], round: 0 };
+        const send = (value: unknown, authenticated = true) =>
+            request('/api/v1/task-drafts/questions', {
+                method: 'POST',
+                headers: authenticated ? authHeaders(owner) : headers(),
+                body: JSON.stringify(value),
+            });
+        expect((await send(body, false)).status).toBe(401);
+        expect(
+            (
+                await request('/api/v1/task-drafts/questions', {
+                    method: 'POST',
+                    headers: headers({ cookie: owner.cookie }),
+                    body: JSON.stringify(body),
+                })
+            ).status,
+        ).toBe(403);
+        expect((await send({ ...body, round: 3 })).status).toBe(422);
+        expect(externalCalls).toBe(0);
+        const first = await send(body);
+        expect(first.status).toBe(200);
+        expect(first.headers.get('cache-control')).toBe('no-store');
+        expect((await json(first)).questions[0].question).toBe('哪个城市？');
+        const next = await send({
+            ...body,
+            round: 1,
+            clarifications: [{ question: '哪个城市？', answer: '上海' }],
+        });
+        expect((await json(next)).questions).toEqual([]);
+        expect(await counter()).toMatchObject({
+            requests: '2',
+            attempts: '2',
+            inputTokens: '200',
+            outputTokens: '200',
+        });
+        expect(await businessCounts()).toEqual(before);
+    });
     beforeAll(async () => {
         await admin.connect();
         await admin.query('CREATE SCHEMA "' + schema + '"');
