@@ -6,6 +6,8 @@
 
 壳测试覆盖工作台路由、刷新、未知路径、390 视口导航和键盘主内容焦点，不代表账号、研究旅程或完整视觉验收。成功冒烟也在各自结果目录保存桌面和窄视口截图。Vite+ 单元扫描与 Playwright 隔离。
 
+普通样本使用 `.env.test` 的同源 `/api/v1`，仅 test 模式的 preview 将该路径代理到 `127.0.0.1:4190` 的受控 API。浏览器不直接访问该端口，Cookie 与请求来源检查均以页面源为准；生产 preview 不启用此代理。运行默认样本时保留这一配置，不注入跨源 API 地址。
+
 [基础视觉验收](frontend-visual-foundation.md)另提供独立端口的四主色、浅暗、中文字体及透明层矩阵，记录实际渲染测量与源码指纹；它不替代页面专项或真实设备验收。
 
 全栈环境需要 Docker Engine 和 Compose v2，并能拉取构建所需镜像、安装锁定依赖。连续执行两次 `vp run test:e2e tests/e2e/environment.spec.ts`，验证真实 Web 静态代理、API、PostgreSQL、Redis、Worker、迁移与交付。首次构建可能较慢，镜像构建上限 15 分钟；依赖和应用健康等待分别为 90、120 秒，单次 Run 交付等待 90 秒。该命令自动选择全栈配置，不启动 Vite preview。
