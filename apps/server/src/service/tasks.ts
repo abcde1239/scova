@@ -61,6 +61,7 @@ export function comparisonScopeHash(config: TaskConfig): string {
                 exclusions: config.exclusions,
                 sourcePreferences: config.sourcePreferences,
                 timeRange: config.timeRange,
+                ...(config.researchMode === 'collection' ? { researchMode: 'collection' } : {}),
             }),
         ),
     );

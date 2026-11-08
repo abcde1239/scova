@@ -504,6 +504,19 @@
                                 ],
                                 "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
                             },
+                            "researchMode": {
+                                "anyOf": [
+                                    {
+                                        "const": "collection",
+                                        "type": "string"
+                                    },
+                                    {
+                                        "const": "analysis",
+                                        "type": "string"
+                                    }
+                                ],
+                                "description": "资料收集汇集当前来源内容；分析研究核对时间、支持关系与条件。省略沿用分析研究"
+                            },
                             "schedule": {
                                 "anyOf": [
                                     {
@@ -944,6 +957,11 @@
                                                 "maxItems": 20,
                                                 "minItems": 1,
                                                 "type": "array"
+                                            },
+                                            "researchMode": {
+                                                "const": "collection",
+                                                "description": "以读取到的来源信息回答，不认证发布时间；timeScope保留真实判定",
+                                                "type": "string"
                                             },
                                             "selections": {
                                                 "description": "接口字段 selections 的配置或结果",
@@ -1578,6 +1596,11 @@
                                                             "maxItems": 20,
                                                             "minItems": 1,
                                                             "type": "array"
+                                                        },
+                                                        "researchMode": {
+                                                            "const": "collection",
+                                                            "description": "以读取到的来源信息回答，不认证发布时间；timeScope保留真实判定",
+                                                            "type": "string"
                                                         },
                                                         "selections": {
                                                             "description": "接口字段 selections 的配置或结果",
@@ -4050,6 +4073,11 @@
                                         "minItems": 1,
                                         "type": "array"
                                     },
+                                    "researchMode": {
+                                        "const": "collection",
+                                        "description": "以读取到的来源信息回答，不认证发布时间；timeScope保留真实判定",
+                                        "type": "string"
+                                    },
                                     "selections": {
                                         "description": "接口字段 selections 的配置或结果",
                                         "items": {
@@ -4946,6 +4974,11 @@
                                                     "minItems": 1,
                                                     "type": "array"
                                                 },
+                                                "researchMode": {
+                                                    "const": "collection",
+                                                    "description": "以读取到的来源信息回答，不认证发布时间；timeScope保留真实判定",
+                                                    "type": "string"
+                                                },
                                                 "selections": {
                                                     "description": "接口字段 selections 的配置或结果",
                                                     "items": {
@@ -5818,6 +5851,11 @@
                                                 "minItems": 1,
                                                 "type": "array"
                                             },
+                                            "researchMode": {
+                                                "const": "collection",
+                                                "description": "以读取到的来源信息回答，不认证发布时间；timeScope保留真实判定",
+                                                "type": "string"
+                                            },
                                             "selections": {
                                                 "description": "接口字段 selections 的配置或结果",
                                                 "items": {
@@ -6407,6 +6445,27 @@
                         "const": "live",
                         "description": "真实或演示服务模式",
                         "type": "string"
+                    },
+                    "outputFormat": {
+                        "anyOf": [
+                            {
+                                "const": "brief",
+                                "type": "string"
+                            },
+                            {
+                                "const": "list",
+                                "type": "string"
+                            },
+                            {
+                                "const": "comparison",
+                                "type": "string"
+                            },
+                            {
+                                "const": "research_report",
+                                "type": "string"
+                            }
+                        ],
+                        "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
                     }
                 },
                 "type": "object"
@@ -6636,6 +6695,11 @@
                                                         "maxItems": 20,
                                                         "minItems": 1,
                                                         "type": "array"
+                                                    },
+                                                    "researchMode": {
+                                                        "const": "collection",
+                                                        "description": "以读取到的来源信息回答，不认证发布时间；timeScope保留真实判定",
+                                                        "type": "string"
                                                     },
                                                     "selections": {
                                                         "description": "接口字段 selections 的配置或结果",
@@ -7931,6 +7995,19 @@
                                         "description": "是否允许在剩余预算内按策略重试",
                                         "type": "boolean"
                                     },
+                                    "severity": {
+                                        "anyOf": [
+                                            {
+                                                "const": "warning",
+                                                "type": "string"
+                                            },
+                                            {
+                                                "const": "error",
+                                                "type": "string"
+                                            }
+                                        ],
+                                        "description": "单次工具异常的影响等级；最终执行失败另记error，历史事件可省略"
+                                    },
                                     "tool": {
                                         "anyOf": [
                                             {
@@ -8297,6 +8374,11 @@
                                                 "maxItems": 20,
                                                 "minItems": 1,
                                                 "type": "array"
+                                            },
+                                            "researchMode": {
+                                                "const": "collection",
+                                                "description": "以读取到的来源信息回答，不认证发布时间；timeScope保留真实判定",
+                                                "type": "string"
                                             },
                                             "selections": {
                                                 "description": "接口字段 selections 的配置或结果",
@@ -9218,6 +9300,11 @@
                                                             "minItems": 1,
                                                             "type": "array"
                                                         },
+                                                        "researchMode": {
+                                                            "const": "collection",
+                                                            "description": "以读取到的来源信息回答，不认证发布时间；timeScope保留真实判定",
+                                                            "type": "string"
+                                                        },
                                                         "selections": {
                                                             "description": "接口字段 selections 的配置或结果",
                                                             "items": {
@@ -10101,6 +10188,19 @@
                         ],
                         "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
                     },
+                    "researchMode": {
+                        "anyOf": [
+                            {
+                                "const": "collection",
+                                "type": "string"
+                            },
+                            {
+                                "const": "analysis",
+                                "type": "string"
+                            }
+                        ],
+                        "description": "资料收集汇集当前来源内容；分析研究核对时间、支持关系与条件。省略沿用分析研究"
+                    },
                     "schedule": {
                         "anyOf": [
                             {
@@ -10507,6 +10607,19 @@
                                         ],
                                         "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
                                     },
+                                    "researchMode": {
+                                        "anyOf": [
+                                            {
+                                                "const": "collection",
+                                                "type": "string"
+                                            },
+                                            {
+                                                "const": "analysis",
+                                                "type": "string"
+                                            }
+                                        ],
+                                        "description": "资料收集汇集当前来源内容；分析研究核对时间、支持关系与条件。省略沿用分析研究"
+                                    },
                                     "schedule": {
                                         "anyOf": [
                                             {
@@ -10741,6 +10854,168 @@
                         "pattern": "\\S",
                         "type": "string"
                     },
+                    "searchScope": {
+                        "additionalProperties": false,
+                        "description": "生成草稿前经用户确认的搜索范围，模型不得扩大；不创建或执行任务",
+                        "properties": {
+                            "exclusions": {
+                                "description": "接口字段 exclusions 的配置或结果",
+                                "items": {
+                                    "maxLength": 1000,
+                                    "minLength": 1,
+                                    "pattern": "\\S",
+                                    "type": "string"
+                                },
+                                "maxItems": 10,
+                                "type": "array"
+                            },
+                            "focusPoints": {
+                                "description": "接口字段 focusPoints 的配置或结果",
+                                "items": {
+                                    "maxLength": 1000,
+                                    "minLength": 1,
+                                    "pattern": "\\S",
+                                    "type": "string"
+                                },
+                                "maxItems": 10,
+                                "type": "array"
+                            },
+                            "goal": {
+                                "description": "问答确认的查阅目标",
+                                "maxLength": 2000,
+                                "minLength": 1,
+                                "pattern": "\\S",
+                                "type": "string"
+                            },
+                            "outputFormat": {
+                                "anyOf": [
+                                    {
+                                        "const": "brief",
+                                        "type": "string"
+                                    },
+                                    {
+                                        "const": "list",
+                                        "type": "string"
+                                    },
+                                    {
+                                        "const": "comparison",
+                                        "type": "string"
+                                    },
+                                    {
+                                        "const": "research_report",
+                                        "type": "string"
+                                    }
+                                ],
+                                "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
+                            },
+                            "researchMode": {
+                                "anyOf": [
+                                    {
+                                        "const": "collection",
+                                        "type": "string"
+                                    },
+                                    {
+                                        "const": "analysis",
+                                        "type": "string"
+                                    }
+                                ],
+                                "description": "接口字段 researchMode 的配置或结果"
+                            },
+                            "sourcePreferences": {
+                                "additionalProperties": false,
+                                "description": "接口字段 sourcePreferences 的配置或结果",
+                                "properties": {
+                                    "excludedUrls": {
+                                        "description": "接口字段 excludedUrls 的配置或结果",
+                                        "items": {
+                                            "description": "HTTP/HTTPS 来源原文链接，不包含用户名或密码；实际抓取另行执行网络安全校验",
+                                            "format": "scova-http-url",
+                                            "maxLength": 4096,
+                                            "type": "string"
+                                        },
+                                        "maxItems": 10,
+                                        "type": "array",
+                                        "uniqueItems": true
+                                    },
+                                    "officialOnly": {
+                                        "description": "是否限定官方来源；Agent 仍需验证来源性质",
+                                        "type": "boolean"
+                                    },
+                                    "preferredUrls": {
+                                        "description": "接口字段 preferredUrls 的配置或结果",
+                                        "items": {
+                                            "description": "HTTP/HTTPS 来源原文链接，不包含用户名或密码；实际抓取另行执行网络安全校验",
+                                            "format": "scova-http-url",
+                                            "maxLength": 4096,
+                                            "type": "string"
+                                        },
+                                        "maxItems": 10,
+                                        "type": "array",
+                                        "uniqueItems": true
+                                    }
+                                },
+                                "required": ["preferredUrls", "excludedUrls", "officialOnly"],
+                                "type": "object"
+                            },
+                            "timeRange": {
+                                "anyOf": [
+                                    {
+                                        "additionalProperties": false,
+                                        "description": "滚动查阅范围",
+                                        "properties": {
+                                            "days": {
+                                                "description": "每次执行向前查阅的天数",
+                                                "maximum": 9007199254740991,
+                                                "minimum": 1,
+                                                "type": "integer"
+                                            },
+                                            "kind": {
+                                                "const": "rolling",
+                                                "description": "范围或记录分类",
+                                                "type": "string"
+                                            }
+                                        },
+                                        "required": ["kind", "days"],
+                                        "type": "object"
+                                    },
+                                    {
+                                        "additionalProperties": false,
+                                        "description": "固定查阅范围，结束时间不得早于开始时间",
+                                        "properties": {
+                                            "end": {
+                                                "description": "带 UTC 偏移的 ISO 8601 时间",
+                                                "format": "scova-instant",
+                                                "type": "string"
+                                            },
+                                            "kind": {
+                                                "const": "fixed",
+                                                "description": "范围或记录分类",
+                                                "type": "string"
+                                            },
+                                            "start": {
+                                                "description": "带 UTC 偏移的 ISO 8601 时间",
+                                                "format": "scova-instant",
+                                                "type": "string"
+                                            }
+                                        },
+                                        "required": ["kind", "start", "end"],
+                                        "type": "object"
+                                    }
+                                ],
+                                "description": "滚动或固定时间范围"
+                            }
+                        },
+                        "required": [
+                            "goal",
+                            "focusPoints",
+                            "exclusions",
+                            "sourcePreferences",
+                            "timeRange",
+                            "outputFormat",
+                            "researchMode"
+                        ],
+                        "type": "object"
+                    },
                     "timezone": {
                         "description": "明确的 IANA 时区，例如 Asia/Shanghai",
                         "format": "scova-timezone",
@@ -10884,6 +11159,19 @@
                                     }
                                 ],
                                 "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
+                            },
+                            "researchMode": {
+                                "anyOf": [
+                                    {
+                                        "const": "collection",
+                                        "type": "string"
+                                    },
+                                    {
+                                        "const": "analysis",
+                                        "type": "string"
+                                    }
+                                ],
+                                "description": "资料收集汇集当前来源内容；分析研究核对时间、支持关系与条件。省略沿用分析研究"
                             },
                             "schedule": {
                                 "anyOf": [
@@ -11462,6 +11750,19 @@
                                 ],
                                 "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
                             },
+                            "researchMode": {
+                                "anyOf": [
+                                    {
+                                        "const": "collection",
+                                        "type": "string"
+                                    },
+                                    {
+                                        "const": "analysis",
+                                        "type": "string"
+                                    }
+                                ],
+                                "description": "资料收集汇集当前来源内容；分析研究核对时间、支持关系与条件。省略沿用分析研究"
+                            },
                             "schedule": {
                                 "anyOf": [
                                     {
@@ -11853,6 +12154,19 @@
                                     }
                                 ],
                                 "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
+                            },
+                            "researchMode": {
+                                "anyOf": [
+                                    {
+                                        "const": "collection",
+                                        "type": "string"
+                                    },
+                                    {
+                                        "const": "analysis",
+                                        "type": "string"
+                                    }
+                                ],
+                                "description": "资料收集汇集当前来源内容；分析研究核对时间、支持关系与条件。省略沿用分析研究"
                             },
                             "schedule": {
                                 "anyOf": [
@@ -18173,6 +18487,11 @@
                                                                                 "minItems": 1,
                                                                                 "type": "array"
                                                                             },
+                                                                            "researchMode": {
+                                                                                "const": "collection",
+                                                                                "description": "以读取到的来源信息回答，不认证发布时间；timeScope保留真实判定",
+                                                                                "type": "string"
+                                                                            },
                                                                             "selections": {
                                                                                 "description": "接口字段 selections 的配置或结果",
                                                                                 "items": {
@@ -18834,6 +19153,11 @@
                                                                                 "minItems": 1,
                                                                                 "type": "array"
                                                                             },
+                                                                            "researchMode": {
+                                                                                "const": "collection",
+                                                                                "description": "以读取到的来源信息回答，不认证发布时间；timeScope保留真实判定",
+                                                                                "type": "string"
+                                                                            },
                                                                             "selections": {
                                                                                 "description": "接口字段 selections 的配置或结果",
                                                                                 "items": {
@@ -19494,6 +19818,11 @@
                                                                                 "maxItems": 20,
                                                                                 "minItems": 1,
                                                                                 "type": "array"
+                                                                            },
+                                                                            "researchMode": {
+                                                                                "const": "collection",
+                                                                                "description": "以读取到的来源信息回答，不认证发布时间；timeScope保留真实判定",
+                                                                                "type": "string"
                                                                             },
                                                                             "selections": {
                                                                                 "description": "接口字段 selections 的配置或结果",
@@ -21125,6 +21454,11 @@
                                                                     "minItems": 1,
                                                                     "type": "array"
                                                                 },
+                                                                "researchMode": {
+                                                                    "const": "collection",
+                                                                    "description": "以读取到的来源信息回答，不认证发布时间；timeScope保留真实判定",
+                                                                    "type": "string"
+                                                                },
                                                                 "selections": {
                                                                     "description": "接口字段 selections 的配置或结果",
                                                                     "items": {
@@ -21755,6 +22089,11 @@
                                                                     "minItems": 1,
                                                                     "type": "array"
                                                                 },
+                                                                "researchMode": {
+                                                                    "const": "collection",
+                                                                    "description": "以读取到的来源信息回答，不认证发布时间；timeScope保留真实判定",
+                                                                    "type": "string"
+                                                                },
                                                                 "selections": {
                                                                     "description": "接口字段 selections 的配置或结果",
                                                                     "items": {
@@ -22384,6 +22723,11 @@
                                                                     "maxItems": 20,
                                                                     "minItems": 1,
                                                                     "type": "array"
+                                                                },
+                                                                "researchMode": {
+                                                                    "const": "collection",
+                                                                    "description": "以读取到的来源信息回答，不认证发布时间；timeScope保留真实判定",
+                                                                    "type": "string"
                                                                 },
                                                                 "selections": {
                                                                     "description": "接口字段 selections 的配置或结果",
@@ -45843,6 +46187,11 @@
                                                                         "minItems": 1,
                                                                         "type": "array"
                                                                     },
+                                                                    "researchMode": {
+                                                                        "const": "collection",
+                                                                        "description": "以读取到的来源信息回答，不认证发布时间；timeScope保留真实判定",
+                                                                        "type": "string"
+                                                                    },
                                                                     "selections": {
                                                                         "description": "接口字段 selections 的配置或结果",
                                                                         "items": {
@@ -46461,6 +46810,11 @@
                                                                         "minItems": 1,
                                                                         "type": "array"
                                                                     },
+                                                                    "researchMode": {
+                                                                        "const": "collection",
+                                                                        "description": "以读取到的来源信息回答，不认证发布时间；timeScope保留真实判定",
+                                                                        "type": "string"
+                                                                    },
                                                                     "selections": {
                                                                         "description": "接口字段 selections 的配置或结果",
                                                                         "items": {
@@ -47078,6 +47432,11 @@
                                                                         "maxItems": 20,
                                                                         "minItems": 1,
                                                                         "type": "array"
+                                                                    },
+                                                                    "researchMode": {
+                                                                        "const": "collection",
+                                                                        "description": "以读取到的来源信息回答，不认证发布时间；timeScope保留真实判定",
+                                                                        "type": "string"
                                                                     },
                                                                     "selections": {
                                                                         "description": "接口字段 selections 的配置或结果",
@@ -48827,6 +49186,11 @@
                                                             "minItems": 1,
                                                             "type": "array"
                                                         },
+                                                        "researchMode": {
+                                                            "const": "collection",
+                                                            "description": "以读取到的来源信息回答，不认证发布时间；timeScope保留真实判定",
+                                                            "type": "string"
+                                                        },
                                                         "selections": {
                                                             "description": "接口字段 selections 的配置或结果",
                                                             "items": {
@@ -49935,6 +50299,11 @@
                                                             "minItems": 1,
                                                             "type": "array"
                                                         },
+                                                        "researchMode": {
+                                                            "const": "collection",
+                                                            "description": "以读取到的来源信息回答，不认证发布时间；timeScope保留真实判定",
+                                                            "type": "string"
+                                                        },
                                                         "selections": {
                                                             "description": "接口字段 selections 的配置或结果",
                                                             "items": {
@@ -51042,6 +51411,11 @@
                                                             "maxItems": 20,
                                                             "minItems": 1,
                                                             "type": "array"
+                                                        },
+                                                        "researchMode": {
+                                                            "const": "collection",
+                                                            "description": "以读取到的来源信息回答，不认证发布时间；timeScope保留真实判定",
+                                                            "type": "string"
                                                         },
                                                         "selections": {
                                                             "description": "接口字段 selections 的配置或结果",
@@ -56944,6 +57318,11 @@
                                                                             "minItems": 1,
                                                                             "type": "array"
                                                                         },
+                                                                        "researchMode": {
+                                                                            "const": "collection",
+                                                                            "description": "以读取到的来源信息回答，不认证发布时间；timeScope保留真实判定",
+                                                                            "type": "string"
+                                                                        },
                                                                         "selections": {
                                                                             "description": "接口字段 selections 的配置或结果",
                                                                             "items": {
@@ -57744,6 +58123,11 @@
                                                                             "minItems": 1,
                                                                             "type": "array"
                                                                         },
+                                                                        "researchMode": {
+                                                                            "const": "collection",
+                                                                            "description": "以读取到的来源信息回答，不认证发布时间；timeScope保留真实判定",
+                                                                            "type": "string"
+                                                                        },
                                                                         "selections": {
                                                                             "description": "接口字段 selections 的配置或结果",
                                                                             "items": {
@@ -58543,6 +58927,11 @@
                                                                             "maxItems": 20,
                                                                             "minItems": 1,
                                                                             "type": "array"
+                                                                        },
+                                                                        "researchMode": {
+                                                                            "const": "collection",
+                                                                            "description": "以读取到的来源信息回答，不认证发布时间；timeScope保留真实判定",
+                                                                            "type": "string"
                                                                         },
                                                                         "selections": {
                                                                             "description": "接口字段 selections 的配置或结果",
@@ -60711,6 +61100,11 @@
                                                                     "minItems": 1,
                                                                     "type": "array"
                                                                 },
+                                                                "researchMode": {
+                                                                    "const": "collection",
+                                                                    "description": "以读取到的来源信息回答，不认证发布时间；timeScope保留真实判定",
+                                                                    "type": "string"
+                                                                },
                                                                 "selections": {
                                                                     "description": "接口字段 selections 的配置或结果",
                                                                     "items": {
@@ -61498,6 +61892,11 @@
                                                                     "minItems": 1,
                                                                     "type": "array"
                                                                 },
+                                                                "researchMode": {
+                                                                    "const": "collection",
+                                                                    "description": "以读取到的来源信息回答，不认证发布时间；timeScope保留真实判定",
+                                                                    "type": "string"
+                                                                },
                                                                 "selections": {
                                                                     "description": "接口字段 selections 的配置或结果",
                                                                     "items": {
@@ -62284,6 +62683,11 @@
                                                                     "maxItems": 20,
                                                                     "minItems": 1,
                                                                     "type": "array"
+                                                                },
+                                                                "researchMode": {
+                                                                    "const": "collection",
+                                                                    "description": "以读取到的来源信息回答，不认证发布时间；timeScope保留真实判定",
+                                                                    "type": "string"
                                                                 },
                                                                 "selections": {
                                                                     "description": "接口字段 selections 的配置或结果",
@@ -64157,6 +64561,11 @@
                                                                             "minItems": 1,
                                                                             "type": "array"
                                                                         },
+                                                                        "researchMode": {
+                                                                            "const": "collection",
+                                                                            "description": "以读取到的来源信息回答，不认证发布时间；timeScope保留真实判定",
+                                                                            "type": "string"
+                                                                        },
                                                                         "selections": {
                                                                             "description": "接口字段 selections 的配置或结果",
                                                                             "items": {
@@ -64957,6 +65366,11 @@
                                                                             "minItems": 1,
                                                                             "type": "array"
                                                                         },
+                                                                        "researchMode": {
+                                                                            "const": "collection",
+                                                                            "description": "以读取到的来源信息回答，不认证发布时间；timeScope保留真实判定",
+                                                                            "type": "string"
+                                                                        },
                                                                         "selections": {
                                                                             "description": "接口字段 selections 的配置或结果",
                                                                             "items": {
@@ -65756,6 +66170,11 @@
                                                                             "maxItems": 20,
                                                                             "minItems": 1,
                                                                             "type": "array"
+                                                                        },
+                                                                        "researchMode": {
+                                                                            "const": "collection",
+                                                                            "description": "以读取到的来源信息回答，不认证发布时间；timeScope保留真实判定",
+                                                                            "type": "string"
                                                                         },
                                                                         "selections": {
                                                                             "description": "接口字段 selections 的配置或结果",
@@ -67716,6 +68135,11 @@
                                                                             "minItems": 1,
                                                                             "type": "array"
                                                                         },
+                                                                        "researchMode": {
+                                                                            "const": "collection",
+                                                                            "description": "以读取到的来源信息回答，不认证发布时间；timeScope保留真实判定",
+                                                                            "type": "string"
+                                                                        },
                                                                         "selections": {
                                                                             "description": "接口字段 selections 的配置或结果",
                                                                             "items": {
@@ -68516,6 +68940,11 @@
                                                                             "minItems": 1,
                                                                             "type": "array"
                                                                         },
+                                                                        "researchMode": {
+                                                                            "const": "collection",
+                                                                            "description": "以读取到的来源信息回答，不认证发布时间；timeScope保留真实判定",
+                                                                            "type": "string"
+                                                                        },
                                                                         "selections": {
                                                                             "description": "接口字段 selections 的配置或结果",
                                                                             "items": {
@@ -69315,6 +69744,11 @@
                                                                             "maxItems": 20,
                                                                             "minItems": 1,
                                                                             "type": "array"
+                                                                        },
+                                                                        "researchMode": {
+                                                                            "const": "collection",
+                                                                            "description": "以读取到的来源信息回答，不认证发布时间；timeScope保留真实判定",
+                                                                            "type": "string"
                                                                         },
                                                                         "selections": {
                                                                             "description": "接口字段 selections 的配置或结果",
@@ -70970,6 +71404,172 @@
                                         "pattern": "\\S",
                                         "type": "string"
                                     },
+                                    "searchScope": {
+                                        "additionalProperties": false,
+                                        "description": "生成草稿前经用户确认的搜索范围，模型不得扩大；不创建或执行任务",
+                                        "properties": {
+                                            "exclusions": {
+                                                "description": "接口字段 exclusions 的配置或结果",
+                                                "items": {
+                                                    "maxLength": 1000,
+                                                    "minLength": 1,
+                                                    "pattern": "\\S",
+                                                    "type": "string"
+                                                },
+                                                "maxItems": 10,
+                                                "type": "array"
+                                            },
+                                            "focusPoints": {
+                                                "description": "接口字段 focusPoints 的配置或结果",
+                                                "items": {
+                                                    "maxLength": 1000,
+                                                    "minLength": 1,
+                                                    "pattern": "\\S",
+                                                    "type": "string"
+                                                },
+                                                "maxItems": 10,
+                                                "type": "array"
+                                            },
+                                            "goal": {
+                                                "description": "问答确认的查阅目标",
+                                                "maxLength": 2000,
+                                                "minLength": 1,
+                                                "pattern": "\\S",
+                                                "type": "string"
+                                            },
+                                            "outputFormat": {
+                                                "anyOf": [
+                                                    {
+                                                        "const": "brief",
+                                                        "type": "string"
+                                                    },
+                                                    {
+                                                        "const": "list",
+                                                        "type": "string"
+                                                    },
+                                                    {
+                                                        "const": "comparison",
+                                                        "type": "string"
+                                                    },
+                                                    {
+                                                        "const": "research_report",
+                                                        "type": "string"
+                                                    }
+                                                ],
+                                                "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
+                                            },
+                                            "researchMode": {
+                                                "anyOf": [
+                                                    {
+                                                        "const": "collection",
+                                                        "type": "string"
+                                                    },
+                                                    {
+                                                        "const": "analysis",
+                                                        "type": "string"
+                                                    }
+                                                ],
+                                                "description": "接口字段 researchMode 的配置或结果"
+                                            },
+                                            "sourcePreferences": {
+                                                "additionalProperties": false,
+                                                "description": "接口字段 sourcePreferences 的配置或结果",
+                                                "properties": {
+                                                    "excludedUrls": {
+                                                        "description": "接口字段 excludedUrls 的配置或结果",
+                                                        "items": {
+                                                            "description": "HTTP/HTTPS 来源原文链接，不包含用户名或密码；实际抓取另行执行网络安全校验",
+                                                            "format": "scova-http-url",
+                                                            "maxLength": 4096,
+                                                            "type": "string"
+                                                        },
+                                                        "maxItems": 10,
+                                                        "type": "array",
+                                                        "uniqueItems": true
+                                                    },
+                                                    "officialOnly": {
+                                                        "description": "是否限定官方来源；Agent 仍需验证来源性质",
+                                                        "type": "boolean"
+                                                    },
+                                                    "preferredUrls": {
+                                                        "description": "接口字段 preferredUrls 的配置或结果",
+                                                        "items": {
+                                                            "description": "HTTP/HTTPS 来源原文链接，不包含用户名或密码；实际抓取另行执行网络安全校验",
+                                                            "format": "scova-http-url",
+                                                            "maxLength": 4096,
+                                                            "type": "string"
+                                                        },
+                                                        "maxItems": 10,
+                                                        "type": "array",
+                                                        "uniqueItems": true
+                                                    }
+                                                },
+                                                "required": [
+                                                    "preferredUrls",
+                                                    "excludedUrls",
+                                                    "officialOnly"
+                                                ],
+                                                "type": "object"
+                                            },
+                                            "timeRange": {
+                                                "anyOf": [
+                                                    {
+                                                        "additionalProperties": false,
+                                                        "description": "滚动查阅范围",
+                                                        "properties": {
+                                                            "days": {
+                                                                "description": "每次执行向前查阅的天数",
+                                                                "maximum": 9007199254740991,
+                                                                "minimum": 1,
+                                                                "type": "integer"
+                                                            },
+                                                            "kind": {
+                                                                "const": "rolling",
+                                                                "description": "范围或记录分类",
+                                                                "type": "string"
+                                                            }
+                                                        },
+                                                        "required": ["kind", "days"],
+                                                        "type": "object"
+                                                    },
+                                                    {
+                                                        "additionalProperties": false,
+                                                        "description": "固定查阅范围，结束时间不得早于开始时间",
+                                                        "properties": {
+                                                            "end": {
+                                                                "description": "带 UTC 偏移的 ISO 8601 时间",
+                                                                "format": "scova-instant",
+                                                                "type": "string"
+                                                            },
+                                                            "kind": {
+                                                                "const": "fixed",
+                                                                "description": "范围或记录分类",
+                                                                "type": "string"
+                                                            },
+                                                            "start": {
+                                                                "description": "带 UTC 偏移的 ISO 8601 时间",
+                                                                "format": "scova-instant",
+                                                                "type": "string"
+                                                            }
+                                                        },
+                                                        "required": ["kind", "start", "end"],
+                                                        "type": "object"
+                                                    }
+                                                ],
+                                                "description": "滚动或固定时间范围"
+                                            }
+                                        },
+                                        "required": [
+                                            "goal",
+                                            "focusPoints",
+                                            "exclusions",
+                                            "sourcePreferences",
+                                            "timeRange",
+                                            "outputFormat",
+                                            "researchMode"
+                                        ],
+                                        "type": "object"
+                                    },
                                     "timezone": {
                                         "description": "明确的 IANA 时区，例如 Asia/Shanghai",
                                         "format": "scova-timezone",
@@ -70993,6 +71593,172 @@
                                         "pattern": "\\S",
                                         "type": "string"
                                     },
+                                    "searchScope": {
+                                        "additionalProperties": false,
+                                        "description": "生成草稿前经用户确认的搜索范围，模型不得扩大；不创建或执行任务",
+                                        "properties": {
+                                            "exclusions": {
+                                                "description": "接口字段 exclusions 的配置或结果",
+                                                "items": {
+                                                    "maxLength": 1000,
+                                                    "minLength": 1,
+                                                    "pattern": "\\S",
+                                                    "type": "string"
+                                                },
+                                                "maxItems": 10,
+                                                "type": "array"
+                                            },
+                                            "focusPoints": {
+                                                "description": "接口字段 focusPoints 的配置或结果",
+                                                "items": {
+                                                    "maxLength": 1000,
+                                                    "minLength": 1,
+                                                    "pattern": "\\S",
+                                                    "type": "string"
+                                                },
+                                                "maxItems": 10,
+                                                "type": "array"
+                                            },
+                                            "goal": {
+                                                "description": "问答确认的查阅目标",
+                                                "maxLength": 2000,
+                                                "minLength": 1,
+                                                "pattern": "\\S",
+                                                "type": "string"
+                                            },
+                                            "outputFormat": {
+                                                "anyOf": [
+                                                    {
+                                                        "const": "brief",
+                                                        "type": "string"
+                                                    },
+                                                    {
+                                                        "const": "list",
+                                                        "type": "string"
+                                                    },
+                                                    {
+                                                        "const": "comparison",
+                                                        "type": "string"
+                                                    },
+                                                    {
+                                                        "const": "research_report",
+                                                        "type": "string"
+                                                    }
+                                                ],
+                                                "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
+                                            },
+                                            "researchMode": {
+                                                "anyOf": [
+                                                    {
+                                                        "const": "collection",
+                                                        "type": "string"
+                                                    },
+                                                    {
+                                                        "const": "analysis",
+                                                        "type": "string"
+                                                    }
+                                                ],
+                                                "description": "接口字段 researchMode 的配置或结果"
+                                            },
+                                            "sourcePreferences": {
+                                                "additionalProperties": false,
+                                                "description": "接口字段 sourcePreferences 的配置或结果",
+                                                "properties": {
+                                                    "excludedUrls": {
+                                                        "description": "接口字段 excludedUrls 的配置或结果",
+                                                        "items": {
+                                                            "description": "HTTP/HTTPS 来源原文链接，不包含用户名或密码；实际抓取另行执行网络安全校验",
+                                                            "format": "scova-http-url",
+                                                            "maxLength": 4096,
+                                                            "type": "string"
+                                                        },
+                                                        "maxItems": 10,
+                                                        "type": "array",
+                                                        "uniqueItems": true
+                                                    },
+                                                    "officialOnly": {
+                                                        "description": "是否限定官方来源；Agent 仍需验证来源性质",
+                                                        "type": "boolean"
+                                                    },
+                                                    "preferredUrls": {
+                                                        "description": "接口字段 preferredUrls 的配置或结果",
+                                                        "items": {
+                                                            "description": "HTTP/HTTPS 来源原文链接，不包含用户名或密码；实际抓取另行执行网络安全校验",
+                                                            "format": "scova-http-url",
+                                                            "maxLength": 4096,
+                                                            "type": "string"
+                                                        },
+                                                        "maxItems": 10,
+                                                        "type": "array",
+                                                        "uniqueItems": true
+                                                    }
+                                                },
+                                                "required": [
+                                                    "preferredUrls",
+                                                    "excludedUrls",
+                                                    "officialOnly"
+                                                ],
+                                                "type": "object"
+                                            },
+                                            "timeRange": {
+                                                "anyOf": [
+                                                    {
+                                                        "additionalProperties": false,
+                                                        "description": "滚动查阅范围",
+                                                        "properties": {
+                                                            "days": {
+                                                                "description": "每次执行向前查阅的天数",
+                                                                "maximum": 9007199254740991,
+                                                                "minimum": 1,
+                                                                "type": "integer"
+                                                            },
+                                                            "kind": {
+                                                                "const": "rolling",
+                                                                "description": "范围或记录分类",
+                                                                "type": "string"
+                                                            }
+                                                        },
+                                                        "required": ["kind", "days"],
+                                                        "type": "object"
+                                                    },
+                                                    {
+                                                        "additionalProperties": false,
+                                                        "description": "固定查阅范围，结束时间不得早于开始时间",
+                                                        "properties": {
+                                                            "end": {
+                                                                "description": "带 UTC 偏移的 ISO 8601 时间",
+                                                                "format": "scova-instant",
+                                                                "type": "string"
+                                                            },
+                                                            "kind": {
+                                                                "const": "fixed",
+                                                                "description": "范围或记录分类",
+                                                                "type": "string"
+                                                            },
+                                                            "start": {
+                                                                "description": "带 UTC 偏移的 ISO 8601 时间",
+                                                                "format": "scova-instant",
+                                                                "type": "string"
+                                                            }
+                                                        },
+                                                        "required": ["kind", "start", "end"],
+                                                        "type": "object"
+                                                    }
+                                                ],
+                                                "description": "滚动或固定时间范围"
+                                            }
+                                        },
+                                        "required": [
+                                            "goal",
+                                            "focusPoints",
+                                            "exclusions",
+                                            "sourcePreferences",
+                                            "timeRange",
+                                            "outputFormat",
+                                            "researchMode"
+                                        ],
+                                        "type": "object"
+                                    },
                                     "timezone": {
                                         "description": "明确的 IANA 时区，例如 Asia/Shanghai",
                                         "format": "scova-timezone",
@@ -71015,6 +71781,172 @@
                                         "minLength": 1,
                                         "pattern": "\\S",
                                         "type": "string"
+                                    },
+                                    "searchScope": {
+                                        "additionalProperties": false,
+                                        "description": "生成草稿前经用户确认的搜索范围，模型不得扩大；不创建或执行任务",
+                                        "properties": {
+                                            "exclusions": {
+                                                "description": "接口字段 exclusions 的配置或结果",
+                                                "items": {
+                                                    "maxLength": 1000,
+                                                    "minLength": 1,
+                                                    "pattern": "\\S",
+                                                    "type": "string"
+                                                },
+                                                "maxItems": 10,
+                                                "type": "array"
+                                            },
+                                            "focusPoints": {
+                                                "description": "接口字段 focusPoints 的配置或结果",
+                                                "items": {
+                                                    "maxLength": 1000,
+                                                    "minLength": 1,
+                                                    "pattern": "\\S",
+                                                    "type": "string"
+                                                },
+                                                "maxItems": 10,
+                                                "type": "array"
+                                            },
+                                            "goal": {
+                                                "description": "问答确认的查阅目标",
+                                                "maxLength": 2000,
+                                                "minLength": 1,
+                                                "pattern": "\\S",
+                                                "type": "string"
+                                            },
+                                            "outputFormat": {
+                                                "anyOf": [
+                                                    {
+                                                        "const": "brief",
+                                                        "type": "string"
+                                                    },
+                                                    {
+                                                        "const": "list",
+                                                        "type": "string"
+                                                    },
+                                                    {
+                                                        "const": "comparison",
+                                                        "type": "string"
+                                                    },
+                                                    {
+                                                        "const": "research_report",
+                                                        "type": "string"
+                                                    }
+                                                ],
+                                                "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
+                                            },
+                                            "researchMode": {
+                                                "anyOf": [
+                                                    {
+                                                        "const": "collection",
+                                                        "type": "string"
+                                                    },
+                                                    {
+                                                        "const": "analysis",
+                                                        "type": "string"
+                                                    }
+                                                ],
+                                                "description": "接口字段 researchMode 的配置或结果"
+                                            },
+                                            "sourcePreferences": {
+                                                "additionalProperties": false,
+                                                "description": "接口字段 sourcePreferences 的配置或结果",
+                                                "properties": {
+                                                    "excludedUrls": {
+                                                        "description": "接口字段 excludedUrls 的配置或结果",
+                                                        "items": {
+                                                            "description": "HTTP/HTTPS 来源原文链接，不包含用户名或密码；实际抓取另行执行网络安全校验",
+                                                            "format": "scova-http-url",
+                                                            "maxLength": 4096,
+                                                            "type": "string"
+                                                        },
+                                                        "maxItems": 10,
+                                                        "type": "array",
+                                                        "uniqueItems": true
+                                                    },
+                                                    "officialOnly": {
+                                                        "description": "是否限定官方来源；Agent 仍需验证来源性质",
+                                                        "type": "boolean"
+                                                    },
+                                                    "preferredUrls": {
+                                                        "description": "接口字段 preferredUrls 的配置或结果",
+                                                        "items": {
+                                                            "description": "HTTP/HTTPS 来源原文链接，不包含用户名或密码；实际抓取另行执行网络安全校验",
+                                                            "format": "scova-http-url",
+                                                            "maxLength": 4096,
+                                                            "type": "string"
+                                                        },
+                                                        "maxItems": 10,
+                                                        "type": "array",
+                                                        "uniqueItems": true
+                                                    }
+                                                },
+                                                "required": [
+                                                    "preferredUrls",
+                                                    "excludedUrls",
+                                                    "officialOnly"
+                                                ],
+                                                "type": "object"
+                                            },
+                                            "timeRange": {
+                                                "anyOf": [
+                                                    {
+                                                        "additionalProperties": false,
+                                                        "description": "滚动查阅范围",
+                                                        "properties": {
+                                                            "days": {
+                                                                "description": "每次执行向前查阅的天数",
+                                                                "maximum": 9007199254740991,
+                                                                "minimum": 1,
+                                                                "type": "integer"
+                                                            },
+                                                            "kind": {
+                                                                "const": "rolling",
+                                                                "description": "范围或记录分类",
+                                                                "type": "string"
+                                                            }
+                                                        },
+                                                        "required": ["kind", "days"],
+                                                        "type": "object"
+                                                    },
+                                                    {
+                                                        "additionalProperties": false,
+                                                        "description": "固定查阅范围，结束时间不得早于开始时间",
+                                                        "properties": {
+                                                            "end": {
+                                                                "description": "带 UTC 偏移的 ISO 8601 时间",
+                                                                "format": "scova-instant",
+                                                                "type": "string"
+                                                            },
+                                                            "kind": {
+                                                                "const": "fixed",
+                                                                "description": "范围或记录分类",
+                                                                "type": "string"
+                                                            },
+                                                            "start": {
+                                                                "description": "带 UTC 偏移的 ISO 8601 时间",
+                                                                "format": "scova-instant",
+                                                                "type": "string"
+                                                            }
+                                                        },
+                                                        "required": ["kind", "start", "end"],
+                                                        "type": "object"
+                                                    }
+                                                ],
+                                                "description": "滚动或固定时间范围"
+                                            }
+                                        },
+                                        "required": [
+                                            "goal",
+                                            "focusPoints",
+                                            "exclusions",
+                                            "sourcePreferences",
+                                            "timeRange",
+                                            "outputFormat",
+                                            "researchMode"
+                                        ],
+                                        "type": "object"
                                     },
                                     "timezone": {
                                         "description": "明确的 IANA 时区，例如 Asia/Shanghai",
@@ -71165,6 +72097,19 @@
                                                         }
                                                     ],
                                                     "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
+                                                },
+                                                "researchMode": {
+                                                    "anyOf": [
+                                                        {
+                                                            "const": "collection",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "analysis",
+                                                            "type": "string"
+                                                        }
+                                                    ],
+                                                    "description": "资料收集汇集当前来源内容；分析研究核对时间、支持关系与条件。省略沿用分析研究"
                                                 },
                                                 "schedule": {
                                                     "anyOf": [
@@ -71613,6 +72558,19 @@
                                                     ],
                                                     "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
                                                 },
+                                                "researchMode": {
+                                                    "anyOf": [
+                                                        {
+                                                            "const": "collection",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "analysis",
+                                                            "type": "string"
+                                                        }
+                                                    ],
+                                                    "description": "资料收集汇集当前来源内容；分析研究核对时间、支持关系与条件。省略沿用分析研究"
+                                                },
                                                 "schedule": {
                                                     "anyOf": [
                                                         {
@@ -72059,6 +73017,19 @@
                                                         }
                                                     ],
                                                     "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
+                                                },
+                                                "researchMode": {
+                                                    "anyOf": [
+                                                        {
+                                                            "const": "collection",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "analysis",
+                                                            "type": "string"
+                                                        }
+                                                    ],
+                                                    "description": "资料收集汇集当前来源内容；分析研究核对时间、支持关系与条件。省略沿用分析研究"
                                                 },
                                                 "schedule": {
                                                     "anyOf": [
@@ -74960,6 +75931,19 @@
                                                             ],
                                                             "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
                                                         },
+                                                        "researchMode": {
+                                                            "anyOf": [
+                                                                {
+                                                                    "const": "collection",
+                                                                    "type": "string"
+                                                                },
+                                                                {
+                                                                    "const": "analysis",
+                                                                    "type": "string"
+                                                                }
+                                                            ],
+                                                            "description": "资料收集汇集当前来源内容；分析研究核对时间、支持关系与条件。省略沿用分析研究"
+                                                        },
                                                         "schedule": {
                                                             "anyOf": [
                                                                 {
@@ -75422,6 +76406,19 @@
                                                             ],
                                                             "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
                                                         },
+                                                        "researchMode": {
+                                                            "anyOf": [
+                                                                {
+                                                                    "const": "collection",
+                                                                    "type": "string"
+                                                                },
+                                                                {
+                                                                    "const": "analysis",
+                                                                    "type": "string"
+                                                                }
+                                                            ],
+                                                            "description": "资料收集汇集当前来源内容；分析研究核对时间、支持关系与条件。省略沿用分析研究"
+                                                        },
                                                         "schedule": {
                                                             "anyOf": [
                                                                 {
@@ -75883,6 +76880,19 @@
                                                                 }
                                                             ],
                                                             "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
+                                                        },
+                                                        "researchMode": {
+                                                            "anyOf": [
+                                                                {
+                                                                    "const": "collection",
+                                                                    "type": "string"
+                                                                },
+                                                                {
+                                                                    "const": "analysis",
+                                                                    "type": "string"
+                                                                }
+                                                            ],
+                                                            "description": "资料收集汇集当前来源内容；分析研究核对时间、支持关系与条件。省略沿用分析研究"
                                                         },
                                                         "schedule": {
                                                             "anyOf": [
@@ -78651,6 +79661,19 @@
                                                             ],
                                                             "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
                                                         },
+                                                        "researchMode": {
+                                                            "anyOf": [
+                                                                {
+                                                                    "const": "collection",
+                                                                    "type": "string"
+                                                                },
+                                                                {
+                                                                    "const": "analysis",
+                                                                    "type": "string"
+                                                                }
+                                                            ],
+                                                            "description": "资料收集汇集当前来源内容；分析研究核对时间、支持关系与条件。省略沿用分析研究"
+                                                        },
                                                         "schedule": {
                                                             "anyOf": [
                                                                 {
@@ -79113,6 +80136,19 @@
                                                             ],
                                                             "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
                                                         },
+                                                        "researchMode": {
+                                                            "anyOf": [
+                                                                {
+                                                                    "const": "collection",
+                                                                    "type": "string"
+                                                                },
+                                                                {
+                                                                    "const": "analysis",
+                                                                    "type": "string"
+                                                                }
+                                                            ],
+                                                            "description": "资料收集汇集当前来源内容；分析研究核对时间、支持关系与条件。省略沿用分析研究"
+                                                        },
                                                         "schedule": {
                                                             "anyOf": [
                                                                 {
@@ -79574,6 +80610,19 @@
                                                                 }
                                                             ],
                                                             "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
+                                                        },
+                                                        "researchMode": {
+                                                            "anyOf": [
+                                                                {
+                                                                    "const": "collection",
+                                                                    "type": "string"
+                                                                },
+                                                                {
+                                                                    "const": "analysis",
+                                                                    "type": "string"
+                                                                }
+                                                            ],
+                                                            "description": "资料收集汇集当前来源内容；分析研究核对时间、支持关系与条件。省略沿用分析研究"
                                                         },
                                                         "schedule": {
                                                             "anyOf": [
@@ -81141,6 +82190,19 @@
                                                             ],
                                                             "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
                                                         },
+                                                        "researchMode": {
+                                                            "anyOf": [
+                                                                {
+                                                                    "const": "collection",
+                                                                    "type": "string"
+                                                                },
+                                                                {
+                                                                    "const": "analysis",
+                                                                    "type": "string"
+                                                                }
+                                                            ],
+                                                            "description": "资料收集汇集当前来源内容；分析研究核对时间、支持关系与条件。省略沿用分析研究"
+                                                        },
                                                         "schedule": {
                                                             "anyOf": [
                                                                 {
@@ -81603,6 +82665,19 @@
                                                             ],
                                                             "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
                                                         },
+                                                        "researchMode": {
+                                                            "anyOf": [
+                                                                {
+                                                                    "const": "collection",
+                                                                    "type": "string"
+                                                                },
+                                                                {
+                                                                    "const": "analysis",
+                                                                    "type": "string"
+                                                                }
+                                                            ],
+                                                            "description": "资料收集汇集当前来源内容；分析研究核对时间、支持关系与条件。省略沿用分析研究"
+                                                        },
                                                         "schedule": {
                                                             "anyOf": [
                                                                 {
@@ -82064,6 +83139,19 @@
                                                                 }
                                                             ],
                                                             "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
+                                                        },
+                                                        "researchMode": {
+                                                            "anyOf": [
+                                                                {
+                                                                    "const": "collection",
+                                                                    "type": "string"
+                                                                },
+                                                                {
+                                                                    "const": "analysis",
+                                                                    "type": "string"
+                                                                }
+                                                            ],
+                                                            "description": "资料收集汇集当前来源内容；分析研究核对时间、支持关系与条件。省略沿用分析研究"
                                                         },
                                                         "schedule": {
                                                             "anyOf": [
@@ -83763,6 +84851,19 @@
                                                             ],
                                                             "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
                                                         },
+                                                        "researchMode": {
+                                                            "anyOf": [
+                                                                {
+                                                                    "const": "collection",
+                                                                    "type": "string"
+                                                                },
+                                                                {
+                                                                    "const": "analysis",
+                                                                    "type": "string"
+                                                                }
+                                                            ],
+                                                            "description": "资料收集汇集当前来源内容；分析研究核对时间、支持关系与条件。省略沿用分析研究"
+                                                        },
                                                         "schedule": {
                                                             "anyOf": [
                                                                 {
@@ -84225,6 +85326,19 @@
                                                             ],
                                                             "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
                                                         },
+                                                        "researchMode": {
+                                                            "anyOf": [
+                                                                {
+                                                                    "const": "collection",
+                                                                    "type": "string"
+                                                                },
+                                                                {
+                                                                    "const": "analysis",
+                                                                    "type": "string"
+                                                                }
+                                                            ],
+                                                            "description": "资料收集汇集当前来源内容；分析研究核对时间、支持关系与条件。省略沿用分析研究"
+                                                        },
                                                         "schedule": {
                                                             "anyOf": [
                                                                 {
@@ -84686,6 +85800,19 @@
                                                                 }
                                                             ],
                                                             "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
+                                                        },
+                                                        "researchMode": {
+                                                            "anyOf": [
+                                                                {
+                                                                    "const": "collection",
+                                                                    "type": "string"
+                                                                },
+                                                                {
+                                                                    "const": "analysis",
+                                                                    "type": "string"
+                                                                }
+                                                            ],
+                                                            "description": "资料收集汇集当前来源内容；分析研究核对时间、支持关系与条件。省略沿用分析研究"
                                                         },
                                                         "schedule": {
                                                             "anyOf": [
@@ -87433,6 +88560,19 @@
                                                             ],
                                                             "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
                                                         },
+                                                        "researchMode": {
+                                                            "anyOf": [
+                                                                {
+                                                                    "const": "collection",
+                                                                    "type": "string"
+                                                                },
+                                                                {
+                                                                    "const": "analysis",
+                                                                    "type": "string"
+                                                                }
+                                                            ],
+                                                            "description": "资料收集汇集当前来源内容；分析研究核对时间、支持关系与条件。省略沿用分析研究"
+                                                        },
                                                         "schedule": {
                                                             "anyOf": [
                                                                 {
@@ -87895,6 +89035,19 @@
                                                             ],
                                                             "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
                                                         },
+                                                        "researchMode": {
+                                                            "anyOf": [
+                                                                {
+                                                                    "const": "collection",
+                                                                    "type": "string"
+                                                                },
+                                                                {
+                                                                    "const": "analysis",
+                                                                    "type": "string"
+                                                                }
+                                                            ],
+                                                            "description": "资料收集汇集当前来源内容；分析研究核对时间、支持关系与条件。省略沿用分析研究"
+                                                        },
                                                         "schedule": {
                                                             "anyOf": [
                                                                 {
@@ -88356,6 +89509,19 @@
                                                                 }
                                                             ],
                                                             "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
+                                                        },
+                                                        "researchMode": {
+                                                            "anyOf": [
+                                                                {
+                                                                    "const": "collection",
+                                                                    "type": "string"
+                                                                },
+                                                                {
+                                                                    "const": "analysis",
+                                                                    "type": "string"
+                                                                }
+                                                            ],
+                                                            "description": "资料收集汇集当前来源内容；分析研究核对时间、支持关系与条件。省略沿用分析研究"
                                                         },
                                                         "schedule": {
                                                             "anyOf": [
@@ -90055,6 +91221,19 @@
                                                             ],
                                                             "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
                                                         },
+                                                        "researchMode": {
+                                                            "anyOf": [
+                                                                {
+                                                                    "const": "collection",
+                                                                    "type": "string"
+                                                                },
+                                                                {
+                                                                    "const": "analysis",
+                                                                    "type": "string"
+                                                                }
+                                                            ],
+                                                            "description": "资料收集汇集当前来源内容；分析研究核对时间、支持关系与条件。省略沿用分析研究"
+                                                        },
                                                         "schedule": {
                                                             "anyOf": [
                                                                 {
@@ -90517,6 +91696,19 @@
                                                             ],
                                                             "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
                                                         },
+                                                        "researchMode": {
+                                                            "anyOf": [
+                                                                {
+                                                                    "const": "collection",
+                                                                    "type": "string"
+                                                                },
+                                                                {
+                                                                    "const": "analysis",
+                                                                    "type": "string"
+                                                                }
+                                                            ],
+                                                            "description": "资料收集汇集当前来源内容；分析研究核对时间、支持关系与条件。省略沿用分析研究"
+                                                        },
                                                         "schedule": {
                                                             "anyOf": [
                                                                 {
@@ -90978,6 +92170,19 @@
                                                                 }
                                                             ],
                                                             "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
+                                                        },
+                                                        "researchMode": {
+                                                            "anyOf": [
+                                                                {
+                                                                    "const": "collection",
+                                                                    "type": "string"
+                                                                },
+                                                                {
+                                                                    "const": "analysis",
+                                                                    "type": "string"
+                                                                }
+                                                            ],
+                                                            "description": "资料收集汇集当前来源内容；分析研究核对时间、支持关系与条件。省略沿用分析研究"
                                                         },
                                                         "schedule": {
                                                             "anyOf": [
@@ -92695,6 +93900,11 @@
                                                                                 "minItems": 1,
                                                                                 "type": "array"
                                                                             },
+                                                                            "researchMode": {
+                                                                                "const": "collection",
+                                                                                "description": "以读取到的来源信息回答，不认证发布时间；timeScope保留真实判定",
+                                                                                "type": "string"
+                                                                            },
                                                                             "selections": {
                                                                                 "description": "接口字段 selections 的配置或结果",
                                                                                 "items": {
@@ -93507,6 +94717,11 @@
                                                                                 "minItems": 1,
                                                                                 "type": "array"
                                                                             },
+                                                                            "researchMode": {
+                                                                                "const": "collection",
+                                                                                "description": "以读取到的来源信息回答，不认证发布时间；timeScope保留真实判定",
+                                                                                "type": "string"
+                                                                            },
                                                                             "selections": {
                                                                                 "description": "接口字段 selections 的配置或结果",
                                                                                 "items": {
@@ -94318,6 +95533,11 @@
                                                                                 "maxItems": 20,
                                                                                 "minItems": 1,
                                                                                 "type": "array"
+                                                                            },
+                                                                            "researchMode": {
+                                                                                "const": "collection",
+                                                                                "description": "以读取到的来源信息回答，不认证发布时间；timeScope保留真实判定",
+                                                                                "type": "string"
                                                                             },
                                                                             "selections": {
                                                                                 "description": "接口字段 selections 的配置或结果",
@@ -96239,6 +97459,11 @@
                                                                             "minItems": 1,
                                                                             "type": "array"
                                                                         },
+                                                                        "researchMode": {
+                                                                            "const": "collection",
+                                                                            "description": "以读取到的来源信息回答，不认证发布时间；timeScope保留真实判定",
+                                                                            "type": "string"
+                                                                        },
                                                                         "selections": {
                                                                             "description": "接口字段 selections 的配置或结果",
                                                                             "items": {
@@ -97039,6 +98264,11 @@
                                                                             "minItems": 1,
                                                                             "type": "array"
                                                                         },
+                                                                        "researchMode": {
+                                                                            "const": "collection",
+                                                                            "description": "以读取到的来源信息回答，不认证发布时间；timeScope保留真实判定",
+                                                                            "type": "string"
+                                                                        },
                                                                         "selections": {
                                                                             "description": "接口字段 selections 的配置或结果",
                                                                             "items": {
@@ -97838,6 +99068,11 @@
                                                                             "maxItems": 20,
                                                                             "minItems": 1,
                                                                             "type": "array"
+                                                                        },
+                                                                        "researchMode": {
+                                                                            "const": "collection",
+                                                                            "description": "以读取到的来源信息回答，不认证发布时间；timeScope保留真实判定",
+                                                                            "type": "string"
                                                                         },
                                                                         "selections": {
                                                                             "description": "接口字段 selections 的配置或结果",

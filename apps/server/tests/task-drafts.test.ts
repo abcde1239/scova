@@ -76,6 +76,52 @@ function fixtureModel(
 afterEach(() => vi.unstubAllEnvs());
 
 describe('草稿解析与独立预算', () => {
+    it.each([true, false])('问答确认的范围不被模型扩大，模型可用=%s', async (available) => {
+        const searchScope = {
+            goal: '收集学费与申请条件',
+            focusPoints: ['费用'],
+            exclusions: ['历史背景'],
+            sourcePreferences: {
+                preferredUrls: ['https://university.example.edu/fees'],
+                excludedUrls: [],
+                officialOnly: true,
+            },
+            timeRange: { kind: 'rolling' as const, days: 30 },
+            outputFormat: 'list' as const,
+            researchMode: 'collection' as const,
+        };
+        const fixture = fixtureModel(() => ({
+            ...draftConfig(),
+            goal: '额外预测未来趋势',
+            sourcePreferences: searchScope.sourcePreferences,
+            researchMode: 'analysis',
+        }));
+        const result = await setup(available ? fixture.model : null).service.create(session, {
+            ...request,
+            searchScope,
+        });
+        expect(result.mode).toBe(available ? 'model' : 'manual');
+        expect(result.config).toMatchObject(searchScope);
+        expect(result.warnings.some((w) => w.message.includes('已移除'))).toBe(false);
+        if (available) expect(JSON.stringify(fixture.inputs[0])).toContain('confirmedSearchScope');
+    });
+    it('模型不能擅自改变研究方式或选择个人执行配置', () => {
+        const fallback = manualDraft(request, {
+            timezone: 'Asia/Tokyo',
+            notificationPreference: { mode: 'off', runIssues: false },
+        });
+        const result = normalizeDraft(
+            {
+                ...fallback,
+                researchMode: 'collection',
+                agentProviderId: '019a0000-0000-7000-8000-000000000002',
+            },
+            request,
+            fallback,
+        );
+        expect(result.config.researchMode).toBeUndefined();
+        expect(result.config.agentProviderId).toBeUndefined();
+    });
     it('无模型明确手工回退，原样保留描述并使用用户偏好与合法完整配置', async () => {
         const { service, evalRedis } = setup();
         const result = await service.create(session, request);
