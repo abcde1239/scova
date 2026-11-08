@@ -88,6 +88,9 @@ async function samples(context: BrowserContext) {
             },
         }),
     );
+    await context.route('**/api/v1/me/agent-providers', (route) =>
+        route.fulfill({ json: { storageReady: true, systemConfigured: true, items: [] } }),
+    );
     await context.route('**/api/v1/tasks**', async (route) => {
         const request = route.request();
         const path = new URL(request.url()).pathname;
@@ -240,10 +243,10 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         }
         await save(page).focus();
         await save(page).press('Enter');
-        await expect(page.locator('.task-config-form').getByRole('status')).toContainText(
+        await expect(page.locator('.task-config-form .save-success[role="status"]')).toContainText(
             '修改已保存',
         );
-        await expect(page.locator('.task-config-form').getByRole('status')).toBeFocused();
+        await expect(page.locator('.task-config-form .save-success[role="status"]')).toBeFocused();
         await expect(saved(page)).toContainText('Asia/Tokyo');
         await expect(saved(page)).not.toContainText('有未保存修改');
         await expect(preview(page)).not.toContainText('当前填写内容尚未安排执行');
@@ -327,7 +330,9 @@ test('ISO星期1到7映射，0或8没有选项；切换manual清除周期payload
     await expect(localTime(page)).toHaveCount(0);
     await expect(weekday(page)).toHaveCount(0);
     await save(page).click();
-    await expect(page.locator('.task-config-form').getByRole('status')).toContainText('修改已保存');
+    await expect(page.locator('.task-config-form .save-success[role="status"]')).toContainText(
+        '修改已保存',
+    );
     expect(state.config).toEqual({ ...original, schedule: { frequency: 'manual' } });
     await expect(saved(page)).toContainText('服务端已保存为仅手动执行');
     await expect(saved(page).locator('time')).toHaveCount(0);
@@ -398,7 +403,9 @@ test('计划冲突保留字段与已保存时区，重新读取后使用新quote
     await expect(localTime(page)).toHaveValue('10:00');
     await localTime(page).fill('10:15');
     await save(page).click();
-    await expect(page.locator('.task-config-form').getByRole('status')).toContainText('修改已保存');
+    await expect(page.locator('.task-config-form .save-success[role="status"]')).toContainText(
+        '修改已保存',
+    );
     expect(patches(calls).map((call) => call.etag)).toEqual(['"1"', '"8"']);
     expect(patches(calls)[1]!.body?.config).toEqual({
         ...state.config,

@@ -63,8 +63,13 @@ test('有效路径与未知路径均可刷新直达，标题、导航和焦点�
             expect(new URL(page.url()).pathname + new URL(page.url()).search).toBe(url);
             const active = page.getByRole('banner').locator('nav [aria-current="page"]:visible');
             const accountPage = selected === '账号' || selected === '外观';
-            await expect(active).toHaveCount(selected && !accountPage ? 1 : 0);
-            if (selected && !accountPage) await expect(active).toHaveText(selected);
+            const notificationPage = selected === '通知';
+            await expect(active).toHaveCount(selected && !accountPage && !notificationPage ? 1 : 0);
+            if (selected && !accountPage && !notificationPage)
+                await expect(active).toHaveText(selected);
+            const notification = page.getByRole('button', { name: '通知', exact: true });
+            if (notificationPage) await expect(notification).toHaveClass(/selected/);
+            else await expect(notification).not.toHaveClass(/selected/);
             if (accountPage)
                 await expect(page.getByRole('button', { name: '账号菜单' })).toHaveAttribute(
                     'aria-current',

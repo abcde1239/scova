@@ -92,6 +92,10 @@ async function samples(context: BrowserContext) {
                     csrfToken: 'sample-csrf',
                 },
             });
+        if (path === '/api/v1/me/agent-providers' && request.method() === 'GET')
+            return route.fulfill({
+                json: { storageReady: true, systemConfigured: true, items: [] },
+            });
         const body: unknown = request.method() === 'POST' ? request.postDataJSON() : null;
         calls.push({
             method: request.method(),
@@ -136,7 +140,16 @@ async function samples(context: BrowserContext) {
             return route.fulfill({
                 json: { items: state.saved ? [detail().task] : [], nextCursor: null },
             });
-        return route.fulfill({ headers: { etag: '"1"' }, json: detail() });
+        if (path === `/api/v1/tasks/${taskId}` && request.method() === 'GET' && state.saved)
+            return route.fulfill({ headers: { etag: '"1"' }, json: detail() });
+        return route.fulfill({
+            status: 501,
+            json: {
+                code: 'UNEXPECTED_ENDPOINT',
+                message: 'Unknown sample endpoint',
+                requestId: 'sample',
+            },
+        });
     });
     return { calls, state };
 }
