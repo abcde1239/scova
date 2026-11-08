@@ -1,6 +1,16 @@
 <template>
     <section ref="panel" class="scope-questions" aria-labelledby="scope-question-title">
-        <h3 id="scope-question-title" tabindex="-1">先确认搜索范围 · {{ step }}/3</h3>
+        <h3 id="scope-question-title" tabindex="-1">核对搜索范围 · {{ step }}/3</h3>
+        <p v-if="summary">{{ summary }}</p>
+        <details v-if="transcript?.length">
+            <summary>已回答的需求澄清</summary>
+            <dl>
+                <template v-for="(item, index) in transcript" :key="index"
+                    ><dt>{{ item.question }}</dt>
+                    <dd>{{ item.answer }}</dd></template
+                >
+            </dl>
+        </details>
         <template v-if="step === 1">
             <p>你希望查到什么？哪些内容必须包含，哪些不需要？</p>
             <task-config-field
@@ -114,11 +124,12 @@
                 <dt>优先来源</dt>
                 <dd>{{ preferredUrls.join('、') || '公开网页' }}</dd>
             </dl>
-            <p>确认后才调用需求整理 Agent。这里只生成草稿，应用并保存后才会创建任务。</p>
+            <p>确认后由需求整理 Agent 生成草稿，应用并保存后才会创建任务。</p>
         </template>
         <p v-if="error" role="alert" class="scope-error">{{ error }}</p>
         <div class="scope-actions">
             <action-button :disabled="disabled" @click="emit('cancel')">返回需求描述</action-button>
+            <action-button :disabled="disabled" @click="emit('manual')">手动填写</action-button>
             <action-button v-if="step > 1" :disabled="disabled" @click="move(-1)"
                 >上一步</action-button
             >
@@ -131,7 +142,12 @@
 
 <script setup lang="ts">
 import { nextTick, ref } from 'vue';
-import { parseContract, TaskDraftScopeSchema, type TaskDraftScope } from '@scova/models';
+import {
+    parseContract,
+    TaskDraftScopeSchema,
+    type TaskDraftScope,
+    type TaskClarifications,
+} from '@scova/models';
 import TaskConfigField from '@/components/tasks/TaskConfigField.vue';
 import ListInput from '@/components/common/ListInput.vue';
 import ActionButton from '@/components/common/ActionButton.vue';
@@ -140,9 +156,11 @@ const props = defineProps<{
     format: string;
     mode: string;
     initial?: TaskDraftScope;
+    summary?: string;
+    transcript?: TaskClarifications;
     disabled?: boolean;
 }>();
-const emit = defineEmits<{ confirm: [scope: TaskDraftScope]; cancel: [] }>();
+const emit = defineEmits<{ confirm: [scope: TaskDraftScope]; cancel: []; manual: [] }>();
 const panel = ref<HTMLElement>();
 const step = ref(1);
 const error = ref('');

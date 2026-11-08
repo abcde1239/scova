@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 import { effectScope } from 'vue';
-import type { SessionResponse, TaskConfig, TaskDraftResponse, TaskDraftScope } from '@scova/models';
+import type {
+    SessionResponse,
+    TaskConfig,
+    TaskDraftResponse,
+    TaskDraftScope,
+    TaskDraftQuestionsResponse,
+} from '@scova/models';
 import { createSessionLifecycle } from '@/api/session';
 import { validateDraftInput } from '@/api/task-drafts';
 import {
@@ -86,6 +92,124 @@ function setup(fetcher: typeof fetch, timeout?: number) {
 afterEach(() => cleanups.splice(0).forEach((cleanup) => cleanup()));
 
 describe('自然语言草稿与显式应用', () => {
+    it('调用AI生成问题，回答后继续澄清，确认范围及对话完整发送到草稿接口', async () => {
+        const calls: { path: string; body: Record<string, unknown> }[] = [];
+        const { goal, focusPoints, exclusions, sourcePreferences, timeRange, outputFormat } =
+            config();
+        const proposed = {
+            goal,
+            focusPoints,
+            exclusions,
+            sourcePreferences,
+            timeRange,
+            outputFormat,
+            researchMode: 'analysis' as const,
+        };
+        const { task, natural } = setup(async (url, init) => {
+            const path = addressOf(url);
+            const body = JSON.parse(init?.body as string);
+            calls.push({ path, body });
+            if (path.endsWith('/questions'))
+                return Response.json({
+                    inputText: body.inputText,
+                    round: body.round,
+                    summary: '需要确认范围',
+                    scope: proposed,
+                    questions:
+                        body.round === 0
+                            ? [
+                                  {
+                                      id: 'q1',
+                                      question: '查哪个城市？',
+                                      reason: '影响搜索范围',
+                                      options: ['上海', '杭州'],
+                                  },
+                              ]
+                            : [],
+                    mode: 'model',
+                    manualReason: null,
+                    parsingUsage: {
+                        attempts: 1,
+                        inputTokens: 100,
+                        outputTokens: 50,
+                        estimated: false,
+                    },
+                } satisfies TaskDraftQuestionsResponse);
+            return Response.json({ ...response(), config: { ...config(), ...proposed } });
+        });
+        await natural.clarify();
+        expect(natural.clarificationResult.value?.questions[0]?.question).toBe('查哪个城市？');
+        expect(natural.canApply.value).toBe(false);
+        expect(task.draft.title).toBe('');
+        await natural.clarify({ q1: '' });
+        expect(calls).toHaveLength(1);
+        await natural.clarify({ q1: '上海，仅线下' });
+        const transcript = [{ question: '查哪个城市？', answer: '上海，仅线下' }];
+        expect(calls[1]?.body.clarifications).toEqual(transcript);
+        expect(calls[1]?.body.round).toBe(1);
+        expect(natural.clarificationResult.value?.questions).toEqual([]);
+        expect(natural.clarificationUsage.value).toEqual({
+            attempts: 2,
+            inputTokens: 200,
+            outputTokens: 100,
+            estimated: false,
+        });
+        natural.searchScope.value = proposed;
+        await natural.parse();
+        expect(calls[2]?.body.clarifications).toEqual(transcript);
+        expect(natural.apply()).toBe(true);
+        expect(task.draft.goal).toBe(goal);
+        expect(calls.every((call) => call.path.startsWith('/api/v1/task-drafts'))).toBe(true);
+    });
+    it.each(['cancel', 'edit', 'session'] as const)(
+        'AI提问在途%s后迟到结果不能恢复对话或覆盖配置',
+        async (change) => {
+            let finish!: (value: Response) => void;
+            const { task, natural, lifecycle } = setup(
+                async () =>
+                    new Promise((resolve) => {
+                        finish = resolve;
+                    }),
+            );
+            const pending = natural.clarify();
+            await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+            if (change === 'cancel') natural.cancel();
+            else if (change === 'edit') task.inputText.value = '另一项需求';
+            else lifecycle.replaceSession({ ...account, user: { ...account.user, id: id(2) } });
+            const { goal, focusPoints, exclusions, sourcePreferences, timeRange, outputFormat } =
+                config();
+            finish(
+                Response.json({
+                    inputText: originalText,
+                    round: 0,
+                    summary: '建议范围',
+                    scope: {
+                        goal,
+                        focusPoints,
+                        exclusions,
+                        sourcePreferences,
+                        timeRange,
+                        outputFormat,
+                        researchMode: 'analysis',
+                    },
+                    questions: [],
+                    mode: 'model',
+                    manualReason: null,
+                    parsingUsage: {
+                        attempts: 1,
+                        inputTokens: 100,
+                        outputTokens: 50,
+                        estimated: false,
+                    },
+                }),
+            );
+            await pending;
+            expect(natural.clarificationResult.value).toBeUndefined();
+            expect(natural.clarifications.value).toEqual([]);
+            expect(task.draft.title).toBe('');
+            expect(natural.clarifying.value).toBe(false);
+        },
+    );
     it.each([false, true])('确认范围被完整发送，错配响应不能覆盖选择=%s', async (mismatch) => {
         const scope: TaskDraftScope = { ...config(), researchMode: 'collection' };
         const {

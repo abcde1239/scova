@@ -4,6 +4,10 @@ import {
     ContractValidationError,
     parseContract,
     taskDraftScopeMatches,
+    TaskDraftQuestionsInputSchema,
+    TaskDraftQuestionsResponseSchema,
+    type TaskDraftQuestionsInput,
+    type TaskDraftQuestionsResponse,
     type TaskDraftInput,
     type TaskDraftResponse,
 } from '@scova/models';
@@ -43,5 +47,46 @@ export async function requestTaskDraft(
             : result.data.manualReason === null)
     )
         throw toApiError(new InvalidResponseError('解析原文或结果模式不一致'));
+    return result;
+}
+
+const questionsEndpoint = defineApiEndpoint<{
+    body: TaskDraftQuestionsInput;
+    data: TaskDraftQuestionsResponse;
+}>({
+    method: 'POST',
+    path: '/task-drafts/questions',
+    timeout: 30_000,
+    inputValidators: {
+        body: {
+            parse: (value: unknown) => {
+                const input = parseContract(TaskDraftQuestionsInputSchema, value);
+                validateDraftInput({
+                    inputText: input.inputText,
+                    ...(input.timezone ? { timezone: input.timezone } : {}),
+                });
+                return input;
+            },
+        },
+    },
+    validator: modelValidator(TaskDraftQuestionsResponseSchema),
+});
+export async function requestTaskQuestions(
+    session: ReturnType<SessionLifecycle['capture']>,
+    input: TaskDraftQuestionsInput,
+    signal: AbortSignal,
+    timeout?: number,
+) {
+    const result = await session.request(questionsEndpoint, { body: input }, { signal, timeout });
+    const value = result.data;
+    if (
+        value.inputText !== input.inputText ||
+        value.round !== input.round ||
+        (value.mode === 'model' ? value.manualReason !== null : value.manualReason === null) ||
+        new Set(value.questions.map((q) => q.id)).size !== value.questions.length ||
+        (input.round === 2 && value.questions.length > 0) ||
+        (value.mode === 'manual' && value.questions.length > 0)
+    )
+        throw toApiError(new InvalidResponseError('AI澄清结果与请求不一致'));
     return result;
 }
