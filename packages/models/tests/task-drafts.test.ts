@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test';
 import {
+    TaskDraftQuestionsInputSchema,
     TaskDraftInputSchema,
     TaskDraftResponseSchema,
     TaskDraftScopeSchema,
@@ -7,6 +8,21 @@ import {
 } from '../src/index.ts';
 
 describe('未保存任务草稿契约', () => {
+    it('AI澄清轮次和回答长度有界，拒绝客户端附带执行权限', () => {
+        const input = {
+            inputText: '查课程',
+            clarifications: [{ question: '哪个城市？', answer: '上海' }],
+            round: 1,
+        };
+        expect(parseContract(TaskDraftQuestionsInputSchema, input)).toEqual(input);
+        for (const body of [
+            { ...input, round: 3 },
+            { ...input, clarifications: Array(10).fill(input.clarifications[0]) },
+            { ...input, clarifications: [{ question: '城市', answer: ' ' }] },
+            { ...input, runNow: true },
+        ])
+            expect(() => parseContract(TaskDraftQuestionsInputSchema, body)).toThrow();
+    });
     it('问答范围有界且保留逐项内容，拒绝非法日期、重复网址和附加权限', () => {
         const scope = {
             goal: '收集公开课程',
