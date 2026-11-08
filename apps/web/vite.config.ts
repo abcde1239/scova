@@ -44,6 +44,13 @@ export default defineConfig(({ mode }) => {
                           },
                       },
                   },
+                  preview: {
+                      proxy: {
+                          '/api/v1': {
+                              target: 'http://127.0.0.1:4190',
+                          },
+                      },
+                  },
               }
             : {}),
         plugins: [

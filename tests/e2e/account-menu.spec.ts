@@ -228,7 +228,7 @@ test('手机侧栏退出失败保留账号，可重试且在途双击只发送�
     await logout.click();
     await expect(logout).toHaveAttribute('aria-busy', 'true');
     await logout.press('Enter');
-    expect(attempts).toBe(1);
+    await expect.poll(() => attempts).toBe(1);
     release();
     await expect(drawer.locator('.logout-error')).toHaveText('退出未成功，请检查连接后重试');
     await expect(drawer.locator('.drawer-account')).toContainText('browser-sample@example.test');
