@@ -18,6 +18,8 @@ vp run api:openapi:check
 
 `POST /api/v1/task-drafts` 接收 `{ "inputText": "需求描述", "timezone": "Asia/Tokyo" }`，其中时区可省略。接口使用会话与 CSRF，返回原始描述、完整可编辑配置、`mode`、`requiresConfirmation: true`、警告和独立解析用量；不会保存任务或启用计划。无模型、解析失败或超时会明确返回手工草稿，限流和基础设施错误仍使用真实 HTTP 状态。确认并编辑后通过 `POST /api/v1/tasks` 保存配置。
 
+`POST /api/v1/task-drafts/questions` 接收 `inputText`、可选 `timezone`、`clarifications: [{ question, answer }]` 和从 0 开始的 `round`（0–2）。需求整理 Agent 根据原文与回答返回摘要、最多三个问题和待确认范围；末轮仅整理范围，需求明确时可提前结束。模型不可用或输出无效时明确返回 `mode: manual`。问答与草稿生成共用原解析限流和预算，每请求最多两次模型尝试；不保存任务，不搜索网页。最终草稿请求可附带 `clarifications` 和经用户核对的 `searchScope`，服务端强制保留已确认范围。
+
 `POST /api/v1/tasks/:id/pause`、`resume`、`archive` 使用会话、CSRF 和 `If-Match` 修订控制，返回任务详情和新 `ETag`。暂停保留当前 Run，恢复仅安排未来周期时点；归档阻止新手动、重试和周期执行，并对当前 Run 请求取消。已完成幂等命令仍可重放原结果。
 
 报告接口使用当前会话的账号权限：`GET /api/v1/reports` 支持任务筛选与游标分页，`GET /api/v1/reports/:id` 返回结构化结论、来源快照元数据和原文引用。`GET /api/v1/inbox` 分页读取收件箱，`PATCH /api/v1/inbox/:id` 以 `{ "read": true }` 标记已读，传 `false` 恢复未读；写请求仍需 CSRF。报告读取保留演示模式、覆盖缺口和引用定位，完整网页正文及内部工具、checkpoint 不进入响应。
