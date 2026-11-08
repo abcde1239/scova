@@ -407,7 +407,8 @@ for (const mode of ['lost', 'pending', 'rate', 'unavailable'] as const) {
         await button(page, '读取本次结果').click();
         await expect(result(page)).toBeVisible();
         expect(requests(state, 'POST')[1]).toEqual(requests(state, 'POST')[0]);
-        if (before) expect(new URL(page.url()).searchParams.get('questionId')).toBe(before.id);
+        if (before)
+            await expect(page).toHaveURL((url) => url.searchParams.get('questionId') === before.id);
         await expect(result(page)).toContainText('未获得可核验回答');
         expect(requests(state, 'POST')).toHaveLength(2);
         expect(state.unexpected).toEqual([]);
