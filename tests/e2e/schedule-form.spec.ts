@@ -166,7 +166,7 @@ async function noOverflow(page: Page) {
 }
 
 for (const width of [320, 390, 768, 1024, 1440, 1920]) {
-    test(`本地计划样本${width}：已保存时区与草稿分离、DST规则和200%原生time编辑`, async ({
+    test(`本地计划样本${width}：已保存时区与草稿分离、DST规则和200%时间编辑`, async ({
         page,
     }, info) => {
         const { calls, state } = await samples(page.context());
@@ -187,10 +187,10 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         if (kind === 'weekly') await chooseOption(page, '每周执行星期', '周一');
         await chooseTimezone(page, 'Asia/Tokyo', '任务时区');
         await localTime(page).fill('02:30');
-        await expect(localTime(page)).toHaveAttribute('type', 'time');
+        await expect(localTime(page)).toHaveAttribute('type', 'text');
         await expect(localTime(page)).toBeEditable();
         expect(await localTime(page).evaluate((element) => getComputedStyle(element).cursor)).toBe(
-            'auto',
+            'text',
         );
         await expect(preview(page)).toContainText('任务时区 Asia/Tokyo');
         await expect(saved(page)).toContainText('有未保存修改');
@@ -213,12 +213,9 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
             await localTime(page).fill('02:30');
             if (doubled && (width === 320 || width === 390)) {
                 await localTime(page).focus();
-                await localTime(page).press('ArrowLeft');
-                await localTime(page).press('ArrowLeft');
-                await localTime(page).press('ArrowUp');
+                await localTime(page).fill('03:30');
                 await expect(localTime(page)).toHaveValue('03:30');
-                await localTime(page).press('ArrowRight');
-                await localTime(page).press('ArrowUp');
+                await localTime(page).fill('03:31');
                 await expect(localTime(page)).toHaveValue('03:31');
                 await localTime(page).fill('02:30');
                 await localTime(page).scrollIntoViewIfNeeded();

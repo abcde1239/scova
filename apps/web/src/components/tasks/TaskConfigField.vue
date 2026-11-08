@@ -21,6 +21,15 @@
             :aria-invalid="error ? 'true' : undefined"
             :aria-describedby="error ? `${id}-error` : undefined"
         />
+        <app-date-time-input
+            v-else-if="kind === 'date' || kind === 'time'"
+            :id="id"
+            v-model="value"
+            :kind="kind"
+            :label="label"
+            :error="error"
+            :disabled="disabled"
+        />
         <n-input
             v-else
             v-model:value="value"
@@ -30,8 +39,7 @@
             placeholder=""
             :input-props="{
                 id,
-                type: kind === 'date' ? 'datetime-local' : kind === 'time' ? 'time' : 'text',
-                step: kind === 'time' ? '60' : undefined,
+                type: 'text',
                 inputmode: kind === 'number' ? 'numeric' : undefined,
                 'aria-invalid': error ? 'true' : undefined,
                 'aria-describedby': error ? `${id}-error` : undefined,
@@ -45,6 +53,7 @@
 import { useId } from 'vue';
 import { NInput } from 'naive-ui';
 import AppSelect from '@/components/common/AppSelect.vue';
+import AppDateTimeInput from '@/components/common/AppDateTimeInput.vue';
 defineProps<{
     label: string;
     kind?: 'text' | 'textarea' | 'select' | 'checkbox' | 'number' | 'date' | 'time';

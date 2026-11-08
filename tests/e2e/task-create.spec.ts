@@ -99,6 +99,83 @@ test('资料收集方式保存到配置且任务显示已启用', async ({ page 
     );
 });
 
+for (const width of [320, 390, 1440]) {
+    test(`Naive日历${width}：选择日期、清空与时分选择，预算说明按需打开`, async ({
+        page,
+    }, info) => {
+        await samples(page);
+        await page.setViewportSize({ width, height: 1000 });
+        await page.goto('/tasks/new');
+        await chooseOption(page, '查阅时间范围', '固定范围');
+        const start = page.getByLabel('开始时间', { exact: true });
+        await start.click();
+        const calendar = page.locator('.n-date-panel').filter({ visible: true });
+        await expect(calendar).toBeVisible();
+        const box = await calendar.boundingBox();
+        expect(box!.x).toBeGreaterThanOrEqual(0);
+        expect(box!.x + box!.width).toBeLessThanOrEqual(width);
+        await calendar
+            .locator(
+                '.n-date-panel-date:not(.n-date-panel-date--excluded):not(.n-date-panel-date--disabled)',
+            )
+            .filter({ hasText: /^15$/ })
+            .click();
+        await calendar.getByRole('button', { name: '确认', exact: true }).click();
+        await expect(start).not.toHaveValue('');
+        await start.fill('');
+        await start.press('Tab');
+        await expect(start).toHaveValue('');
+        await page.evaluate(() => (document.documentElement.style.fontSize = '200%'));
+        await start.click();
+        const doubledBox = await calendar.boundingBox();
+        expect(doubledBox!.x).toBeGreaterThanOrEqual(0);
+        expect(doubledBox!.x + doubledBox!.width).toBeLessThanOrEqual(width);
+        const cells = await calendar.locator('.n-date-panel-date').evaluateAll((items) =>
+            items.map((item) => {
+                const rect = item.getBoundingClientRect();
+                return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+            }),
+        );
+        expect(cells[1]!.x).toBeGreaterThanOrEqual(cells[0]!.x + cells[0]!.width);
+        expect(cells[7]!.y).toBeGreaterThanOrEqual(cells[0]!.y + cells[0]!.height);
+        const monthTitle = await calendar.locator('.n-date-panel-month__month-year').boundingBox();
+        expect(monthTitle!.x).toBeGreaterThanOrEqual(doubledBox!.x);
+        expect(monthTitle!.x + monthTitle!.width).toBeLessThanOrEqual(
+            doubledBox!.x + doubledBox!.width,
+        );
+        const monthText = await calendar.locator('.n-date-panel-month__text').innerText();
+        await calendar.locator('.n-date-panel-month__next').click();
+        await expect(calendar.locator('.n-date-panel-month__text')).not.toHaveText(monthText);
+        await calendar.locator('.n-date-panel-month__prev').click();
+        await expect(calendar.locator('.n-date-panel-month__text')).toHaveText(monthText);
+        await calendar.getByRole('button', { name: '确认', exact: true }).scrollIntoViewIfNeeded();
+        await calendar.screenshot({ path: info.outputPath(`calendar-${width}.png`) });
+        await page.keyboard.press('Escape');
+        await chooseOption(page, '计划频率', '每日');
+        await page.getByLabel('执行当地时间', { exact: true }).click();
+        const timePanel = page.locator('.n-time-picker-panel').filter({ visible: true });
+        await expect(timePanel).toBeVisible();
+        await timePanel
+            .locator('.n-time-picker-col')
+            .nth(0)
+            .getByText('09', { exact: true })
+            .click();
+        await timePanel
+            .locator('.n-time-picker-col')
+            .nth(1)
+            .getByText('15', { exact: true })
+            .click();
+        await timePanel.getByRole('button', { name: '确认', exact: true }).click();
+        await expect(page.getByLabel('执行当地时间', { exact: true })).toHaveValue('09:15');
+        await expect(page.getByRole('region', { name: 'Token 分配测算' })).toHaveCount(0);
+        await page.getByRole('button', { name: '查看预算说明', exact: true }).click();
+        const modal = page.getByRole('dialog', { name: '执行预算与 Token 分配' });
+        await expect(modal.getByRole('table')).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(modal).not.toBeVisible();
+    });
+}
+
 for (const width of [390, 1440]) {
     test(`Token 预算即时分配、超额阻止保存、修正后可保存 ${width}`, async ({ page }, info) => {
         const calls = await samples(page);
@@ -106,29 +183,43 @@ for (const width of [390, 1440]) {
         await page.goto('/tasks/new');
         await fillMain(page);
         const preview = page.getByRole('region', { name: 'Token 分配测算', exact: true });
-        await expect(preview).toContainText('网页读取次数降至 15 页以内');
+        const help = page.getByRole('button', { name: '查看预算说明', exact: true });
+        const inspect = async (check: () => Promise<unknown>) => {
+            await help.click();
+            await expect(page.getByRole('dialog', { name: '执行预算与 Token 分配' })).toBeVisible();
+            await check();
+            await page.keyboard.press('Escape');
+            await expect(preview).not.toBeVisible();
+            await expect(help).toBeFocused();
+        };
+        await expect(preview).toHaveCount(0);
+        await inspect(() => expect(preview).toContainText('网页读取次数降至 15 页以内'));
         await page.getByLabel('网页读取次数上限', { exact: true }).fill('10');
-        await expect(preview).not.toContainText('比较额度偏紧');
+        await inspect(() => expect(preview).not.toContainText('比较额度偏紧'));
         await page.getByLabel('累计输出 token 上限', { exact: true }).fill('64000');
-        await expect(preview).toContainText('网页读取次数降至 7 页以内');
+        await inspect(() => expect(preview).toContainText('网页读取次数降至 7 页以内'));
         await page.getByLabel('累计输出 token 上限', { exact: true }).fill('128000');
-        await expect(preview.locator('.token-output-total')).toHaveText(
-            '分配合计 127,999 / 128,000；未分配 1 token。',
-        );
-        await expect(
-            preview.getByRole('row', { name: '来源比较 31,996 31,997', exact: true }),
-        ).toBeVisible();
+        await inspect(async () => {
+            await expect(preview.locator('.token-output-total')).toHaveText(
+                '分配合计 127,999 / 128,000；未分配 1 token。',
+            );
+            await expect(
+                preview.getByRole('row', { name: '来源比较 31,996 31,997', exact: true }),
+            ).toBeVisible();
+        });
         await page.getByLabel('累计输出 token 上限', { exact: true }).fill('1');
-        await expect(preview.getByRole('alert')).toContainText('输出总额不足');
+        await inspect(() => expect(preview.getByRole('alert')).toContainText('输出总额不足'));
         await page.getByRole('button', { name: '确认保存任务', exact: true }).click();
         await expect(page.getByLabel('累计输出 token 上限', { exact: true })).toBeFocused();
         expect(calls.filter((c) => c.method === 'POST')).toHaveLength(0);
         await page.getByLabel('累计输出 token 上限', { exact: true }).fill('8000');
-        await expect(preview.locator('.token-output-total')).toHaveText(
-            '分配合计 7,999 / 8,000；未分配 1 token。',
+        await inspect(() =>
+            expect(preview.locator('.token-output-total')).toHaveText(
+                '分配合计 7,999 / 8,000；未分配 1 token。',
+            ),
         );
         await page.getByLabel('累计输入 token 上限', { exact: true }).fill('');
-        await expect(preview).toContainText('请填写有效的正整数');
+        await inspect(() => expect(preview).toContainText('请填写有效的正整数'));
         await page.getByRole('button', { name: '确认保存任务', exact: true }).click();
         expect(calls.filter((c) => c.method === 'POST')).toHaveLength(0);
         await page.getByLabel('累计输入 token 上限', { exact: true }).fill('40000');
@@ -137,9 +228,11 @@ for (const width of [390, 1440]) {
                 document.documentElement.style.fontSize = value;
             }, size);
             await noOverflow(page);
-            await expect(preview.getByRole('table')).toBeVisible();
+            await inspect(() => expect(preview.getByRole('table')).toBeVisible());
         }
-        await preview.screenshot({ path: info.outputPath(`token-budget-${width}.png`) });
+        await inspect(() =>
+            preview.screenshot({ path: info.outputPath(`token-budget-${width}.png`) }),
+        );
         await page.getByRole('button', { name: '确认保存任务', exact: true }).click();
         await expect(page).toHaveURL(new RegExp(`/tasks/${id(11)}$`));
         expect(calls.filter((c) => c.method === 'POST')).toHaveLength(1);
@@ -231,8 +324,8 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         await page.getByLabel('提醒失败或不完整执行', { exact: true }).uncheck();
         await noOverflow(page);
         await chooseOption(page, '查阅时间范围', '固定范围');
-        await page.getByLabel('开始时间', { exact: true }).fill('2026-10-01T09:00');
-        await page.getByLabel('结束时间', { exact: true }).fill('2026-10-30T17:00');
+        await page.getByLabel('开始时间', { exact: true }).fill('2026-10-01 09:00:00.000');
+        await page.getByLabel('结束时间', { exact: true }).fill('2026-10-30 17:00:00.000');
         for (const doubled of [false, true]) {
             if (doubled)
                 await page.evaluate(() => (document.documentElement.style.fontSize = '200%'));
@@ -348,11 +441,11 @@ test('字段错误聚焦、来源校验、固定日期与失败保留重试', as
     await page.screenshot({ path: testInfo.outputPath('source-error-390.png'), fullPage: true });
     await fillList(page, '优先来源网址（可选）', ['https://example.test']);
     await chooseOption(page, '查阅时间范围', '固定范围');
-    await page.getByLabel('开始时间', { exact: true }).fill('2026-10-31T08:00');
-    await page.getByLabel('结束时间', { exact: true }).fill('2026-10-30T08:00');
+    await page.getByLabel('开始时间', { exact: true }).fill('2026-10-31 08:00:00.000');
+    await page.getByLabel('结束时间', { exact: true }).fill('2026-10-30 08:00:00.000');
     await page.getByRole('button', { name: '确认保存任务', exact: true }).click();
     await expect(page.getByLabel('结束时间', { exact: true })).toBeFocused();
-    await page.getByLabel('结束时间', { exact: true }).fill('2026-11-01T08:00');
+    await page.getByLabel('结束时间', { exact: true }).fill('2026-11-01 08:00:00.000');
     let attempt = 0;
     const keys: string[] = [];
     await page.route('**/api/v1/tasks', async (route) => {

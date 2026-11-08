@@ -171,19 +171,21 @@
                     :disabled="locked"
                 />
             </div>
-            <task-token-budget
-                :input="Number(task.draft.maxInputTokens)"
-                :output="Number(task.draft.maxOutputTokens)"
-                :pages="Number(task.draft.maxPages)"
-            />
-            <p>
-                预算按整次执行累计，包含规划、比较、综合和重试。时长最多{{
-                    DEFAULT_TASK_BUDGET_LIMITS.maxDurationSeconds
-                }}秒，输入最多{{ DEFAULT_TASK_BUDGET_LIMITS.maxInputTokens }}、输出最多{{
-                    DEFAULT_TASK_BUDGET_LIMITS.maxOutputTokens
-                }}
-                token。累计输出额度不等于简报篇幅；实际调用还受所选模型支持的上下文和输出上限约束。
-            </p>
+            <info-dialog label="查看预算说明" title="执行预算与 Token 分配" wide>
+                <task-token-budget
+                    :input="Number(task.draft.maxInputTokens)"
+                    :output="Number(task.draft.maxOutputTokens)"
+                    :pages="Number(task.draft.maxPages)"
+                />
+                <p>
+                    预算按整次执行累计，包含规划、比较、综合和重试。时长最多{{
+                        DEFAULT_TASK_BUDGET_LIMITS.maxDurationSeconds
+                    }}秒，输入最多{{ DEFAULT_TASK_BUDGET_LIMITS.maxInputTokens }}、输出最多{{
+                        DEFAULT_TASK_BUDGET_LIMITS.maxOutputTokens
+                    }}
+                    token。累计输出额度不等于简报篇幅；实际调用还受所选模型支持的上下文和输出上限约束。
+                </p>
+            </info-dialog>
         </details>
         <schedule-fields
             v-model:frequency="task.draft.scheduleFrequency"
@@ -252,6 +254,7 @@
 </template>
 
 <script setup lang="ts">
+import InfoDialog from '@/components/common/InfoDialog.vue';
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import { onBeforeRouteLeave, onBeforeRouteUpdate, RouterLink } from 'vue-router';
 import {
