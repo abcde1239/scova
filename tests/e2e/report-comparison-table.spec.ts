@@ -274,7 +274,7 @@ test('real SFC: semantic caption/headers and missing sides do not borrow opposit
                 ...document.querySelectorAll('#summary-title,.comparison-section,.claim'),
             ].every(
                 (element) =>
-                    !!(warning.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING),
+                    !!(warning.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_PRECEDING),
             );
         }),
     ).toBe(true);

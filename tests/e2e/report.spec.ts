@@ -107,7 +107,7 @@ async function samples(page: Page) {
 const article = (page: Page) =>
     page.getByRole('article', { name: '开放研究资料：可追溯的基础简报' });
 
-test('报告桌面并列辅助区，手机紧凑分区，快捷跳转仍聚焦正文', async ({ page }) => {
+test('报告正文优先完整展示，后续操作位于正文之后，快捷跳转仍聚焦正文', async ({ page }) => {
     await samples(page);
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto(reportPath);
@@ -116,14 +116,21 @@ test('报告桌面并列辅助区，手机紧凑分区，快捷跳转仍聚焦�
     expect(main!.width).toBeGreaterThan(1300);
     const content = await page.locator('.report-content').boundingBox();
     const companion = await page.locator('.report-companion').boundingBox();
-    expect(companion!.x).toBeGreaterThan(content!.x + content!.width);
-    expect(Math.abs(companion!.y - content!.y)).toBeLessThan(2);
+    expect(companion!.y).toBeGreaterThanOrEqual(content!.y + content!.height);
+    await expect(page.getByRole('heading', { name: '阅读后继续', exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: '执行详情', exact: true })).toHaveAttribute(
+        'href',
+        `/runs/${id(3)}`,
+    );
     for (const width of [390, 320]) {
         await page.setViewportSize({ width, height: 844 });
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
             true,
         );
         const tools = page.getByRole('navigation', { name: '报告内容导航' });
+        const body = await page.locator('.report-content').boundingBox();
+        const following = await page.locator('.report-companion').boundingBox();
+        expect(following!.y).toBeGreaterThanOrEqual(body!.y + body!.height);
         const jump = tools.getByRole('link', { name: '正文', exact: true });
         await expect(jump).toHaveClass(/n-button/);
         expect((await jump.boundingBox())!.height).toBeGreaterThanOrEqual(44);
@@ -168,7 +175,9 @@ test('报告默认只展开问答，辅助工具按需打开且折叠保留笔�
     expect(state.unexpected).toEqual([]);
 });
 
-test('本地 HTTP 样本：partial 在正文前、四类结论、保存引用与安全原始链接', async ({ page }) => {
+test('本地 HTTP 样本：正文优先且保留范围说明、四类结论、保存引用与安全原始链接', async ({
+    page,
+}) => {
     await samples(page);
     const sourceRequests: string[] = [];
     page.on('request', (request) => {
@@ -186,7 +195,7 @@ test('本地 HTTP 样本：partial 在正文前、四类结论、保存引用与
                     document
                         .querySelector('[aria-label="查阅范围说明"]')!
                         .compareDocumentPosition(document.getElementById('summary-title')!) &
-                    Node.DOCUMENT_POSITION_FOLLOWING
+                    Node.DOCUMENT_POSITION_PRECEDING
                 ),
         ),
     ).toBe(true);

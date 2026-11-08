@@ -51,6 +51,9 @@
                 <navigation-button to="/account/appearance" icon="appearance" label="阅读外观"
                     >外观</navigation-button
                 >
+                <navigation-button v-if="report" :to="`/runs/${report.runId}`" icon="back"
+                    >执行详情</navigation-button
+                >
             </nav>
         </div>
         <div class="report-workspace">
@@ -69,7 +72,8 @@
                     @retry="retry"
                 />
             </div>
-            <div class="report-companion">
+            <section class="report-companion" aria-labelledby="report-next-title">
+                <h2 id="report-next-title">阅读后继续</h2>
                 <report-questions
                     v-if="questionIdentity"
                     :key="questionIdentity"
@@ -156,7 +160,7 @@
                         />
                     </section>
                 </tool-section>
-            </div>
+            </section>
         </div>
     </div>
 </template>
@@ -353,6 +357,12 @@ async function retry() {
 .report-companion {
     display: grid;
     gap: 0;
+    border-block-start: 0.0625rem solid var(--scova-border);
+    padding-block-start: 1.5rem;
+}
+.report-companion > h2 {
+    margin: 0 0 1.5rem;
+    font-size: 1.25rem;
 }
 .report-companion :deep(.questions),
 .report-companion :deep(.feedback-effects),
@@ -373,12 +383,6 @@ async function retry() {
 }
 .report-companion :deep(.tool-section h2 .n-icon) {
     display: none;
-}
-@media (min-width: 75rem) {
-    .report-workspace {
-        grid-template-columns: minmax(0, 1fr) minmax(21rem, 0.4fr);
-        gap: 2.5rem;
-    }
 }
 .report-bookmarks {
     display: grid;

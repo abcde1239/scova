@@ -151,7 +151,7 @@ test('real SFCs: same DTO has identical claims, raw confidence and ordered share
     expect(api).toEqual([]);
 });
 
-test('real SFCs: partial precedes summary and every claim; raw coverage and modes survive both layouts', async ({
+test('real SFCs: summary and claims precede scope notes; raw coverage and modes survive both layouts', async ({
     page,
 }) => {
     const report = await open(page);
@@ -165,7 +165,7 @@ test('real SFCs: partial precedes summary and every claim; raw coverage and mode
                     (element) =>
                         !!(
                             alert.compareDocumentPosition(element) &
-                            Node.DOCUMENT_POSITION_FOLLOWING
+                            Node.DOCUMENT_POSITION_PRECEDING
                         ),
                 );
             }),
