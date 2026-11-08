@@ -136,15 +136,15 @@ test('本地会话样本：登录入口服务不可达，重试失败不循环�
     expect(attempts).toBe(3);
 });
 
-test('本地HTTP样本：构建环境地址直接请求独立API端口', async ({ page }) => {
-    const request = page.waitForRequest('http://127.0.0.1:4190/api/v1/me');
-    const response = page.waitForResponse('http://127.0.0.1:4190/api/v1/me');
+test('本地HTTP样本：同源代理保留Cookie会话与SSE', async ({ page }) => {
+    const request = page.waitForRequest('http://127.0.0.1:4189/api/v1/me');
+    const response = page.waitForResponse('http://127.0.0.1:4189/api/v1/me');
     await page.goto('/account');
-    expect((await (await request).allHeaders()).origin).toBe('http://127.0.0.1:4189');
-    expect((await response).headers()['access-control-allow-origin']).toBe('http://127.0.0.1:4189');
+    expect(new URL((await request).url()).origin).toBe(new URL(page.url()).origin);
+    expect(new URL((await response).url()).origin).toBe(new URL(page.url()).origin);
     await expectAccountReady(page);
     const result = await page.evaluate(async () => {
-        const base = 'http://127.0.0.1:4190/api/v1/__sample';
+        const base = '/api/v1/__sample';
         const write = await fetch(`${base}/session`, {
             method: 'POST',
             credentials: 'include',
@@ -170,6 +170,11 @@ test('本地HTTP样本：构建环境地址直接请求独立API端口', async (
         etag: '"sample"',
     });
     expect(result.cookie).not.toContain('scova_connection_sample');
+    expect(await page.context().cookies(page.url())).toEqual(
+        expect.arrayContaining([
+            expect.objectContaining({ name: 'scova_connection_sample', httpOnly: true }),
+        ]),
+    );
 });
 
 test('本地会话样本：已登录后断网，在切换业务页前进入错误页', async ({ page }) => {
