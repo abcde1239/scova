@@ -81,7 +81,8 @@ test('真实网络中断不猜测执行失败：恢复终态、N+1持久事件�
     await environment.services.compose(['stop', '-t', '30', 'worker']);
     const run = await queued(environment, owner, task.id);
     await owner.page.goto(`/runs/${run.id}`);
-    await expect(owner.page.locator('.connection')).toContainText('实时连接正常');
+    const liveStatus = owner.page.locator('.log-footer').getByRole('status');
+    await expect(liveStatus).toHaveText('实时连接正常');
     const cursor = JSON.parse(
         await environment.services.sql(
             `SELECT json_build_object('id',id,'seq',seq) FROM "${environment.services.schema}".run_events WHERE run_id='${run.id}' ORDER BY seq DESC LIMIT 1`,
@@ -98,11 +99,11 @@ test('真实网络中断不猜测执行失败：恢复终态、N+1持久事件�
     await owner.context.setOffline(true);
     try {
         await owner.page.getByRole('button', { name: '刷新快照', exact: true }).click();
-        await expect(owner.page.locator('.connection')).toContainText(
+        await expect(liveStatus).toHaveText(
             '浏览器网络已断开，实时更新暂停；后台执行状态需恢复连接后确认。',
         );
         await expect(owner.page.locator('.connection')).toContainText('快照更新已暂停');
-        await expect(owner.page.locator('.connection')).not.toContainText('实时连接正常');
+        await expect(liveStatus).not.toHaveText('实时连接正常');
         await expect(owner.page.locator('#execution-status')).toHaveText('等待执行');
         await environment.services.compose(['start', 'worker']);
         await expect
@@ -221,6 +222,8 @@ test('取消只作用于本次Run，未来周期计划保持；晚到真实401�
         releaseFetch();
         await expect.poll(() => actualStatus).toBe(401);
         await owner.page.getByRole('link', { name: '注册账号', exact: true }).click();
+        await expect(owner.page).toHaveURL(/\/register(?:\?|$)/);
+        await expect(owner.page.getByRole('heading', { name: '注册', exact: true })).toBeVisible();
         await owner.page.getByLabel('邮箱', { exact: true }).fill(`${randomUUID()}@example.test`);
         await owner.page.getByLabel('密码', { exact: true }).fill(`Fixture-${randomUUID()}`);
         await chooseTimezone(owner.page, 'UTC');
