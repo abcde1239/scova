@@ -42,6 +42,7 @@ async function checkLayout(page: Page, scale: number) {
                     const bounds = element.getBoundingClientRect();
                     return {
                         name: element.getAttribute('id') ?? element.tagName,
+                        textEntry: !element.matches('input[type="checkbox"], input[type="radio"]'),
                         size: parseFloat(style.fontSize),
                         left: bounds.left,
                         right: bounds.right,
@@ -50,7 +51,8 @@ async function checkLayout(page: Page, scale: number) {
                 }),
         );
     for (const input of measurements) {
-        expect(input.size, input.name).toBeGreaterThanOrEqual((16 * scale) / 100);
+        if (input.textEntry)
+            expect(input.size, input.name).toBeGreaterThanOrEqual((16 * scale) / 100);
         expect(input.left, input.name).toBeGreaterThanOrEqual(-1);
         expect(input.right, input.name).toBeLessThanOrEqual(input.viewport + 1);
     }
