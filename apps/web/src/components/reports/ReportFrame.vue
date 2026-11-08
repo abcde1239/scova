@@ -13,6 +13,15 @@
                 <time :datetime="report.publishedAt">{{ published }}</time>
             </p>
         </header>
+
+        <slot name="format-notice" />
+        <section aria-labelledby="summary-title" class="report-summary scova-reading">
+            <h3 id="summary-title">{{ summaryTitle }}</h3>
+            <p>{{ report.summary }}</p>
+        </section>
+        <slot name="after-summary" />
+        <report-answers v-if="report.coverage.reportValue" :report="report" />
+        <slot />
         <aside
             v-if="integrity.partial"
             class="report-warning scova-warning"
@@ -23,13 +32,6 @@
             <p>结果已整理当前查阅到的内容；未覆盖项目和来源详情见下方。</p>
             <a href="#coverage-title" @click="openCoverage">查看完整限制与缺口</a>
         </aside>
-        <slot name="format-notice" />
-        <section aria-labelledby="summary-title" class="report-summary scova-reading">
-            <h3 id="summary-title">{{ summaryTitle }}</h3>
-            <p>{{ report.summary }}</p>
-        </section>
-        <slot name="after-summary" />
-        <report-answers v-if="report.coverage.reportValue" :report="report" />
         <section class="coverage scova-interface" aria-labelledby="coverage-title">
             <h3 id="coverage-title">查阅范围与限制</h3>
             <details ref="coverageDetails">
@@ -84,7 +86,7 @@
                 </div>
             </details>
         </section>
-        <slot />
+
         <report-sources :report="report" />
     </article>
 </template>

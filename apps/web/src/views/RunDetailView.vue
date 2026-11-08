@@ -11,13 +11,32 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick } from 'vue';
-import { useRoute } from 'vue-router';
+import { computed, nextTick, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import StatePanel from '@/components/common/StatePanel.vue';
 import ExecutionDetail from '@/components/run/ExecutionDetail.vue';
 import { useExecution } from '@/composables/useExecution';
 const route = useRoute();
+const router = useRouter();
 const execution = useExecution(() => String(route.params.runId ?? ''));
+let watchedRun: string | undefined;
+// Only follow an execution observed in progress. Opening its history remains an explicit detail view.
+watch(
+    () => [execution.run.value, execution.reportId.value] as const,
+    ([run, reportId]) => {
+        if (!run || route.params.runId !== run.id) {
+            watchedRun = undefined;
+            return;
+        }
+        if (['queued', 'running', 'recovering', 'cancel_requested'].includes(run.status))
+            watchedRun = run.id;
+        if (watchedRun === run.id && reportId && ['succeeded', 'partial'].includes(run.status)) {
+            watchedRun = undefined;
+            void router.replace(`/reports/${reportId}`);
+        }
+    },
+    { immediate: true },
+);
 async function retry() {
     const path = route.fullPath;
     await execution.query.refetch();

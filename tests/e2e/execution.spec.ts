@@ -323,6 +323,81 @@ async function noOverflow(page: Page) {
     ).not.toBe('progress');
 }
 
+for (const status of ['succeeded', 'partial'] as const) {
+    test(`正在查看的执行${status}后优先进入报告，返回执行详情不会再次跳转`, async ({ page }) => {
+        let current = snapshot('running');
+        let reportUnavailable = status === 'partial';
+        await install(page, current);
+        await page.route(`**/api/v1/runs/${runId}`, (route) => route.fulfill({ json: current }));
+        await page.route('**/api/v1/reports?*', (route) =>
+            reportUnavailable
+                ? route.fulfill({ status: 503, json: failure })
+                : route.fulfill({
+                      json: {
+                          items: current.status === 'running' ? [] : [report(current)],
+                          nextCursor: null,
+                      },
+                  }),
+        );
+        await page.route(`**/api/v1/reports/${reportId}`, (route) =>
+            route.fulfill({
+                json: {
+                    ...report(current),
+                    baselineRunId: null,
+                    schemaVersion: 1,
+                    limitations: current.coverage?.gaps ?? [],
+                    changes: [],
+                    claims: [
+                        {
+                            id: taskId,
+                            kind: 'fact',
+                            text: '来源已公开课程价格。',
+                            confidenceLabel: '来源陈述',
+                            evidenceIds: [runId],
+                        },
+                    ],
+                    evidence: [
+                        {
+                            id: runId,
+                            sourceId: taskId,
+                            snapshotId: reportId,
+                            title: '课程价格',
+                            url: 'https://example.test/course',
+                            quote: '来源已公开课程价格。',
+                            location: '第一段',
+                            observedAt: instant,
+                        },
+                    ],
+                },
+            }),
+        );
+        await page.goto(`/runs/${runId}`);
+        await expect(page.getByRole('heading', { name: '正在查阅', exact: true })).toBeVisible();
+        current = snapshot(status);
+        await page.getByRole('button', { name: '刷新快照', exact: true }).click();
+        if (reportUnavailable) {
+            await expect(
+                page.getByRole('button', { name: '重试查找报告', exact: true }),
+            ).toBeVisible();
+            await expect(page).toHaveURL(new RegExp(`/runs/${runId}$`));
+            reportUnavailable = false;
+            await page.getByRole('button', { name: '重试查找报告', exact: true }).click();
+        }
+        await expect(page).toHaveURL(new RegExp(`/reports/${reportId}$`));
+        await expect(page.getByRole('article', { name: '本地报告样本' })).toContainText(
+            '来源已公开课程价格。',
+        );
+        await page.getByRole('link', { name: '执行详情', exact: true }).click();
+        await expect(page).toHaveURL(new RegExp(`/runs/${runId}$`));
+        const sections = page.locator('.execution-detail > section');
+        await expect(sections.first()).toHaveAttribute('aria-labelledby', 'report-title');
+        await expect(page.getByRole('link', { name: '查看已发布报告' })).toHaveAttribute(
+            'href',
+            `/reports/${reportId}`,
+        );
+    });
+}
+
 for (const width of [320, 390, 768, 1024, 1440, 1920]) {
     for (const mode of ['demo', 'live'] as const) {
         for (const status of ['partial', 'failed'] as const) {

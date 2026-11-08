@@ -418,7 +418,7 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
                 document
                     .querySelector('.report-warning')!
                     .compareDocumentPosition(document.querySelector('#summary-title')!) &
-                    Node.DOCUMENT_POSITION_FOLLOWING,
+                    Node.DOCUMENT_POSITION_PRECEDING,
             ).toBeTruthy();
             expect(text(document, '.coverage')).toContain('保存的查询');
         },

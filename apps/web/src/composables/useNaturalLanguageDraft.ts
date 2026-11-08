@@ -1,8 +1,14 @@
 import { computed, onScopeDispose, ref, shallowRef, watch } from 'vue';
-import type { TaskDraftResponse, TaskDraftScope } from '@scova/models';
+import type {
+    TaskDraftResponse,
+    TaskDraftScope,
+    TaskClarifications,
+    TaskDraftQuestionsResponse,
+    TaskDraftUsage,
+} from '@scova/models';
 import { ContractValidationError } from '@scova/models';
 import type { SessionLifecycle } from '@/api/session';
-import { requestTaskDraft, validateDraftInput } from '@/api/task-drafts';
+import { requestTaskDraft, requestTaskQuestions, validateDraftInput } from '@/api/task-drafts';
 import { toApiError } from '@/api/errors';
 import type { createTaskController } from '@/composables/useCreateTask';
 import { useCommand } from '@/composables/useCommand';
@@ -16,6 +22,15 @@ export function useNaturalLanguageDraft(
     const command = useCommand();
     const timezone = ref(task.draft.timezone);
     const result = shallowRef<TaskDraftResponse>();
+    const clarificationResult = shallowRef<TaskDraftQuestionsResponse>();
+    const clarifications = shallowRef<TaskClarifications>([]);
+    const clarificationUsage = ref<TaskDraftUsage>({
+        attempts: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        estimated: false,
+    });
+    const clarifying = ref(false);
     const message = ref('');
     const inputError = ref('');
     const timezoneError = ref('');
@@ -50,6 +65,7 @@ export function useNaturalLanguageDraft(
         timezone,
         () => {
             timezoneRevision.value++;
+            resetConversation();
         },
         { flush: 'sync' },
     );
@@ -57,9 +73,20 @@ export function useNaturalLanguageDraft(
         task.inputText,
         () => {
             searchScope.value = undefined;
+            resetConversation();
         },
         { flush: 'sync' },
     );
+    function resetConversation() {
+        clarificationResult.value = undefined;
+        clarifications.value = [];
+        clarificationUsage.value = {
+            attempts: 0,
+            inputTokens: 0,
+            outputTokens: 0,
+            estimated: false,
+        };
+    }
     function clear() {
         generation++;
         controller.abort();
@@ -74,6 +101,7 @@ export function useNaturalLanguageDraft(
         () => lifecycle.session.epoch,
         () => {
             clear();
+            resetConversation();
             searchScope.value = undefined;
             timezone.value = lifecycle.session.user?.preferences.defaultTimezone ?? 'Asia/Shanghai';
         },
@@ -102,6 +130,9 @@ export function useNaturalLanguageDraft(
                     inputText: task.inputText.value,
                     ...(timezone.value ? { timezone: timezone.value } : {}),
                     ...(capturedScope ? { searchScope: capturedScope } : {}),
+                    ...(clarifications.value.length
+                        ? { clarifications: clarifications.value }
+                        : {}),
                 });
                 const response = await requestTaskDraft(scope, input, signal, options.timeout);
                 if (current !== generation || signal.aborted || !scope.isCurrent()) return;
@@ -149,10 +180,103 @@ export function useNaturalLanguageDraft(
     }
     function cancel() {
         clear();
+        clarificationResult.value = undefined;
         message.value = '解析已停止，原文已保留，可以继续手工填写。';
+    }
+    async function clarify(answers?: Record<string, string>) {
+        if (command.pending.value || unavailable.value || !lifecycle.session.user) return;
+        const previous = answers ? clarificationResult.value : undefined;
+        if (answers && (!previous || !previous.questions.length || previous.round >= 2)) return;
+        const additions =
+            previous?.questions.map((q) => ({
+                question: q.question,
+                answer: answers?.[q.id]?.trim() ?? '',
+            })) ?? [];
+        if (additions.some((item) => !item.answer || item.answer.length > 2000)) {
+            message.value = '请逐项回答 AI 的问题，每项最多 2000 字；也可直接手动填写。';
+            return;
+        }
+        await command.run(async () => {
+            clear();
+            if (!answers) resetConversation();
+            clarifying.value = true;
+            const session = lifecycle.capture();
+            const current = generation;
+            const revision = task.editRevision.value;
+            const timezoneVersion = timezoneRevision.value;
+            const signal = controller.signal;
+            try {
+                const input = validateDraftInput({
+                    inputText: task.inputText.value,
+                    ...(timezone.value ? { timezone: timezone.value } : {}),
+                });
+                const transcript = [...clarifications.value, ...additions];
+                const response = await requestTaskQuestions(
+                    session,
+                    {
+                        ...input,
+                        clarifications: transcript,
+                        round: previous ? previous.round + 1 : 0,
+                    },
+                    signal,
+                    options.timeout,
+                );
+                if (current !== generation || signal.aborted || !session.isCurrent()) return;
+                if (
+                    revision !== task.editRevision.value ||
+                    timezoneVersion !== timezoneRevision.value
+                ) {
+                    resetConversation();
+                    message.value =
+                        '问答期间原文、时区或表单已变化，请重新整理需求；当前配置已保留。';
+                    return;
+                }
+                clarificationResult.value = response.data;
+                clarifications.value = transcript;
+                const usage = response.data.parsingUsage;
+                clarificationUsage.value = {
+                    attempts: clarificationUsage.value.attempts + usage.attempts,
+                    inputTokens: clarificationUsage.value.inputTokens + usage.inputTokens,
+                    outputTokens: clarificationUsage.value.outputTokens + usage.outputTokens,
+                    estimated: clarificationUsage.value.estimated || usage.estimated,
+                };
+                message.value =
+                    response.data.mode === 'manual'
+                        ? response.data.summary
+                        : response.data.questions.length
+                          ? '请回答 AI 根据需求提出的问题，也可以补充自己的要求。'
+                          : 'AI 已整理搜索范围，请核对后再生成任务草稿。';
+            } catch (cause) {
+                if (current !== generation || signal.aborted || !session.isCurrent()) return;
+                const error = toApiError(cause);
+                if (error.kind === 'cancelled') return;
+                if (cause instanceof ContractValidationError) {
+                    inputError.value = !task.inputText.value.trim()
+                        ? '请先描述你想研究的内容。'
+                        : '需求描述最多输入 2000 字，请精简后再试。';
+                    if (cause.fieldErrors.some((f) => f.path === '/timezone')) {
+                        inputError.value = '';
+                        timezoneError.value = '请从列表中选择有效时区。';
+                    }
+                }
+                message.value =
+                    inputError.value ||
+                    timezoneError.value ||
+                    (error.status === 429
+                        ? '解析过于频繁，请稍后再试，或直接手工填写。原文和回答已保留。'
+                        : 'AI 问答暂时无法继续，原文和已有回答已保留，可重试或手动填写。');
+            } finally {
+                clarifying.value = false;
+            }
+        });
     }
     return {
         timezone,
+        clarificationResult,
+        clarifications,
+        clarificationUsage,
+        clarifying,
+        clarify,
         searchScope,
         result,
         message,

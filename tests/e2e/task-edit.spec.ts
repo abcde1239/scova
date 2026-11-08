@@ -198,7 +198,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
             'America/New_York',
         );
         await expect(page.getByLabel('开始时间', { exact: true })).toHaveValue(
-            '2026-10-01T10:02:03.123',
+            '2026-10-01 10:02:03.123',
         );
         await title.fill('我的本地修改草稿');
         for (const doubled of [false, true]) {

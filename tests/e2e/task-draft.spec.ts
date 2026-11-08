@@ -109,6 +109,38 @@ async function samples(context: BrowserContext) {
             csrf: request.headers()['x-csrf-token'],
             key: request.headers()['idempotency-key'],
         });
+        if (path === '/api/v1/task-drafts/questions') {
+            const input = body as { inputText: string; round: number };
+            return route.fulfill({
+                json: {
+                    inputText: input.inputText,
+                    round: input.round,
+                    summary: '已整理需求，请核对范围。',
+                    questions: [],
+                    scope: {
+                        goal: input.inputText.trim(),
+                        focusPoints: [],
+                        exclusions: [],
+                        sourcePreferences: {
+                            preferredUrls: [],
+                            excludedUrls: [],
+                            officialOnly: false,
+                        },
+                        timeRange: { kind: 'rolling', days: 7 },
+                        outputFormat: 'brief',
+                        researchMode: 'analysis',
+                    },
+                    mode: 'model',
+                    manualReason: null,
+                    parsingUsage: {
+                        attempts: 1,
+                        inputTokens: 50,
+                        outputTokens: 30,
+                        estimated: false,
+                    },
+                },
+            });
+        }
         if (path === '/api/v1/task-drafts') {
             if (state.wait) await state.wait;
             if (state.failure)
@@ -193,8 +225,8 @@ async function generateDraft(page: Page, activation: 'click' | 'keyboard' | 'dou
     }
     await questions.getByRole('button', { name: '下一步', exact: true }).click();
     await chooseOption(page, '搜索时间范围', '指定时间段');
-    await questions.getByLabel('搜索起始时间', { exact: true }).fill('2026-10-01T12:04:05.123');
-    await questions.getByLabel('搜索截止时间', { exact: true }).fill('2026-10-30T13:05:06.456');
+    await questions.getByLabel('搜索起始时间', { exact: true }).fill('2026-10-01 12:04:05.123');
+    await questions.getByLabel('搜索截止时间', { exact: true }).fill('2026-10-30 13:05:06.456');
     for (const [label, button, values] of [
         ['优先查阅的网址（可选）', '添加优先网址', parsed.sourcePreferences.preferredUrls],
         ['不查阅的网址（可选）', '添加排除网址', parsed.sourcePreferences.excludedUrls],
@@ -219,11 +251,164 @@ const apply = (page: Page) =>
     panel(page).getByRole('button', { name: '应用草稿并替换当前配置', exact: true });
 const feedback = (page: Page) => panel(page).getByRole('status');
 const taskPosts = (calls: Awaited<ReturnType<typeof samples>>['calls']) =>
-    calls.filter((call) => call.method === 'POST' && call.path !== '/api/v1/task-drafts');
+    calls.filter((call) => call.method === 'POST' && !call.path.startsWith('/api/v1/task-drafts'));
 const draftPosts = (calls: Awaited<ReturnType<typeof samples>>['calls']) =>
     calls.filter((call) => call.method === 'POST' && call.path === '/api/v1/task-drafts');
 
-test('先问清内容和范围，非法日期可回退修正，确认前零模型请求', async ({ page }, info) => {
+for (const width of [390, 1440]) {
+    test(`AI交互澄清${width}：根据回答继续追问，最终范围与对话进入草稿而不创建任务`, async ({
+        page,
+    }, info) => {
+        const { calls } = await samples(page.context());
+        const questionCalls: {
+            round: number;
+            clarifications: { question: string; answer: string }[];
+        }[] = [];
+        const scope: TaskDraftScope = {
+            goal: '收集上海线下编程课程价格与申请条件',
+            focusPoints: ['价格', '申请条件'],
+            exclusions: ['在线课程'],
+            sourcePreferences: { preferredUrls: [], excludedUrls: [], officialOnly: true },
+            timeRange: { kind: 'rolling', days: 30 },
+            outputFormat: 'comparison',
+            researchMode: 'collection',
+        };
+        await page.context().route('**/api/v1/task-drafts/questions', (route) => {
+            const body = route.request().postDataJSON();
+            questionCalls.push(body);
+            return route.fulfill({
+                json: {
+                    inputText: body.inputText,
+                    round: body.round,
+                    summary:
+                        body.round === 2
+                            ? '收集上海线下编程课程，比较费用与申请条件。'
+                            : '需要进一步确认课程范围。',
+                    scope,
+                    questions:
+                        body.round === 0
+                            ? [
+                                  {
+                                      id: 'q1',
+                                      question: '查哪个城市的课程？',
+                                      reason: '城市决定可报名范围',
+                                      options: ['上海', '杭州'],
+                                  },
+                              ]
+                            : body.round === 1
+                              ? [
+                                    {
+                                        id: 'q1',
+                                        question: '上海需要哪一类课程？',
+                                        reason: '只搜索你需要的课程',
+                                        options: ['语言', '编程'],
+                                    },
+                                ]
+                              : [],
+                    mode: 'model',
+                    manualReason: null,
+                    parsingUsage: {
+                        attempts: 1,
+                        inputTokens: 80,
+                        outputTokens: 60,
+                        estimated: false,
+                    },
+                },
+            });
+        });
+        await page.setViewportSize({ width, height: 1000 });
+        await page.goto('/tasks/new');
+        await original(page).fill('比较课程价格');
+        await parse(page).click();
+        await expect(
+            panel(page).getByRole('heading', { name: /AI 正在与你确认需求/ }),
+        ).toBeFocused();
+        await panel(page).getByRole('button', { name: '继续与 AI 确认', exact: true }).click();
+        expect(questionCalls).toHaveLength(1);
+        await expect(panel(page)).toContainText('请逐项回答');
+        await panel(page).getByRole('button', { name: '上海', exact: true }).click();
+        await panel(page).getByRole('button', { name: '继续与 AI 确认', exact: true }).click();
+        await expect(panel(page)).toContainText('上海需要哪一类课程？');
+        expect(questionCalls[1]!.clarifications).toEqual([
+            { question: '查哪个城市的课程？', answer: '上海' },
+        ]);
+        await panel(page)
+            .getByLabel('你的回答：上海需要哪一类课程？', { exact: true })
+            .fill('编程，只查线下课程');
+        await page.evaluate(() => (document.documentElement.style.fontSize = '200%'));
+        await noOverflow(page);
+        await panel(page).screenshot({ path: info.outputPath(`ai-clarification-${width}.png`) });
+        await panel(page).getByRole('button', { name: '继续与 AI 确认', exact: true }).click();
+        const review = panel(page).locator('.scope-questions');
+        await expect(review).toContainText('收集上海线下编程课程');
+        expect(draftPosts(calls)).toHaveLength(0);
+        await review.getByRole('button', { name: '下一步', exact: true }).click();
+        await review.getByRole('button', { name: '下一步', exact: true }).click();
+        await expect(review.getByLabel('希望得到的形式', { exact: true })).toContainText('对比表');
+        await review.getByRole('button', { name: '确认范围并生成草稿', exact: true }).click();
+        await expect(apply(page)).toBeEnabled();
+        expect(draftPosts(calls)[0]!.body).toMatchObject({
+            searchScope: scope,
+            clarifications: questionCalls[2]!.clarifications,
+        });
+        await apply(page).click();
+        await expect(page.getByLabel('查阅目标', { exact: true })).toHaveValue(scope.goal);
+        expect(taskPosts(calls)).toHaveLength(0);
+    });
+}
+
+test('AI追问失败保留当前回答，显式重试不重复追加对话', async ({ page }) => {
+    const { calls } = await samples(page.context());
+    let attempts = 0;
+    const bodies: unknown[] = [];
+    await page.context().route('**/api/v1/task-drafts/questions', (route) => {
+        const body = route.request().postDataJSON();
+        bodies.push(body);
+        attempts++;
+        if (attempts === 2)
+            return route.fulfill({
+                status: 503,
+                json: { code: 'MODEL_UNAVAILABLE', message: 'local fixture', requestId: 'sample' },
+            });
+        return route.fulfill({
+            json: {
+                inputText: body.inputText,
+                round: body.round,
+                summary: '请明确范围',
+                scope: confirmedScope,
+                questions:
+                    body.round === 0
+                        ? [
+                              {
+                                  id: 'q1',
+                                  question: '关注哪种课程？',
+                                  reason: '缩小范围',
+                                  options: [],
+                              },
+                          ]
+                        : [],
+                mode: 'model',
+                manualReason: null,
+                parsingUsage: { attempts: 1, inputTokens: 80, outputTokens: 40, estimated: false },
+            },
+        });
+    });
+    await page.goto('/tasks/new');
+    await original(page).fill('收集课程信息');
+    await parse(page).click();
+    const answer = panel(page).getByLabel('你的回答：关注哪种课程？', { exact: true });
+    await answer.fill('编程，保留原回答');
+    await panel(page).getByRole('button', { name: '继续与 AI 确认', exact: true }).click();
+    await expect(panel(page)).toContainText('已有回答已保留');
+    await expect(answer).toHaveValue('编程，保留原回答');
+    expect(attempts).toBe(2);
+    await panel(page).getByRole('button', { name: '继续与 AI 确认', exact: true }).click();
+    await expect(panel(page).locator('.scope-questions')).toBeVisible();
+    expect(bodies[2]).toEqual(bodies[1]);
+    expect(draftPosts(calls)).toHaveLength(0);
+});
+
+test('AI先整理范围，非法日期可回退修正，确认前不生成草稿', async ({ page }, info) => {
     const { calls } = await samples(page.context());
     await page.setViewportSize({ width: 390, height: 1000 });
     await page.goto('/tasks/new');
@@ -401,7 +586,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         await expect(panel(page).getByText(/原文、解析时区或表单已变化/)).toHaveCount(0);
         await expect(page.getByLabel('计划频率', { exact: true })).toContainText('每周');
         await expect(page.getByLabel('开始时间', { exact: true })).toHaveValue(
-            '2026-10-01T12:04:05.123',
+            '2026-10-01 12:04:05.123',
         );
         expect(taskPosts(calls)).toHaveLength(0);
         if (width === 320) {

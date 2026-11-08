@@ -9,7 +9,7 @@
             <info-dialog label="如何创建任务" title="AI 整理与手动填写">
                 <p>
                     AI 整理：描述想研究的内容，由需求整理 Agent
-                    建议标题、关注重点和执行计划，再由你检查、修改。
+                    根据你的回答继续澄清，核对搜索范围与交付形式后，建议标题、关注重点和执行计划，再由你检查、修改。
                 </p>
                 <p>
                     手动填写：直接填写下方的任务配置，不调用需求整理
@@ -36,18 +36,36 @@
                 >返回 AI 整理需求</action-button
             >
         </div>
+        <task-ai-questions
+            v-else-if="draft.clarificationResult.value?.questions.length"
+            :key="draft.clarificationResult.value.round"
+            :result="draft.clarificationResult.value"
+            :transcript="draft.clarifications.value"
+            :busy="draft.pending.value"
+            :disabled="draft.unavailable.value"
+            :message="draft.message.value"
+            @answer="continueQuestions"
+            @cancel="cancelQuestions"
+            @manual="enterManual"
+        />
         <task-scope-questions
             v-else-if="questionsVisible"
             :input-text="task.inputText.value"
             :format="task.draft.outputFormat"
             :mode="task.draft.researchMode"
-            :initial="draft.searchScope.value"
+            :initial="draft.clarificationResult.value?.scope ?? draft.searchScope.value"
+            :summary="draft.clarificationResult.value?.summary"
+            :transcript="draft.clarifications.value"
             :disabled="draft.unavailable.value || draft.pending.value"
             @confirm="confirmScope"
-            @cancel="questionsVisible = false"
+            @cancel="cancelQuestions"
+            @manual="enterManual"
         />
         <template v-else>
-            <p>描述需求后，先通过三步问答确认搜索内容、来源与时间、交付形式，再由 AI 生成配置。</p>
+            <p>
+                AI
+                会根据描述提出需要澄清的问题，再结合你的回答整理搜索范围和交付形式。核对后才生成草稿。
+            </p>
             <task-config-field
                 v-model="task.inputText.value"
                 label="需求描述"
@@ -82,7 +100,11 @@
             <state-panel
                 v-if="draft.pending.value"
                 state="loading"
-                message="正在整理需求与生成建议配置，可随时停止解析。"
+                :message="
+                    draft.clarifying.value
+                        ? 'AI 正在理解需求并准备澄清问题，可随时停止解析。'
+                        : '正在整理需求与生成建议配置，可随时停止解析。'
+                "
             />
             <div
                 v-if="draft.message.value"
@@ -136,13 +158,19 @@
                 </dl>
                 <info-dialog label="查看生成详情" title="本次草稿生成详情">
                     <p>
+                        AI 问答调用 {{ draft.clarificationUsage.value.attempts }} 次 · 输入
+                        {{ draft.clarificationUsage.value.inputTokens }} token · 输出
+                        {{ draft.clarificationUsage.value.outputTokens }} token。
+                    </p>
+                    <p>
                         模型调用 {{ draft.result.value.parsingUsage.attempts }} 次 · 输入
                         {{ draft.result.value.parsingUsage.inputTokens }} token · 输出
                         {{ draft.result.value.parsingUsage.outputTokens }} token
                     </p>
                     <p>
                         {{
-                            draft.result.value.parsingUsage.estimated
+                            draft.result.value.parsingUsage.estimated ||
+                            draft.clarificationUsage.value.estimated
                                 ? '包含保守预留或估算用量。'
                                 : '当前解析用量未标记估算。'
                         }}用量独立统计，不计入后续研究预算。
@@ -170,6 +198,7 @@ import AppIcon from '@/components/common/AppIcon.vue';
 import InfoDialog from '@/components/common/InfoDialog.vue';
 import StatePanel from '@/components/common/StatePanel.vue';
 import TaskScopeQuestions from '@/components/tasks/TaskScopeQuestions.vue';
+import TaskAiQuestions from '@/components/tasks/TaskAiQuestions.vue';
 import { validateDraftInput } from '@/api/task-drafts';
 import type { TaskDraftScope } from '@scova/models';
 import { timezoneOptions } from '@/utils/timezones';
@@ -214,12 +243,30 @@ async function openQuestions() {
     try {
         validateDraftInput({ inputText: props.task.inputText.value });
     } catch {
-        await parse();
+        await draft.clarify();
+        await nextTick();
+        panel.value?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
         return;
     }
-    questionsVisible.value = true;
+    await draft.clarify();
+    questionsVisible.value =
+        !!draft.clarificationResult.value && !draft.clarificationResult.value.questions.length;
     await nextTick();
-    panel.value?.querySelector<HTMLElement>('.scope-questions h3')?.focus();
+    if (questionsVisible.value)
+        panel.value?.querySelector<HTMLElement>('.scope-questions h3')?.focus();
+    else if (!draft.clarificationResult.value) feedback.value?.focus();
+}
+async function continueQuestions(answers: Record<string, string>) {
+    await draft.clarify(answers);
+    questionsVisible.value =
+        !!draft.clarificationResult.value && !draft.clarificationResult.value.questions.length;
+    await nextTick();
+    if (questionsVisible.value)
+        panel.value?.querySelector<HTMLElement>('.scope-questions h3')?.focus();
+}
+function cancelQuestions() {
+    draft.cancel();
+    questionsVisible.value = false;
 }
 async function confirmScope(scope: TaskDraftScope) {
     draft.searchScope.value = scope;

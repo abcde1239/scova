@@ -1,5 +1,44 @@
 <template>
     <article v-if="run" class="execution-detail">
+        <section
+            v-if="terminal"
+            class="detail-section scova-surface"
+            aria-labelledby="report-title"
+        >
+            <h2 id="report-title">报告结果</h2>
+            <router-link
+                v-if="execution.reportId.value"
+                class="scova-reference report-link"
+                :to="`/reports/${execution.reportId.value}`"
+                >查看已发布报告<app-icon name="library"
+            /></router-link>
+            <template v-else-if="['succeeded', 'partial'].includes(run.status)">
+                <p>
+                    {{
+                        execution.reports.isError.value
+                            ? '报告入口暂时无法读取，请重试查找。'
+                            : execution.reports.isPending.value
+                              ? '正在查找已发布报告'
+                              : '当前已读取记录中尚未找到此执行的报告。'
+                    }}
+                </p>
+                <action-button
+                    v-if="execution.reports.isError.value"
+                    :busy="execution.reports.isFetching.value"
+                    @click="execution.reports.refetch()"
+                    >重试查找报告</action-button
+                >
+                <div v-else-if="execution.reports.hasNextPage.value" class="scova-pagination">
+                    <action-button
+                        :busy="execution.reports.isFetchingNextPage.value"
+                        @click="execution.reports.fetchNextPage()"
+                        >继续查找报告</action-button
+                    >
+                </div>
+            </template>
+            <p v-else>本次执行未完成报告交付。</p>
+        </section>
+
         <section class="execution-overview scova-surface" aria-labelledby="execution-status">
             <div class="status-heading">
                 <h2
@@ -193,45 +232,6 @@
             <summary>执行操作</summary>
             <run-actions :task-id="run.taskId" :run="run" />
         </details>
-
-        <section
-            v-if="terminal"
-            class="detail-section scova-surface"
-            aria-labelledby="report-title"
-        >
-            <h2 id="report-title">交付报告</h2>
-            <router-link
-                v-if="execution.reportId.value"
-                class="scova-reference report-link"
-                :to="`/reports/${execution.reportId.value}`"
-                >查看已发布报告<app-icon name="library"
-            /></router-link>
-            <template v-else-if="['succeeded', 'partial'].includes(run.status)">
-                <p>
-                    {{
-                        execution.reports.isError.value
-                            ? '报告入口暂时无法读取，请重试查找。'
-                            : execution.reports.isPending.value
-                              ? '正在查找已发布报告'
-                              : '当前已读取记录中尚未找到此执行的报告。'
-                    }}
-                </p>
-                <action-button
-                    v-if="execution.reports.isError.value"
-                    :busy="execution.reports.isFetching.value"
-                    @click="execution.reports.refetch()"
-                    >重试查找报告</action-button
-                >
-                <div v-else-if="execution.reports.hasNextPage.value" class="scova-pagination">
-                    <action-button
-                        :busy="execution.reports.isFetchingNextPage.value"
-                        @click="execution.reports.fetchNextPage()"
-                        >继续查找报告</action-button
-                    >
-                </div>
-            </template>
-            <p v-else>本次执行未完成报告交付。</p>
-        </section>
     </article>
 </template>
 
