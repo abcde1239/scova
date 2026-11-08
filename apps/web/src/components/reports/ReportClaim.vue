@@ -4,7 +4,15 @@
         <p v-if="claim.kind === 'insufficient'" class="scova-warning scova-interface">
             <strong>需要补充材料</strong> · 这条线索的来源依据较少，详情见下方引用。
         </p>
+        <details
+            v-if="claim.kind === 'fact' || claim.kind === 'inference'"
+            class="confidence-details scova-interface"
+        >
+            <summary>{{ claim.kind === 'fact' ? '来源事实' : '来源归纳' }} · 查看说明</summary>
+            <p class="confidence">{{ `证据说明：${claim.confidenceLabel}` }}</p>
+        </details>
         <p
+            v-else
             class="confidence scova-interface"
             :class="{ 'scova-warning': claim.kind === 'insufficient' || claim.kind === 'conflict' }"
         >
@@ -61,8 +69,15 @@ p {
 .claim-text {
     white-space: pre-wrap;
 }
-.confidence {
+.confidence,
+.confidence-details {
     color: var(--scova-muted);
+}
+.confidence-details summary {
+    cursor: pointer;
+}
+.confidence-details p {
+    margin-block-start: 0.5rem;
 }
 @media (max-width: 40rem) {
     .citation :deep(summary),

@@ -11,7 +11,7 @@
                 :key="step"
                 type="button"
                 :aria-pressed="selected === step"
-                :class="{ failed: log.steps[step]?.failures }"
+                :class="{ failed: hasErrors(step), warned: log.steps[step]?.warnings }"
                 @click="selected = step"
             >
                 <app-icon :name="stageIcon(step)" />
@@ -30,7 +30,7 @@
                     <p>{{ selected ? stepLabels[selected] : '全部阶段' }} · 按事件时间更新</p>
                 </div>
                 <div class="log-controls">
-                    <label><input v-model="errorsOnly" type="checkbox" />仅失败</label>
+                    <label><input v-model="errorsOnly" type="checkbox" />仅 warning / error</label>
                     <label><input v-model="follow" type="checkbox" />跟随最新</label>
                 </div>
             </header>
@@ -57,8 +57,16 @@
                             >{{ timestamp(entry.at) }}</time
                         >
                         <span class="line-message"
-                            ><span v-if="entry.level === 'error'" class="error-label">失败</span
-                            >{{ entry.text }}<code v-if="entry.code">{{ entry.code }}</code></span
+                            ><span
+                                v-if="entry.level === 'error' || entry.level === 'warning'"
+                                class="error-label"
+                                >{{
+                                    entry.level === 'error' ? '错误 · error' : '警告 · warning'
+                                }}</span
+                            >{{ entry.text }}<code v-if="entry.code">{{ entry.code }}</code
+                            ><small v-if="entry.guidance" class="guidance">{{
+                                entry.guidance
+                            }}</small></span
                         >
                         <span v-if="entry.durationMs !== undefined" class="line-duration">{{
                             duration(entry.durationMs)
@@ -98,7 +106,7 @@ const visible = computed(() =>
     props.log.entries.filter(
         (entry) =>
             (!selected.value || entry.step === selected.value) &&
-            (!errorsOnly.value || entry.level === 'error'),
+            (!errorsOnly.value || entry.level === 'error' || entry.level === 'warning'),
     ),
 );
 const duration = (ms: number) =>
@@ -110,10 +118,15 @@ function stageIcon(step: ExecutionStep) {
     if (stats && stats.started > stats.completed) return props.terminal ? 'pause' : 'run';
     return stats?.completed ? 'confirm' : 'chevron';
 }
+function hasErrors(step: ExecutionStep) {
+    const stats = props.log.steps[step];
+    return !!stats && stats.failures > (stats.warnings ?? 0);
+}
 function stageText(step: ExecutionStep) {
     const stats = props.log.steps[step];
     if (!stats) return '未观察到记录';
-    if (stats.failures) return `${stats.failures} 次工具失败`;
+    if (stats.failures)
+        return `${stats.warnings ?? 0} 次警告 · ${stats.failures - (stats.warnings ?? 0)} 次错误`;
     if (stats.started > stats.completed) return props.terminal ? '未收到结束记录' : '进行中';
     return `节点已结束${stats.completed > 1 ? ` · ${stats.completed} 次` : ''}`;
 }
@@ -188,6 +201,9 @@ watch([() => props.log.lastSeq, selected, errorsOnly, follow], async () => {
 }
 .stages .failed > .app-icon {
     color: var(--scova-danger);
+}
+.stages .warned:not(.failed) > .app-icon {
+    color: var(--scova-partial);
 }
 .console {
     min-inline-size: 0;
@@ -274,6 +290,17 @@ time,
 }
 .error .line-message {
     color: var(--scova-danger);
+}
+.warning {
+    background: color-mix(in srgb, var(--scova-partial) 6%, transparent);
+}
+.warning .line-message {
+    color: var(--scova-partial);
+}
+.guidance {
+    display: block;
+    font: inherit;
+    color: var(--scova-muted);
 }
 .error-label {
     font-size: 0.75rem;

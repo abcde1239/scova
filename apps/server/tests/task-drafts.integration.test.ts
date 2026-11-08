@@ -220,6 +220,38 @@ describe('HTTP任务草稿、真实Redis解析预算与手工回退', () => {
         expect(externalCalls).toBe(0);
         expect(await redis.keys(services.taskDraftPolicy.keyPrefix + '*')).toHaveLength(0);
     });
+    it('问答范围通过HTTP契约保留且不创建任务，模型不能改变用户选择', async () => {
+        const owner = await register();
+        const before = await businessCounts();
+        const searchScope = {
+            goal: '收集课程费用',
+            focusPoints: ['课程价格'],
+            exclusions: ['未来预测'],
+            sourcePreferences: {
+                preferredUrls: ['https://example.edu/fees'],
+                excludedUrls: [],
+                officialOnly: true,
+            },
+            timeRange: { kind: 'rolling', days: 30 },
+            researchMode: 'collection',
+            outputFormat: 'comparison',
+        };
+        model = fixture(() => draftConfig());
+        const response = await draft(owner, { inputText: '课程资料', searchScope });
+        expect(response.status).toBe(200);
+        expect((await json(response)).config).toMatchObject(searchScope);
+        expect(externalCalls).toBe(1);
+        expect(await businessCounts()).toEqual(before);
+        expect(
+            (
+                await draft(owner, {
+                    inputText: '课程资料',
+                    searchScope: { ...searchScope, goal: '' },
+                })
+            ).status,
+        ).toBe(422);
+        expect(externalCalls).toBe(1);
+    });
     it.each(draftExamples)(
         '三典型需求返回完整可编辑草稿且无任务执行副作用 $input.inputText',
         async ({ input, config }) => {

@@ -78,7 +78,14 @@
                     </div>
                 </div>
             </div>
-            <p v-if="question.gap" class="scova-interface">补充说明：{{ question.gap }}</p>
+            <details
+                v-if="question.gap"
+                class="assessment scova-interface"
+                :open="question.status === 'unresolved' || question.status === 'disputed'"
+            >
+                <summary>本问题的补充说明</summary>
+                <p>{{ question.gap }}</p>
+            </details>
         </section>
         <details v-if="references.length" class="references">
             <summary class="scova-interface">参考与探索线索（{{ references.length }}条）</summary>

@@ -56,10 +56,14 @@
             v-if="creator"
             :task="creator"
             @applied="focusConfiguration"
-            @manual="focusConfiguration"
+            @manual="enterManualConfiguration"
         />
         <fieldset :disabled="locked">
             <legend>查阅任务</legend>
+            <p v-if="manualConfiguration" role="status">
+                手工配置已就绪：填写任务内容和范围后，点击“确认保存任务”。此过程不调用需求整理
+                Agent。
+            </p>
             <task-config-field
                 v-for="field in mainFields"
                 :key="field.key"
@@ -73,6 +77,17 @@
         <fieldset :disabled="locked">
             <legend>时间与输出</legend>
             <execution-agent-select v-model="task.draft.agentProviderId" :disabled="locked" />
+            <task-config-field
+                v-model="task.draft.researchMode"
+                label="任务方式"
+                kind="select"
+                :options="researchModes"
+                :error="task.fields.value.researchMode"
+                :disabled="locked"
+            />
+            <p>
+                资料收集汇集当前可读内容，不要求来源在查阅窗口内新发布；如需跟踪指定期间的新进展或核验推论，请选分析研究。
+            </p>
             <task-config-field
                 v-model="task.draft.rangeKind"
                 label="查阅时间范围"
@@ -349,6 +364,10 @@ const ranges = [
     { value: 'rolling', label: '滚动范围' },
     { value: 'fixed', label: '固定范围' },
 ];
+const researchModes = [
+    { value: 'collection', label: '资料收集：整理来源信息' },
+    { value: 'analysis', label: '分析研究：核对依据与时间' },
+];
 const outputs = [
     { value: 'brief', label: '简报' },
     { value: 'list', label: '主题清单' },
@@ -361,9 +380,16 @@ const notifications = [
     { value: 'off', label: '关闭结果提醒' },
 ];
 const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+const manualConfiguration = ref(false);
+async function enterManualConfiguration() {
+    manualConfiguration.value = true;
+    await focusConfiguration();
+}
 async function focusConfiguration() {
     await nextTick();
-    form.value?.querySelector<HTMLElement>('fieldset input')?.focus();
+    const input = form.value?.querySelector<HTMLElement>('fieldset input');
+    input?.focus();
+    input?.scrollIntoView({ block: 'center' });
 }
 async function save() {
     const result = await task.submit();

@@ -21,6 +21,7 @@ import {
     UsageSchema,
     parseContract,
     readFeedbackSnapshot,
+    toolIssueLevel,
     type Usage,
     type FeedbackSnapshot,
 } from '@scova/models';
@@ -430,6 +431,11 @@ export function createAgentRepository(db: DatabaseClient, token: RunLeaseToken):
                         : undefined;
                 const call = await callForSettlement(tx, input.toolCallId);
                 if (call.status !== 'reserved' && call.status !== 'running') return;
+                const code = failure
+                    ? input.failureCode!
+                    : input.unknown === false
+                      ? 'TOOL_FAILED'
+                      : 'TOOL_RESULT_UNKNOWN';
                 if (!Object.hasOwn(TOOL_SUMMARIES, call.tool))
                     throw new AgentPersistenceError('INVALID_TOOL_CALL');
                 await tx
@@ -446,11 +452,8 @@ export function createAgentRepository(db: DatabaseClient, token: RunLeaseToken):
                     payload: {
                         toolCallId: call.id,
                         tool: call.tool as AgentTool,
-                        code: failure
-                            ? input.failureCode!
-                            : input.unknown === false
-                              ? 'TOOL_FAILED'
-                              : 'TOOL_RESULT_UNKNOWN',
+                        code,
+                        severity: toolIssueLevel(call.tool as AgentTool, code),
                         message: failure
                             ? failure[0]
                             : input.unknown === false

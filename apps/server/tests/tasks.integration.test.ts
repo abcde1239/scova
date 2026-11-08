@@ -376,6 +376,12 @@ describe('长期任务、不可变版本与并发编辑', () => {
     it('比较范围保留预算调整，关键来源和时间窗口改变则隔离', () => {
         const original = config();
         const baselineScope = comparisonScopeHash(original as TaskConfig);
+        expect(comparisonScopeHash({ ...original, researchMode: 'analysis' } as TaskConfig)).toBe(
+            baselineScope,
+        );
+        expect(
+            comparisonScopeHash({ ...original, researchMode: 'collection' } as TaskConfig),
+        ).not.toBe(baselineScope);
         expect(
             comparisonScopeHash(
                 config({ budget: { ...original.budget, maxSearches: 2 } }) as TaskConfig,
@@ -409,9 +415,11 @@ describe('长期任务、不可变版本与并发编辑', () => {
             request(`/api/v1/tasks/${created.task.id}/runs`, {
                 method: 'POST',
                 headers: authHeaders(owner, { 'idempotency-key': key }),
-                body: JSON.stringify({ mode: 'demo' }),
+                body: JSON.stringify({ mode: 'live' }),
             });
-        const first = await json(await start('paused-current-run-key'));
+        const firstResponse = await start('paused-current-run-key');
+        expect(firstResponse.status).toBe(202);
+        const first = await json(firstResponse);
         const paused = await request(`/api/v1/tasks/${created.task.id}/pause`, {
             method: 'POST',
             headers: authHeaders(owner, { 'if-match': '"1"' }),

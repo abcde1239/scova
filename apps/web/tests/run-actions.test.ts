@@ -75,6 +75,31 @@ const failure = (status: number, code = 'LOCAL_FAILURE') =>
 afterEach(() => cleanups.splice(0).forEach((cleanup) => cleanup()));
 
 describe('显式 Run 命令与冻结重发', () => {
+    it('freezes the selected output format for replay and excludes it from cancellation', async () => {
+        const bodies: string[] = [];
+        const { actions, target } = setup(
+            async (_url, init) => {
+                bodies.push(init?.body as string);
+                if (bodies.length === 1) throw new TypeError('network');
+                return success();
+            },
+            { taskId, outputFormat: 'comparison' },
+        );
+        await actions.submit('start');
+        target.value.outputFormat = 'brief';
+        await actions.replay();
+        expect(bodies[0]).toBe(bodies[1]);
+        expect(JSON.parse(bodies[1]!)).toEqual({ mode: 'live', outputFormat: 'comparison' });
+        const canceled = setup(
+            async (_url, init) => {
+                expect(init?.body).toBeUndefined();
+                return success({ ...run, status: 'cancel_requested' });
+            },
+            { taskId, run: { ...run, status: 'running' }, outputFormat: 'list' },
+        );
+        await canceled.actions.submit('cancel');
+        expect(canceled.actions.phase.value).toBe('success');
+    });
     it('未知结果重发冻结原Agent选择，更改页面选择不会改变原请求', async () => {
         const calls: { body: string; key: string | null }[] = [];
         const { actions, target } = setup(

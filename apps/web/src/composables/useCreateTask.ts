@@ -50,6 +50,7 @@ export function initialTaskDraft(preferences?: SessionResponse['user']['preferen
         scheduleLocalTime: '',
         scheduleWeekday: '',
         outputFormat: 'brief',
+        researchMode: 'analysis',
         agentProviderId: '',
         maxSearches: String(DEFAULT_TASK_BUDGET.maxSearches),
         maxPages: String(DEFAULT_TASK_BUDGET.maxPages),
@@ -89,6 +90,7 @@ export function taskDraftFromConfig(config: TaskConfig): TaskDraft {
         scheduleWeekday:
             config.schedule.frequency === 'weekly' ? String(config.schedule.weekday) : '',
         outputFormat: config.outputFormat,
+        researchMode: config.researchMode ?? 'analysis',
         agentProviderId: config.agentProviderId ?? '',
         ...(Object.fromEntries(
             budgetFields.map(({ key }) => [key, String(config.budget[key])]),
@@ -209,6 +211,9 @@ export function taskInput(draft: TaskDraft, original?: TaskConfig, keepSchedule 
             timezone: preserve('timezone', original?.timezone ?? '', draft.timezone.trim()),
             schedule: keepSchedule ? schedule : { frequency: 'manual' },
             outputFormat: draft.outputFormat,
+            ...(draft.researchMode === 'collection' || original?.researchMode !== undefined
+                ? { researchMode: draft.researchMode }
+                : {}),
             ...(draft.agentProviderId ? { agentProviderId: draft.agentProviderId } : {}),
             budget: Object.fromEntries(budgetFields.map(({ key }) => [key, Number(draft[key])])),
             notificationPreference: { mode: draft.notificationMode, runIssues: draft.runIssues },
@@ -248,6 +253,7 @@ const fieldPaths: Partial<Record<string, TaskDraftField>> = {
     'schedule/localTime': 'scheduleLocalTime',
     'schedule/weekday': 'scheduleWeekday',
     outputFormat: 'outputFormat',
+    researchMode: 'researchMode',
     agentProviderId: 'agentProviderId',
     'notificationPreference/mode': 'notificationMode',
     'notificationPreference/runIssues': 'runIssues',
@@ -384,6 +390,7 @@ export function createTaskController(lifecycle: SessionLifecycle) {
         parsedConfig.value = JSON.parse(JSON.stringify(valid)) as TaskConfig;
         Object.assign(draft, taskDraftFromConfig(valid), {
             agentProviderId: draft.agentProviderId,
+            researchMode: valid.researchMode ?? draft.researchMode,
         });
         keepSuggestedSchedule.value = true;
         fields.value = {};

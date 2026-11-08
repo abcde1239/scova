@@ -9,6 +9,14 @@
                 }}。重试使用原任务版本与预算，创建关联的新执行。
             </p>
             <p>执行会调用已配置的搜索与模型，可能产生服务费用；缺少配置时会明确报错。</p>
+            <task-config-field
+                v-model="outputSelection"
+                label="本次输出形式"
+                kind="select"
+                :options="outputOptions"
+                :disabled="actions.locked.value || actions.pending.value"
+            />
+            <p>选择需要的形式后执行。此选择仅用于本次新执行；报告打开后也可切换阅读布局。</p>
             <execution-agent-select
                 v-model="agentSelection"
                 inherit
@@ -89,18 +97,49 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue';
 import { RouterLink } from 'vue-router';
-import type { Run, Task } from '@scova/models';
+import {
+    parseContract,
+    OutputFormatSchema,
+    type Run,
+    type Task,
+    type TaskConfig,
+} from '@scova/models';
 import ActionButton from '@/components/common/ActionButton.vue';
 import AppIcon from '@/components/common/AppIcon.vue';
 import ExecutionAgentSelect from '@/components/tasks/ExecutionAgentSelect.vue';
+import TaskConfigField from '@/components/tasks/TaskConfigField.vue';
 import { useRunActions } from '@/composables/useRunActions';
 import { executionStates } from '@/composables/useExecution';
-const props = defineProps<{ taskId: string; run?: Run; taskStatus?: Task['status'] }>();
+const props = defineProps<{
+    taskId: string;
+    run?: Run;
+    taskStatus?: Task['status'];
+    outputFormat?: TaskConfig['outputFormat'];
+}>();
 const agentSelection = ref('');
+const outputSelection = ref('');
+const formatLabels = {
+    brief: '简报',
+    list: '主题清单',
+    comparison: '对比表',
+    research_report: '研究报告',
+};
+const outputOptions = computed(() => [
+    {
+        value: '',
+        label: props.outputFormat
+            ? `沿用任务设置（${formatLabels[props.outputFormat]}）`
+            : '沿用原配置',
+    },
+    ...Object.entries(formatLabels).map(([value, label]) => ({ value, label })),
+]);
 const actions = useRunActions(() => ({
     taskId: props.taskId,
     run: props.run,
     taskStatus: props.taskStatus,
+    outputFormat: outputSelection.value
+        ? parseContract(OutputFormatSchema, outputSelection.value)
+        : undefined,
     agentProviderId:
         agentSelection.value === ''
             ? undefined
@@ -109,9 +148,10 @@ const actions = useRunActions(() => ({
               : agentSelection.value,
 }));
 watch(
-    () => props.taskId,
+    () => `${props.taskId}:${props.run?.id ?? ''}`,
     () => {
         agentSelection.value = '';
+        outputSelection.value = '';
     },
 );
 const canStart = computed(() => !props.run || ['failed', 'canceled'].includes(props.run.status));

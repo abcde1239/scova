@@ -133,7 +133,15 @@ export function createTaskDraftService(services: ApiServices) {
                                       repairPaths.join(', ')
                                     : ''),
                             schema: draftModelSchema,
-                            untrustedSources: [{ inputText: input.inputText, defaults: fallback }],
+                            untrustedSources: [
+                                {
+                                    inputText: input.inputText,
+                                    defaults: fallback,
+                                    ...(input.searchScope
+                                        ? { confirmedSearchScope: input.searchScope }
+                                        : {}),
+                                },
+                            ],
                             maxInputTokens: policy.maxInputTokens - currentUsage.inputTokens,
                             maxOutputTokens: outputTokens,
                         };

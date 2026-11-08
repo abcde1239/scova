@@ -90,6 +90,9 @@
                     >编辑任务配置</navigation-button
                 >
                 <p class="scope-note">时间按 {{ timezone }} 显示</p>
+                <p class="scope-note">
+                    任务启用表示允许后续计划；本次是否正在运行请查看执行历史。手动任务完成后仍会保持启用。
+                </p>
                 <task-card
                     :task="detail.data.value.data.task"
                     :filter="filter"
@@ -108,6 +111,7 @@
                 <run-actions
                     :task-id="detail.data.value.data.task.id"
                     :task-status="detail.data.value.data.task.status"
+                    :output-format="detail.data.value.data.version.config.outputFormat"
                 />
                 <task-lifecycle-actions :task-id="detail.data.value.data.task.id" />
             </template>

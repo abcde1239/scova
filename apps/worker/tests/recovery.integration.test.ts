@@ -348,9 +348,9 @@ describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）',
             const candidate = await session.execute();
             expect(candidate.comparison).toBe('completed');
             expect(comparisons).toBe(2);
-            expect(outputs.slice(0, 3)).toEqual([1000, 1000, 2000]);
+            expect(outputs.slice(0, 3)).toEqual([1000, 1333, 2666]);
             expect(outputs.reduce((sum, n) => sum + n, 0)).toBeLessThanOrEqual(8000);
-            expect(await seed.repo.usage()).toMatchObject({ outputTokens: 1003 });
+            expect(await seed.repo.usage()).toMatchObject({ outputTokens: 1336 });
             const calls = await fixture.db.query.toolCalls.findMany({
                 where: eq(dbToolCalls.runId, seed.run.id),
             });
@@ -505,9 +505,34 @@ describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）',
         const failure = events.find((event) => event.type === 'tool.failed');
         expect(failure?.payload).toMatchObject({
             code: 'TOOL_UNSAFE_URL',
+            severity: 'error',
             message: '地址或域名解析未通过公网安全校验',
             retryable: false,
         });
+    });
+
+    it('persists a skipped page warning without marking the whole execution failed', async () => {
+        const seed = await setup();
+        const held = await seed.repo.reserve({
+            operationKey: 'page-warning',
+            tool: 'read',
+            reserved: usage({ pages: 1 }),
+        });
+        await seed.repo.fail({
+            toolCallId: held.toolCallId,
+            failureCode: 'TOOL_HTTP_NOT_FOUND',
+            unknown: false,
+        });
+        const events = await fixture.db.query.runEvents.findMany({
+            where: eq(dbRunEvents.runId, seed.run.id),
+        });
+        expect(events.find((event) => event.type === 'tool.failed')?.payload).toMatchObject({
+            code: 'TOOL_HTTP_NOT_FOUND',
+            severity: 'warning',
+            retryable: false,
+        });
+        expect(events.some((event) => event.type === 'run.failed')).toBe(false);
+        expect(await seed.repo.usage()).toMatchObject({ pages: 1 });
     });
 
     it.each([true, false])(

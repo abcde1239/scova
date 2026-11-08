@@ -132,6 +132,12 @@ export const RunEventSchema = Type.Union(
                     ...ToolCallProperties,
                     code: NonEmptyTextSchema,
                     message: NonEmptyTextSchema,
+                    severity: Type.Optional(
+                        Type.Union([Type.Literal('warning'), Type.Literal('error')], {
+                            description:
+                                '单次工具异常的影响等级；最终执行失败另记error，历史事件可省略',
+                        }),
+                    ),
                     retryable: Type.Boolean({ description: '是否允许在剩余预算内按策略重试' }),
                 },
                 { additionalProperties: false },

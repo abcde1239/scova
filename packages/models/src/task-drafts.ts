@@ -1,6 +1,6 @@
 import { Type, type Static } from '@sinclair/typebox';
 import { describeProperties, FieldErrorSchema, TimezoneSchema } from './common.ts';
-import { TaskConfigSchema } from './tasks.ts';
+import { TaskConfigSchema, type TaskConfig } from './tasks.ts';
 
 const InputTextSchema = Type.String({
     minLength: 1,
@@ -8,8 +8,70 @@ const InputTextSchema = Type.String({
     pattern: '\\S',
     description: '原始需求描述，最多2000个字符且不超过8000 UTF-8字节；服务端原样返回',
 });
+export const TaskDraftScopeSchema = Type.Object(
+    {
+        goal: Type.String({
+            minLength: 1,
+            maxLength: 2000,
+            pattern: '\\S',
+            description: '问答确认的查阅目标',
+        }),
+        focusPoints: Type.Array(Type.String({ minLength: 1, maxLength: 1000, pattern: '\\S' }), {
+            maxItems: 10,
+        }),
+        exclusions: Type.Array(Type.String({ minLength: 1, maxLength: 1000, pattern: '\\S' }), {
+            maxItems: 10,
+        }),
+        sourcePreferences: Type.Object(
+            {
+                ...TaskConfigSchema.properties.sourcePreferences.properties,
+                preferredUrls: Type.Array(
+                    TaskConfigSchema.properties.sourcePreferences.properties.preferredUrls.items,
+                    { maxItems: 10, uniqueItems: true },
+                ),
+                excludedUrls: Type.Array(
+                    TaskConfigSchema.properties.sourcePreferences.properties.excludedUrls.items,
+                    { maxItems: 10, uniqueItems: true },
+                ),
+            },
+            { additionalProperties: false },
+        ),
+        timeRange: TaskConfigSchema.properties.timeRange,
+        outputFormat: TaskConfigSchema.properties.outputFormat,
+        researchMode: Type.Union([Type.Literal('collection'), Type.Literal('analysis')]),
+    },
+    {
+        additionalProperties: false,
+        description: '生成草稿前经用户确认的搜索范围，模型不得扩大；不创建或执行任务',
+    },
+);
+export type TaskDraftScope = Static<typeof TaskDraftScopeSchema>;
+/** Compare confirmed user choices independently of JSON property order. */
+export function taskDraftScopeMatches(scope: TaskDraftScope, config: TaskConfig): boolean {
+    const sameItems = (a: string[], b: string[]) =>
+        a.length === b.length && a.every((item, index) => item === b[index]);
+    return (
+        scope.goal === config.goal &&
+        sameItems(scope.focusPoints, config.focusPoints) &&
+        sameItems(scope.exclusions, config.exclusions) &&
+        sameItems(scope.sourcePreferences.preferredUrls, config.sourcePreferences.preferredUrls) &&
+        sameItems(scope.sourcePreferences.excludedUrls, config.sourcePreferences.excludedUrls) &&
+        scope.sourcePreferences.officialOnly === config.sourcePreferences.officialOnly &&
+        (scope.timeRange.kind === 'rolling'
+            ? config.timeRange.kind === 'rolling' && scope.timeRange.days === config.timeRange.days
+            : config.timeRange.kind === 'fixed' &&
+              scope.timeRange.start === config.timeRange.start &&
+              scope.timeRange.end === config.timeRange.end) &&
+        scope.outputFormat === config.outputFormat &&
+        scope.researchMode === config.researchMode
+    );
+}
 export const TaskDraftInputSchema = Type.Object(
-    { inputText: InputTextSchema, timezone: Type.Optional(TimezoneSchema) },
+    {
+        inputText: InputTextSchema,
+        timezone: Type.Optional(TimezoneSchema),
+        searchScope: Type.Optional(TaskDraftScopeSchema),
+    },
     {
         additionalProperties: false,
         description: '只解析未保存草稿；依次采用显式时区、原文明确时区、用户默认时区',
@@ -64,7 +126,12 @@ export const TaskDraftResponseSchema = Type.Object(
     },
     { additionalProperties: false, description: '未持久化的完整可编辑草稿，不创建任务或执行' },
 );
-for (const schema of [TaskDraftInputSchema, TaskDraftUsageSchema, TaskDraftResponseSchema])
+for (const schema of [
+    TaskDraftScopeSchema,
+    TaskDraftInputSchema,
+    TaskDraftUsageSchema,
+    TaskDraftResponseSchema,
+])
     describeProperties(schema);
 export type TaskDraftInput = Static<typeof TaskDraftInputSchema>;
 export type TaskDraftResponse = Static<typeof TaskDraftResponseSchema>;

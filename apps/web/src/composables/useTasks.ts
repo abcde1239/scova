@@ -7,7 +7,7 @@ import { tasksEndpoint, taskKeys } from '@/api/tasks';
 import { useSessionLifecycle } from '@/composables/useSessionQuery';
 
 export const taskFilters = [
-    { value: 'active', label: '进行中' },
+    { value: 'active', label: '已启用' },
     { value: 'paused', label: '暂停' },
     { value: 'archived', label: '归档' },
     { value: 'all', label: '全部' },

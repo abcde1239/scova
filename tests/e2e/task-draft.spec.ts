@@ -1,6 +1,10 @@
 import { chooseOption, chooseTimezone } from './support/select.ts';
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
-import type { TaskDraftResponse } from '../../packages/models/src/task-drafts.ts';
+import type {
+    TaskDraftResponse,
+    TaskDraftInput,
+    TaskDraftScope,
+} from '../../packages/models/src/task-drafts.ts';
 import type { taskInput } from '../../apps/web/src/composables/useCreateTask.ts';
 
 test.use({ timezoneId: 'Asia/Tokyo' });
@@ -22,12 +26,13 @@ const parsed: TaskDraftResponse['config'] = {
     },
     timeRange: {
         kind: 'fixed',
-        start: '2026-10-01T03:04:05.123456Z',
-        end: '2026-10-30T04:05:06.456789Z',
+        start: '2026-10-01T03:04:05.123Z',
+        end: '2026-10-30T04:05:06.456Z',
     },
     timezone: 'Asia/Shanghai',
     schedule: { frequency: 'weekly', weekday: 3, localTime: '09:15' },
     outputFormat: 'comparison',
+    researchMode: 'analysis',
     budget: {
         maxSearches: 9,
         maxPages: 12,
@@ -114,7 +119,7 @@ async function samples(context: BrowserContext) {
             const model = state.mode === 'model';
             const result: TaskDraftResponse = {
                 inputText: (body as { inputText: string }).inputText,
-                config: structuredClone(parsed),
+                config: { ...structuredClone(parsed), ...(body as TaskDraftInput).searchScope },
                 mode: state.mode,
                 requiresConfirmation: true,
                 manualReason: model ? null : state.reason,
@@ -159,6 +164,57 @@ const timezone = (page: Page) => page.getByLabel('需求时区', { exact: true }
 const title = (page: Page) => page.getByLabel('任务标题', { exact: true });
 const parse = (page: Page) =>
     panel(page).getByRole('button', { name: '生成任务草稿', exact: true });
+const confirmedScope: TaskDraftScope = {
+    goal: parsed.goal,
+    focusPoints: parsed.focusPoints,
+    exclusions: parsed.exclusions,
+    sourcePreferences: parsed.sourcePreferences,
+    timeRange: parsed.timeRange,
+    outputFormat: parsed.outputFormat,
+    researchMode: 'analysis',
+};
+async function generateDraft(page: Page, activation: 'click' | 'keyboard' | 'double' = 'click') {
+    const text = await original(page).inputValue();
+    if (activation === 'keyboard') await parse(page).press('Enter');
+    else await parse(page).click();
+    if (!text.trim() || text.length > 2000) return;
+    const questions = panel(page).locator('.scope-questions');
+    await questions.getByLabel('希望回答的核心问题', { exact: true }).fill(parsed.goal);
+    for (const [label, button, values] of [
+        ['必须收集的内容（可选）', '添加搜索重点', parsed.focusPoints],
+        ['不查哪些内容（可选）', '添加排除内容', parsed.exclusions],
+    ] as const) {
+        for (const [i, value] of values.entries()) {
+            const field = questions.getByLabel(label + ' ' + (i + 1), { exact: true });
+            if (!(await field.count()))
+                await questions.getByRole('button', { name: button, exact: true }).click();
+            await field.fill(value);
+        }
+    }
+    await questions.getByRole('button', { name: '下一步', exact: true }).click();
+    await chooseOption(page, '搜索时间范围', '指定时间段');
+    await questions.getByLabel('搜索起始时间', { exact: true }).fill('2026-10-01T12:04:05.123');
+    await questions.getByLabel('搜索截止时间', { exact: true }).fill('2026-10-30T13:05:06.456');
+    for (const [label, button, values] of [
+        ['优先查阅的网址（可选）', '添加优先网址', parsed.sourcePreferences.preferredUrls],
+        ['不查阅的网址（可选）', '添加排除网址', parsed.sourcePreferences.excludedUrls],
+    ] as const) {
+        for (const [i, value] of values.entries()) {
+            const field = questions.getByLabel(label + ' ' + (i + 1), { exact: true });
+            if (!(await field.count()))
+                await questions.getByRole('button', { name: button, exact: true }).click();
+            await field.fill(value);
+        }
+    }
+    await questions.getByLabel('限定官方来源', { exact: true }).check();
+    await questions.getByRole('button', { name: '下一步', exact: true }).click();
+    await chooseOption(page, '此次需要的工作', '分析研究');
+    await chooseOption(page, '希望得到的形式', '对比表');
+    const confirm = questions.getByRole('button', { name: '确认范围并生成草稿', exact: true });
+    if (activation === 'double') await confirm.dblclick();
+    else if (activation === 'keyboard') await confirm.press('Enter');
+    else await confirm.click();
+}
 const apply = (page: Page) =>
     panel(page).getByRole('button', { name: '应用草稿并替换当前配置', exact: true });
 const feedback = (page: Page) => panel(page).getByRole('status');
@@ -166,6 +222,77 @@ const taskPosts = (calls: Awaited<ReturnType<typeof samples>>['calls']) =>
     calls.filter((call) => call.method === 'POST' && call.path !== '/api/v1/task-drafts');
 const draftPosts = (calls: Awaited<ReturnType<typeof samples>>['calls']) =>
     calls.filter((call) => call.method === 'POST' && call.path === '/api/v1/task-drafts');
+
+test('先问清内容和范围，非法日期可回退修正，确认前零模型请求', async ({ page }, info) => {
+    const { calls } = await samples(page.context());
+    await page.setViewportSize({ width: 390, height: 1000 });
+    await page.goto('/tasks/new');
+    await original(page).fill('收集最新课程和价格');
+    await parse(page).click();
+    const questions = panel(page).locator('.scope-questions');
+    await expect(questions.getByRole('heading')).toBeFocused();
+    await questions.getByLabel('希望回答的核心问题', { exact: true }).fill('');
+    await questions.getByRole('button', { name: '下一步', exact: true }).click();
+    await expect(questions.getByRole('alert')).toContainText('请填写核心问题');
+    await questions.getByLabel('希望回答的核心问题', { exact: true }).fill('课程与价格');
+    await questions.getByRole('button', { name: '下一步', exact: true }).click();
+    await chooseOption(page, '搜索时间范围', '指定时间段');
+    await questions.getByRole('button', { name: '下一步', exact: true }).click();
+    await expect(questions.getByRole('alert')).toContainText('请检查日期');
+    await questions.getByRole('button', { name: '上一步', exact: true }).click();
+    await questions.getByRole('button', { name: '下一步', exact: true }).click();
+    await expect(questions.getByLabel('搜索时间范围', { exact: true })).toBeVisible();
+    await chooseOption(page, '搜索时间范围', '最近一段时间');
+    await questions.getByLabel('搜索最近多少天', { exact: true }).fill('30');
+    await questions.getByRole('button', { name: '下一步', exact: true }).click();
+    await chooseOption(page, '此次需要的工作', '资料收集');
+    await chooseOption(page, '希望得到的形式', '简报');
+    expect(draftPosts(calls)).toHaveLength(0);
+    await page.evaluate(() => (document.documentElement.style.fontSize = '200%'));
+    await noOverflow(page);
+    await questions.screenshot({ path: info.outputPath('scope-confirmation-mobile.png') });
+    await questions.getByRole('button', { name: '确认范围并生成草稿', exact: true }).click();
+    await expect(apply(page)).toBeEnabled();
+    expect(draftPosts(calls)[0]!.body).toEqual({
+        inputText: '收集最新课程和价格',
+        timezone: 'UTC',
+        searchScope: {
+            goal: '课程与价格',
+            focusPoints: [],
+            exclusions: [],
+            sourcePreferences: { preferredUrls: [], excludedUrls: [], officialOnly: false },
+            timeRange: { kind: 'rolling', days: 30 },
+            researchMode: 'collection',
+            outputFormat: 'brief',
+        },
+    });
+    await apply(page).click();
+    await expect(page.getByLabel('任务方式', { exact: true })).toContainText('资料收集');
+    expect(taskPosts(calls)).toHaveLength(0);
+});
+
+test('手动填写保留原文和配置，取消在途解析并可返回问答入口', async ({ page }) => {
+    const { state, calls } = await samples(page.context());
+    let release!: () => void;
+    state.wait = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    await page.goto('/tasks/new');
+    await original(page).fill(inputText);
+    await title(page).fill('保留手工内容');
+    await generateDraft(page);
+    await expect.poll(() => draftPosts(calls).length).toBe(1);
+    await panel(page).getByRole('button', { name: '手动填写', exact: true }).click();
+    await expect(panel(page)).toContainText('已进入手工配置');
+    await expect(title(page)).toBeFocused();
+    release();
+    await expect(title(page)).toHaveValue('保留手工内容');
+    await panel(page).getByRole('button', { name: '返回 AI 整理需求', exact: true }).click();
+    await expect(original(page)).toHaveValue(inputText);
+    await expect(apply(page)).toHaveCount(0);
+    expect(taskPosts(calls)).toHaveLength(0);
+    expect(draftPosts(calls)).toHaveLength(1);
+});
 
 test('草稿解析显示就地进度和按钮加载，取消后清除且不应用迟到结果', async ({ page }, info) => {
     const { state, calls } = await samples(page.context());
@@ -177,7 +304,7 @@ test('草稿解析显示就地进度和按钮加载，取消后清除且不应�
     await page.goto('/tasks/new');
     await original(page).fill(inputText);
     await title(page).fill('保留手工标题');
-    await parse(page).click();
+    await generateDraft(page);
     const loading = panel(page).locator('.state-panel--loading');
     await expect(loading).toContainText('正在整理需求与生成建议配置');
     await expect(panel(page).locator('.action-spinner')).toBeVisible();
@@ -222,8 +349,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         await title(page).fill('原有手工配置');
         await page.getByLabel('搜索次数上限', { exact: true }).fill('1');
         await chooseTimezone(page, 'Asia/Tokyo', '需求时区');
-        await parse(page).focus();
-        await parse(page).press('Enter');
+        await generateDraft(page, 'keyboard');
         await expect(apply(page)).toBeEnabled();
         await expect(feedback(page)).toBeFocused();
         await expect(title(page)).toHaveValue('原有手工配置');
@@ -311,7 +437,11 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
                 ...(width === 390 ? { schedule: { frequency: 'manual' } } : {}),
             },
         });
-        expect(draftPosts(calls)[0]!.body).toEqual({ inputText, timezone: 'Asia/Tokyo' });
+        expect(draftPosts(calls)[0]!.body).toEqual({
+            inputText,
+            timezone: 'Asia/Tokyo',
+            searchScope: confirmedScope,
+        });
         expect(draftPosts(calls)[0]!.csrf).toBe('sample-csrf');
         expect(draftPosts(calls)[0]!.key).toBeUndefined();
         expect(calls.some((call) => call.method === 'POST' && call.path.includes('/runs'))).toBe(
@@ -324,7 +454,7 @@ test('应用解析草稿后手改星期和当地时间，保存使用修改值�
     const { state, calls } = await samples(page.context());
     await page.goto('/tasks/new');
     await original(page).fill(inputText);
-    await parse(page).click();
+    await generateDraft(page);
     await expect(apply(page)).toBeEnabled();
     await apply(page).click();
     await expect(page.getByLabel('计划频率', { exact: true })).toContainText('每周');
@@ -357,7 +487,7 @@ for (const status of [429, 408]) {
         await original(page).fill(inputText);
         await title(page).fill('解析失败前的手工标题');
         await page.evaluate(() => (document.documentElement.style.fontSize = '200%'));
-        await parse(page).click();
+        await generateDraft(page);
         await expect(feedback(page)).toContainText(status === 429 ? '解析过于频繁' : '解析超时');
         await expect(feedback(page)).toBeFocused();
         await expect(original(page)).toHaveValue(inputText);
@@ -397,7 +527,7 @@ for (const timing of ['during', 'after'] as const) {
                 await page.evaluate(() => (document.documentElement.style.fontSize = '200%'));
             await original(page).fill(inputText);
             await title(page).fill('手工标题');
-            await parse(page).click();
+            await generateDraft(page);
             await expect.poll(() => draftPosts(calls).length).toBe(1);
             if (timing === 'after') await expect(apply(page)).toBeEnabled();
             const edited =
@@ -426,7 +556,7 @@ for (const timing of ['during', 'after'] as const) {
                 });
             }
             state.wait = undefined;
-            await parse(page).click();
+            await generateDraft(page);
             await expect(apply(page)).toBeEnabled();
             await apply(page).click();
             await expect(title(page)).toHaveValue(parsed.title);
@@ -441,7 +571,7 @@ test('字符边界与非法时区前端拦截保留原文，2000中文字符合�
     await page.goto('/tasks/new');
     const excessive = '中'.repeat(2001);
     await original(page).fill(excessive);
-    await parse(page).click();
+    await generateDraft(page);
     await expect(original(page)).toHaveAttribute('aria-invalid', 'true');
     await expect(original(page)).toBeFocused();
     await expect(original(page)).toHaveValue(excessive);
@@ -454,9 +584,13 @@ test('字符边界与非法时区前端拦截保留原文，2000中文字符合�
     await expect(page.getByRole('option')).toHaveCount(0);
     await page.keyboard.press('Escape');
     expect(draftPosts(calls)).toHaveLength(0);
-    await parse(page).click();
+    await generateDraft(page);
     await expect(apply(page)).toBeEnabled();
-    expect(draftPosts(calls)[0]!.body).toEqual({ inputText: boundary, timezone: 'UTC' });
+    expect(draftPosts(calls)[0]!.body).toEqual({
+        inputText: boundary,
+        timezone: 'UTC',
+        searchScope: confirmedScope,
+    });
     expect(taskPosts(calls)).toHaveLength(0);
 });
 
@@ -468,7 +602,7 @@ test('在途重复解析与停止不会写任务，迟到结果不复活', async
     });
     await page.goto('/tasks/new');
     await original(page).fill(inputText);
-    await parse(page).dblclick();
+    await generateDraft(page, 'double');
     const pending = panel(page).getByRole('button', { name: '正在整理', exact: true });
     await expect(pending).toHaveAttribute('aria-busy', 'true');
     await pending.press('Enter');
@@ -498,7 +632,7 @@ test('原文Enter保留换行，时区Enter选择预设且不生成草稿或保�
     await page.keyboard.press('Enter');
     await expect(timezone(page)).toContainText('Asia/Tokyo');
     expect(draftPosts(calls)).toHaveLength(0);
-    await parse(page).click();
+    await generateDraft(page);
     await expect(apply(page)).toBeEnabled();
     expect(draftPosts(calls)).toHaveLength(1);
     expect(taskPosts(calls)).toHaveLength(0);
@@ -512,7 +646,7 @@ test('离开解析页后迟到结果不会应用到新页面', async ({ page }) 
     });
     await page.goto('/tasks/new');
     await original(page).fill(inputText);
-    await parse(page).click();
+    await generateDraft(page);
     await expect.poll(() => draftPosts(calls).length).toBe(1);
     page.once('dialog', (dialog) => dialog.accept());
     await page.getByRole('link', { name: '返回任务列表', exact: true }).click();
@@ -530,7 +664,7 @@ test('空描述只显示简短提示；创建说明弹窗支持 Esc 和焦点返
     const { calls } = await samples(page.context());
     await page.goto('/tasks/new');
     await expect(timezone(page)).toContainText('UTC');
-    await parse(page).click();
+    await generateDraft(page);
     await expect(panel(page)).toContainText('请先描述你想研究的内容。');
     await expect(panel(page)).not.toContainText('UTF-8');
     await expect(panel(page)).not.toContainText('接口约束');

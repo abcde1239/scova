@@ -1,4 +1,5 @@
 import { logoutFromAccount, expectAccountReady } from './support/account-menu.ts';
+import { chooseOption } from './support/select.ts';
 import { expect, test, type Page } from '@playwright/test';
 type Status =
     | 'queued'
@@ -108,6 +109,78 @@ function event(seq: number, type: 'tool.started' | 'tool.completed' = 'tool.star
           };
 }
 
+for (const width of [390, 1440]) {
+    test(`本次输出形式选择与warning/error显示 ${width}`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 1000 });
+        await install(page, snapshot('failed'));
+        const warnings = [
+            { ...event(1), type: 'step.started', payload: { step: 'read' } },
+            {
+                ...event(2),
+                type: 'tool.failed',
+                payload: {
+                    toolCallId: taskId,
+                    tool: 'read',
+                    code: 'TOOL_HTTP_NOT_FOUND',
+                    message: 'DO_NOT_RENDER',
+                    retryable: false,
+                    severity: 'warning',
+                },
+            },
+            {
+                ...event(3),
+                type: 'run.failed',
+                payload: { status: 'failed', code: 'NO_EVIDENCE', message: 'DO_NOT_RENDER' },
+            },
+        ];
+        await page.route(`**/api/v1/runs/${runId}/events?*`, (route) =>
+            route.fulfill({
+                contentType: 'text/event-stream',
+                body: warnings
+                    .map(
+                        (entry) =>
+                            `id: ${entry.eventId}\nevent: ${entry.type}\ndata: ${JSON.stringify(entry)}\n\n`,
+                    )
+                    .join(''),
+            }),
+        );
+        const bodies: unknown[] = [];
+        await page.route(`**/api/v1/runs/${runId}/retry`, async (route) => {
+            bodies.push(route.request().postDataJSON());
+            await route.fulfill({
+                status: 202,
+                json: {
+                    run: {
+                        ...snapshot('queued'),
+                        id: reportId,
+                        parentRunId: runId,
+                        trigger: 'retry',
+                    },
+                    reused: false,
+                },
+            });
+        });
+        for (const [value, label] of [
+            ['brief', '简报'],
+            ['list', '主题清单'],
+            ['comparison', '对比表'],
+            ['research_report', '研究报告'],
+        ]) {
+            await page.goto(`/runs/${runId}`);
+            const logs = page.getByRole('region', { name: '执行日志内容' });
+            await expect(logs.locator('li.warning')).toContainText('warning');
+            await expect(logs.locator('li.warning')).toContainText('检查链接');
+            await expect(logs.locator('li.error')).toContainText('error');
+            await expect(logs).not.toContainText('DO_NOT_RENDER');
+            await chooseOption(page, '本次输出形式', label!);
+            await page.getByRole('button', { name: '重试并创建新执行', exact: true }).click();
+            await expect(page.getByRole('link', { name: '打开执行', exact: true })).toBeVisible();
+            expect(bodies.at(-1)).toMatchObject({ mode: 'live', outputFormat: value });
+            await noOverflow(page);
+        }
+    });
+}
+
 test('实时日志按阶段筛选、失败原因脱敏并跟随新事件', async ({ page }) => {
     let current = snapshot('running');
     await install(page, current);
@@ -147,14 +220,14 @@ test('实时日志按阶段筛选、失败原因脱敏并跟随新事件', async
     await expect(logs).toContainText('读取网页 · 开始');
     await expect(page.getByLabel('跟随最新')).toBeChecked();
     await page.getByLabel('跟随最新').uncheck();
-    await page.getByLabel('仅失败').check();
+    await page.getByLabel('仅 warning / error').check();
     await expect(logs).toContainText('当前筛选下没有日志');
     release();
     await expect(logs).toContainText('TOOL_UNSAFE_URL');
     await expect(logs).toContainText('公网安全校验');
     await expect(logs).not.toContainText('sk-secret');
     await expect(page.getByRole('heading', { name: '执行失败', exact: true })).toBeVisible();
-    await page.getByRole('button', { name: /读取网页.*1 次工具失败/ }).click();
+    await page.getByRole('button', { name: /读取网页.*0 次警告 · 1 次错误/ }).click();
     await expect(logs).toContainText('TOOL_UNSAFE_URL');
     await expect(page.getByLabel('跟随最新')).not.toBeChecked();
     await page.getByLabel('跟随最新').check();

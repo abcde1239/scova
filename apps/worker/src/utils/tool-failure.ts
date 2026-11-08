@@ -10,6 +10,8 @@ export const toolFailures = {
     TOOL_ABORTED: ['外部调用已停止', false],
     TOOL_RESPONSE_TOO_LARGE: ['响应超过大小限制', false],
     TOOL_HTTP_FORBIDDEN: ['目标服务拒绝访问（HTTP 403）', false],
+    TOOL_HTTP_UNAUTHORIZED: ['目标网页需要登录（HTTP 401）', false],
+    TOOL_HTTP_NOT_FOUND: ['目标网页不存在（HTTP 404）', false],
     TOOL_RATE_LIMITED: ['目标服务限流（HTTP 429）', true],
     TOOL_HTTP_ERROR: ['目标服务返回 HTTP 错误', true],
     TOOL_INVALID_RESPONSE: ['响应格式或内容类型不符合要求', false],
@@ -22,6 +24,8 @@ export type ToolFailureCode = keyof typeof toolFailures;
 export function classifyToolFailure(error: unknown): ToolFailureCode | undefined {
     if (!(error instanceof ConnectorError)) return undefined;
     if (error.code === 'http') {
+        if (error.status === 401) return 'TOOL_HTTP_UNAUTHORIZED';
+        if (error.status === 404) return 'TOOL_HTTP_NOT_FOUND';
         if (error.status === 403) return 'TOOL_HTTP_FORBIDDEN';
         if (error.status === 429) return 'TOOL_RATE_LIMITED';
         return 'TOOL_HTTP_ERROR';

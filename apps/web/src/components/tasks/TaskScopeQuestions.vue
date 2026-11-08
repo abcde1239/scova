@@ -1,0 +1,258 @@
+<template>
+    <section ref="panel" class="scope-questions" aria-labelledby="scope-question-title">
+        <h3 id="scope-question-title" tabindex="-1">先确认搜索范围 · {{ step }}/3</h3>
+        <template v-if="step === 1">
+            <p>你希望查到什么？哪些内容必须包含，哪些不需要？</p>
+            <task-config-field
+                v-model="goal"
+                label="希望回答的核心问题"
+                kind="textarea"
+                :disabled="disabled"
+            />
+            <list-input
+                v-model="focusPoints"
+                label="必须收集的内容（可选）"
+                placeholder="例如：价格、申请条件"
+                add-label="添加搜索重点"
+                :disabled="disabled"
+            />
+            <list-input
+                v-model="exclusions"
+                label="不查哪些内容（可选）"
+                placeholder="例如：广告、历史背景"
+                add-label="添加排除内容"
+                :disabled="disabled"
+            />
+        </template>
+        <template v-else-if="step === 2">
+            <p>查哪些时间、哪些来源？不指定网址时，按已确认的问题搜索公开网页。</p>
+            <task-config-field
+                v-model="rangeKind"
+                label="搜索时间范围"
+                kind="select"
+                :options="[
+                    { value: 'rolling', label: '最近一段时间' },
+                    { value: 'fixed', label: '指定时间段' },
+                ]"
+                :disabled="disabled"
+            />
+            <task-config-field
+                v-if="rangeKind === 'rolling'"
+                v-model="days"
+                label="搜索最近多少天"
+                kind="number"
+                :disabled="disabled"
+            />
+            <template v-else>
+                <p>以下日期按浏览器当地时间 {{ browserTimezone }} 填写。</p>
+                <task-config-field
+                    v-model="start"
+                    label="搜索起始时间"
+                    kind="date"
+                    :disabled="disabled"
+                />
+                <task-config-field
+                    v-model="end"
+                    label="搜索截止时间"
+                    kind="date"
+                    :disabled="disabled"
+                />
+            </template>
+            <list-input
+                v-model="preferredUrls"
+                label="优先查阅的网址（可选）"
+                url
+                add-label="添加优先网址"
+                :disabled="disabled"
+            />
+            <list-input
+                v-model="excludedUrls"
+                label="不查阅的网址（可选）"
+                url
+                add-label="添加排除网址"
+                :disabled="disabled"
+            />
+            <task-config-field
+                v-model:checked="officialOnly"
+                label="限定官方来源"
+                kind="checkbox"
+                :disabled="disabled"
+            />
+        </template>
+        <template v-else>
+            <p>只需要收集信息，还是需要分析？希望如何呈现结果？</p>
+            <task-config-field
+                v-model="researchMode"
+                label="此次需要的工作"
+                kind="select"
+                :options="[
+                    { value: 'collection', label: '资料收集' },
+                    { value: 'analysis', label: '分析研究' },
+                ]"
+                :disabled="disabled"
+            />
+            <p>资料收集整理当前可读信息；分析研究还会核对时间适用性、依据与推论。</p>
+            <task-config-field
+                v-model="outputFormat"
+                label="希望得到的形式"
+                kind="select"
+                :options="[
+                    { value: 'brief', label: '简报' },
+                    { value: 'list', label: '主题清单' },
+                    { value: 'comparison', label: '对比表' },
+                    { value: 'research_report', label: '研究报告' },
+                ]"
+                :disabled="disabled"
+            />
+            <dl>
+                <dt>核心问题</dt>
+                <dd>{{ goal }}</dd>
+                <dt>搜索重点</dt>
+                <dd>{{ focusPoints.join('、') || '围绕核心问题' }}</dd>
+                <dt>时间范围</dt>
+                <dd>{{ rangeKind === 'rolling' ? `最近 ${days} 天` : `${start} 至 ${end}` }}</dd>
+                <dt>优先来源</dt>
+                <dd>{{ preferredUrls.join('、') || '公开网页' }}</dd>
+            </dl>
+            <p>确认后才调用需求整理 Agent。这里只生成草稿，应用并保存后才会创建任务。</p>
+        </template>
+        <p v-if="error" role="alert" class="scope-error">{{ error }}</p>
+        <div class="scope-actions">
+            <action-button :disabled="disabled" @click="emit('cancel')">返回需求描述</action-button>
+            <action-button v-if="step > 1" :disabled="disabled" @click="move(-1)"
+                >上一步</action-button
+            >
+            <action-button :disabled="disabled" @click="advance">{{
+                step < 3 ? '下一步' : '确认范围并生成草稿'
+            }}</action-button>
+        </div>
+    </section>
+</template>
+
+<script setup lang="ts">
+import { nextTick, ref } from 'vue';
+import { parseContract, TaskDraftScopeSchema, type TaskDraftScope } from '@scova/models';
+import TaskConfigField from '@/components/tasks/TaskConfigField.vue';
+import ListInput from '@/components/common/ListInput.vue';
+import ActionButton from '@/components/common/ActionButton.vue';
+const props = defineProps<{
+    inputText: string;
+    format: string;
+    mode: string;
+    initial?: TaskDraftScope;
+    disabled?: boolean;
+}>();
+const emit = defineEmits<{ confirm: [scope: TaskDraftScope]; cancel: [] }>();
+const panel = ref<HTMLElement>();
+const step = ref(1);
+const error = ref('');
+const goal = ref(props.initial?.goal ?? props.inputText.trim());
+const focusPoints = ref([...(props.initial?.focusPoints ?? [])]);
+const exclusions = ref([...(props.initial?.exclusions ?? [])]);
+const preferredUrls = ref([...(props.initial?.sourcePreferences.preferredUrls ?? [])]);
+const excludedUrls = ref([...(props.initial?.sourcePreferences.excludedUrls ?? [])]);
+const officialOnly = ref(props.initial?.sourcePreferences.officialOnly ?? false);
+const rangeKind = ref<string>(props.initial?.timeRange.kind ?? 'rolling');
+const days = ref(
+    String(props.initial?.timeRange.kind === 'rolling' ? props.initial.timeRange.days : 7),
+);
+const localTime = (value: string) => {
+    const date = new Date(value);
+    return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 23);
+};
+const start = ref(
+    props.initial?.timeRange.kind === 'fixed' ? localTime(props.initial.timeRange.start) : '',
+);
+const end = ref(
+    props.initial?.timeRange.kind === 'fixed' ? localTime(props.initial.timeRange.end) : '',
+);
+const researchMode = ref(props.initial?.researchMode ?? props.mode);
+const outputFormat = ref(props.initial?.outputFormat ?? props.format);
+const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+function fixedInstant(value: string, key: 'start' | 'end') {
+    const initial = props.initial?.timeRange;
+    if (initial?.kind === 'fixed' && value === localTime(initial[key])) return initial[key];
+    return new Date(value).toISOString();
+}
+function scope(validateStep = 3) {
+    return parseContract(TaskDraftScopeSchema, {
+        goal: goal.value,
+        focusPoints: focusPoints.value.filter((v) => v.trim()),
+        exclusions: exclusions.value.filter((v) => v.trim()),
+        sourcePreferences:
+            validateStep === 1
+                ? { preferredUrls: [], excludedUrls: [], officialOnly: false }
+                : {
+                      preferredUrls: preferredUrls.value
+                          .filter((v) => v.trim())
+                          .map((v) => v.trim()),
+                      excludedUrls: excludedUrls.value.filter((v) => v.trim()).map((v) => v.trim()),
+                      officialOnly: officialOnly.value,
+                  },
+        timeRange:
+            validateStep === 1
+                ? { kind: 'rolling', days: 7 }
+                : rangeKind.value === 'rolling'
+                  ? { kind: 'rolling', days: Number(days.value) }
+                  : {
+                        kind: 'fixed',
+                        start: fixedInstant(start.value, 'start'),
+                        end: fixedInstant(end.value, 'end'),
+                    },
+        researchMode: researchMode.value,
+        outputFormat: outputFormat.value,
+    });
+}
+async function move(delta: number) {
+    step.value += delta;
+    error.value = '';
+    await nextTick();
+    panel.value?.querySelector<HTMLElement>('h3')?.focus();
+}
+function advance() {
+    try {
+        const confirmed = scope(step.value);
+        if (step.value < 3) void move(1);
+        else emit('confirm', confirmed);
+    } catch {
+        error.value =
+            step.value === 1
+                ? '请填写核心问题；每项最多1000字、最多10项，核心问题最多2000字。'
+                : '请检查日期先后、正整数天数和公开网页链接；每类网址最多10条。';
+    }
+}
+</script>
+
+<style scoped>
+.scope-questions {
+    display: grid;
+    gap: 1.25rem;
+    min-inline-size: 0;
+}
+h3,
+p,
+dl,
+dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+dl {
+    display: grid;
+    gap: 0.5rem;
+}
+dt {
+    color: var(--scova-muted);
+}
+.scope-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+.scope-error {
+    color: var(--scova-danger);
+}
+h3:focus-visible {
+    outline: 0.125rem solid var(--scova-primary);
+    outline-offset: 0.25rem;
+}
+</style>

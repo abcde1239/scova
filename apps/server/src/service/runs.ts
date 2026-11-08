@@ -60,6 +60,7 @@ function commandBody(input: RunCommandInput | undefined) {
     const parsed = parseContract(RunCommandInputSchema, input ?? {});
     return {
         mode: parsed.mode ?? 'live',
+        ...(parsed.outputFormat !== undefined ? { outputFormat: parsed.outputFormat } : {}),
         ...(parsed.agentProviderId !== undefined
             ? { agentProviderId: parsed.agentProviderId }
             : {}),
@@ -161,6 +162,8 @@ export function createRunService(services: ApiServices) {
                           schedule: { frequency: 'manual' },
                       })
                     : baseConfig;
+                if (command.outputFormat !== undefined)
+                    config = { ...config, outputFormat: command.outputFormat };
                 if (command.agentProviderId !== undefined) {
                     const { agentProviderId: _previous, ...rest } = config;
                     config =
@@ -215,7 +218,10 @@ export function createRunService(services: ApiServices) {
                         ),
                     mode: command.mode,
                     trigger: followup ? 'followup' : parentRunId ? 'retry' : 'manual',
-                    ...(question || inheritedConfig || command.agentProviderId !== undefined
+                    ...(question ||
+                    inheritedConfig ||
+                    command.agentProviderId !== undefined ||
+                    command.outputFormat !== undefined
                         ? { followupConfigJson: config }
                         : {}),
                     parentRunId,

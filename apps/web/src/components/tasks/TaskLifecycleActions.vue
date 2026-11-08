@@ -154,7 +154,7 @@ async function confirmDelete() {
     deleteDialog.value?.close();
     if (await actions.remove()) await router.replace({ name: 'tasks' });
 }
-const statusLabels = { active: '进行中', paused: '已暂停', archived: '已归档' };
+const statusLabels = { active: '已启用', paused: '已暂停', archived: '已归档' };
 const confirmationDialog = ref<HTMLDialogElement>();
 const archiveTrigger = ref<{ $el: HTMLButtonElement }>();
 const cancelTrigger = ref<{ $el: HTMLButtonElement }>();

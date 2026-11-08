@@ -154,6 +154,12 @@ export const TaskConfigSchema = Type.Object(
         timezone: TimezoneSchema,
         schedule: ScheduleSchema,
         outputFormat: OutputFormatSchema,
+        researchMode: Type.Optional(
+            Type.Union([Type.Literal('collection'), Type.Literal('analysis')], {
+                description:
+                    '资料收集汇集当前来源内容；分析研究核对时间、支持关系与条件。省略沿用分析研究',
+            }),
+        ),
         agentProviderId: Type.Optional(
             Type.String({
                 ...UuidSchema,

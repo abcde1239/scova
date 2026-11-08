@@ -320,7 +320,7 @@ for (const status of [409, 428, 503, 0]) {
             status === 409 || status === 428 ? String(status) : '尚不能确认操作结果',
         );
         await expect(feedback(page)).toBeFocused();
-        await expect(section(page)).toContainText('当前状态：进行中');
+        await expect(section(page)).toContainText('当前状态：已启用');
         await expect(pause(page)).toBeDisabled();
         await expect(archive(page)).toBeDisabled();
         await noOverflow(page);
@@ -422,7 +422,7 @@ test('写成功后重读暂时失败保留上下文并锁定，显式刷新取�
     await expect(
         page.getByText('任务摘要刷新失败，当前显示上次读取的内容', { exact: false }),
     ).toBeVisible();
-    await expect(section(page)).toContainText('当前状态：进行中');
+    await expect(section(page)).toContainText('当前状态：已启用');
     await expect(pause(page)).toBeDisabled();
     await noOverflow(page);
     await feedback(page).scrollIntoViewIfNeeded();

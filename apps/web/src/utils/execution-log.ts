@@ -1,4 +1,4 @@
-import type { RunEvent } from '@scova/models';
+import { toolIssueLevel, toolIssueGuidance, type RunEvent } from '@scova/models';
 
 export const stepLabels = {
     load_context: '加载上下文',
@@ -23,6 +23,8 @@ const failures: Record<string, string> = {
     TOOL_ABORTED: '外部调用已停止',
     TOOL_RESPONSE_TOO_LARGE: '响应超过大小限制',
     TOOL_HTTP_FORBIDDEN: '目标服务拒绝访问（HTTP 403）',
+    TOOL_HTTP_UNAUTHORIZED: '目标网页需要登录（HTTP 401）',
+    TOOL_HTTP_NOT_FOUND: '目标网页不存在（HTTP 404）',
     TOOL_RATE_LIMITED: '目标服务限流（HTTP 429）',
     TOOL_HTTP_ERROR: '目标服务返回 HTTP 错误',
     TOOL_INVALID_RESPONSE: '响应格式或内容类型不符合要求',
@@ -41,15 +43,17 @@ export interface ExecutionLogEntry {
     seq: number;
     at: string;
     text: string;
-    level: 'info' | 'success' | 'error';
+    level: 'info' | 'success' | 'warning' | 'error';
     step?: ExecutionStep;
     code?: string;
     durationMs?: number;
+    guidance?: string;
 }
 export interface ExecutionStepState {
     started: number;
     completed: number;
     failures: number;
+    warnings?: number;
     durationMs: number;
 }
 export interface ExecutionLog {
@@ -104,8 +108,9 @@ export function appendExecutionLog(state: ExecutionLog, event: RunEvent): Execut
             entry.durationMs = event.payload.durationMs;
         }
         if (event.type === 'tool.failed') {
-            entry.level = 'error';
             const code = event.payload.code;
+            entry.level = toolIssueLevel(event.payload.tool, code);
+            entry.guidance = toolIssueGuidance(event.payload.tool, code) || undefined;
             const known = Object.hasOwn(failures, code);
             entry.text += `：${known ? failures[code] : '未取得可公开的具体失败说明'}`;
             if (known) entry.code = code;
@@ -113,6 +118,9 @@ export function appendExecutionLog(state: ExecutionLog, event: RunEvent): Execut
                 next.steps[entry.step] = {
                     ...next.steps[entry.step]!,
                     failures: next.steps[entry.step]!.failures + 1,
+                    ...(entry.level === 'warning'
+                        ? { warnings: (next.steps[entry.step]!.warnings ?? 0) + 1 }
+                        : {}),
                 };
         }
     } else if (event.type === 'research.updated') {
