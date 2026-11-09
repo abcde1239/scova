@@ -13,6 +13,7 @@ import {
 } from './report-value.ts';
 import {
     ClaimAssessmentSchema,
+    classifyReportDelivery,
     researchOutputStages,
     researchSynthesisOutputLimits,
     researchInputLimits,
@@ -774,6 +775,7 @@ function candidate(context: AgentContext, state: ResearchState, reason?: string)
         ...(context.feedback?.items.length ? { feedbackEffects: feedback.effects } : {}),
         pages: state.pages,
         coverage: {
+            delivery: classifyReportDelivery(reportValue, feedback.claims),
             ...(reportValue ? { reportValue } : {}),
             ...(state.softEvidence
                 ? {
@@ -987,7 +989,9 @@ export async function runResearchAgent(
             'load_context',
             node(async (state) => {
                 if (context.config.sourcePreferences.officialOnly)
-                    state.gaps.push('来源已按用户指定范围筛选，官方身份尚需独立核验');
+                    (state.notes ??= []).push(
+                        '来源已按用户指定范围筛选；范围匹配不等于独立认证官方身份',
+                    );
                 if (
                     context.config.sourcePreferences.officialOnly &&
                     !context.config.sourcePreferences.preferredUrls.length

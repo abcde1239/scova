@@ -833,7 +833,7 @@ describe('persistent bounded research Agent', () => {
         },
     );
 
-    it('uses configured fixed time bounds and retains official-source uncertainty', async () => {
+    it('uses configured fixed time bounds and retains official-source uncertainty as a note', async () => {
         const { context, deps, tools } = fixture();
         context.config.timeRange = {
             kind: 'fixed',
@@ -861,8 +861,9 @@ describe('persistent bounded research Agent', () => {
             },
         }));
         const result = await runResearchAgent(context, deps);
-        expect(result.coverage.completeness).toBe('partial');
-        expect(result.coverage.gaps.join(' ')).toContain('官方身份');
+        expect(result.coverage.completeness).toBe('complete');
+        expect(result.coverage.notes?.join(' ')).toContain('官方身份');
+        expect(result.coverage.gaps).toEqual([]);
         expect(result.coverage.gaps.join(' ')).not.toContain('时间范围未核验');
     });
 

@@ -35,6 +35,7 @@ import {
 } from '@scova/agent-core';
 import {
     BudgetSchema,
+    classifyReportDelivery,
     CoverageSchema,
     TaskConfigSchema,
     UsageSchema,
@@ -261,11 +262,26 @@ export function createDeliveryRepository(db: DatabaseClient) {
                             }
                         }
                         const gaps = [...candidate.coverage.gaps];
+                        const notes = [...(candidate.coverage.notes ?? [])];
                         // These checks are independent of a model/caller's completeness flag.
                         if (candidate.pages.some((page) => page.truncated))
                             gaps.push('存在已截断正文，无法保证完整查阅');
-                        if (calls.some((call) => call.status !== 'succeeded'))
-                            gaps.push('存在失败或结果未确认的工具调用');
+                        const unresolvedCalls = calls.filter(
+                            (call) =>
+                                call.status !== 'succeeded' &&
+                                !successful.some(
+                                    (done) =>
+                                        done.tool === call.tool &&
+                                        done.operationKey === call.operationKey &&
+                                        done.attemptNo > call.attemptNo,
+                                ),
+                        );
+                        if (unresolvedCalls.length) gaps.push('存在失败或结果未确认的工具调用');
+                        if (
+                            calls.some((call) => call.status !== 'succeeded') &&
+                            !unresolvedCalls.length
+                        )
+                            notes.push('临时工具故障已在原预算内重试恢复，相关成功结果已核验');
                         if (!proof.deadline) {
                             const state = proof.research as {
                                 queries: { query: string; questionIds: string[] }[];
@@ -319,7 +335,7 @@ export function createDeliveryRepository(db: DatabaseClient) {
                         // Publication coverage is recomputed by candidateFromCheckpoint from page-authored facts.
                         // The current source policy still cannot certify official identity.
                         if (config.sourcePreferences.officialOnly)
-                            gaps.push('来源已按用户指定范围筛选，官方身份尚需独立核验');
+                            notes.push('来源已按用户指定范围筛选；范围匹配不等于独立认证官方身份');
                         if (run.mode === 'demo')
                             gaps.push(
                                 '本次执行为固定演示资料，未验证互联网事实',
@@ -327,6 +343,11 @@ export function createDeliveryRepository(db: DatabaseClient) {
                             );
                         candidate.coverage = parseContract(CoverageSchema, {
                             ...candidate.coverage,
+                            delivery: classifyReportDelivery(
+                                candidate.coverage.reportValue,
+                                candidate.claims,
+                            ),
+                            ...(notes.length ? { notes: [...new Set(notes)] } : {}),
                             gaps: [...new Set(gaps)],
                             completeness: gaps.length || proof.deadline ? 'partial' : 'complete',
                         });
@@ -380,7 +401,7 @@ export function createDeliveryRepository(db: DatabaseClient) {
                                     extractorVersion: page.extractionVersion,
                                     title: page.title || page.url,
                                     publishedAt:
-                                        publication.status === 'known'
+                                        publication.status === 'known' && publication.instant
                                             ? new Date(publication.instant!)
                                             : null,
                                     textBody: page.text,

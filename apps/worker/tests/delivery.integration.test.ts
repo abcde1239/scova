@@ -145,11 +145,23 @@ async function liveResearch(
         badComparisonQuote?: boolean;
         badClaimQuote?: boolean;
         pageCount?: number;
+        publication?: string | null;
+        modified?: string;
+        retryRead?: boolean;
+        officialOnly?: boolean;
+        condition?: string;
     } = {},
 ) {
     const initial = options.previous ?? (await seedRun(fixture.db, { mode: 'live' }));
-    if (options.notificationPreference) {
-        initial.config.notificationPreference = options.notificationPreference;
+    if (options.notificationPreference || options.officialOnly) {
+        if (options.notificationPreference)
+            initial.config.notificationPreference = options.notificationPreference;
+        if (options.officialOnly)
+            initial.config.sourcePreferences = {
+                preferredUrls: [options.pageUrl ?? 'https://example.com/publication'],
+                excludedUrls: [],
+                officialOnly: true,
+            };
         await fixture.db
             .update(dbTaskVersions)
             .set({ configJson: initial.config })
@@ -182,18 +194,29 @@ async function liveResearch(
     const claimed = await runs.claim(run.id, 'delivery-live', 60_000);
     if (claimed.kind !== 'claimed') throw new Error('Expected claimed live Run');
     const url = options.pageUrl ?? 'https://example.com/publication';
-    const publication = new Date(Date.now() - 60_000).toISOString();
+    const publication =
+        options.publication === undefined
+            ? new Date(Date.now() - 60_000).toISOString()
+            : options.publication;
+    let readRequests = 0;
     const reader = createPageReader({
         maxTextChars: options.maxTextChars,
         http: {
             async request(requestedUrl) {
+                if (options.retryRead && readRequests++ === 0)
+                    return {
+                        url: requestedUrl,
+                        status: 503,
+                        headers: { 'content-type': 'text/html' },
+                        body: '',
+                    };
                 if (options.failUrls?.includes(requestedUrl))
                     throw new Error('Injected missing source');
                 return {
                     url: requestedUrl,
                     status: 200,
                     headers: { 'content-type': 'text/html; charset=utf-8' },
-                    body: `<html><head><title>采集公告</title><meta property="article:published_time" content="${publication}"></head><body><article><p>${options.bodyByUrl?.[requestedUrl] ?? options.body ?? (requestedUrl.endsWith('alternate') ? '第二来源称申请截止日期为十一月十六日。' : '这是已发布的公共公告，申请截止日期为十一月十五日。')}</p></article></body></html>`,
+                    body: `<html><head><title>采集公告</title>${publication === null ? '' : `<meta property="article:published_time" content="${publication}">`}${options.modified ? `<meta property="article:modified_time" content="${options.modified}">` : ''}</head><body><article><p>${options.bodyByUrl?.[requestedUrl] ?? options.body ?? (requestedUrl.endsWith('alternate') ? '第二来源称申请截止日期为十一月十六日。' : '这是已发布的公共公告，申请截止日期为十一月十五日。')}</p></article></body></html>`,
                 };
             },
         },
@@ -290,7 +313,7 @@ async function liveResearch(
                                           role: 'answer',
                                           sourceRelation: 'unknown',
                                           reason: '受控原文直接回答测试问题',
-                                          conditions: '',
+                                          conditions: options.condition ?? '',
                                           gap: '',
                                       },
                                       text:
@@ -1269,6 +1292,80 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
             code: 'INVALID_DELIVERY_EVIDENCE',
         });
         await assertEmpty(seed.run.id);
+    });
+
+    it('未知时间和适用条件不妨碍交付核心答案，但仍保留严格比较范围且不推进基线', async () => {
+        const seed = await liveResearch({ publication: null, condition: '仅适用于本轮申请' });
+        expect(seed.candidate.coverage.delivery).toMatchObject({
+            status: 'answered',
+            answeredCoreQuestions: 1,
+        });
+        expect(seed.candidate.coverage.completeness).toBe('partial');
+        const { reportId } = await delivery.deliver(seed.claimed.token, seed.candidate);
+        const saved = await fixture.db.query.runs.findFirst({ where: eq(dbRuns.id, seed.run.id) });
+        expect(saved).toMatchObject({
+            status: 'partial',
+            outcome: 'inconclusive',
+            coverageJson: { delivery: { status: 'answered' } },
+        });
+        expect(
+            await fixture.db.query.reports.findFirst({ where: eq(dbReports.id, reportId) }),
+        ).toBeDefined();
+        expect(
+            await fixture.db.query.baselines.findFirst({
+                where: eq(dbBaselines.taskId, seed.task.id),
+            }),
+        ).toBeUndefined();
+        // A separate Run is needed to test validation, since replay legitimately reuses an already committed report.
+        const other = await liveResearch({ publication: null });
+        other.candidate.coverage.delivery!.status = 'sources_only';
+        await expect(delivery.deliver(other.claimed.token, other.candidate)).rejects.toMatchObject({
+            code: 'INVALID_DELIVERY_EVIDENCE',
+        });
+        await assertEmpty(other.run.id);
+    });
+
+    it('同一正文读取重试恢复后不因旧失败降级，来源范围匹配不强加官方认证缺口', async () => {
+        const seed = await liveResearch({ retryRead: true, officialOnly: true });
+        expect(seed.candidate.coverage.completeness).toBe('complete');
+        await delivery.deliver(seed.claimed.token, seed.candidate);
+        const saved = await fixture.db.query.runs.findFirst({ where: eq(dbRuns.id, seed.run.id) });
+        expect(saved).toMatchObject({
+            status: 'succeeded',
+            outcome: 'baseline',
+            coverageJson: { delivery: { status: 'answered' }, completeness: 'complete', gaps: [] },
+        });
+        const calls = await fixture.db.query.toolCalls.findMany({
+            where: and(eq(dbToolCalls.runId, seed.run.id), eq(dbToolCalls.tool, 'read')),
+            orderBy: [asc(dbToolCalls.attemptNo)],
+        });
+        // A transport failure retains its conservative unknown settlement and reserved usage.
+        expect(calls.map((call) => call.status)).toEqual(['unknown', 'succeeded']);
+        expect(calls[0].operationKey).toBe(calls[1].operationKey);
+        expect(saved!.usageJson).toMatchObject({ pages: 2 });
+        expect((saved!.coverageJson as { notes: string[] }).notes.join(' ')).toContain('重试恢复');
+    });
+
+    it('日期精度和修改时间独立保存，不将未知时区日期写成午夜UTC', async () => {
+        const day = new Date(Date.now() - 3 * 86400_000).toISOString().slice(0, 10);
+        const seed = await liveResearch({ publication: day, modified: new Date().toISOString() });
+        await delivery.deliver(seed.claimed.token, seed.candidate);
+        const observation = await fixture.db.query.runSources.findFirst({
+            where: eq(dbRunSources.runId, seed.run.id),
+            with: { snapshot: true },
+        });
+        expect(observation!.snapshot!.publishedAt).toBeNull();
+        expect(observation!.metadataJson).toMatchObject({
+            publication: {
+                parserVersion: 'scova-publication-v2',
+                status: 'known',
+                instant: null,
+                observations: expect.arrayContaining([
+                    expect.objectContaining({ rawValue: day }),
+                    expect.objectContaining({ field: 'meta:modified' }),
+                ]),
+            },
+        });
     });
 
     it('HTML来源声明日期经Reader→Agent→账本验证后首次完整交付建立基线', async () => {
