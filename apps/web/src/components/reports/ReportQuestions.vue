@@ -6,6 +6,24 @@
             报告当前无法读取。本地问题仍可复制；报告恢复后才能提问或读取回答。
         </p>
         <p v-if="state.address.value.error" role="alert">{{ state.address.value.error }}</p>
+        <div
+            v-if="
+                state.available.value &&
+                !state.selectedId.value &&
+                !state.attempt.value &&
+                !state.draft.value &&
+                !state.address.value.error
+            "
+            class="question-starters"
+            aria-label="提问建议"
+        >
+            <button type="button" @click="prepareQuestion('请总结这份报告的主要发现。')">
+                总结主要发现
+            </button>
+            <button type="button" @click="prepareQuestion('哪些来源支持报告的主要结论？')">
+                查看结论依据
+            </button>
+        </div>
         <form
             v-if="!state.selectedId.value || (!state.available.value && state.draft.value)"
             class="question-form"
@@ -73,6 +91,10 @@
                 >
             </div>
             <article v-else class="question-result" aria-labelledby="question-result-title">
+                <div class="question-message question-message--user">
+                    <p class="message-label">你的问题</p>
+                    <p class="question-text">{{ state.answer.value.question }}</p>
+                </div>
                 <h3 id="question-result-title" tabindex="-1">
                     {{
                         state.answer.value.answer.status === 'answered'
@@ -80,7 +102,6 @@
                             : '未获得可核验回答'
                     }}
                 </h3>
-                <p class="question-text">{{ state.answer.value.question }}</p>
                 <p>{{ questionReasons[state.answer.value.answer.reason] }}</p>
                 <ol v-if="state.answer.value.answer.statements.length" class="statements">
                     <li
@@ -188,6 +209,11 @@ watch(
     { flush: 'sync' },
 );
 const textError = computed(() => questionTextError(state.draft.value));
+async function prepareQuestion(question: string) {
+    state.draft.value = question;
+    await nextTick();
+    panel.value?.querySelector<HTMLTextAreaElement>('textarea')?.focus();
+}
 let internalDestination = '';
 let mounted = true;
 function evidence(id: string) {
@@ -313,6 +339,43 @@ h3:focus-visible {
     flex-wrap: wrap;
     gap: 0.75rem;
     align-items: start;
+}
+.question-starters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+.question-starters button {
+    min-inline-size: 0;
+    max-inline-size: 100%;
+    min-block-size: 2.75rem;
+    padding: 0.5rem 0.75rem;
+    border: 0.0625rem solid var(--scova-border);
+    border-radius: 0.75rem;
+    background: var(--scova-surface);
+    color: var(--scova-primary);
+    font: inherit;
+    text-align: start;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+}
+.question-starters button:hover {
+    background: var(--scova-selected);
+}
+.question-starters button:focus-visible {
+    outline: 0.125rem solid var(--scova-primary);
+    outline-offset: 0.25rem;
+}
+.question-message {
+    display: grid;
+    gap: 0.5rem;
+    padding: 1rem;
+    border-radius: 0.75rem;
+    background: var(--scova-selected);
+}
+.message-label {
+    color: var(--scova-muted);
+    font-size: 0.875rem;
 }
 .question-text,
 blockquote {

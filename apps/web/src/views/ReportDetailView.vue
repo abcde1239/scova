@@ -1,46 +1,10 @@
 <template>
     <div ref="detail" class="report-detail">
-        <div class="report-presentation scova-interface">
-            <template v-if="report">
-                <label for="report-format">报告形式</label>
-                <select
-                    id="report-format"
-                    v-model="selectedFormat"
-                    aria-describedby="report-format-help"
-                >
-                    <option value="brief">简报</option>
-                    <option value="list">主题清单</option>
-                    <option value="comparison">对比表</option>
-                    <option value="research_report">研究报告</option>
-                </select>
-                <p id="report-format-help">临时切换，刷新恢复保存形式。</p>
-                <nav class="report-sections" aria-label="报告内容导航">
-                    <n-button
-                        tag="a"
-                        quaternary
-                        type="primary"
-                        v-bind="{ href: '#summary-title' }"
-                        @click="jump($event, 'summary-title')"
-                        ><app-icon name="report" />正文</n-button
-                    >
-                    <n-button
-                        tag="a"
-                        quaternary
-                        type="primary"
-                        v-bind="{ href: `#${changesTarget}` }"
-                        @click="jump($event, changesTarget)"
-                        ><app-icon name="retry" />变化</n-button
-                    >
-                    <n-button
-                        tag="a"
-                        quaternary
-                        type="primary"
-                        v-bind="{ href: '#saved-evidence-title' }"
-                        @click="jump($event, 'saved-evidence-title')"
-                        ><app-icon name="source" />来源</n-button
-                    >
-                </nav>
-            </template>
+        <header class="workspace-heading scova-interface">
+            <div>
+                <p class="workspace-eyebrow">信息搜索 · 报告工作区</p>
+                <p class="workspace-description">阅读报告、核对来源，围绕已有资料继续提问。</p>
+            </div>
             <nav class="report-tools" aria-label="报告阅读工具">
                 <navigation-button
                     v-if="returnTo"
@@ -51,13 +15,76 @@
                 <navigation-button to="/account/appearance" icon="appearance" label="阅读外观"
                     >外观</navigation-button
                 >
-                <navigation-button v-if="report" :to="`/runs/${report.runId}`" icon="back"
+                <navigation-button v-if="report" :to="`/runs/${report.runId}`" icon="tasks"
                     >执行详情</navigation-button
                 >
             </nav>
-        </div>
-        <div class="report-workspace">
-            <div class="report-content">
+        </header>
+        <nav
+            v-if="questionIdentity"
+            class="workspace-actions scova-interface"
+            aria-label="工作区视图"
+        >
+            <n-button
+                v-bind="{ 'aria-pressed': readingOnly, 'aria-controls': 'report-conversation' }"
+                @click="readingOnly = !readingOnly"
+            >
+                <app-icon name="report" />{{ readingOnly ? '显示对话' : '专注阅读' }}
+            </n-button>
+            <n-button @click="openConversation"><app-icon name="question" />围绕报告提问</n-button>
+            <p>原运行日志保留在执行详情中。</p>
+        </nav>
+        <div
+            class="report-workspace"
+            :class="{ 'report-workspace--reading': readingOnly || !questionIdentity }"
+        >
+            <section class="report-content" aria-label="报告交付物">
+                <div class="deliverable-heading scova-interface">
+                    <h2><app-icon name="report" />报告交付物</h2>
+                    <span v-if="report">已保存 · {{ formatLabels[report.format] }}</span>
+                </div>
+                <div class="report-presentation scova-interface">
+                    <template v-if="report">
+                        <label for="report-format">报告形式</label>
+                        <select
+                            id="report-format"
+                            v-model="selectedFormat"
+                            aria-describedby="report-format-help"
+                        >
+                            <option value="brief">简报</option>
+                            <option value="list">主题清单</option>
+                            <option value="comparison">对比表</option>
+                            <option value="research_report">研究报告</option>
+                        </select>
+                        <p id="report-format-help">临时切换，刷新恢复保存形式。</p>
+                        <nav class="report-sections" aria-label="报告内容导航">
+                            <n-button
+                                tag="a"
+                                quaternary
+                                type="primary"
+                                v-bind="{ href: '#summary-title' }"
+                                @click="jump($event, 'summary-title')"
+                                ><app-icon name="report" />正文</n-button
+                            >
+                            <n-button
+                                tag="a"
+                                quaternary
+                                type="primary"
+                                v-bind="{ href: `#${changesTarget}` }"
+                                @click="jump($event, changesTarget)"
+                                ><app-icon name="retry" />变化</n-button
+                            >
+                            <n-button
+                                tag="a"
+                                quaternary
+                                type="primary"
+                                v-bind="{ href: '#saved-evidence-title' }"
+                                @click="jump($event, 'saved-evidence-title')"
+                                ><app-icon name="source" />来源</n-button
+                            >
+                        </nav>
+                    </template>
+                </div>
                 <component
                     :is="renderer"
                     v-if="report"
@@ -71,9 +98,18 @@
                     :retryable="error.retryable && valid && query.isError.value"
                     @retry="retry"
                 />
-            </div>
-            <section class="report-companion" aria-labelledby="report-next-title">
-                <h2 id="report-next-title">阅读后继续</h2>
+            </section>
+            <section
+                id="report-conversation"
+                v-show="!readingOnly && !!questionIdentity"
+                class="report-companion"
+                aria-labelledby="report-next-title"
+                tabindex="-1"
+            >
+                <header class="companion-heading scova-interface">
+                    <h2 id="report-next-title"><app-icon name="question" />对话与后续研究</h2>
+                    <p>基于这份报告的保存证据作答。补充搜索需单独确认后续研究。</p>
+                </header>
                 <report-questions
                     v-if="questionIdentity"
                     :key="questionIdentity"
@@ -278,6 +314,13 @@ const routeIdentity = computed(
     () => `${lifecycle.session.epoch}:${accountId.value ?? ''}:${route.params.reportId}`,
 );
 const selectedFormat = ref<Report['format']>();
+const readingOnly = ref(false);
+const formatLabels = {
+    brief: '简报',
+    list: '主题清单',
+    comparison: '对比表',
+    research_report: '研究报告',
+};
 let formatIdentity = '';
 watch(
     [routeIdentity, report],
@@ -304,6 +347,7 @@ watch(
     routeIdentity,
     () => {
         questionIdentity.value = '';
+        readingOnly.value = false;
     },
     { flush: 'sync' },
 );
@@ -315,6 +359,14 @@ watch(
     { immediate: true, flush: 'sync' },
 );
 const detail = ref<HTMLElement>();
+async function openConversation() {
+    readingOnly.value = false;
+    await nextTick();
+    const target = detail.value?.querySelector<HTMLElement>('#report-conversation');
+    const input = target?.querySelector<HTMLTextAreaElement>('textarea:not([readonly])');
+    (input ?? target)?.focus({ preventScroll: true });
+    target?.scrollIntoView({ block: 'start', behavior: 'auto' });
+}
 function jump(event: MouseEvent, id: string) {
     event.preventDefault();
     const target = detail.value?.querySelector<HTMLElement>(`#${CSS.escape(id)}`);
@@ -340,6 +392,73 @@ async function retry() {
     gap: 0.875rem;
     min-inline-size: 0;
 }
+.workspace-heading,
+.workspace-actions,
+.deliverable-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem 1rem;
+    min-inline-size: 0;
+}
+.workspace-heading {
+    justify-content: space-between;
+}
+.workspace-heading > div,
+.workspace-actions > * {
+    min-inline-size: 0;
+    overflow-wrap: anywhere;
+}
+.workspace-eyebrow {
+    margin: 0;
+    font-weight: 600;
+}
+.workspace-description,
+.workspace-actions p,
+.companion-heading p,
+.deliverable-heading span {
+    margin: 0;
+    color: var(--scova-muted);
+    font-size: 0.875rem;
+    line-height: 1.6;
+}
+.workspace-description {
+    margin-block-start: 0.375rem;
+}
+.workspace-actions :deep(.n-button__content) {
+    gap: 0.5rem;
+    white-space: normal;
+}
+.workspace-actions :deep(.n-button) {
+    min-block-size: 2.75rem;
+    height: auto;
+    padding-block: 0.625rem;
+}
+.workspace-actions :deep([aria-pressed='true']) {
+    color: var(--scova-primary);
+    background: var(--scova-selected);
+}
+.deliverable-heading {
+    justify-content: space-between;
+    padding-block-end: 1rem;
+    border-block-end: 0.0625rem solid var(--scova-border);
+}
+.deliverable-heading h2,
+.companion-heading h2 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+}
+.companion-heading {
+    display: grid;
+    gap: 0.5rem;
+    padding-block-end: 1.5rem;
+    border-block-end: 0.0625rem solid var(--scova-border);
+    margin-block-end: 1rem;
+}
 .report-workspace {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
@@ -352,17 +471,23 @@ async function retry() {
     min-inline-size: 0;
 }
 .report-content {
-    padding-block: 0.5rem;
+    padding: clamp(1rem, 2vw, 2rem);
+    border: 0.0625rem solid var(--scova-border);
+    border-radius: 0.875rem;
+    background: var(--scova-surface);
 }
 .report-companion {
     display: grid;
     gap: 0;
-    border-block-start: 0.0625rem solid var(--scova-border);
-    padding-block-start: 1.5rem;
+    padding: 1rem;
+    border: 0.0625rem solid var(--scova-border);
+    border-radius: 0.875rem;
+    background: var(--scova-surface);
+    scroll-margin-block-start: 1rem;
 }
-.report-companion > h2 {
-    margin: 0 0 1.5rem;
-    font-size: 1.25rem;
+.report-companion:focus-visible {
+    outline: 0.125rem solid var(--scova-primary);
+    outline-offset: 0.25rem;
 }
 .report-companion :deep(.questions),
 .report-companion :deep(.feedback-effects),
@@ -399,7 +524,7 @@ async function retry() {
     gap: 0.5rem 0.875rem;
     inline-size: 100%;
     min-inline-size: 0;
-    padding-block: 0.25rem 0.75rem;
+    padding-block: 1rem 1.5rem;
 }
 .report-presentation select {
     inline-size: auto;
@@ -471,7 +596,24 @@ select:disabled {
     justify-self: start;
     max-inline-size: 100%;
 }
+@media (min-width: 80rem) {
+    .report-workspace {
+        grid-template-columns: minmax(0, 1fr) minmax(22rem, 25rem);
+        gap: 1.5rem;
+    }
+    .report-workspace--reading {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .report-workspace--reading .report-content {
+        inline-size: min(100%, 64rem);
+        justify-self: center;
+    }
+}
 @media (max-width: 39.999rem) {
+    .report-content,
+    .report-companion {
+        padding: 0.5rem;
+    }
     .report-presentation {
         gap: 0.5rem;
         padding-block: 0.25rem 0.5rem;
