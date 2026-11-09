@@ -9,6 +9,15 @@
                         : '真实查阅报告'
                 }}
             </p>
+            <p v-if="delivery" class="scova-interface report-delivery">
+                <strong>{{ reportDeliveryLabels[delivery.status] }}</strong>
+                <span v-if="delivery.questionCount">
+                    · {{ delivery.answeredQuestions }}/{{
+                        delivery.questionCount
+                    }}
+                    个问题有材料支撑的回答</span
+                >
+            </p>
             <p class="published scova-interface">
                 <time :datetime="report.publishedAt">{{ published }}</time>
             </p>
@@ -93,7 +102,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import type { Report } from '@scova/models';
+import { classifyReportDelivery, reportDeliveryLabels, type Report } from '@scova/models';
 import { reportIntegrity } from '@/composables/useReport';
 import { useReadingTypography } from '@/composables/useReadingTypography';
 import ReportSources from '@/components/reports/ReportSources.vue';
@@ -103,6 +112,13 @@ const props = withDefaults(defineProps<{ report: Report; summaryTitle?: string }
 });
 const { reading } = useReadingTypography();
 const integrity = computed(() => reportIntegrity(props.report));
+const delivery = computed(
+    () =>
+        props.report.coverage.delivery ??
+        (props.report.coverage.reportValue
+            ? classifyReportDelivery(props.report.coverage.reportValue, props.report.claims)
+            : undefined),
+);
 const coverageDetails = ref<HTMLDetailsElement>();
 const published = computed(() =>
     new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(

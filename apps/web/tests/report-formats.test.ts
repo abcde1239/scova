@@ -212,6 +212,8 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
                 })),
             };
             const document = await render(format, parseContract(ReportSchema, report));
+            expect(text(document, '.report-delivery')).toContain('核心问题已回答');
+            expect(text(document, '.report-delivery')).toContain('1/2');
             expect(text(document, '.answers')).toContain('主要结论');
             expect(text(document, '.answer')).toContain('仅限申请阶段');
             expect(document.querySelector('#question-q1')?.textContent).toContain('尚无直接回答');
