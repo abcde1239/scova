@@ -8,6 +8,8 @@ export * from './library.ts';
 export * from './runs.ts';
 export * from './reports.ts';
 export * from './report-value.ts';
+export * from './report-delivery.ts';
+export * from './source-dates.ts';
 export * from './notifications.ts';
 export * from './events.ts';
 export * from './tool-diagnostics.ts';

@@ -11,7 +11,11 @@
         <p class="history-metadata">
             <strong>{{ item.mode === 'demo' ? '演示报告' : '真实查阅' }}</strong>
             <span>{{
-                item.coverage.completeness === 'partial' ? '有范围说明' : '计划范围内完成'
+                item.coverage.delivery
+                    ? reportDeliveryLabels[item.coverage.delivery.status]
+                    : item.coverage.completeness === 'partial'
+                      ? '有范围说明'
+                      : '计划范围内完成'
             }}</span>
             <time :datetime="item.publishedAt">{{ localTaskTime(item.publishedAt) }}</time>
         </p>
@@ -27,6 +31,7 @@
 
 <script setup lang="ts">
 import { RouterLink } from 'vue-router';
+import { reportDeliveryLabels } from '@scova/models';
 import type { ReportHistoryItem } from '@/api/reports';
 import AppIcon from '@/components/common/AppIcon.vue';
 import { localTaskTime } from '@/composables/useTasks';

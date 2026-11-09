@@ -1,6 +1,12 @@
 import { computed, shallowRef, toValue, watch, type MaybeRefOrGetter } from 'vue';
 import { useInfiniteQuery, useQuery } from '@tanstack/vue-query';
-import { parseContract, UuidSchema, type Run, type RunEvent } from '@scova/models';
+import {
+    parseContract,
+    UuidSchema,
+    reportDeliveryLabels,
+    type Run,
+    type RunEvent,
+} from '@scova/models';
 import { runQueryOptions } from '@/api/runs';
 import { runReportsOptions } from '@/api/run-detail';
 import { toApiError } from '@/api/errors';
@@ -13,7 +19,7 @@ export const executionStates = {
     running: ['正在查阅', '后台正在研究；可以离开此页，稍后返回查看。'],
     recovering: ['系统恢复中', '系统正在恢复上次执行，不需要手动继续。'],
     cancel_requested: ['正在取消', '取消请求已保存，等待后台停止在途工作。'],
-    succeeded: ['已完成', '已完成本次查阅范围，仍须结合覆盖说明阅读结论。'],
+    succeeded: ['已完成', '报告已生成，回答、适用条件和查阅范围见报告。'],
     partial: ['已生成结果', '结果覆盖已执行范围，未覆盖项目见报告详情。'],
     failed: ['执行失败', '本次未完成交付，不能将失败解释为资料没有变化。'],
     canceled: ['已取消', '执行已经停止，不能据此判断查阅结论。'],
@@ -26,9 +32,16 @@ const outcomes = {
     inconclusive: '暂无法得出结论',
 };
 export function executionOutcome(run: Run) {
+    if (['succeeded', 'partial'].includes(run.status) && run.coverage?.delivery)
+        return reportDeliveryLabels[run.coverage.delivery.status];
     if (run.status === 'succeeded' && run.outcome) return outcomes[run.outcome];
     if (run.status === 'partial') return '已生成结果';
     return undefined;
+}
+export function executionTitle(run: Run) {
+    return ['succeeded', 'partial'].includes(run.status) && run.coverage?.delivery
+        ? reportDeliveryLabels[run.coverage.delivery.status]
+        : executionStates[run.status][0];
 }
 export function executionFailure(run: Run) {
     if (run.status !== 'failed') return undefined;

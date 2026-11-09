@@ -478,6 +478,35 @@ test('本地HTTP样本：全部持久状态，完整无变化与失败/不完整
         );
     }
 });
+for (const [status, label, answeredQuestions, answeredCoreQuestions] of [
+    ['answered', '核心问题已回答', 1, 1],
+    ['partial', '已生成部分答案', 1, 0],
+    ['sources_only', '已保存来源资料', 0, 0],
+] as const) {
+    test(`交付情况独立于严格完整度：执行页 ${status}`, async ({ page }) => {
+        const run = snapshot('partial');
+        await install(page, {
+            ...run,
+            coverage: {
+                ...run.coverage!,
+                delivery: {
+                    status,
+                    answeredQuestions,
+                    answeredCoreQuestions,
+                    questionCount: 2,
+                    coreQuestionCount: 1,
+                },
+            },
+        } as ReturnType<typeof snapshot>);
+        await page.goto(`/runs/${runId}`);
+        await expect(page.getByRole('heading', { name: label, exact: true })).toBeVisible();
+        await expect(page.getByRole('link', { name: '查看已发布报告' })).toBeVisible();
+        await expect(page.getByText('本次范围内未发现重要变化', { exact: true })).toHaveCount(0);
+        await expect(
+            page.getByText('部分来源读取失败，尚未核验冲突证据。', { exact: true }),
+        ).toBeVisible();
+    });
+}
 for (const width of [390, 768, 1440]) {
     test(`本地HTTP样本：${width} 文字200%与键盘刷新`, async ({ page }, testInfo) => {
         await page.setViewportSize({ width, height: 1000 });

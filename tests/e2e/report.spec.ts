@@ -1,7 +1,7 @@
 import { logoutFromAccount, expectAccountReady } from './support/account-menu.ts';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import type { Report } from '@scova/models';
+import { classifyReportDelivery, type Report } from '@scova/models';
 
 // Local HTTP samples exercise the real Web bundle; database delivery is verified separately.
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -106,6 +106,92 @@ async function samples(page: Page) {
 }
 const article = (page: Page) =>
     page.getByRole('article', { name: '开放研究资料：可追溯的基础简报' });
+
+for (const width of [320, 1440]) {
+    for (const status of ['answered', 'partial', 'sources_only'] as const) {
+        test(`交付分类与来源日期：${status}/${width}`, async ({ page }, info) => {
+            const saved = formatReport();
+            const selectedIndex = status === 'answered' ? 0 : status === 'partial' ? 1 : -1;
+            saved.coverage.reportValue = {
+                version: 1,
+                questions: ['核心问题', '补充问题'].map((text, i) => ({
+                    id: `q${i}`,
+                    text,
+                    priority: i === 0 ? 'core' : 'supporting',
+                    status: i === selectedIndex ? 'provisional' : 'unresolved',
+                    claimIndexes: i === selectedIndex ? [i] : [],
+                    gap: i === selectedIndex ? '时间未完全确认' : '尚无直接回答',
+                })),
+                selections: saved.claims.map((_, index) => ({
+                    claimIndex: index,
+                    questionIds: index === selectedIndex ? [`q${index}`] : [],
+                    placement: index === selectedIndex ? 'main' : 'reference',
+                    reason: '仅按材料基础选择答案',
+                    basis: index === selectedIndex ? 'model_assessment' : 'unassessed',
+                    timeScope: 'unknown',
+                    ...(index === selectedIndex
+                        ? {
+                              assessment: {
+                                  relevance: 'direct' as const,
+                                  support: 'partial' as const,
+                                  role: 'answer' as const,
+                                  sourceRelation: 'unknown' as const,
+                                  reason: '条件内回答',
+                                  conditions: '适用于本次保存版本',
+                                  gap: '',
+                              },
+                          }
+                        : {}),
+                })),
+            };
+            saved.coverage.delivery = classifyReportDelivery(
+                saved.coverage.reportValue,
+                saved.claims,
+            );
+            expect(saved.coverage.delivery.status).toBe(status);
+            saved.evidence[0].snapshot!.sourceDates = {
+                published: {
+                    status: 'known',
+                    value: '2026-11-08',
+                    instant: null,
+                    precision: 'day',
+                },
+                modified: {
+                    status: 'known',
+                    value: '2026-11-09T02:30:00.000Z',
+                    instant: '2026-11-09T02:30:00.000Z',
+                    precision: 'instant',
+                },
+            };
+            await page.setViewportSize({ width, height: 900 });
+            const state = await formatSamples(page, saved);
+            await page.goto(reportPath);
+            await expect(page.locator('.report-delivery')).toContainText(
+                {
+                    answered: '核心问题已回答',
+                    partial: '已生成部分答案',
+                    sources_only: '已保存来源资料',
+                }[status],
+            );
+            const evidence = page.locator(`#evidence-${saved.evidence[0].id}`);
+            await evidence.locator('summary').click();
+            await expect(evidence).toContainText('2026-11-08（仅日期，时区未声明）');
+            await expect(evidence).toContainText('来源更新时间');
+            await expect(evidence).toContainText('2026-11-09T02:30:00.000Z');
+            await page.evaluate(() => {
+                document.documentElement.style.fontSize = '200%';
+            });
+            expect(
+                await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1),
+            ).toBe(true);
+            await page.screenshot({
+                path: info.outputPath(`delivery-${status}-${width}.png`),
+                fullPage: true,
+            });
+            expect(state.unexpected).toEqual([]);
+        });
+    }
+}
 
 test('报告正文优先完整展示，后续操作位于正文之后，快捷跳转仍聚焦正文', async ({ page }) => {
     await samples(page);

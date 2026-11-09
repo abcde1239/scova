@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { validatePublication } from '@scova/connectors';
+import { validatePublication, describePublication } from '@scova/connectors';
 import {
     EvidenceSelectorSchema,
     InboxItemSchema,
@@ -95,6 +95,12 @@ function evidence(row: StoredEvidence, report: StoredReport, expectedRunId: stri
     const selector = parseContract(EvidenceSelectorSchema, row.selectorJson);
     const metadata = observation.metadataJson as Record<string, unknown>;
     const publication = validatePublication(metadata?.publication);
+    const dates = describePublication(metadata?.publication);
+    const dateSummary = ({
+        earliest: _earliest,
+        latest: _latest,
+        ...date
+    }: typeof dates.published) => date;
     if (
         selector.extractorVersion !== snapshot.extractorVersion ||
         selector.end - selector.start !== row.quote.length ||
@@ -119,6 +125,14 @@ function evidence(row: StoredEvidence, report: StoredReport, expectedRunId: stri
             contentHash: snapshot.contentHash,
             extractorVersion: snapshot.extractorVersion,
             publishedAt: publication.instant,
+            ...(metadata?.publication
+                ? {
+                      sourceDates: {
+                          published: dateSummary(dates.published),
+                          modified: dateSummary(dates.modified),
+                      },
+                  }
+                : {}),
             truncated: metadata.truncated,
             selector,
         },

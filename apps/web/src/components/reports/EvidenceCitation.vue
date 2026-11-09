@@ -31,7 +31,23 @@
                 </div>
                 <div v-if="evidence.snapshot">
                     <dt>来源发布时间</dt>
-                    <dd>{{ evidence.snapshot.publishedAt ?? '未确认' }}</dd>
+                    <dd>
+                        {{
+                            sourceDate(
+                                evidence.snapshot.sourceDates?.published,
+                                evidence.snapshot.publishedAt,
+                            )
+                        }}
+                    </dd>
+                </div>
+                <div
+                    v-if="
+                        evidence.snapshot?.sourceDates &&
+                        evidence.snapshot.sourceDates.modified.status !== 'unknown'
+                    "
+                >
+                    <dt>来源更新时间</dt>
+                    <dd>{{ sourceDate(evidence.snapshot.sourceDates.modified) }}</dd>
                 </div>
             </dl>
             <p class="citation-history">
@@ -47,6 +63,15 @@ import type { Evidence } from '@scova/models';
 import { sourceLink } from '@/composables/useReport';
 const props = defineProps<{ evidence: Evidence }>();
 const link = computed(() => sourceLink(props.evidence.snapshot?.originalUrl ?? props.evidence.url));
+function sourceDate(
+    date: NonNullable<NonNullable<Evidence['snapshot']>['sourceDates']>['published'] | undefined,
+    fallback?: string | null,
+) {
+    if (!date) return fallback ?? '未确认';
+    if (date.status === 'conflict') return '来源声明存在冲突';
+    if (date.status === 'unknown') return '未确认';
+    return `${date.value}${date.precision === 'day' ? '（仅日期，时区未声明）' : date.precision === 'local' ? '（时区未声明）' : ''}`;
+}
 </script>
 
 <style scoped>

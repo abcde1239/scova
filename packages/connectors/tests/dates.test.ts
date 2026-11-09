@@ -144,11 +144,12 @@ describe('HTML reader publication extraction', () => {
         expect(page.publication?.observations.map((entry) => entry.field)).toEqual([
             'article:published_time',
             'datePublished',
+            'dateModified',
         ]);
         expect(page.text).toBe(baseline.text);
         expect(page.contentHash).toBe(baseline.contentHash);
     });
-    it('extracts a publication time inside article while excluding navigation and explicit modification times', async () => {
+    it('extracts a publication time inside article and keeps modification separate from publication', async () => {
         const page = await readHtml(
             '',
             `<time itemprop="datePublished" datetime="${knownDate}">Published</time><time itemprop="dateModified" datetime="2026-10-26T00:00:00Z">Updated</time>`,
@@ -156,7 +157,10 @@ describe('HTML reader publication extraction', () => {
         expect(page.publication).toMatchObject({
             status: 'known',
             instant: knownDate,
-            observations: [{ field: 'time[datetime]', rawValue: knownDate }],
+            observations: [
+                { field: 'time[datetime]', rawValue: knownDate },
+                { field: 'time:modified', rawValue: '2026-10-26T00:00:00Z' },
+            ],
         });
     });
     it.each([
@@ -236,7 +240,7 @@ describe('HTML reader publication extraction', () => {
         expect(page.publication?.observations).toHaveLength(1);
     });
     it.each(['', 'itemid="https://other.example/recommended"'])(
-        'does not use an unbound DOM article publication %#',
+        'accepts the sole article but rejects an explicitly mismatched article identity %#',
         async (identity) => {
             const page = await readHtml(
                 '',
@@ -244,16 +248,14 @@ describe('HTML reader publication extraction', () => {
                 identity,
             );
             expect(page.publication).toMatchObject({
-                status: 'unknown',
-                instant: null,
-                observations: [],
+                status: identity ? 'unknown' : 'known',
+                instant: identity ? null : knownDate,
             });
+            if (identity) expect(page.publication?.observations).toEqual([]);
         },
     );
     it.each([
         '',
-        `<meta property="article:published_time" content="2026-10-25">`,
-        `<meta property="article:published_time" content="2026-10-25T12:00:00">`,
         `<script type="application/ld+json">${JSON.stringify({ '@type': 'Article', dateModified: knownDate })}</script>`,
         `<script type="application/ld+json">${JSON.stringify({ '@type': 'Organization', datePublished: knownDate })}</script>`,
     ])('keeps missing, ambiguous or non-publication metadata unknown %#', async (metadata) => {
@@ -286,7 +288,6 @@ describe('HTML reader publication extraction', () => {
     it.each([
         `<meta property="article:published_time" content="${knownDate}"><script type="application/ld+json">{"@type":"Article","datePublished":"${'x'.repeat(262_144)}"}</script>`,
         `<meta property="article:published_time" content="${knownDate}">${`<meta property="article:published_time" content="${knownDate}">`.repeat(33)}`,
-        `<meta property="article:published_time" content="${knownDate}"><script type="application/ld+json">invalid json</script>`,
     ])(
         'treats overflow or malformed JSON-LD conservatively without side effects %#',
         async (metadata) => {

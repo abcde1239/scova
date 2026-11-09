@@ -84,14 +84,30 @@ export interface SearchResponse {
 }
 
 export interface ReadPublication {
-    parserVersion: 'scova-publication-v1';
+    parserVersion: 'scova-publication-v1' | 'scova-publication-v2';
     status: 'known' | 'unknown' | 'conflict';
     observations: {
-        field: 'article:published_time' | 'datePublished' | 'time[datetime]';
+        field:
+            | 'article:published_time'
+            | 'datePublished'
+            | 'time[datetime]'
+            | 'meta:published'
+            | 'meta:modified'
+            | 'dateModified'
+            | 'time:modified';
         rawValue: string;
         locator: string;
     }[];
     instant: string | null;
+}
+
+export interface PublicationDate {
+    status: 'known' | 'unknown' | 'conflict';
+    instant: string | null;
+    value: string | null;
+    precision: 'instant' | 'day' | 'local' | null;
+    earliest: string | null;
+    latest: string | null;
 }
 
 export interface ReadPage {

@@ -422,6 +422,61 @@ describe('报告证据与收件箱 API', () => {
         ).toMatchObject({ truncated: false });
     });
 
+    it('HTTP保留来源日期精度与独立更新时间，不信任存储的断言时刻', async () => {
+        const auth = await register();
+        const data = await fixture(auth);
+        await db
+            .update(tables.runSources)
+            .set({
+                metadataJson: {
+                    mode: 'demo',
+                    truncated: false,
+                    publication: {
+                        parserVersion: 'scova-publication-v2',
+                        status: 'known',
+                        instant: '2000-01-01T00:00:00Z',
+                        observations: [
+                            {
+                                field: 'meta:published',
+                                rawValue: '2026年11月08日',
+                                locator: 'head meta[0]',
+                            },
+                            {
+                                field: 'dateModified',
+                                rawValue: '2026-11-09T10:30+0800',
+                                locator: 'jsonld[0]$.dateModified',
+                            },
+                        ],
+                    },
+                },
+            })
+            .where(
+                and(
+                    eq(tables.runSources.runId, data.run.id),
+                    eq(tables.runSources.sourceId, data.source.id),
+                ),
+            );
+        const response = await request(`/reports/${data.report.id}`, { headers: headers(auth) });
+        expect(response.status).toBe(200);
+        expect((await json(response)).evidence[0].snapshot).toMatchObject({
+            publishedAt: null,
+            sourceDates: {
+                published: {
+                    status: 'known',
+                    value: '2026-11-08',
+                    instant: null,
+                    precision: 'day',
+                },
+                modified: {
+                    status: 'known',
+                    value: '2026-11-09T02:30:00.000Z',
+                    instant: '2026-11-09T02:30:00.000Z',
+                    precision: 'instant',
+                },
+            },
+        });
+    });
+
     it.each(['partial', 'mode', 'scope'])('拒绝不合法 %s 基线的旧侧引用', async (reason) => {
         const auth = await register();
         const current = await fixture(auth);

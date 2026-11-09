@@ -49,7 +49,11 @@
                         'scova-failure': run.status === 'failed',
                     }"
                 >
-                    {{ executionStates[run.status][0] }}
+                    {{
+                        run.coverage?.delivery && terminal
+                            ? reportDeliveryLabels[run.coverage.delivery.status]
+                            : executionStates[run.status][0]
+                    }}
                 </h2>
                 <p class="mode">
                     {{ run.mode === 'demo' ? '演示模式 · Demo' : '真实查阅 · Live' }}
@@ -236,6 +240,7 @@
 </template>
 
 <script setup lang="ts">
+import { reportDeliveryLabels } from '@scova/models';
 import { computed, onScopeDispose, shallowRef } from 'vue';
 import { onlineManager } from '@tanstack/vue-query';
 import { RouterLink } from 'vue-router';

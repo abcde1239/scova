@@ -15,7 +15,7 @@
             <ol v-else>
                 <li v-for="run in items" :key="run.id" class="history-entry">
                     <router-link :to="`/runs/${run.id}`"
-                        >{{ executionStates[run.status][0] }} · 查看执行</router-link
+                        >{{ executionTitle(run) }} · 查看执行</router-link
                     >
                     <p>{{ run.mode === 'demo' ? '演示模式 · Demo' : '真实查阅 · Live' }}</p>
                     <p>
@@ -54,7 +54,7 @@
 import { nextTick, ref } from 'vue';
 import { RouterLink } from 'vue-router';
 import { useTaskRunHistory } from '@/composables/useTaskRunHistory';
-import { executionStates } from '@/composables/useExecution';
+import { executionTitle } from '@/composables/useExecution';
 import { localTaskTime } from '@/composables/useTasks';
 import ActionButton from '@/components/common/ActionButton.vue';
 import StatePanel from '@/components/common/StatePanel.vue';
