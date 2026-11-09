@@ -3,12 +3,22 @@
         <template v-if="!taskId">
             <div class="task-toolbar">
                 <task-filters :value="filter" @change="changeFilter" />
-                <action-button :busy="query.isFetching.value" @click="query.refetch()"
-                    >刷新任务列表</action-button
-                >
-                <navigation-button class="back-link" icon="create" :to="{ name: 'task-create' }"
-                    >新建任务</navigation-button
-                >
+                <div class="task-toolbar-actions">
+                    <action-button
+                        quaternary
+                        :busy="query.isFetching.value"
+                        @click="query.refetch()"
+                    >
+                        <app-icon name="retry" />刷新
+                    </action-button>
+                    <navigation-button
+                        class="back-link"
+                        icon="create"
+                        :to="{ name: 'task-create' }"
+                    >
+                        新建任务
+                    </navigation-button>
+                </div>
             </div>
             <p class="scope-note">筛选已加载任务 · 时间按 {{ timezone }} 显示</p>
             <state-panel v-if="query.isPending.value" state="loading" />
@@ -122,6 +132,7 @@
 
 <script setup lang="ts">
 import NavigationButton from '@/components/common/NavigationButton.vue';
+import AppIcon from '@/components/common/AppIcon.vue';
 import { computed } from 'vue';
 import { useQuery } from '@tanstack/vue-query';
 import { useRoute, useRouter } from 'vue-router';
@@ -187,6 +198,20 @@ function changeFilter(value: TaskFilter) {
     align-items: center;
     justify-content: space-between;
     gap: 0.75rem 1.5rem;
+}
+.task-toolbar-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.5rem;
+    min-inline-size: 0;
+}
+@media (max-width: 47.999rem) {
+    .task-toolbar {
+        flex-direction: column;
+        align-items: flex-start;
+    }
 }
 .task-center > :deep(.scova-action-button) {
     justify-self: start;

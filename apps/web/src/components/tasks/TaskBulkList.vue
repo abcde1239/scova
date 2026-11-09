@@ -4,33 +4,44 @@
             <action-button
                 v-if="!managing"
                 ref="manageTrigger"
+                quaternary
                 :disabled="unavailable"
                 @click="managing = true"
-                >批量管理</action-button
+                ><app-icon name="tasks" />批量管理</action-button
             >
             <template v-else>
-                <p>已选 {{ actions.selected.value.length }} 个任务</p>
-                <action-button :disabled="locked || !tasks.length" @click="actions.selectLoaded()"
-                    >选择已加载任务</action-button
-                >
-                <action-button
-                    :disabled="locked || !actions.selected.value.length"
-                    @click="actions.clearSelection()"
-                    >取消选择</action-button
-                >
-                <action-button
-                    ref="clearTrigger"
-                    class="danger"
-                    :disabled="
-                        unavailable || actions.pending.value || !actions.selected.value.length
-                    "
-                    :busy="actions.preparing.value"
-                    @click="openConfirmation"
-                    >清除所选任务</action-button
-                >
-                <action-button :disabled="actions.busy.value" @click="finishManaging"
-                    >退出批量管理</action-button
-                >
+                <div class="bulk-selection">
+                    <p class="selection-count">已选 {{ actions.selected.value.length }} 个任务</p>
+                    <div class="selection-actions">
+                        <action-button
+                            :disabled="locked || !tasks.length"
+                            @click="actions.selectLoaded()"
+                            quaternary
+                            >选择已加载任务</action-button
+                        >
+                        <action-button
+                            :disabled="locked || !actions.selected.value.length"
+                            quaternary
+                            @click="actions.clearSelection()"
+                            >取消选择</action-button
+                        >
+                    </div>
+                </div>
+                <div class="bulk-actions">
+                    <action-button quaternary :disabled="actions.busy.value" @click="finishManaging"
+                        >退出批量管理</action-button
+                    >
+                    <action-button
+                        ref="clearTrigger"
+                        class="danger"
+                        :disabled="
+                            unavailable || actions.pending.value || !actions.selected.value.length
+                        "
+                        :busy="actions.preparing.value"
+                        @click="openConfirmation"
+                        ><app-icon name="delete" />清除所选任务</action-button
+                    >
+                </div>
             </template>
         </div>
         <p v-if="managing" class="selection-note">
@@ -135,6 +146,7 @@
 import { computed, nextTick, ref, watch } from 'vue';
 import type { Task } from '@scova/models';
 import ActionButton from '@/components/common/ActionButton.vue';
+import AppIcon from '@/components/common/AppIcon.vue';
 import TaskCard from '@/components/tasks/TaskCard.vue';
 import { bulkTaskLimit, useBulkTaskDeletion } from '@/composables/useBulkTaskDeletion';
 import type { TaskFilter } from '@/composables/useTasks';
@@ -203,11 +215,48 @@ watch([actions.message, actions.busy], async ([value, busy]) => {
     gap: 1rem;
 }
 .bulk-toolbar,
+.bulk-selection,
+.selection-actions,
+.bulk-actions,
 .dialog-actions {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 0.75rem;
+}
+.bulk-toolbar {
+    justify-content: space-between;
+    row-gap: 1rem;
+}
+.bulk-selection,
+.selection-actions,
+.bulk-actions {
+    min-inline-size: 0;
+    gap: 0.5rem;
+}
+.selection-count {
+    flex: 0 0 auto;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--scova-muted);
+}
+.bulk-actions {
+    margin-inline-start: auto;
+}
+@media (max-width: 47.999rem) {
+    .bulk-toolbar {
+        align-items: flex-start;
+    }
+    .bulk-selection {
+        flex: 1 1 100%;
+    }
+    .selection-count {
+        flex-basis: 100%;
+    }
+    .bulk-actions {
+        flex: 1 1 100%;
+        margin-inline-start: 0;
+    }
 }
 .bulk-toolbar p,
 h2 {

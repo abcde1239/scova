@@ -57,6 +57,7 @@ async function samples(
     const reads: number[] = [];
     const unexpected: string[] = [];
     const pageErrors: string[] = [];
+    const controls = { readWait: undefined as Promise<void> | undefined };
     page.on('pageerror', (error) => pageErrors.push(error.message));
     await page.route('**/api/v1/**', async (route) => {
         const request = route.request();
@@ -108,6 +109,7 @@ async function samples(
             }
             if (request.method() === 'GET') {
                 reads.push(n);
+                if (controls.readWait) await controls.readWait;
                 if (deleted.has(n)) return error(404, 'NOT_FOUND');
                 const revision = mode === 'changed' && n === 11 ? 2 : 1;
                 return route.fulfill({
@@ -119,7 +121,7 @@ async function samples(
         unexpected.push(`${request.method()} ${path}`);
         return error(501, 'UNEXPECTED_SAMPLE');
     });
-    return { writes, reads, deleted, unexpected, pageErrors };
+    return { writes, reads, deleted, unexpected, pageErrors, controls };
 }
 const dialog = (page: Page, count: number) =>
     page.getByRole('dialog', { name: `永久清除 ${count} 个任务？` });
@@ -279,3 +281,101 @@ test('执行中显示进度并阻止双击与Escape关闭', async ({ page }) => 
     expect(state.writes).toHaveLength(2);
     expect(state.pageErrors).toEqual([]);
 });
+
+for (const width of [320, 768, 1440]) {
+    for (const theme of ['light', 'dark'] as const) {
+        test(`任务操作布局 ${width}/${theme}：普通、批量、200%与核对中`, async ({ page }, info) => {
+            const state = await samples(page);
+            await page.setViewportSize({ width, height: 1100 });
+            await page.addInitScript(
+                (mode) =>
+                    localStorage.setItem(
+                        'scova.appearance.v1',
+                        JSON.stringify({ version: 1, accent: 'blue', mode }),
+                    ),
+                theme,
+            );
+            await start(page);
+            await expect(page.locator('.scova-theme')).toHaveClass(
+                theme === 'dark' ? /scova-theme--dark/ : /^(?!.*scova-theme--dark)/,
+            );
+            for (const scale of [1, 2]) {
+                await page.evaluate(
+                    (value) => (document.documentElement.style.fontSize = `${value * 100}%`),
+                    scale,
+                );
+                const top = page.locator('.task-toolbar-actions');
+                const refresh = top.getByRole('button', { name: '刷新', exact: true });
+                const create = top.getByRole('link', { name: '新建任务' });
+                const refreshRect = (await refresh.boundingBox())!;
+                const createRect = (await create.boundingBox())!;
+                // Keep actions adjacent, with an aligned next row when enlarged text needs it.
+                if (Math.abs(refreshRect.y - createRect.y) <= 1) {
+                    expect(createRect.x).toBeGreaterThanOrEqual(refreshRect.x + refreshRect.width);
+                    expect(createRect.x - refreshRect.x - refreshRect.width).toBeLessThanOrEqual(
+                        8 * scale + 1,
+                    );
+                } else {
+                    expect(Math.abs(createRect.x - refreshRect.x)).toBeLessThanOrEqual(1);
+                    expect(createRect.y).toBeGreaterThanOrEqual(refreshRect.y + refreshRect.height);
+                    expect(createRect.y - refreshRect.y - refreshRect.height).toBeLessThanOrEqual(
+                        8 * scale + 1,
+                    );
+                }
+                await selectAll(page);
+                for (const group of [
+                    '.task-toolbar-actions',
+                    '.selection-actions',
+                    '.bulk-actions',
+                ]) {
+                    const controls = page.locator(group).locator('button, a');
+                    for (const control of await controls.all()) {
+                        const rect = (await control.boundingBox())!;
+                        expect(rect.x).toBeGreaterThanOrEqual(0);
+                        expect(rect.x + rect.width).toBeLessThanOrEqual(width + 1);
+                    }
+                }
+                const clear = page.getByRole('button', { name: '清除所选任务' });
+                const exit = page.getByRole('button', { name: '退出批量管理' });
+                const clearRect = (await clear.boundingBox())!;
+                const exitRect = (await exit.boundingBox())!;
+                expect(clearRect.y >= exitRect.y).toBe(true);
+                expect(
+                    await page.evaluate(
+                        () => document.documentElement.scrollWidth <= innerWidth + 1,
+                    ),
+                ).toBe(true);
+                await page.screenshot({
+                    path: info.outputPath(`tasks-${width}-${theme}-${scale}x.png`),
+                    fullPage: true,
+                });
+            }
+            let release!: () => void;
+            state.controls.readWait = new Promise<void>((resolve) => {
+                release = resolve;
+            });
+            try {
+                const clear = page.getByRole('button', { name: '清除所选任务' });
+                await clear.click();
+                await expect(clear).toHaveAttribute('aria-busy', 'true');
+                await expect(page.getByRole('button', { name: '退出批量管理' })).toBeDisabled();
+                expect(
+                    await page.evaluate(
+                        () => document.documentElement.scrollWidth <= innerWidth + 1,
+                    ),
+                ).toBe(true);
+                await page.screenshot({
+                    path: info.outputPath(`tasks-${width}-${theme}-preparing.png`),
+                    fullPage: true,
+                });
+            } finally {
+                release();
+            }
+            await expect(dialog(page, 2)).toBeVisible();
+            await dialog(page, 2).getByRole('button', { name: '取消', exact: true }).click();
+            expect(state.writes).toEqual([]);
+            expect(state.unexpected).toEqual([]);
+            expect(state.pageErrors).toEqual([]);
+        });
+    }
+}
