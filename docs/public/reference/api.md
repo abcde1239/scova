@@ -24,6 +24,8 @@ vp run api:openapi:check
 
 报告接口使用当前会话的账号权限：`GET /api/v1/reports` 支持任务筛选与游标分页，`GET /api/v1/reports/:id` 返回结构化结论、来源快照元数据和原文引用。`GET /api/v1/inbox` 分页读取收件箱，`PATCH /api/v1/inbox/:id` 以 `{ "read": true }` 标记已读，传 `false` 恢复未读；写请求仍需 CSRF。报告读取保留演示模式、覆盖缺口和引用定位，完整网页正文及内部工具、checkpoint 不进入响应。
 
+`coverage.delivery` 可选，包含 `answered`（核心问题均有引用答案）、`partial`（部分问题有答案）、`sources_only`（仅来源资料）及问题计数；详情校验分类与保存的结论映射一致。它独立于 `coverage.completeness`、Run 状态和比较基线，旧记录可以缺省。证据快照的可选 `sourceDates` 分别返回 `published`、`modified`，各含 `status`、`instant`、`value` 和 `precision`；`day`、`local` 精度的 `instant` 为 null，不伪造 UTC 时刻。日期来自本轮已保存的来源时间观测并重新校验，不采用模型猜测或更新时间替代发布时间。
+
 报告的 `changes` 使用同一组可访问证据：`oldEvidenceIds` 来自本次执行首次领取时固定的完整基线，`newEvidenceIds` 来自当前执行；两侧还须分别匹配变化记录的来源与快照。非法关联使整个详情返回 `409 INVALID_REPORT_EVIDENCE`。正文过期清理后仍可读取保存的引用片段和定位。
 
 资料库提供 `/bookmarks` 收藏列表/创建/取消、`/notes` 纯文本笔记创建/查询/编辑/删除、`/library/sources/:sourceId/snapshots` 历史及详情，以及 `/library/search` 隔离检索。所有写接口使用会话与 CSRF；创建笔记要求稳定 `Idempotency-Key`，编辑和删除要求 `If-Match`。同键异参或旧修订返回 409，缺少命令头返回 428。取消收藏不删除来源、报告或引用。
