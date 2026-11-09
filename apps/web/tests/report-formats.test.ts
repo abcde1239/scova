@@ -285,7 +285,9 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
             };
             const before = structuredClone(report);
             const document = await render(format, parseContract(ReportSchema, report));
-            const groups = [...document.querySelectorAll('#question-q0 > .answer-source')];
+            const groups = [
+                ...document.querySelectorAll('#question-q0 > .answer-body > .answer-source'),
+            ];
             expect(
                 groups.map((group) => [...group.querySelectorAll('.claim')].map((node) => node.id)),
             ).toEqual([
@@ -349,7 +351,7 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
             const document = await render(format, report);
             const rows =
                 format === 'comparison'
-                    ? [...document.querySelectorAll('tbody > tr')]
+                    ? [...document.querySelectorAll('.comparison-table tbody > tr')]
                     : [...document.querySelectorAll('.change-record')];
             expect(rows).toHaveLength(report.changes.length);
             for (const [index, change] of report.changes.entries()) {
@@ -470,7 +472,9 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
                     expect(document.body.textContent).toContain(
                         baselineRunId ?? '报告未提供关联的基线执行。',
                     );
-                    expect(document.querySelectorAll('.change-record, tbody > tr')).toHaveLength(0);
+                    expect(
+                        document.querySelectorAll('.change-record, .comparison-table tbody > tr'),
+                    ).toHaveLength(0);
                     expect(document.querySelector('.report-warning')).toBeNull();
                     expect(text(document, '.mode')).toBe('真实查阅报告');
                 }
@@ -550,7 +554,17 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
                 );
                 expect(
                     document.querySelector('.report-sections a:nth-child(2)')?.getAttribute('href'),
-                ).toBe(format === 'comparison' ? '#comparison-title' : '#report-changes-title');
+                ).toBe('#report-changes-title');
+                expect(
+                    document.querySelector(
+                        '.report-content .report-changes, .report-content .comparison-context',
+                    ),
+                ).toBeNull();
+                expect(
+                    document.querySelector(
+                        '.report-sidebar .report-baseline #report-changes-title',
+                    ),
+                ).not.toBeNull();
                 expect(router.currentRoute.value.fullPath).toBe(address);
                 expect(requests.some((url) => url.endsWith(`/reports/${report.id}`))).toBe(false);
                 expect(report.format).toBe(format);

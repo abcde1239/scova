@@ -1,6 +1,13 @@
 <template>
-    <report-frame :report="report" class="report-comparison">
-        <section class="comparison-section scova-interface" aria-labelledby="comparison-title">
+    <report-frame :report="report" format="comparison" class="report-comparison">
+        <template #format-notice
+            ><report-format-banner format="comparison" :report="report"
+        /></template>
+        <section
+            v-if="showChanges"
+            class="comparison-section scova-interface"
+            aria-labelledby="comparison-title"
+        >
             <h3 id="comparison-title">事实与变化对比</h3>
             <dl class="comparison-context">
                 <div>
@@ -100,20 +107,7 @@
                 </div>
             </template>
         </section>
-        <section
-            v-for="section in model.sections"
-            :key="section.kind"
-            class="claim-section"
-            :aria-labelledby="`claims-${section.kind}`"
-        >
-            <h3 :id="`claims-${section.kind}`" class="scova-content-title">{{ section.title }}</h3>
-            <report-claim
-                v-for="claim in section.claims"
-                :key="claim.id"
-                :report="report"
-                :claim="claim"
-            />
-        </section>
+        <report-findings-table v-if="!report.coverage.reportValue" :report="report" />
     </report-frame>
 </template>
 
@@ -121,10 +115,13 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import type { Report } from '@scova/models';
 import ReportFrame from '@/components/reports/ReportFrame.vue';
-import ReportClaim from '@/components/reports/ReportClaim.vue';
+import ReportFindingsTable from '@/components/reports/ReportFindingsTable.vue';
+import ReportFormatBanner from '@/components/reports/ReportFormatBanner.vue';
 import EvidenceCitation from '@/components/reports/EvidenceCitation.vue';
 import { reportComparison } from '@/utils/report-comparison';
-const props = defineProps<{ report: Report }>();
+const props = withDefaults(defineProps<{ report: Report; showChanges?: boolean }>(), {
+    showChanges: true,
+});
 const model = computed(() => reportComparison(props.report));
 const scrollArea = ref<HTMLElement>();
 const table = ref<HTMLTableElement>();

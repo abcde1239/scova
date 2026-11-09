@@ -1,6 +1,6 @@
 <template>
     <report-frame :report="report" summary-title="简报概述" class="report-brief">
-        <report-changes :report="report" />
+        <report-changes v-if="showChanges" :report="report" />
         <section
             v-for="section in sections"
             :key="section.kind"
@@ -25,7 +25,9 @@ import ReportFrame from '@/components/reports/ReportFrame.vue';
 import ReportClaim from '@/components/reports/ReportClaim.vue';
 import ReportChanges from '@/components/reports/ReportChanges.vue';
 import { reportSections } from '@/composables/useReport';
-const props = defineProps<{ report: Report }>();
+const props = withDefaults(defineProps<{ report: Report; showChanges?: boolean }>(), {
+    showChanges: true,
+});
 const sections = computed(() => reportSections(props.report));
 </script>
 

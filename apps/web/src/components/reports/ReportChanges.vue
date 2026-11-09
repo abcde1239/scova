@@ -1,5 +1,9 @@
 <template>
-    <section class="report-changes" aria-labelledby="report-changes-title">
+    <section
+        class="report-changes"
+        :style="reading.variables"
+        aria-labelledby="report-changes-title"
+    >
         <h3 id="report-changes-title" class="scova-content-title">变化与基线</h3>
         <dl class="comparison-context scova-interface">
             <div>
@@ -96,6 +100,8 @@ import { computed } from 'vue';
 import type { Report } from '@scova/models';
 import EvidenceCitation from '@/components/reports/EvidenceCitation.vue';
 import { changeSummary, mapReportChanges } from '@/utils/report-changes';
+import { useReadingTypography } from '@/composables/useReadingTypography';
+const { reading } = useReadingTypography();
 const props = defineProps<{ report: Report }>();
 const groups = computed(() => mapReportChanges(props.report));
 const summary = computed(() => changeSummary(props.report));

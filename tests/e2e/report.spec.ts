@@ -205,6 +205,10 @@ test('报告交付物优先，宽屏并排对话、窄屏正文在前，保留�
     expect(companion!.x).toBeGreaterThanOrEqual(content!.x + content!.width);
     expect(Math.abs(companion!.y - content!.y)).toBeLessThan(1);
     expect(content!.width).toBeGreaterThan(companion!.width * 1.5);
+    const baseline = await page.locator('.report-baseline').boundingBox();
+    expect(baseline!.x).toBe(companion!.x);
+    expect(baseline!.y).toBeGreaterThanOrEqual(companion!.y + companion!.height);
+    await expect(page.locator('.report-content .report-changes')).toHaveCount(0);
     await expect(page.getByRole('heading', { name: '对话与后续研究', exact: true })).toBeVisible();
     await expect(page.getByRole('link', { name: '执行详情', exact: true })).toHaveAttribute(
         'href',
@@ -249,6 +253,7 @@ test('专注阅读与对话定位保留问题和笔记草稿，切换不发起�
     const focus = page.getByRole('button', { name: '专注阅读', exact: true });
     await focus.click();
     await expect(page.locator('.report-companion')).toBeHidden();
+    await expect(page.locator('.report-baseline')).toBeHidden();
     await expect(page.getByRole('region', { name: '报告交付物' })).toBeVisible();
     await expect(page.getByRole('button', { name: '显示对话', exact: true })).toHaveAttribute(
         'aria-pressed',
@@ -535,6 +540,147 @@ const formats = [
 ] as const;
 const claimKinds = ['fact', 'inference', 'conflict', 'insufficient'] as const;
 
+function questionReport(): Report {
+    const saved = formatReport();
+    saved.coverage.reportValue = {
+        version: 1,
+        questions: [
+            {
+                id: 'q0',
+                text: '资料有哪些主要发现？',
+                priority: 'core',
+                status: 'provisional',
+                claimIndexes: [0, 1],
+                gap: '',
+            },
+            {
+                id: 'q1',
+                text: '后续有哪些值得关注的内容？',
+                priority: 'supporting',
+                status: 'provisional',
+                claimIndexes: [4],
+                gap: '',
+            },
+        ],
+        selections: saved.claims.map((_, index) => ({
+            claimIndex: index,
+            questionIds: index === 4 ? ['q1'] : index < 2 ? ['q0'] : [],
+            placement: index === 2 || index === 3 ? 'reference' : 'main',
+            reason: '按问题保留材料',
+            basis: 'model_assessment',
+            timeScope: 'unknown',
+            assessment: {
+                relevance: 'direct',
+                support: 'partial',
+                role: 'answer',
+                sourceRelation: 'unknown',
+                reason: '对应保存资料',
+                conditions: '仅限当前保存版本',
+                gap: '',
+            },
+        })),
+    };
+    return saved;
+}
+
+for (const width of [320, 390, 1024, 1440]) {
+    test(`问题型交付物视觉区分 ${width}：清单卡片、信息表格、研究章节与右侧基线`, async ({
+        page,
+    }, info) => {
+        test.setTimeout(90_000);
+        const saved = questionReport();
+        const state = await formatSamples(page, saved);
+        await page.setViewportSize({ width, height: 1000 });
+        await page.goto(reportPath);
+        const selector = page.getByLabel('报告形式', { exact: true });
+        for (const dark of [false, true]) {
+            await page.emulateMedia({ colorScheme: dark ? 'dark' : 'light' });
+            await expect(page.locator('.scova-theme--dark')).toHaveCount(dark ? 1 : 0);
+            for (const enlarged of [false, true]) {
+                await page.evaluate(
+                    (value) => (document.documentElement.style.fontSize = value ? '200%' : ''),
+                    enlarged,
+                );
+                for (const [format] of formats) {
+                    await selector.selectOption(format);
+                    const answers = page.locator(`.answers--${format}`);
+                    await expect(answers).toBeVisible();
+                    await expect(answers.locator('.answer')).toHaveCount(2);
+                    await expect(answers).toContainText('仅限当前保存版本');
+                    await expect(
+                        page.locator(
+                            '.report-content .report-changes, .report-content .comparison-context',
+                        ),
+                    ).toHaveCount(0);
+                    await expect(page.locator('.report-baseline')).toBeVisible();
+                    await expect(answers.locator('table')).toHaveCount(
+                        format === 'comparison' ? 1 : 0,
+                    );
+                    if (format === 'comparison') {
+                        await expect(answers.getByRole('columnheader')).toHaveText([
+                            '研究问题',
+                            '已收集信息与来源',
+                        ]);
+                        if (width < 1024 || enlarged)
+                            expect(
+                                await answers
+                                    .locator('.answer-scroll')
+                                    .evaluate(
+                                        (element) => element.scrollWidth > element.clientWidth,
+                                    ),
+                            ).toBe(true);
+                    }
+                    if (format === 'list') {
+                        await expect(answers.locator('.answer-number')).toHaveText(['01', '02']);
+                        expect(
+                            await answers
+                                .locator('.answer')
+                                .first()
+                                .evaluate((element) => getComputedStyle(element).borderTopStyle),
+                        ).toBe('solid');
+                    }
+                    await expect(page.locator('.report-directory')).toHaveCount(
+                        format === 'research_report' ? 1 : 0,
+                    );
+                    const citations = answers.locator('.source-evidence details.evidence');
+                    for (let i = 0; i < (await citations.count()); i++) {
+                        const citation = citations.nth(i);
+                        await citation.locator('summary').click();
+                        expect(
+                            await citation.locator('blockquote').evaluate((element) => {
+                                const style = getComputedStyle(element);
+                                return (
+                                    (element.clientWidth -
+                                        parseFloat(style.paddingLeft) -
+                                        parseFloat(style.paddingRight)) /
+                                    parseFloat(style.fontSize)
+                                );
+                            }),
+                        ).toBeGreaterThanOrEqual(4);
+                    }
+                    expect(
+                        await page.evaluate(
+                            () => document.documentElement.scrollWidth <= innerWidth,
+                        ),
+                    ).toBe(true);
+                    const ids = await page
+                        .locator('[id]')
+                        .evaluateAll((elements) => elements.map((element) => element.id));
+                    expect(new Set(ids).size).toBe(ids.length);
+                    if (!dark && !enlarged)
+                        await page.screenshot({
+                            path: info.outputPath(`${format}-${width}.png`),
+                            fullPage: true,
+                        });
+                }
+            }
+        }
+        expect(state.calls.filter((entry) => entry.method !== 'GET')).toEqual([]);
+        expect(state.unexpected).toEqual([]);
+        expect(state.report).toEqual(saved);
+    });
+}
+
 function formatReport(): Report {
     const value = report() as Report;
     value.baselineRunId = id(5);
@@ -642,10 +788,9 @@ async function assertFormatContent(page: Page, expected: Report) {
         ),
     ).toEqual(expected.evidence.map((entry) => ({ id: entry.id, quote: entry.quote })));
     for (const entry of expected.changes) {
-        const comparison = await page.locator('.report-comparison').count();
-        const row = comparison
-            ? page.locator(`#comparison-change-${entry.id}`)
-            : page.locator(`.change-record[aria-labelledby="change-${entry.id}"]`);
+        const row = page.locator(
+            `.report-baseline .change-record[aria-labelledby="change-${entry.id}"]`,
+        );
         await expect(row).toHaveCount(1);
         await expect(row).toContainText(entry.factKey);
         await expect(row).toContainText(entry.reason);
@@ -697,7 +842,7 @@ for (const [savedFormat, renderer] of formats) {
             const navigation = page.getByRole('navigation', { name: '报告内容导航', exact: true });
             for (const [label, target] of [
                 ['正文', 'summary-title'],
-                ['变化', format === 'comparison' ? 'comparison-title' : 'report-changes-title'],
+                ['变化', 'report-changes-title'],
                 ['来源', 'saved-evidence-title'],
             ]) {
                 await navigation.getByRole('link', { name: label!, exact: true }).focus();
@@ -807,7 +952,7 @@ for (const width of [320, 360, 390, 768, 1024, 1440]) {
                     await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
                 ).toBe(true);
                 if (format === 'comparison') {
-                    const scroll = page.locator('.comparison-scroll');
+                    const scroll = page.locator('.findings-scroll');
                     expect(
                         await scroll.evaluate((element) => getComputedStyle(element).overflowX),
                     ).toBe('auto');
