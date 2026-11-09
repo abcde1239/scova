@@ -14,6 +14,8 @@ import {
 } from './common.ts';
 import { CoverageSchema } from './runs.ts';
 import { validReportValueClaims } from './report-value.ts';
+import { classifyReportDelivery } from './report-delivery.ts';
+import { SourceDatesSchema } from './source-dates.ts';
 import { FeedbackEffectsSchema } from './feedback.ts';
 
 export const EvidenceSelectorSchema = refineSchema(
@@ -51,6 +53,7 @@ export const EvidenceSnapshotSchema = Type.Object(
         publishedAt: Type.Union([InstantSchema, Type.Null()], {
             description: '来源发布时间，未确认时为空',
         }),
+        sourceDates: Type.Optional(SourceDatesSchema),
         truncated: Type.Boolean({ description: '采集正文是否发生截断' }),
         selector: EvidenceSelectorSchema,
     },
@@ -180,6 +183,15 @@ const ReportObject = Type.Object(
     { additionalProperties: false, description: '四种展示形式共用的不可变报告 DTO' },
 );
 export const ReportSchema = refineSchema(ReportObject, 'ScovaReport', (value) => {
+    if (value.coverage.delivery) {
+        const expected = classifyReportDelivery(value.coverage.reportValue, value.claims);
+        if (
+            Object.entries(expected).some(
+                ([key, item]) => Reflect.get(value.coverage.delivery!, key) !== item,
+            )
+        )
+            return false;
+    }
     if (
         value.coverage.reportValue &&
         (!validReportValueClaims(value.coverage.reportValue, value.claims.length) ||

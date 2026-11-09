@@ -12,6 +12,7 @@ import {
 } from './common.ts';
 import { BudgetSchema } from './tasks.ts';
 import { ReportValueSchema } from './report-value.ts';
+import { ReportDeliverySchema } from './report-delivery.ts';
 
 const CountSchema = Type.Integer({
     minimum: 0,
@@ -31,6 +32,7 @@ export const UsageSchema = Type.Object(
 export const CoverageSchema = Type.Object(
     {
         reportValue: Type.Optional(ReportValueSchema),
+        delivery: Type.Optional(ReportDeliverySchema),
         notes: Type.Optional(
             Type.Array(NonEmptyTextSchema, {
                 maxItems: 1200,
