@@ -1,5 +1,10 @@
 <template>
-    <article class="report-frame" :style="reading.variables" aria-labelledby="report-title">
+    <article
+        class="report-frame"
+        :class="`report-frame--${format}`"
+        :style="reading.variables"
+        aria-labelledby="report-title"
+    >
         <header class="report-header">
             <h2 id="report-title" class="scova-report-title" tabindex="-1">{{ report.title }}</h2>
             <p class="mode scova-interface">
@@ -29,7 +34,7 @@
             <p>{{ report.summary }}</p>
         </section>
         <slot name="after-summary" />
-        <report-answers v-if="report.coverage.reportValue" :report="report" />
+        <report-answers v-if="report.coverage.reportValue" :report="report" :format="format" />
         <slot />
         <aside
             v-if="integrity.partial"
@@ -107,9 +112,13 @@ import { reportIntegrity } from '@/composables/useReport';
 import { useReadingTypography } from '@/composables/useReadingTypography';
 import ReportSources from '@/components/reports/ReportSources.vue';
 import ReportAnswers from '@/components/reports/ReportAnswers.vue';
-const props = withDefaults(defineProps<{ report: Report; summaryTitle?: string }>(), {
-    summaryTitle: '报告概述',
-});
+const props = withDefaults(
+    defineProps<{ report: Report; summaryTitle?: string; format?: Report['format'] }>(),
+    {
+        summaryTitle: '报告概述',
+        format: 'brief',
+    },
+);
 const { reading } = useReadingTypography();
 const integrity = computed(() => reportIntegrity(props.report));
 const delivery = computed(

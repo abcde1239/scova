@@ -90,6 +90,7 @@
                     v-if="report"
                     :key="`${routeIdentity}-${selectedFormat}`"
                     :report="report"
+                    :show-changes="false"
                 />
                 <state-panel
                     v-if="!report"
@@ -99,104 +100,114 @@
                     @retry="retry"
                 />
             </section>
-            <section
-                id="report-conversation"
-                v-show="!readingOnly && !!questionIdentity"
-                class="report-companion"
-                aria-labelledby="report-next-title"
-                tabindex="-1"
-            >
-                <header class="companion-heading scova-interface">
-                    <h2 id="report-next-title"><app-icon name="question" />对话与后续研究</h2>
-                    <p>基于这份报告的保存证据作答。补充搜索需单独确认后续研究。</p>
-                </header>
-                <report-questions
-                    v-if="questionIdentity"
-                    :key="questionIdentity"
-                    :report-id="String(route.params.reportId)"
-                    :report="report"
-                />
-                <feedback-effects
-                    v-if="report"
-                    :key="`effects-${accountId}-${report.id}`"
-                    :report="report"
-                />
-                <tool-section
-                    v-if="report"
-                    label="调整后续研究"
-                    icon="settings"
-                    class="feedback-tool"
+            <div v-show="!readingOnly && !!questionIdentity" class="report-sidebar">
+                <section
+                    id="report-conversation"
+                    class="report-companion"
+                    aria-labelledby="report-next-title"
+                    tabindex="-1"
                 >
-                    <feedback-actions
-                        v-if="report"
-                        :key="`feedback-${accountId}-${report.id}`"
+                    <header class="companion-heading scova-interface">
+                        <h2 id="report-next-title"><app-icon name="question" />对话与后续研究</h2>
+                        <p>基于这份报告的保存证据作答。补充搜索需单独确认后续研究。</p>
+                    </header>
+                    <report-questions
+                        v-if="questionIdentity"
+                        :key="questionIdentity"
+                        :report-id="String(route.params.reportId)"
                         :report="report"
                     />
-                </tool-section>
-                <tool-section
-                    v-if="notesSession === notesIdentity"
-                    label="笔记"
-                    icon="edit"
-                    class="notes-tool"
-                >
-                    <notes-panel
-                        v-if="notesSession === notesIdentity"
-                        :key="`notes-${notesIdentity}`"
-                        :targets="noteTargets"
-                        :initial-target="{ kind: 'report', id: String(route.params.reportId) }"
-                        :available="!!report"
-                    />
-                </tool-section>
-                <tool-section
-                    v-if="report"
-                    label="收藏与来源"
-                    icon="bookmark"
-                    class="bookmarks-tool"
-                >
-                    <section
+                    <feedback-effects
                         v-if="report"
-                        class="report-bookmarks scova-interface"
-                        aria-labelledby="report-bookmark-title"
+                        :key="`effects-${accountId}-${report.id}`"
+                        :report="report"
+                    />
+                    <tool-section
+                        v-if="report"
+                        label="调整后续研究"
+                        icon="settings"
+                        class="feedback-tool"
                     >
-                        <h2 id="report-bookmark-title"><app-icon name="bookmark" />收藏报告来源</h2>
-                        <label for="bookmark-source">选择收藏来源</label>
-                        <select
-                            id="bookmark-source"
-                            v-model="selectedSource"
-                            :disabled="bookmarkBusy"
-                        >
-                            <option value="">请选择一份资料</option>
-                            <option v-for="source in sources" :key="source.id" :value="source.id">
-                                {{ source.title }}
-                            </option>
-                        </select>
-                        <p v-if="chosenSource">{{ chosenSource.title }}</p>
-                        <nav
-                            v-if="chosenSource"
-                            class="report-source-history"
-                            aria-label="所选来源历史与快照"
-                        >
-                            <navigation-button
-                                :to="sourceHistoryLink(chosenSource.id)"
-                                icon="library"
-                                >查看来源历史</navigation-button
-                            >
-                            <navigation-button
-                                v-for="evidence in chosenSnapshots"
-                                :key="evidence.snapshotId"
-                                :to="sourceHistoryLink(evidence.sourceId, evidence.snapshotId)"
-                                >查看保存快照（{{ evidence.observedAt }}）</navigation-button
-                            >
-                        </nav>
-                        <bookmark-action
-                            v-if="chosenSource"
-                            :key="`${accountId}-${report.id}-${chosenSource.id}`"
-                            :source-id="chosenSource.id"
-                            :report-id="report.id"
+                        <feedback-actions
+                            v-if="report"
+                            :key="`feedback-${accountId}-${report.id}`"
+                            :report="report"
                         />
-                    </section>
-                </tool-section>
-            </section>
+                    </tool-section>
+                    <tool-section
+                        v-if="notesSession === notesIdentity"
+                        label="笔记"
+                        icon="edit"
+                        class="notes-tool"
+                    >
+                        <notes-panel
+                            v-if="notesSession === notesIdentity"
+                            :key="`notes-${notesIdentity}`"
+                            :targets="noteTargets"
+                            :initial-target="{ kind: 'report', id: String(route.params.reportId) }"
+                            :available="!!report"
+                        />
+                    </tool-section>
+                    <tool-section
+                        v-if="report"
+                        label="收藏与来源"
+                        icon="bookmark"
+                        class="bookmarks-tool"
+                    >
+                        <section
+                            v-if="report"
+                            class="report-bookmarks scova-interface"
+                            aria-labelledby="report-bookmark-title"
+                        >
+                            <h2 id="report-bookmark-title">
+                                <app-icon name="bookmark" />收藏报告来源
+                            </h2>
+                            <label for="bookmark-source">选择收藏来源</label>
+                            <select
+                                id="bookmark-source"
+                                v-model="selectedSource"
+                                :disabled="bookmarkBusy"
+                            >
+                                <option value="">请选择一份资料</option>
+                                <option
+                                    v-for="source in sources"
+                                    :key="source.id"
+                                    :value="source.id"
+                                >
+                                    {{ source.title }}
+                                </option>
+                            </select>
+                            <p v-if="chosenSource">{{ chosenSource.title }}</p>
+                            <nav
+                                v-if="chosenSource"
+                                class="report-source-history"
+                                aria-label="所选来源历史与快照"
+                            >
+                                <navigation-button
+                                    :to="sourceHistoryLink(chosenSource.id)"
+                                    icon="library"
+                                    >查看来源历史</navigation-button
+                                >
+                                <navigation-button
+                                    v-for="evidence in chosenSnapshots"
+                                    :key="evidence.snapshotId"
+                                    :to="sourceHistoryLink(evidence.sourceId, evidence.snapshotId)"
+                                    >查看保存快照（{{ evidence.observedAt }}）</navigation-button
+                                >
+                            </nav>
+                            <bookmark-action
+                                v-if="chosenSource"
+                                :key="`${accountId}-${report.id}-${chosenSource.id}`"
+                                :source-id="chosenSource.id"
+                                :report-id="report.id"
+                            />
+                        </section>
+                    </tool-section>
+                </section>
+                <section v-if="report" class="report-baseline" aria-label="历史变化与比较基线">
+                    <report-changes :report="report" />
+                </section>
+            </div>
         </div>
     </div>
 </template>
@@ -218,6 +229,7 @@ import FeedbackEffects from '@/components/reports/FeedbackEffects.vue';
 import BookmarkAction from '@/components/library/BookmarkAction.vue';
 import NotesPanel from '@/components/library/NotesPanel.vue';
 import ReportQuestions from '@/components/reports/ReportQuestions.vue';
+import ReportChanges from '@/components/reports/ReportChanges.vue';
 import {
     bookmarkOrigin,
     bookmarksPending,
@@ -340,9 +352,7 @@ const renderers = {
     research_report: ResearchReport,
 };
 const renderer = computed(() => renderers[selectedFormat.value ?? 'brief']);
-const changesTarget = computed(() =>
-    selectedFormat.value === 'comparison' ? 'comparison-title' : 'report-changes-title',
-);
+const changesTarget = 'report-changes-title';
 watch(
     routeIdentity,
     () => {
@@ -367,8 +377,12 @@ async function openConversation() {
     (input ?? target)?.focus({ preventScroll: true });
     target?.scrollIntoView({ block: 'start', behavior: 'auto' });
 }
-function jump(event: MouseEvent, id: string) {
+async function jump(event: MouseEvent, id: string) {
     event.preventDefault();
+    if (id === changesTarget) {
+        readingOnly.value = false;
+        await nextTick();
+    }
     const target = detail.value?.querySelector<HTMLElement>(`#${CSS.escape(id)}`);
     if (!target) return;
     target.tabIndex = -1;
@@ -467,8 +481,32 @@ async function retry() {
     min-inline-size: 0;
 }
 .report-content,
+.report-sidebar,
+.report-baseline,
 .report-companion {
     min-inline-size: 0;
+}
+.report-sidebar {
+    display: grid;
+    gap: 1rem;
+    align-content: start;
+}
+.report-baseline {
+    padding: 1rem;
+    border: 0.0625rem solid var(--scova-border);
+    border-radius: 0.875rem;
+    background: var(--scova-surface);
+}
+.report-baseline :deep(.report-changes) {
+    padding: 0;
+    border: 0;
+}
+.report-baseline :deep(.change-sides) {
+    grid-template-columns: minmax(0, 1fr);
+}
+.report-baseline :deep(.comparison-summary) {
+    padding: 0.75rem 0;
+    border-inline-start: 0;
 }
 .report-content {
     padding: clamp(1rem, 2vw, 2rem);
@@ -611,6 +649,7 @@ select:disabled {
 }
 @media (max-width: 39.999rem) {
     .report-content,
+    .report-baseline,
     .report-companion {
         padding: 0.5rem;
     }
