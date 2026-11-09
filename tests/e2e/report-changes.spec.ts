@@ -246,9 +246,11 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
             await noOverflow(page);
             const old = (await record(page).locator('.old-side').boundingBox())!;
             const current = (await record(page).locator('.new-side').boundingBox())!;
-            if (width <= 390) expect(current.y).toBeGreaterThan(old.y + old.height);
-            if (!enlarged && width >= 1024)
-                expect(Math.abs(current.y - old.y)).toBeLessThanOrEqual(1);
+            // The production report keeps the comparison baseline in the right
+            // sidebar and stacks each side vertically, even when the viewport
+            // is wide. This leaves the question/answer area compact while
+            // keeping both citations readable and independently expandable.
+            if (!enlarged) expect(current.y).toBeGreaterThanOrEqual(old.y + old.height - 1);
             await panel(page).scrollIntoViewIfNeeded();
             await screenshot(
                 page,
