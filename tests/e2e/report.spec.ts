@@ -193,7 +193,7 @@ for (const width of [320, 1440]) {
     }
 }
 
-test('报告正文优先完整展示，后续操作位于正文之后，快捷跳转仍聚焦正文', async ({ page }) => {
+test('报告交付物优先，宽屏并排对话、窄屏正文在前，保留原运行日志入口', async ({ page }) => {
     await samples(page);
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto(reportPath);
@@ -202,8 +202,10 @@ test('报告正文优先完整展示，后续操作位于正文之后，快捷�
     expect(main!.width).toBeGreaterThan(1300);
     const content = await page.locator('.report-content').boundingBox();
     const companion = await page.locator('.report-companion').boundingBox();
-    expect(companion!.y).toBeGreaterThanOrEqual(content!.y + content!.height);
-    await expect(page.getByRole('heading', { name: '阅读后继续', exact: true })).toBeVisible();
+    expect(companion!.x).toBeGreaterThanOrEqual(content!.x + content!.width);
+    expect(Math.abs(companion!.y - content!.y)).toBeLessThan(1);
+    expect(content!.width).toBeGreaterThan(companion!.width * 1.5);
+    await expect(page.getByRole('heading', { name: '对话与后续研究', exact: true })).toBeVisible();
     await expect(page.getByRole('link', { name: '执行详情', exact: true })).toHaveAttribute(
         'href',
         `/runs/${id(3)}`,
@@ -227,6 +229,48 @@ test('报告正文优先完整展示，后续操作位于正文之后，快捷�
         await expect(section.locator('.report-bookmarks')).toBeHidden();
         expect((await section.boundingBox())!.width).toBeLessThanOrEqual(width);
     }
+});
+
+test('专注阅读与对话定位保留问题和笔记草稿，切换不发起研究请求', async ({ page }) => {
+    const state = await formatSamples(page);
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto(reportPath);
+    const question = page.getByLabel('问题', { exact: true });
+    await page.getByRole('button', { name: '总结主要发现', exact: true }).click();
+    await expect(question).toHaveValue('请总结这份报告的主要发现。');
+    await expect(question).toBeFocused();
+    await question.fill('阅读模式切换时保留的问题');
+    await page.locator('.notes-tool > summary').click();
+    await page.getByRole('button', { name: '新建笔记', exact: true }).click();
+    const draft = page.getByLabel('本地笔记正文', { exact: true });
+    await draft.fill('阅读模式切换时保留的笔记');
+    const editor = await page.locator('.note-editor').elementHandle();
+    const questions = await page.locator('.questions').elementHandle();
+    const focus = page.getByRole('button', { name: '专注阅读', exact: true });
+    await focus.click();
+    await expect(page.locator('.report-companion')).toBeHidden();
+    await expect(page.getByRole('region', { name: '报告交付物' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '显示对话', exact: true })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+    );
+    await page.getByRole('button', { name: '围绕报告提问', exact: true }).click();
+    await expect(question).toBeFocused();
+    await expect(question).toHaveValue('阅读模式切换时保留的问题');
+    await expect(draft).toHaveValue('阅读模式切换时保留的笔记');
+    expect(await editor!.evaluate((element) => element.isConnected)).toBe(true);
+    expect(await questions!.evaluate((element) => element.isConnected)).toBe(true);
+    await page.setViewportSize({ width: 320, height: 844 });
+    await page.getByRole('button', { name: '专注阅读', exact: true }).click();
+    await expect(question).toBeHidden();
+    await page.getByRole('button', { name: '围绕报告提问', exact: true }).click();
+    await expect(question).toBeFocused();
+    await expect(draft).toHaveValue('阅读模式切换时保留的笔记');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+    );
+    expect(state.calls.filter((entry) => entry.method !== 'GET')).toEqual([]);
+    expect(state.unexpected).toEqual([]);
 });
 
 test.beforeAll(async ({ browser }) => {
