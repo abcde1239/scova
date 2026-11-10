@@ -36,7 +36,7 @@ import {
 } from '@scova/agent-core';
 import {
     createConnectorBundle,
-    createPageReader,
+    createHttpPageReader as createPageReader,
     ConnectorError,
     type ConnectorBundle,
     type StructuredInput,

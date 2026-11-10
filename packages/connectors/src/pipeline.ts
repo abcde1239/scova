@@ -1,8 +1,11 @@
 import { Ajv } from 'ajv';
 import type { SafeHttpClient } from './http.ts';
 import { createTavilySearch, createModelProvider } from './providers.ts';
-import { createPageReader, pageFingerprint } from './reader.ts';
+import { pageFingerprint } from './reader.ts';
+import { createPageReader } from './browser-reader.ts';
 import { createSearxngSearch } from './searxng.ts';
+import { createSearchApi, type SearchApiOptions } from './search-api.ts';
+import { createModelSearch, type ModelSearchProtocol } from './model-search.ts';
 import { ConnectorError } from './types.ts';
 import type { ModelProtocol } from './model-protocol.ts';
 import type {
@@ -27,35 +30,70 @@ export interface ConnectorBundle {
 export function createConnectorBundle(
     options: {
         tavilyApiKey?: string;
-        searchProvider?: 'searxng' | 'tavily';
+        searchProvider?: 'searxng' | 'tavily' | 'api';
+        searchApi?: SearchApiOptions;
         searxngBaseUrl?: string;
         managedSearch?: boolean;
         modelApiKey?: string;
         model?: string;
         modelBaseUrl?: string;
         modelProtocol?: ModelProtocol;
+        modelSearch?: ModelSearchProtocol | 'disabled';
         http?: SafeHttpClient;
     } = {},
 ): ConnectorBundle {
     const searchProvider = options.searchProvider ?? 'searxng';
-    if (searchProvider !== 'searxng' && searchProvider !== 'tavily')
+    const modelSearch = options.modelSearch === 'disabled' ? undefined : options.modelSearch;
+    if (!['searxng', 'tavily', 'api'].includes(searchProvider))
         throw new ConnectorError('configuration', '搜索服务选项无效');
+    if (!modelSearch && searchProvider === 'api' && !options.searchApi)
+        throw new ConnectorError('configuration', '搜索 API 未配置');
     if (
-        (searchProvider === 'searxng' || options.tavilyApiKey?.trim()) &&
+        (options.modelSearch === 'anthropic_web_search' &&
+            options.modelProtocol !== 'anthropic_messages') ||
+        (options.modelSearch === 'openai_responses' &&
+            options.modelProtocol &&
+            !['openai_chat_completions', 'openai_json'].includes(options.modelProtocol))
+    )
+        throw new ConnectorError('configuration', '内置搜索与模型协议不匹配');
+    const nativeSearch = modelSearch
+        ? createModelSearch({
+              protocol: modelSearch,
+              model: options.model ?? '',
+              baseUrl: options.modelBaseUrl ?? 'https://api.openai.com/v1',
+              apiKey: options.modelApiKey ?? '',
+              http: options.http,
+          })
+        : undefined;
+    const apiSearch =
+        !nativeSearch && searchProvider === 'api'
+            ? createSearchApi({
+                  ...options.searchApi!,
+                  http: options.searchApi!.http ?? options.http,
+                  maxResults: options.managedSearch ? 10 : options.searchApi!.maxResults,
+              })
+            : undefined;
+    if (
+        (nativeSearch ||
+            searchProvider === 'searxng' ||
+            apiSearch ||
+            options.tavilyApiKey?.trim()) &&
         options.modelApiKey?.trim() &&
         options.model?.trim()
     ) {
         return {
             mode: 'live',
             search:
-                searchProvider === 'searxng'
+                nativeSearch ??
+                apiSearch ??
+                (searchProvider === 'searxng'
                     ? createSearxngSearch({
                           baseUrl: options.searxngBaseUrl,
                           http: options.http,
                           maxResults: options.managedSearch ? 10 : undefined,
                           maxAttempts: options.managedSearch ? 1 : undefined,
                       })
-                    : createTavilySearch({ apiKey: options.tavilyApiKey!, http: options.http }),
+                    : createTavilySearch({ apiKey: options.tavilyApiKey!, http: options.http })),
             reader: createPageReader({ http: options.http }),
             model: createModelProvider({
                 apiKey: options.modelApiKey,

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vite-plus/test';
 import {
     assessPublication,
-    createPageReader,
+    createHttpPageReader as createPageReader,
     createSafeHttpClient,
     validatePublication,
     type HttpTransport,

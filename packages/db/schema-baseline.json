@@ -16,6 +16,14 @@
         {
             "name": "0003_research_events",
             "hash": "e5ffb2c67e47a2e06afdff5f3c4e5506ec7697013d20a381bbff986d82045d27"
+        },
+        {
+            "name": "0004_magenta_slyde",
+            "hash": "ec80fbb2ad365c888af666f8314b8de9f2c27aaea683105def36e33e29a73883"
+        },
+        {
+            "name": "0005_fresh_iron_patriot",
+            "hash": "be7837bb3a60e664cea4595ad0ced0beb1670ed15a08898252ee88193d90bc75"
         }
     ],
     "signature": {
@@ -338,6 +346,17 @@
                 "identity": "",
                 "generated": "",
                 "collation": null
+            },
+            {
+                "table_name": "agent_providers",
+                "name": "web_search",
+                "position": 12,
+                "type": "text",
+                "not_null": true,
+                "default_value": "'disabled'::text",
+                "identity": "",
+                "generated": "",
+                "collation": "default"
             },
             {
                 "table_name": "baselines",
@@ -2989,6 +3008,17 @@
                 "identity": "",
                 "generated": "",
                 "collation": null
+            },
+            {
+                "table_name": "users",
+                "name": "avatar_version",
+                "position": 8,
+                "type": "uuid",
+                "not_null": false,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
             }
         ],
         "enums": [
@@ -3309,6 +3339,13 @@
                 "name": "agent_provider_revision_positive",
                 "type": "c",
                 "definition": "CHECK (revision > 0)",
+                "validated": true
+            },
+            {
+                "table_name": "agent_providers",
+                "name": "agent_provider_web_search_valid",
+                "type": "c",
+                "definition": "CHECK (web_search = 'disabled'::text OR web_search = 'openai_responses'::text AND (protocol = ANY (ARRAY['openai_chat_completions'::text, 'openai_json'::text])) OR web_search = 'anthropic_web_search'::text AND protocol = 'anthropic_messages'::text)",
                 "validated": true
             },
             {

@@ -76,7 +76,15 @@ export interface SearchCoverage {
 export interface SearchResponse {
     kind: 'search_results';
     mode: 'live' | 'demo';
-    provider: 'searxng' | 'tavily' | 'demo';
+    provider:
+        | 'searxng'
+        | 'tavily'
+        | 'deepseek'
+        | 'perplexity'
+        | 'openai_responses'
+        | 'anthropic_web_search'
+        | 'demo';
+    usage?: ModelResponse['usage'];
     query: string;
     searchedAt: string;
     results: SearchResult[];
@@ -142,10 +150,13 @@ export interface ModelResponse<T = unknown> {
 }
 
 export interface SearchProvider {
+    /** Conservative per-physical-request token reservation for model-backed search. */
+    tokenReservation?: Readonly<{ inputTokens: number; outputTokens: number }>;
     search(query: string, context?: CallContext): Promise<SearchResponse>;
 }
 
 export interface PageReader {
+    close?(): Promise<void>;
     read(url: string, context?: CallContext): Promise<ReadPage>;
 }
 

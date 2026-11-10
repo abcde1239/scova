@@ -326,7 +326,7 @@ describe('Drizzle SQL 迁移与旧库无损接管', () => {
                         table: tablename,
                         data: (
                             await client.query(
-                                `SELECT md5(coalesce(jsonb_agg(to_jsonb(t) ORDER BY id)::text,'[]')) AS hash,count(*)::int AS count FROM "${tablename}" t`,
+                                `SELECT md5(coalesce(jsonb_agg(${tablename === 'users' ? "to_jsonb(t) - 'avatar_version'" : 'to_jsonb(t)'} ORDER BY id)::text,'[]')) AS hash,count(*)::int AS count FROM "${tablename}" t`,
                             )
                         ).rows[0],
                     });
@@ -339,7 +339,11 @@ describe('Drizzle SQL 迁移与旧库无损接管', () => {
             expect(
                 after.filter((row) => before.some((previous) => previous.table === row.table)),
             ).toEqual(before);
-            // New migrations may add tables, while every pre-existing table must remain identical.
+            expect(
+                (await client.query('SELECT avatar_version FROM users WHERE id=$1', [user])).rows[0]
+                    .avatar_version,
+            ).toBeNull();
+            // Original column values remain identical; new avatar references start at NULL.
             expect(
                 after.filter((row) => !before.some((previous) => previous.table === row.table)),
             ).toEqual([

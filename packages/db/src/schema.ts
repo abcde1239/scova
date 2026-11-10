@@ -112,6 +112,7 @@ export const users = pgTable(
         email: text('email').notNull(),
         normalizedEmail: text('normalized_email').notNull(),
         passwordHash: text('password_hash').notNull(),
+        avatarVersion: uuid('avatar_version'),
         defaultTimezone: text('default_timezone').notNull().default('UTC'),
         notificationPreference: jsonb('notification_preference')
             .$type<JsonValue>()
@@ -143,6 +144,10 @@ export const agentProviders = pgTable(
             .notNull()
             .default('openai_chat_completions'),
         encryptedApiKey: text('encrypted_api_key').notNull(),
+        webSearch: text('web_search')
+            .$type<'disabled' | 'openai_responses' | 'anthropic_web_search'>()
+            .notNull()
+            .default('disabled'),
         active: boolean('active').notNull().default(false),
         draftActive: boolean('draft_active').notNull().default(false),
         revision: integer('revision').notNull().default(1),
@@ -159,6 +164,10 @@ export const agentProviders = pgTable(
             .on(table.userId)
             .where(sql`${table.draftActive} = true`),
         check('agent_provider_revision_positive', sql`${table.revision} > 0`),
+        check(
+            'agent_provider_web_search_valid',
+            sql`${table.webSearch} = 'disabled' OR (${table.webSearch} = 'openai_responses' AND ${table.protocol} IN ('openai_chat_completions', 'openai_json')) OR (${table.webSearch} = 'anthropic_web_search' AND ${table.protocol} = 'anthropic_messages')`,
+        ),
     ],
 );
 

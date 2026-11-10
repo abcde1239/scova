@@ -20,8 +20,8 @@ flowchart LR
   Queue --> Worker
   Worker --> Graph[LangGraph.js Agent]
   Graph --> CP[(PostgreSQL checkpoints)]
-  Graph --> Search[SearxNG / 显式可选 Tavily]
-  Graph --> Reader[安全抓取 / Readability]
+  Graph --> Search[SearxNG / 独立搜索 API / 授权模型搜索]
+  Graph --> Reader[安全 HTTP / Crawlee + Playwright / Readability]
   Graph --> Model[可配置模型适配器]
   Graph -->|结构化候选成果| Worker
 ```
@@ -30,16 +30,18 @@ API、worker 分别作为两个进程，PostgreSQL 和 Redis 是唯一首版基�
 
 ## 2. 工作区与职责
 
-| 目标目录            | 职责                                                                        | 依赖方向                                                 |
-| ------------------- | --------------------------------------------------------------------------- | -------------------------------------------------------- |
-| apps/web            | Vue 3、Router、Pinia、TanStack Vue Query、UnoCSS、naive-ui；页面与 SSE 订阅 | models                                                   |
-| apps/server         | 认证、资源授权、任务版本、执行命令、报告/资料管理、事件读取                 | models、db                                               |
-| apps/worker         | 调度器、outbox dispatcher、BullMQ worker、租约、交付事务                    | models、db、agent-core、connectors                       |
-| packages/models     | 可运行时校验的请求/响应、事件版本、枚举与错误码；不暴露 ORM 实体            | 不依赖应用                                               |
-| packages/shared     | Server/Worker 共用的纯调度计算与执行范围指纹                                | 不依赖应用                                               |
-| packages/db         | Drizzle 表与关系、迁移与服务端客户端；反馈持久化子入口                      | 不依赖应用；反馈投影使用 models                          |
-| packages/agent-core | LangGraph 状态图、有限研究策略、候选和原文引用校验                          | models、connectors 类型、LangGraph；不使用 Elysia/BullMQ |
-| packages/connectors | 默认 SearxNG、可选 Tavily、HTTP 抓取、Readability 和演示数据适配器          | 向 agent-core 提供工具接口                               |
+| 目标目录                | 职责                                                                        | 依赖方向                                                 |
+| ----------------------- | --------------------------------------------------------------------------- | -------------------------------------------------------- |
+| apps/web                | Vue 3、Router、Pinia、TanStack Vue Query、UnoCSS、naive-ui；页面与 SSE 订阅 | models                                                   |
+| apps/server             | 认证、资源授权、任务版本、执行命令、报告/资料管理、事件读取                 | models、db                                               |
+| apps/worker             | 调度器、outbox dispatcher、BullMQ worker、租约、交付事务                    | models、db、agent-core、connectors                       |
+| packages/models         | 可运行时校验的请求/响应、事件版本、枚举与错误码；不暴露 ORM 实体            | 不依赖应用                                               |
+| packages/shared         | Server/Worker 共用的纯调度计算与执行范围指纹                                | 不依赖应用                                               |
+| packages/db             | Drizzle 表与关系、迁移与服务端客户端；反馈持久化子入口                      | 不依赖应用；反馈投影使用 models                          |
+| packages/agent-core     | LangGraph 状态图、有限研究策略、候选和原文引用校验                          | models、connectors 类型、LangGraph；不使用 Elysia/BullMQ |
+| packages/connectors     | SearxNG、显式搜索 API/授权模型搜索、HTTP 抓取与 Readability                 | 向 agent-core 提供工具接口                               |
+| packages/object-storage | R2 / S3 通用文件、目录作用域、大小与 MIME 策略、对象管理和签名 URL          | 官方 AWS S3 SDK；不依赖应用                              |
+| packages/image-storage  | JPEG/PNG/GIF/WebP 图片校验与扩展名，供 API 账号头像复用                     | @scova/object-storage                                    |
 
 API 不负责执行长任务，worker 不提供账号管理入口；Agent 没有通用 SQL、文件系统或任意脚本工具。`packages/db/src/schema.ts` 与 `packages/db/drizzle` 维护业务结构和迁移；Server/Worker 从 `@scova/db` 引用持久化类型，公开接口仍使用 `@scova/models`。
 
@@ -141,13 +143,13 @@ LangGraph checkpointer 使用 PostgreSQL，实现时在适配层验证 Bun 兼�
 
 状态保存 run/version、owner 上下文引用、基线、反馈快照、检索计划、证据 ID、调用账本摘要、候选结论、coverage 与错误；不把整个历史网页反复塞入模型上下文。图输入只接受服务器加载的数据，禁止客户端指定 owner、checkpoint namespace 或任意工具参数。
 
-| 接口                             | 首个实现                                    | 约束                                                        |
-| -------------------------------- | ------------------------------------------- | ----------------------------------------------------------- |
-| SearchProvider.search            | 默认 SearxNG；Tavily 显式可选               | 结构化候选 URL、标题、片段、引擎与覆盖缺口；请求有超时/限额 |
-| PageReader.read                  | HTTP + jsdom + Readability                  | HTML 限长 2 MiB、正文限长、每次请求最多 15 秒，保留抓取状态 |
-| ModelProvider.generateStructured | 部署者配置的兼容模型服务                    | 通过适配层映射 structured output、usage、AbortSignal 与错误 |
-| EvidenceRepository               | worker 注入的受限领域接口                   | 仅当前用户、当前 Run；不暴露数据库客户端                    |
-| CheckpointAdapter                | LangGraph PostgreSQL saver + epoch 引用提升 | 实验验证恢复协议，运行迁移与连接池限制                      |
+| 接口                             | 首个实现                                           | 约束                                                                                                                                       |
+| -------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| SearchProvider.search            | 默认 SearxNG；独立 API 或授权模型搜索              | 结构化候选与覆盖缺口；模型搜索同时预留/结算 Token，候选不等于证据                                                                          |
+| PageReader.read                  | Crawlee PlaywrightCrawler + Chromium + Readability | 主 HTML 先经安全 HTTP 跟随重定向，隔离浏览器执行 JavaScript；15 秒 deadline、单资源 2 MiB/总资源 8 MiB/32 请求、只读公网 GET，保留抓取状态 |
+| ModelProvider.generateStructured | 部署者配置的兼容模型服务                           | 通过适配层映射 structured output、usage、AbortSignal 与错误                                                                                |
+| EvidenceRepository               | worker 注入的受限领域接口                          | 仅当前用户、当前 Run；不暴露数据库客户端                                                                                                   |
+| CheckpointAdapter                | LangGraph PostgreSQL saver + epoch 引用提升        | 实验验证恢复协议，运行迁移与连接池限制                                                                                                     |
 
 新任务默认每次 10 次搜索、20 次网页读取、10 分钟，累计输入 1,000,000 token、输出 128,000 token。部署允许时长最多 1,800 秒、累计输入 2,000,000／输出 512,000 token；单次综合输入最多 256,000，首次输出最多 32,000、修复重试最多 64,000 token。规划首次输出最多 4,000；比较以输出总额的六分之一、最多 24,000 token 为分批基数，首次与修复按实际页数分配；小预算按比例缩减。比较输入按累计输入预算的 30%、最多 192,000 token 分批，综合按 60%、单次最多 256,000 token 分配；模型输出及修复仍共用累计上限。每次模型调用先预留估算输入和最大输出 token，最终按 usage 结算；供应商不返回 usage 时使用保守预留并标为估算。提示词/结构化修复调用同样计费和计入限制。恢复/重试不得绕过限制，预算修改只影响新版本。时间预算到达后停止所有外部调用，仅允许从已存证据用确定性模板交付 partial（无证据则 failed），不得再启动模型综合；用户取消则不交付。综合失败的 partial 使用明确的未归纳说明与原文引用，不以截断正文冒充简报。
 

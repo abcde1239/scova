@@ -161,7 +161,9 @@ function reservation(input: AgentReservationInput): Usage {
     if (
         reserved.searches !== expectedSearches ||
         reserved.pages !== expectedPages ||
-        (input.tool !== 'model' && (reserved.inputTokens !== 0 || reserved.outputTokens !== 0)) ||
+        (input.tool === 'read' && (reserved.inputTokens !== 0 || reserved.outputTokens !== 0)) ||
+        (input.tool === 'search' &&
+            (reserved.inputTokens === 0) !== (reserved.outputTokens === 0)) ||
         (input.tool === 'model' && (reserved.inputTokens < 1 || reserved.outputTokens < 1))
     )
         throw new AgentPersistenceError('INVALID_TOOL_CALL');
@@ -282,13 +284,12 @@ export function createAgentRepository(db: DatabaseClient, token: RunLeaseToken):
                     };
                 // A confirmed billing failure is Run-local and survives lost checkpoints/epochs.
                 // Successful earlier operations remain replayable; a new Run starts unblocked.
-                if (input.tool === 'model') {
+                if (input.tool === 'model' || reserved.inputTokens > 0) {
                     const blocked = await tx.query.runEvents.findFirst({
                         where: and(
                             eq(dbRunEvents.runId, run.id),
                             eq(dbRunEvents.userId, run.userId),
                             eq(dbRunEvents.type, 'tool.failed'),
-                            sql`${dbRunEvents.payload}->>'tool' = 'model'`,
                             sql`${dbRunEvents.payload}->>'code' = 'TOOL_MODEL_QUOTA_EXCEEDED'`,
                         ),
                     });

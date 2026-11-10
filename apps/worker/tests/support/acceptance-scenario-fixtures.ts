@@ -1,5 +1,5 @@
 import {
-    createPageReader,
+    createHttpPageReader as createPageReader,
     type CallContext,
     type ConnectorBundle,
     type StructuredInput,

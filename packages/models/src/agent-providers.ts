@@ -2,6 +2,16 @@ import { Type, type Static } from '@sinclair/typebox';
 import { InstantSchema, UuidSchema } from './common.ts';
 
 const ProviderFields = {
+    webSearch: Type.Optional(
+        Type.Union(
+            [
+                Type.Literal('disabled'),
+                Type.Literal('openai_responses'),
+                Type.Literal('anthropic_web_search'),
+            ],
+            { description: '研究搜索授权；省略时创建默认关闭，更新保留原值' },
+        ),
+    ),
     protocol: Type.Union(
         [
             Type.Literal('openai_chat_completions'),

@@ -64,6 +64,9 @@
                             <div class="provider-meta">
                                 <span>{{ protocolLabel(provider.protocol) }}</span
                                 ><span><app-icon name="confirm" />密钥已保存</span>
+                                <span v-if="provider.webSearch && provider.webSearch !== 'disabled'"
+                                    >内置搜索已允许</span
+                                >
                             </div>
                             <provider-balance
                                 :provider="provider"

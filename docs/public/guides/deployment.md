@@ -10,7 +10,7 @@
 2. 执行 `docker compose up --build -d`，再用 `docker compose ps` 查看健康状态。
 3. 默认只绑定 `127.0.0.1:8080`。打开 `http://localhost:8080/tasks` 访问工作台。`GET /health` 是 API 存活检查；API/Worker 容器健康检查另外核验 PostgreSQL、Redis、全部业务迁移和 saver 版本，代理健康检查验证 Web 入口可读。Worker 还必须持续更新就绪心跳。
 
-`Dockerfile` 的 `build` 阶段在 Linux 内安装锁定依赖并运行全部工作区构建；`web` 目标从 `apps/web/dist` 复制静态产物，Compose 的 `proxy` 服务使用该目标，`runtime` 目标保留 API/Worker/维护工具。构建不从宿主机复制 dist 或 node_modules，也不将后端模型凭据作为前端构建参数。更新源码后执行 `docker compose up --build -d` 才会重新构建 Web 资源。
+`Dockerfile` 的 `build` 阶段在 Linux 内安装锁定依赖并运行全部工作区构建；`web` 目标从 `apps/web/dist` 复制静态产物，Compose 的 `proxy` 服务使用该目标，`runtime` 目标保留 API/维护工具，`worker-runtime` 额外安装锁定版本 Chromium 及系统依赖。构建不从宿主机复制 dist 或 node_modules，也不将后端模型凭据作为前端构建参数。更新源码后执行 `docker compose up --build -d` 才会重新构建 Web 资源。
 
 启动先执行一次性 `migrate` 服务。Drizzle 业务迁移和 LangGraph saver 迁移均成功后，API/Worker 才启动。迁移服务再次运行时若核验当前全部版本已齐，仅返回只读的 current 结果；需要 DDL 时仍要求 API/Worker 已停止。容器中的 `AGENT_CHECKPOINT_MIGRATION=external` 禁止 Worker 自动建表；本地开发默认保留启动时初始化 saver 的行为。升级前先使用旧版本镜像完成备份并验证恢复；保持应用停止，再构建新镜像、执行迁移并启动：
 
@@ -24,6 +24,8 @@ docker compose up -d
 从 Prisma 版本首次升级时，新镜像的备份命令要求原生迁移账本已经存在，因此升级前备份须由旧镜像执行。迁移会核验旧账本与完整物理结构后接管，保留业务数据和历史账本。失败时保持应用停止并检查原因。仅在新版本尚未写入且旧版本结构兼容时才考虑回退镜像；恢复备份会丢弃恢复点后的数据，必须先评估并保存新增数据。
 
 API/Worker 与 Web 代理均由非 root 用户运行，只读根文件系统和临时 `/tmp`；PostgreSQL 与 Redis 使用独立持久卷，Redis 开启 AOF/everysec。仅代理发布端口，数据库、队列和搜索均在 Compose 网络内部。正常 `docker compose down` 保留数据；不要使用 `down -v` 作为升级或恢复步骤。
+
+Compose 的 Worker 使用 `worker-runtime` 镜像、256 MiB `/dev/shm` 和 1536 MiB 内存上限；容器默认 `READER_CHROMIUM_SANDBOX=false`，安全边界由非 root、只读根文件系统、cap drop 和 no-new-privileges 提供。Reader 仅处理非交互公网页面，执行 JavaScript 生成 DOM，但阻止写请求、凭据、下载、WebSocket、service worker 和二次导航；单次读取最多 15 秒、总资源 8 MiB。需要额外 Chromium sandbox 时可设置 `READER_CHROMIUM_SANDBOX=true`，并先在目标内核上受控验证。
 
 新执行统一进行真实研究。通过 `POST /api/v1/auth/register` 或 `/auth/login` 获取会话与 `csrfToken`，后续写请求携带同源 `Origin`、Cookie 和 `x-csrf-token`；先保存完整任务配置，再以 `{}` 或 `{ "mode": "live" }` 创建 Run。缺少必要搜索或模型配置时执行明确失败，草稿仍可手工编辑。完整配置及接口见 [契约](../reference/contracts.md) 与 [API](../reference/api.md)。
 
@@ -45,7 +47,7 @@ SearxNG 是固定镜像、非 root 的可选服务。设置随机 `SEARXNG_SECRE
 docker compose --profile live-search up -d
 ```
 
-设置 `MODEL_API_KEY`、`MODEL_NAME` 和必要的 `MODEL_BASE_URL` 作为部署默认模型，或配置 `AGENT_CREDENTIAL_KEY` 后让各账号在界面添加个人供应商，详见[Agent 配置](agent-configuration.md)。加密主密钥在 Server/Worker 中必须一致，并独立备份。容器使用 `http://searxng:8080`，不使用宿主机的 localhost。默认搜索渠道始终为 SearxNG；仅显式设置 `SEARCH_PROVIDER=tavily` 并提供 `TAVILY_API_KEY` 时使用 Tavily。手动、重试和调度统一创建 live 执行，旧 `WORKER_SCHEDULED_RUN_MODE` 已移除，设置该变量不再改变调度行为。缺凭据或调用失败不会从 live 静默切成演示、付费渠道或其他供应商。真实烟测单独 opt-in，未执行时应记录“未执行”，不能用 fixture 通过冒充真实服务成功。
+设置 `MODEL_API_KEY`、`MODEL_NAME` 和必要的 `MODEL_BASE_URL` 作为部署默认模型，或配置 `AGENT_CREDENTIAL_KEY` 后让各账号在界面添加个人供应商，详见[Agent 配置](agent-configuration.md)。加密主密钥在 Server/Worker 中必须一致，并独立备份。容器使用 `http://searxng:8080`，不使用宿主机的 localhost。默认搜索渠道为 SearxNG；可显式配置 Tavily、DeepSeek/Perplexity 独立搜索 API，或在账号供应商设置中允许 OpenAI/Anthropic 内置搜索，见[搜索说明](search.md)。手动、重试和调度统一创建 live 执行，旧 `WORKER_SCHEDULED_RUN_MODE` 已移除，设置该变量不再改变调度行为。缺凭据或调用失败不会从 live 静默切成演示、付费渠道或其他供应商。真实烟测单独 opt-in，未执行时应记录“未执行”，不能用 fixture 通过冒充真实服务成功。
 
 ## 维护窗口
 

@@ -12,9 +12,11 @@
         "check": "vp check"
     },
     "dependencies": {
+        "@crawlee/playwright": "catalog:",
         "@mozilla/readability": "catalog:",
         "ajv": "catalog:",
-        "jsdom": "catalog:"
+        "jsdom": "catalog:",
+        "playwright": "catalog:"
     },
     "devDependencies": {
         "@types/jsdom": "catalog:",

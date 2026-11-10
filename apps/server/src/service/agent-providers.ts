@@ -18,6 +18,21 @@ import { createAgentProviderRepo } from '@/repo/agent-providers';
 import { ApiError } from '@/utils/errors';
 
 type ProviderRow = Awaited<ReturnType<ReturnType<typeof createAgentProviderRepo>['list']>>[number];
+export function providerWebSearch(
+    protocol: AgentProvider['protocol'],
+    search: NonNullable<AgentProvider['webSearch']>,
+) {
+    if (
+        search === 'disabled' ||
+        (search === 'openai_responses' &&
+            ['openai_chat_completions', 'openai_json'].includes(protocol)) ||
+        (search === 'anthropic_web_search' && protocol === 'anthropic_messages')
+    )
+        return search;
+    throw new ApiError(422, 'VALIDATION_ERROR', '内置搜索与接口协议不匹配', [
+        { path: '/webSearch', message: '请选择当前接口支持的搜索方式，或关闭内置搜索' },
+    ]);
+}
 export function providerDto(row: ProviderRow): AgentProvider {
     return {
         id: row.id,
@@ -29,6 +44,7 @@ export function providerDto(row: ProviderRow): AgentProvider {
         revision: row.revision,
         hasApiKey: true,
         protocol: row.protocol,
+        webSearch: row.webSearch,
         updatedAt: row.updatedAt.toISOString(),
     };
 }
@@ -280,6 +296,7 @@ export function createAgentProviderService(services: ApiServices) {
                         baseUrl,
                         model: input.model,
                         protocol: input.protocol,
+                        webSearch: providerWebSearch(input.protocol, input.webSearch ?? 'disabled'),
                         encryptedApiKey,
                         updatedAt: services.clock(),
                     }),
@@ -299,6 +316,10 @@ export function createAgentProviderService(services: ApiServices) {
                         baseUrl,
                         model: input.model,
                         protocol: input.protocol,
+                        webSearch: providerWebSearch(
+                            input.protocol,
+                            input.webSearch ?? row.webSearch,
+                        ),
                         ...(input.apiKey
                             ? { encryptedApiKey: sealCredential(input.apiKey, userId, id) }
                             : {}),

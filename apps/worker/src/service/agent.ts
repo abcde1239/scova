@@ -11,6 +11,7 @@ import { Redis } from 'ioredis';
 import { createSearchStateRepository } from '@/repo/search.ts';
 import { createManagedSearch } from '@/service/search.ts';
 import { searchScope } from '@/utils/search-scope.ts';
+import { readSearchConfig } from '@/app/search-config.ts';
 import {
     runResearchAgent,
     deterministicPartial,
@@ -232,7 +233,9 @@ export function createAgentSession({
         let attempts = 0;
         try {
             const remaining = Math.min(
-                tool === 'model' ? MODEL_CALL_TIMEOUT_MS : 15_000,
+                tool === 'model' || (tool === 'search' && bundle.search.tokenReservation)
+                    ? MODEL_CALL_TIMEOUT_MS
+                    : 15_000,
                 context.deadlineAt.getTime() - Date.now(),
             );
             if (remaining <= 0) throw new ConnectorError('timeout', '时间预算已耗尽');
@@ -282,7 +285,9 @@ export function createAgentSession({
             const actualUsage =
                 tool === 'model'
                     ? { ...emptyUsage(), ...(result as ModelResponse).usage }
-                    : reserved;
+                    : tool === 'search' && bundle.search.tokenReservation
+                      ? { ...reserved, ...(result as SearchResponse).usage }
+                      : reserved;
             const settled = await repository.settle({
                 toolCallId: held.toolCallId,
                 output: result,
@@ -308,7 +313,7 @@ export function createAgentSession({
                 operationKey,
                 'search',
                 query,
-                { ...emptyUsage(), searches: 1 },
+                { ...emptyUsage(), ...bundle.search.tokenReservation, searches: 1 },
                 (options) => bundle.search.search(query, options),
                 (response) => {
                     if (
@@ -319,6 +324,24 @@ export function createAgentSession({
                         !response.coverage
                     )
                         throw new AgentPersistenceError('INVALID_TOOL_RESULT');
+                    if (bundle.search.tokenReservation) {
+                        const usage = response.usage;
+                        const limits = bundle.search.tokenReservation;
+                        if (
+                            !usage ||
+                            !Number.isSafeInteger(usage.inputTokens) ||
+                            !Number.isSafeInteger(usage.outputTokens) ||
+                            usage.inputTokens < 0 ||
+                            usage.outputTokens < 0 ||
+                            usage.inputTokens > limits.inputTokens ||
+                            usage.outputTokens > limits.outputTokens ||
+                            usage.estimated !== false
+                        )
+                            throw new ConnectorError(
+                                'budget_exceeded',
+                                '内置搜索用量缺失或超出预留',
+                            );
+                    }
                 },
             ),
         read: (operationKey, url) =>
@@ -393,6 +416,7 @@ export function createAgentSession({
         openCheckpoint,
         persist: trackDomain,
         drain: async () => {
+            await bundle.reader.close?.();
             await Promise.allSettled(pending);
         },
         async execute(): Promise<AgentCandidate> {
@@ -512,11 +536,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions) {
         if (options.bundle) return options.bundle;
         if (mode !== 'live') throw new RunExecutionError('AGENT_CONFIGURATION_INVALID');
         {
-            if (
-                env.SEARCH_PROVIDER !== undefined &&
-                !['searxng', 'tavily'].includes(env.SEARCH_PROVIDER)
-            )
-                throw new RunExecutionError('AGENT_CONFIGURATION_INVALID');
             const own = await activeAgentProvider(
                 options.database,
                 userId,
@@ -537,19 +556,28 @@ export function createAgentRuntime(options: AgentRuntimeOptions) {
                     throw new RunExecutionError('AGENT_CONFIGURATION_INVALID');
                 }
             }
-            const liveBundle = createConnectorBundle({
-                searchProvider: env.SEARCH_PROVIDER as 'searxng' | 'tavily' | undefined,
-                searxngBaseUrl: env.SEARXNG_BASE_URL,
-                managedSearch: true,
-                tavilyApiKey: env.TAVILY_API_KEY,
-                modelApiKey,
-                model: own?.model ?? env.MODEL_NAME,
-                modelBaseUrl: own?.baseUrl ?? env.MODEL_BASE_URL,
-                modelProtocol: own?.protocol,
-            });
+            let liveBundle: ConnectorBundle;
+            try {
+                const searchConfig =
+                    own?.webSearch && own.webSearch !== 'disabled' ? {} : readSearchConfig(env);
+                liveBundle = createConnectorBundle({
+                    ...searchConfig,
+                    managedSearch: true,
+                    modelApiKey,
+                    model: own?.model ?? env.MODEL_NAME,
+                    modelBaseUrl: own?.baseUrl ?? env.MODEL_BASE_URL,
+                    modelProtocol: own?.protocol,
+                    modelSearch: own?.webSearch,
+                });
+            } catch {
+                throw new RunExecutionError('AGENT_CONFIGURATION_INVALID');
+            }
             if (liveBundle.mode !== 'live')
                 throw new RunExecutionError('AGENT_CONFIGURATION_INVALID');
-            if ((env.SEARCH_PROVIDER ?? 'searxng') === 'searxng') {
+            if (
+                !liveBundle.search.tokenReservation &&
+                (env.SEARCH_PROVIDER ?? 'searxng') === 'searxng'
+            ) {
                 if (!searchRedis) throw new RunExecutionError('AGENT_CONFIGURATION_INVALID');
                 const namespace = `scova:search:v1:${digest(
                     JSON.stringify([

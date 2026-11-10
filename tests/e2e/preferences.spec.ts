@@ -21,6 +21,9 @@ async function sampleAccount(page: Page) {
         csrfToken: 'preferences-browser-test-only',
     };
     const state = { patches: 0, reads: 0, status: 200, offline: false, failRead: false };
+    await page.route('**/api/v1/me/avatar', (route) =>
+        route.fulfill({ json: { available: false, version: null } }),
+    );
     await page.route('**/api/v1/me', (route) => {
         state.reads++;
         return route.fulfill(

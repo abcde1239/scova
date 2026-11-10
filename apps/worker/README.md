@@ -15,24 +15,32 @@ vp run worker#start:node  # Node.js
 
 ## 配置
 
-| 环境变量                             | 默认值       | 用途                                                 |
-| ------------------------------------ | ------------ | ---------------------------------------------------- |
-| `WORKER_QUEUE_NAME`                  | `scova-runs` | BullMQ 队列名                                        |
-| `WORKER_POLL_INTERVAL_MS`            | `1000`       | 批次间隔                                             |
-| `WORKER_FAILURE_DELAY_MS`            | `5000`       | 批次失败等待                                         |
-| `WORKER_BATCH_SIZE`                  | `50`         | 单批领取上限                                         |
-| `WORKER_LEASE_SECONDS`               | `30`         | 单条投递租约                                         |
-| `WORKER_RUN_LEASE_SECONDS`           | `30`         | Run 租约；续期间隔为其三分之一，最多 10 秒           |
-| `WORKER_RUN_CONCURRENCY`             | `2`          | Run 消费并发数，最大 32                              |
-| `WORKER_SCHEDULER_INTERVAL_MS`       | `30000`      | 周期任务扫描间隔                                     |
-| `WORKER_SCHEDULER_CONCURRENCY`       | `2`          | 同批调度事务并发数，最大 8                           |
-| `SEARCH_ENGINE_INTERVAL_MS`          | `10000`      | 每引擎共享启动间隔（毫秒）                           |
-| `SEARCH_CONFIG_VERSION`              | `1`          | 搜索实例出口、地区或 CX 配置指纹版本                 |
-| `SEARCH_CACHE_ENABLED`               | `true`       | 同账号候选缓存与在途复用                             |
-| `SEARCH_ADAPTIVE_ENABLED`            | `true`       | Agent 最多两次预算内补搜                             |
-| `RESEARCH_ANSWER_SUPPLEMENT_ENABLED` | `false`      | 核心问题缺口的可选一轮定向补证；复用原有综合修复预算 |
+默认通过 SearxNG 搜索；可显式配置 Tavily、DeepSeek/Perplexity 独立搜索 API，或在账号供应商配置中授权 OpenAI/Anthropic 内置搜索。内置搜索同时计入搜索与 Token 预算，详见[搜索配置](../../docs/public/guides/search.md)。
+
+| 环境变量                             | 默认值        | 用途                                                 |
+| ------------------------------------ | ------------- | ---------------------------------------------------- |
+| `WORKER_QUEUE_NAME`                  | `scova-runs`  | BullMQ 队列名                                        |
+| `WORKER_POLL_INTERVAL_MS`            | `1000`        | 批次间隔                                             |
+| `WORKER_FAILURE_DELAY_MS`            | `5000`        | 批次失败等待                                         |
+| `WORKER_BATCH_SIZE`                  | `50`          | 单批领取上限                                         |
+| `WORKER_LEASE_SECONDS`               | `30`          | 单条投递租约                                         |
+| `WORKER_RUN_LEASE_SECONDS`           | `30`          | Run 租约；续期间隔为其三分之一，最多 10 秒           |
+| `WORKER_RUN_CONCURRENCY`             | `2`           | Run 消费并发数，最大 32                              |
+| `WORKER_SCHEDULER_INTERVAL_MS`       | `30000`       | 周期任务扫描间隔                                     |
+| `WORKER_SCHEDULER_CONCURRENCY`       | `2`           | 同批调度事务并发数，最大 8                           |
+| `SEARCH_ENGINE_INTERVAL_MS`          | `10000`       | 每引擎共享启动间隔（毫秒）                           |
+| `SEARCH_CONFIG_VERSION`              | `1`           | 搜索实例出口、地区或 CX 配置指纹版本                 |
+| `SEARCH_CACHE_ENABLED`               | `true`        | 同账号候选缓存与在途复用                             |
+| `SEARCH_ADAPTIVE_ENABLED`            | `true`        | Agent 最多两次预算内补搜                             |
+| `RESEARCH_ANSWER_SUPPLEMENT_ENABLED` | `false`       | 核心问题缺口的可选一轮定向补证；复用原有综合修复预算 |
+| `READER_RENDER_WAIT_MS`              | `1000`        | 浏览器 DOM 渲染等待，范围 1–5000 毫秒                |
+| `READER_CHROMIUM_SANDBOX`            | `false`(容器) | Chromium sandbox；宿主机可设为 `true`                |
 
 Run 从数据库固定 owner、版本、模式和预算，队列只能选择 runId。同一 Run 只有一个有效租约，接管递增 epoch，最多恢复三次；恢复保留首次开始时间和 deadline。数据库恢复扫描独立于原始 job，能处理消息丢失和保留的 completed/failed job。
+
+网页阅读默认使用 Crawlee + Playwright。Reader 先用受限 HTTP 客户端安全跟随重定向，再在一次性 Chromium 上下文中执行 JavaScript；页面只能发起经过同一安全客户端的公网 GET，禁止写请求、凭据转发、下载、WebSocket、service worker 和二次导航。单次读取最多 15 秒、主文档/单资源 2 MiB、总资源 8 MiB、32 个资源请求。Worker 镜像已安装匹配 Chromium；Bun 在 Windows 上通过 Node/vpx 子进程承载 Reader，取消和关闭会等待浏览器清理。该能力面向非交互公网页面，登录墙、挑战页和 PDF 不保证得到正文。
+
+Bun 入口通过 `scripts/run-bun.mjs` 将当前 Node 路径传给 Reader；直接运行 Bun 时可用 `READER_NODE_EXECUTABLE` 指定 Node 可执行文件，默认查找 `node`。Node 通过仓库内 Vite+ loader 加载 Reader TypeScript，不需要额外安装脚本运行器。
 
 调度以 IANA 时区的每日/每周当地时间计算 UTC 时点。DST 缺失时刻取首个有效时刻，重复时刻取较早一次。停机只补最近一次到期，较早时点计入 `missedCount`；已有活动执行则记 `skipped_overlap`。Occurrence、Run、首事件、Outbox 与下一时点在一个 PostgreSQL 事务内提交，多 Worker 通过任务行锁和唯一约束去重。暂停保留当前执行且允许显式手动运行，恢复只安排未来时点；归档阻止新执行并请求取消当前执行。
 

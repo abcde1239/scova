@@ -14,7 +14,16 @@ describe('monorepo importer 的 @ 别名隔离', () => {
         });
         try {
             const resolved = [];
-            for (const workspace of ['models', 'db', 'shared', 'agent-core', 'connectors']) {
+            const workspaces = [
+                'models',
+                'db',
+                'shared',
+                'agent-core',
+                'connectors',
+                'image-storage',
+                'object-storage',
+            ];
+            for (const workspace of workspaces) {
                 const importer = fileURLToPath(
                     new URL(`../../${workspace}/src/index.ts`, import.meta.url),
                 );
@@ -27,7 +36,7 @@ describe('monorepo importer 的 @ 别名隔离', () => {
                 expect(target).toBe(await realpath(importer));
                 resolved.push(target);
             }
-            expect(new Set(resolved).size).toBe(5);
+            expect(new Set(resolved).size).toBe(workspaces.length);
         } finally {
             await server.close();
         }

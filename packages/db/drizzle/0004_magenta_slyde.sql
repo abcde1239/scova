@@ -1,0 +1,2 @@
+ALTER TABLE "agent_providers" ADD COLUMN "web_search" text DEFAULT 'disabled' NOT NULL;--> statement-breakpoint
+ALTER TABLE "agent_providers" ADD CONSTRAINT "agent_provider_web_search_valid" CHECK ("agent_providers"."web_search" = 'disabled' OR ("agent_providers"."web_search" = 'openai_responses' AND "agent_providers"."protocol" IN ('openai_chat_completions', 'openai_json')) OR ("agent_providers"."web_search" = 'anthropic_web_search' AND "agent_providers"."protocol" = 'anthropic_messages'));

@@ -10,7 +10,7 @@ import {
 
 import {
     createConnectorBundle,
-    createPageReader,
+    createHttpPageReader as createPageReader,
     type ConnectorBundle,
     type StructuredInput,
     type CallContext,

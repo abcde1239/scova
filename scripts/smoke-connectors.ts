@@ -1,4 +1,8 @@
-import { createConnectorBundle, createPageReader } from '../packages/connectors/src/index.ts';
+import {
+    createConnectorBundle,
+    createPageReader,
+    type PageReader,
+} from '../packages/connectors/src/index.ts';
 import { ConnectorError, type ConnectorKind } from '../packages/connectors/src/types.ts';
 
 const live = process.argv.includes('--live');
@@ -29,12 +33,11 @@ if (!live && !readerOnly) {
                 throw new ConnectorError('budget_exceeded', 'Smoke allows one attempt per tool');
         },
     };
+    let reader: PageReader | undefined;
     try {
         if (readerOnly) {
-            const page = await createPageReader().read(
-                'https://www.iana.org/help/example-domains',
-                context,
-            );
+            reader = createPageReader();
+            const page = await reader.read('https://www.iana.org/help/example-domains', context);
             if (!page.text.includes('example.com'))
                 throw new Error('Public page did not contain the expected original text');
             console.log(
@@ -56,6 +59,7 @@ if (!live && !readerOnly) {
                 model,
                 modelBaseUrl: process.env.MODEL_BASE_URL,
             });
+            reader = connectors.reader;
             if (connectors.mode !== 'live') throw new Error('Live smoke must select live services');
             const search = await connectors.search.search(
                 'site:iana.org/help/example-domains example domains',
@@ -112,5 +116,6 @@ if (!live && !readerOnly) {
         process.exitCode = 1;
     } finally {
         clearTimeout(timer);
+        await reader?.close?.();
     }
 }

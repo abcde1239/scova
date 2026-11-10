@@ -18,6 +18,7 @@ if (!process.argv.includes('--live')) {
                 throw new ConnectorError('budget_exceeded', 'Smoke allows one attempt per tool');
         },
     };
+    let reader: ReturnType<typeof createPageReader> | undefined;
     try {
         const search = createSearxngSearch({
             baseUrl: process.env.SEARXNG_BASE_URL,
@@ -41,7 +42,8 @@ if (!process.argv.includes('--live')) {
             }),
         );
         if (process.argv.includes('--read')) {
-            const page = await createPageReader().read(result.results[0].originalUrl, context);
+            reader = createPageReader();
+            const page = await reader.read(result.results[0].originalUrl, context);
             if (!page.text.trim())
                 throw new ConnectorError('extraction_failed', 'No original text was collected');
             console.log(
@@ -66,5 +68,7 @@ if (!process.argv.includes('--live')) {
                 : 'FAILED: search verification failed',
         );
         process.exitCode = 1;
+    } finally {
+        await reader?.close?.();
     }
 }

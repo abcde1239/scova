@@ -16,6 +16,9 @@ import type { AgentCandidate } from '@scova/agent-core';
 import {
     createConnectorBundle,
     createModelProvider,
+    createModelSearch,
+    createSafeHttpClient,
+    MODEL_SEARCH_RESERVATION,
     estimateModelInputTokens,
     DEMO_URL,
     ConnectorError,
@@ -126,6 +129,152 @@ beforeAll(async () => {
 afterAll(() => fixture.cleanup());
 
 describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）', () => {
+    it('内置搜索供应商额度不足持久阻止后续模型和内置搜索，跨epoch保留', async () => {
+        const seed = await setup({ mode: 'live' });
+        let dispatches = 0;
+        const bundle = scenarioConnectors('research', 'A');
+        bundle.search = createModelSearch({
+            protocol: 'openai_responses',
+            model: 'model',
+            baseUrl: 'https://model.example/v1',
+            apiKey: 'fixture-key',
+            http: createSafeHttpClient({
+                resolve: async () => [{ address: '93.184.216.34', family: 4 }],
+                transport: async () => {
+                    dispatches++;
+                    return { status: 402, headers: {}, body: '{}' };
+                },
+            }),
+        });
+        const first = sessionFixture(seed, bundle);
+        try {
+            await expect(first.session.tools.search('quota', 'q')).rejects.toMatchObject({
+                code: 'model_quota_exceeded',
+            });
+            await expect(first.session.tools.search('new-search', 'q')).rejects.toMatchObject({
+                code: 'model_quota_exceeded',
+            });
+            await expect(
+                first.session.tools.model('new-model', {
+                    prompt: 'q',
+                    schema: {},
+                    maxInputTokens: 1000,
+                    maxOutputTokens: 100,
+                }),
+            ).rejects.toMatchObject({ code: 'model_quota_exceeded' });
+            const next = await takeover(seed.run.id);
+            const resumed = sessionFixture({ ...seed, ...next }, bundle);
+            try {
+                await expect(resumed.session.tools.search('resumed', 'q')).rejects.toMatchObject({
+                    code: 'model_quota_exceeded',
+                });
+                expect(dispatches).toBe(1);
+                expect(await next.repo.usage()).toMatchObject({
+                    searches: 1,
+                    ...MODEL_SEARCH_RESERVATION,
+                });
+            } finally {
+                await resumed.close();
+            }
+        } finally {
+            await first.close();
+        }
+    });
+    it('模型搜索先预留搜索和Token，按实际用量结算与复用；预算不足不出站', async () => {
+        const seed = await setup({ mode: 'live' });
+        let dispatches = 0;
+        const bundle = scenarioConnectors('research', 'A');
+        bundle.search = createModelSearch({
+            protocol: 'openai_responses',
+            model: 'selected-model',
+            baseUrl: 'https://model.example/v1',
+            apiKey: 'fixture-key',
+            http: createSafeHttpClient({
+                resolve: async () => [{ address: '93.184.216.34', family: 4 }],
+                transport: async () => {
+                    dispatches++;
+                    expect(await seed.repo.usage()).toMatchObject({
+                        searches: 1,
+                        ...MODEL_SEARCH_RESERVATION,
+                    });
+                    return {
+                        status: 200,
+                        headers: {},
+                        body: JSON.stringify({
+                            status: 'completed',
+                            usage: { input_tokens: 8100, output_tokens: 80 },
+                            output: [
+                                {
+                                    type: 'web_search_call',
+                                    status: 'completed',
+                                    action: {
+                                        type: 'search',
+                                        sources: [{ url: 'https://source.example/article' }],
+                                    },
+                                },
+                            ],
+                        }),
+                    };
+                },
+            }),
+        });
+        const active = sessionFixture(seed, bundle);
+        try {
+            const result = await active.session.tools.search('native', 'query');
+            expect(await seed.repo.usage()).toMatchObject({
+                searches: 1,
+                inputTokens: 8100,
+                outputTokens: 80,
+            });
+            expect(await active.session.tools.search('native', 'query')).toEqual(result);
+            expect(dispatches).toBe(1);
+            await fixture.db
+                .update(dbRuns)
+                .set({ budgetJson: { ...seed.current.budget, maxInputTokens: 9000 } })
+                .where(eq(dbRuns.id, seed.run.id));
+            await expect(active.session.tools.search('another', 'query')).rejects.toThrow();
+            expect(dispatches).toBe(1);
+        } finally {
+            await active.close();
+        }
+    });
+    it('模型搜索失败保留全部预留，不自动重试，取消阻止后续出站', async () => {
+        const seed = await setup({ mode: 'live' });
+        let dispatches = 0;
+        const bundle = scenarioConnectors('research', 'A');
+        bundle.search = createModelSearch({
+            protocol: 'openai_responses',
+            model: 'model',
+            baseUrl: 'https://model.example/v1',
+            apiKey: 'fixture-key',
+            http: createSafeHttpClient({
+                resolve: async () => [{ address: '93.184.216.34', family: 4 }],
+                transport: async () => {
+                    dispatches++;
+                    return { status: 503, headers: {}, body: '{}' };
+                },
+            }),
+        });
+        const controller = new AbortController();
+        const active = sessionFixture(seed, bundle, { signal: controller.signal });
+        try {
+            await expect(active.session.tools.search('native', 'q')).rejects.toMatchObject({
+                code: 'http',
+            });
+            expect(dispatches).toBe(1);
+            expect(await seed.repo.usage()).toMatchObject({
+                searches: 1,
+                ...MODEL_SEARCH_RESERVATION,
+            });
+            controller.abort();
+            await expect(active.session.tools.search('later', 'q')).rejects.toMatchObject({
+                code: 'aborted',
+            });
+            expect(dispatches).toBe(1);
+        } finally {
+            await active.close();
+        }
+    });
     it('persists quota blocking across epochs without refunding or blocking a fresh Run', async () => {
         const seed = await setup({ mode: 'live' });
         const input: StructuredInput = {
@@ -1014,6 +1163,9 @@ describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）',
         const locked = deferred();
         const release = deferred();
         const entered = deferred();
+        const readerClosing = deferred();
+        const releaseReader = deferred();
+        let readerClosed = false;
         const locker = fixture.db.transaction(async (tx) => {
             await queryRows<Record<string, unknown>>(
                 tx,
@@ -1043,6 +1195,14 @@ describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）',
             seed,
             {
                 ...base,
+                reader: {
+                    ...base.reader,
+                    async close() {
+                        readerClosing.resolve();
+                        await releaseReader.promise;
+                        readerClosed = true;
+                    },
+                },
                 search: {
                     async search(query, context) {
                         providerCalls++;
@@ -1064,7 +1224,11 @@ describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）',
             draining = session.drain().then(() => {
                 drained = true;
             });
+            await readerClosing.promise;
+            expect(readerClosed).toBe(false);
+            releaseReader.resolve();
             await new Promise((resolve) => setTimeout(resolve, 50));
+            expect(readerClosed).toBe(true);
             expect(drained).toBe(false);
             release.resolve();
             await locker;
@@ -1084,6 +1248,7 @@ describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）',
                     .then((rows) => rows[0]!.count),
             ).toBe(0);
         } finally {
+            releaseReader.resolve();
             release.resolve();
             await locker;
             await draining;
