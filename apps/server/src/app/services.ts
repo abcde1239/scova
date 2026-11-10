@@ -10,6 +10,9 @@ import {
 import { createStreamRegistry, type ApiStreamRegistry } from '@/app/streams.ts';
 import { DEFAULT_SSE_POLICY, type SsePolicy } from '@/utils/sse.ts';
 import { createAgentProviderService } from '@/service/agent-providers';
+import { createImageStorageView, type ImageStorageClient } from '@scova/image-storage';
+import type { ObjectStorage } from '@scova/object-storage';
+import { createBucketStorage } from '@/app/object-storage';
 
 const require = createRequire(import.meta.url);
 
@@ -36,6 +39,8 @@ export interface ApiServices {
     taskDraftModel(userId?: string): ModelProvider | null | Promise<ModelProvider | null>;
     providerModels: typeof listProviderModels;
     providerBalance: typeof readProviderBalance;
+    objectStorage(): ObjectStorage | null;
+    avatarStorage(): ImageStorageClient | null;
     streams: ApiStreamRegistry;
     sse: SsePolicy;
     clock(): Date;
@@ -62,6 +67,8 @@ export function createDefaultServices(overrides: ApiServiceOverrides = {}): ApiS
     let cache: Redis | undefined;
     let draftModel: ModelProvider | null | undefined;
     let questionModel: ModelProvider | null | undefined;
+    let images: ImageStorageClient | null | undefined;
+    let bucket: ObjectStorage | null | undefined;
     const streams = overrides.streams ?? createStreamRegistry();
     let closing: Promise<void> | undefined;
     const origin = new URL(overrides.origin ?? process.env.APP_ORIGIN ?? 'http://localhost:5173')
@@ -81,6 +88,23 @@ export function createDefaultServices(overrides: ApiServiceOverrides = {}): ApiS
     const services: ApiServices = {
         providerModels: overrides.providerModels ?? listProviderModels,
         providerBalance: overrides.providerBalance ?? readProviderBalance,
+        objectStorage:
+            overrides.objectStorage ??
+            (() => {
+                if (closing) throw new Error('文件存储已关闭');
+                if (bucket === undefined) bucket = createBucketStorage();
+                return bucket;
+            }),
+        avatarStorage:
+            overrides.avatarStorage ??
+            (() => {
+                if (closing) throw new Error('文件存储已关闭');
+                if (images === undefined) {
+                    const shared = services.objectStorage();
+                    images = shared ? createImageStorageView(shared) : null;
+                }
+                return images;
+            }),
         origin,
         production: overrides.production ?? process.env.NODE_ENV === 'production',
         registrationEnabled:
@@ -146,6 +170,7 @@ export function createDefaultServices(overrides: ApiServiceOverrides = {}): ApiS
         close: () =>
             (closing ??= (async () => {
                 await streams.stop();
+                bucket?.destroy();
                 if (overrides.close) {
                     await overrides.close();
                     return;

@@ -32,6 +32,7 @@ const session = {
         email: 'fixture@example.test',
         normalizedEmail: 'fixture@example.test',
         passwordHash: 'fixture',
+        avatarVersion: null,
         createdAt: new Date('2026-10-26T00:00:00Z'),
         defaultTimezone: 'Asia/Tokyo',
         notificationPreference: { mode: 'off', runIssues: false },

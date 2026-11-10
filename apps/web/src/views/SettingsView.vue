@@ -1,7 +1,7 @@
 <template>
     <div class="settings">
         <section aria-label="当前登录账号">
-            <p class="account-email">{{ session.user.value?.email }}</p>
+            <avatar-settings />
         </section>
         <section aria-labelledby="account-defaults-title">
             <h2 id="account-defaults-title">新任务默认偏好</h2>
@@ -27,8 +27,7 @@
 import NavigationButton from '@/components/common/NavigationButton.vue';
 import PreferencesForm from '@/components/account/PreferencesForm.vue';
 import AppIcon from '@/components/common/AppIcon.vue';
-import { useSession } from '@/composables/useSession';
-const session = useSession();
+import AvatarSettings from '@/components/account/AvatarSettings.vue';
 </script>
 
 <style scoped>

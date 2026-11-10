@@ -16,7 +16,10 @@
             v-bind="triggerAccessibility"
             @click="toggle"
         >
-            <span class="avatar" aria-hidden="true">{{ initial }}</span>
+            <account-avatar
+                :email="session.user.value.email"
+                :version="session.user.value.avatarVersion"
+            />
         </n-button>
         <nav
             v-if="open"
@@ -59,12 +62,12 @@ import ActionButton from '@/components/common/ActionButton.vue';
 import AppIcon from '@/components/common/AppIcon.vue';
 import NavigationButton from '@/components/common/NavigationButton.vue';
 import { useSession } from '@/composables/useSession';
+import AccountAvatar from '@/components/account/AccountAvatar.vue';
 
 const session = useSession();
 const route = useRoute();
 const root = ref<HTMLElement>();
 const open = ref(false);
-const initial = computed(() => session.user.value?.email.slice(0, 1).toUpperCase());
 const panelId = `account-panel-${useId()}`;
 const triggerAccessibility = computed(() => ({
     'aria-label': '账号菜单',
