@@ -7,7 +7,10 @@ const candidate = join(homedir(), '.bun', 'bin', process.platform === 'win32' ? 
 const executable = process.env.BUN_BIN ?? (existsSync(candidate) ? candidate : 'bun');
 const result = spawnSync(executable, process.argv.slice(2), {
     stdio: 'inherit',
-    env: process.env,
+    env: {
+        ...process.env,
+        READER_NODE_EXECUTABLE: process.env.READER_NODE_EXECUTABLE ?? process.execPath,
+    },
     windowsHide: true,
 });
 if (result.error) throw result.error;

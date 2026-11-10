@@ -64,6 +64,7 @@ async function samples(
                 model: input.model,
                 baseUrl: input.baseUrl,
                 protocol: input.protocol,
+                webSearch: input.webSearch,
             };
             items.push(entry);
             return route.fulfill({ status: 201, json: entry });
@@ -81,6 +82,7 @@ async function samples(
                 model: body.model,
                 baseUrl: body.baseUrl,
                 protocol: body.protocol,
+                webSearch: body.webSearch,
                 revision: entry.revision + 1,
             });
         } else {
@@ -90,6 +92,40 @@ async function samples(
         return route.fulfill({ json: entry });
     });
     return writes;
+}
+for (const width of [1440, 320]) {
+    test(`内置搜索授权${width}：默认关闭、显式保存、编辑回显和协议切换撤权`, async ({
+        page,
+    }, info) => {
+        await page.setViewportSize({ width, height: 960 });
+        const writes = await samples(page);
+        await page.goto('/account/agent');
+        const card = page
+            .getByRole('listitem')
+            .filter({ has: page.getByRole('heading', { name: '日常研究', exact: true }) });
+        await card.getByRole('button', { name: '编辑', exact: true }).click();
+        await expect(page.getByLabel('研究内置搜索', { exact: true })).toContainText(
+            '关闭内置搜索',
+        );
+        await chooseOption(page, '研究内置搜索', '允许 OpenAI Responses Web Search');
+        await expect(page.locator('.provider-form')).toContainText('可能产生额外费用');
+        await page.screenshot({ path: info.outputPath('search-permission.png'), fullPage: true });
+        await page.getByRole('button', { name: '保存配置', exact: true }).click();
+        await expect(card).toContainText('内置搜索已允许');
+        expect(writes[0]?.body.webSearch).toBe('openai_responses');
+        expect(writes[0]?.body).not.toHaveProperty('apiKey');
+        await card.getByRole('button', { name: '编辑', exact: true }).click();
+        await expect(page.getByLabel('研究内置搜索', { exact: true })).toContainText(
+            '允许 OpenAI Responses Web Search',
+        );
+        await chooseOption(page, '接口协议', 'Gemini generateContent');
+        await expect(page.getByLabel('研究内置搜索', { exact: true })).toContainText(
+            '关闭内置搜索',
+        );
+        await page.getByRole('button', { name: '保存配置', exact: true }).click();
+        await expect(card).not.toContainText('内置搜索已允许');
+        expect(writes[1]?.body.webSearch).toBe('disabled');
+    });
 }
 for (const width of [1440, 320]) {
     test(`模型列表${width}：加载、搜索选择、刷新与保存，支持深色和200%文字`, async ({

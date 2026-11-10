@@ -1,0 +1,23 @@
+{
+    "name": "@scova/image-storage",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "exports": {
+        ".": "./src/index.ts"
+    },
+    "scripts": {
+        "build": "tsc --noEmit",
+        "test": "vp test",
+        "check": "vp check"
+    },
+    "dependencies": {
+        "@scova/object-storage": "workspace:*"
+    },
+    "devDependencies": {
+        "@aws-sdk/client-s3": "catalog:",
+        "@aws-sdk/s3-request-presigner": "catalog:",
+        "@types/node": "catalog:",
+        "typescript": "catalog:"
+    }
+}

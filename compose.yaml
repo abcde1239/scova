@@ -19,6 +19,11 @@ x-app: &app
         AGENT_CHECKPOINT_SCHEMA: scova_agent
         AGENT_CHECKPOINT_MIGRATION: external
         SEARCH_PROVIDER: ${SEARCH_PROVIDER:-searxng}
+        SEARCH_API_PROTOCOL: ${SEARCH_API_PROTOCOL:-deepseek}
+        SEARCH_API_KEY: ${SEARCH_API_KEY:-}
+        SEARCH_API_BASE_URL: ${SEARCH_API_BASE_URL:-}
+        SEARCH_API_SEARCH_TYPE: ${SEARCH_API_SEARCH_TYPE:-}
+        SEARCH_API_DNS_RESOLVER: ${SEARCH_API_DNS_RESOLVER:-auto}
         SEARCH_ENGINE_INTERVAL_MS: ${SEARCH_ENGINE_INTERVAL_MS:-10000}
         SEARCH_CONFIG_VERSION: ${SEARCH_CONFIG_VERSION:-1}
         SEARCH_CACHE_ENABLED: ${SEARCH_CACHE_ENABLED:-true}
@@ -76,6 +81,26 @@ services:
         environment:
             <<: *environment
             DATABASE_URL: postgresql://scova:${POSTGRES_PASSWORD}@postgres:5432/scova?application_name=scova-api
+            STORAGE_PROVIDER: ${STORAGE_PROVIDER:-}
+            STORAGE_BUCKET: ${STORAGE_BUCKET:-}
+            STORAGE_ACCESS_KEY_ID: ${STORAGE_ACCESS_KEY_ID:-}
+            STORAGE_SECRET_ACCESS_KEY: ${STORAGE_SECRET_ACCESS_KEY:-}
+            STORAGE_R2_ACCOUNT_ID: ${STORAGE_R2_ACCOUNT_ID:-}
+            STORAGE_R2_JURISDICTION: ${STORAGE_R2_JURISDICTION:-}
+            STORAGE_REGION: ${STORAGE_REGION:-}
+            STORAGE_ENDPOINT: ${STORAGE_ENDPOINT:-}
+            STORAGE_FORCE_PATH_STYLE: ${STORAGE_FORCE_PATH_STYLE:-false}
+            STORAGE_SESSION_TOKEN: ${STORAGE_SESSION_TOKEN:-}
+            IMAGE_STORAGE_PROVIDER: ${IMAGE_STORAGE_PROVIDER:-}
+            IMAGE_STORAGE_BUCKET: ${IMAGE_STORAGE_BUCKET:-}
+            IMAGE_STORAGE_ACCESS_KEY_ID: ${IMAGE_STORAGE_ACCESS_KEY_ID:-}
+            IMAGE_STORAGE_SECRET_ACCESS_KEY: ${IMAGE_STORAGE_SECRET_ACCESS_KEY:-}
+            IMAGE_STORAGE_R2_ACCOUNT_ID: ${IMAGE_STORAGE_R2_ACCOUNT_ID:-}
+            IMAGE_STORAGE_R2_JURISDICTION: ${IMAGE_STORAGE_R2_JURISDICTION:-}
+            IMAGE_STORAGE_REGION: ${IMAGE_STORAGE_REGION:-}
+            IMAGE_STORAGE_ENDPOINT: ${IMAGE_STORAGE_ENDPOINT:-}
+            IMAGE_STORAGE_FORCE_PATH_STYLE: ${IMAGE_STORAGE_FORCE_PATH_STYLE:-false}
+            IMAGE_STORAGE_SESSION_TOKEN: ${IMAGE_STORAGE_SESSION_TOKEN:-}
         depends_on:
             migrate: { condition: service_completed_successfully }
             redis: { condition: service_healthy }
@@ -87,11 +112,20 @@ services:
             start_period: 20s
     worker:
         <<: *app
+        image: scova-worker:local
+        build:
+            context: .
+            target: worker-runtime
+        shm_size: 256m
+        mem_limit: 1536m
         working_dir: /app/apps/worker
         environment:
             <<: *environment
             DATABASE_URL: postgresql://scova:${POSTGRES_PASSWORD}@postgres:5432/scova?application_name=scova-worker
             WORKER_HEARTBEAT_PATH: /tmp/scova-worker-ready
+            READER_RENDER_WAIT_MS: ${READER_RENDER_WAIT_MS:-1000}
+            # Chromium sandbox requires additional host support; this image uses the restricted container.
+            READER_CHROMIUM_SANDBOX: ${READER_CHROMIUM_SANDBOX:-false}
         command: [bun, run, src/main.ts]
         depends_on:
             migrate: { condition: service_completed_successfully }

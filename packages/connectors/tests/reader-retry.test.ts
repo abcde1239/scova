@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vite-plus/test';
 import {
     ConnectorError,
-    createPageReader,
+    createHttpPageReader as createPageReader,
     createSafeHttpClient,
     type HttpTransport,
 } from '../src/index.ts';

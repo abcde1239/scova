@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import {
-    createPageReader,
+    createHttpPageReader as createPageReader,
     createSafeHttpClient,
     createSearxngServiceClient,
     createSearxngSearch,

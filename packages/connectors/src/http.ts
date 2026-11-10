@@ -3,6 +3,7 @@ import { isIP } from 'node:net';
 import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import { ConnectorError } from './types.ts';
+import { decodeWebText } from './web-text.ts';
 
 export interface ResolvedAddress {
     address: string;
@@ -17,6 +18,7 @@ export interface HttpResponse {
 }
 
 export interface HttpOptions {
+    responseEncoding?: 'web-text';
     method?: 'GET' | 'POST';
     headers?: Record<string, string>;
     body?: string;
@@ -27,6 +29,7 @@ export interface HttpOptions {
 }
 
 export interface TransportOptions {
+    responseEncoding?: 'web-text';
     method: 'GET' | 'POST';
     headers: Record<string, string>;
     body?: string;
@@ -186,7 +189,11 @@ export const nodeHttpTransport: HttpTransport = (url, options) =>
                     if (value !== undefined)
                         headers[name] = Array.isArray(value) ? value.join(', ') : value;
                 }
-                if (headers['content-encoding'] && headers['content-encoding'] !== 'identity') {
+                if (
+                    !options.responseEncoding &&
+                    headers['content-encoding'] &&
+                    headers['content-encoding'] !== 'identity'
+                ) {
                     res.destroy();
                     reject(new ConnectorError('invalid_response', '不支持压缩响应'));
                     return;
@@ -216,12 +223,29 @@ export const nodeHttpTransport: HttpTransport = (url, options) =>
                 });
                 res.on('end', () => {
                     try {
+                        if (options.responseEncoding === 'web-text') {
+                            // Redirect/error payloads are never rendered. Preserve status and Location
+                            // even when an upstream sends an empty or binary diagnostic body.
+                            if ((res.statusCode ?? 0) < 200 || (res.statusCode ?? 0) >= 300) {
+                                resolve({ status: res.statusCode ?? 0, headers, body: '' });
+                                return;
+                            }
+                            resolve({
+                                status: res.statusCode ?? 0,
+                                ...decodeWebText(Buffer.concat(chunks), headers, options.maxBytes),
+                            });
+                            return;
+                        }
                         const body = new TextDecoder('utf-8', { fatal: true }).decode(
                             Buffer.concat(chunks),
                         );
                         resolve({ status: res.statusCode ?? 0, headers, body });
-                    } catch {
-                        reject(new ConnectorError('invalid_response', '响应不是有效 UTF-8 文本'));
+                    } catch (error) {
+                        reject(
+                            error instanceof ConnectorError
+                                ? error
+                                : new ConnectorError('invalid_response', '响应不是有效 UTF-8 文本'),
+                        );
                     }
                 });
             },
@@ -315,6 +339,7 @@ export function createSafeHttpClient(
                                 body: options.body,
                                 signal,
                                 maxBytes,
+                                responseEncoding: options.responseEncoding,
                                 address: addresses[0],
                             });
                         } catch (error) {

@@ -19,6 +19,14 @@ vp run dev
 
 Server/Worker 的 Bun 开发与 start 入口通过 `scripts/run-bun.mjs` 启动，优先使用 `BUN_BIN`，其次使用用户目录 `~/.bun/bin/bun`（Windows 为 `bun.exe`），最后查找 PATH。使用独立安装的 Bun，可避免 Vite+ 的同名 shim 尝试联网安装包管理器。Bun 安装在其他位置时，将 `BUN_BIN` 环境变量设为其可执行文件绝对路径后再运行；该变量须在启动命令前设置，不能仅写入由 Bun 随后加载的 `.env.local`。
 
+Worker 的默认网页 Reader 使用 Crawlee + Playwright，开发机首次运行需安装 Chromium：
+
+```sh
+vp exec playwright install chromium
+```
+
+Reader 会执行公开页面 JavaScript，但仍只允许经过安全 HTTP 客户端的公网 GET；不支持登录态、写操作、下载、WebSocket 或 service worker。Bun/Windows 的 Playwright 控制由 Node/vpx 子进程承载，容器配置见[部署说明](deployment.md)。
+
 打开 [工作台](http://localhost:5173)，通过该地址注册和登录。浏览器通过根环境文件中的 `VITE_API_BASE_URL` 直连 API，不使用 Vite proxy；普通请求和 SSE 均携带 Cookie。
 
 ```dotenv
@@ -65,7 +73,7 @@ Windows 的 `local:up` 会先检查 Docker 引擎，必要时启动 Desktop 并�
 vpx --env-file=.env.local scripts/smoke-search.ts --live
 ```
 
-真实研究可在「账号 → Agent 配置」添加并启用个人供应商，支持 OpenAI 兼容、Anthropic 和 Gemini；`local:init` 初始化服务端加密主密钥。也可在 `.env.local` 填写 `MODEL_API_KEY`、`MODEL_NAME` 和必要的 `MODEL_BASE_URL` 作为部署默认值，重启 Server/Worker。个人配置优先，详见[Agent 配置](agent-configuration.md)。手动、重试和定时执行统一使用真实研究，不再提供 demo 选项或调度模式环境变量；缺模型配置时明确失败。默认免费 SearXNG；Tavily 仅在显式设置 `SEARCH_PROVIDER=tavily` 时使用。搜索上游可能限流、超时或要求验证码，健康检查不代表结果覆盖完整，详见[搜索说明](search.md)。
+真实研究可在「账号 → Agent 配置」添加并启用个人供应商，支持 OpenAI 兼容、Anthropic 和 Gemini；`local:init` 初始化服务端加密主密钥。也可在 `.env.local` 填写 `MODEL_API_KEY`、`MODEL_NAME` 和必要的 `MODEL_BASE_URL` 作为部署默认值，重启 Server/Worker。个人配置优先，详见[Agent 配置](agent-configuration.md)。手动、重试和定时执行统一使用真实研究，不再提供 demo 选项或调度模式环境变量；缺模型配置时明确失败。默认免费 SearXNG；可显式配置独立搜索 API 或在供应商配置中授权模型内置搜索。搜索上游可能限流、超时或要求验证码，健康检查不代表结果覆盖完整，详见[搜索说明](search.md)。
 
 代理返回Fake-IP导致模型目录被拒绝时，模型通道默认自动使用可信HTTPS DNS重新解析，列表和实际调用都生效；仍校验真实公网IP并验证TLS证书。需要调整时在`.env.local`设置`MODEL_DNS_RESOLVER=system|alidns|cloudflare|google`后重启Server/Worker，具体策略见[Agent配置](agent-configuration.md)。
 

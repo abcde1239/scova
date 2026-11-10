@@ -1,5 +1,6 @@
 export * from './common.ts';
 export * from './auth.ts';
+export * from './avatar.ts';
 export * from './agent-providers.ts';
 export * from './tasks.ts';
 export * from './task-token-budget.ts';

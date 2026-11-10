@@ -35,7 +35,7 @@ import { outboxJobId } from '../src/utils/outbox.ts';
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import {
     createConnectorBundle,
-    createPageReader,
+    createHttpPageReader as createPageReader,
     type ConnectorBundle,
     type StructuredInput,
     type CallContext,
@@ -143,6 +143,15 @@ function completeBundle(): ConnectorBundle {
                                     text: source.text,
                                     questionIds: ['q0', 'q1'],
                                     citations: [{ pageId: source.pageId, quote: source.text }],
+                                    assessment: {
+                                        relevance: 'direct',
+                                        support: 'direct',
+                                        role: 'answer',
+                                        sourceRelation: 'original',
+                                        reason: '受控公告正文逐字记载维护夹具所需事实。',
+                                        conditions: '',
+                                        gap: '',
+                                    },
                                 },
                             ],
                         }
@@ -184,6 +193,7 @@ async function prepare(db: DatabaseClient, checkpointer: PostgresSaver, complete
     });
     const candidate = await session.execute();
     await session.drain();
+    if (complete) expect(candidate.coverage.completeness).toBe('complete');
     return { ...seed, claimed, candidate, session };
 }
 async function deliver(db: DatabaseClient, checkpointer: PostgresSaver, complete = false) {

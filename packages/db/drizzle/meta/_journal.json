@@ -29,6 +29,20 @@
             "when": 1793865027567,
             "tag": "0003_research_events",
             "breakpoints": true
+        },
+        {
+            "idx": 4,
+            "version": "7",
+            "when": 1794210205532,
+            "tag": "0004_magenta_slyde",
+            "breakpoints": true
+        },
+        {
+            "idx": 5,
+            "version": "7",
+            "when": 1794211570613,
+            "tag": "0005_fresh_iron_patriot",
+            "breakpoints": true
         }
     ]
 }

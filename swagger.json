@@ -50,6 +50,200 @@
                 "required": ["code", "message", "requestId"],
                 "type": "object"
             },
+            "AvatarApiError": {
+                "$id": "#/components/schemas/ApiError",
+                "additionalProperties": false,
+                "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议",
+                "properties": {
+                    "code": {
+                        "description": "至少包含一个非空白字符的文本",
+                        "minLength": 1,
+                        "pattern": "\\S",
+                        "type": "string"
+                    },
+                    "fieldErrors": {
+                        "description": "输入校验失败时的字段错误列表",
+                        "items": {
+                            "additionalProperties": false,
+                            "description": "可定位的字段校验错误",
+                            "properties": {
+                                "message": {
+                                    "description": "至少包含一个非空白字符的文本",
+                                    "minLength": 1,
+                                    "pattern": "\\S",
+                                    "type": "string"
+                                },
+                                "path": {
+                                    "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                                    "type": "string"
+                                }
+                            },
+                            "required": ["path", "message"],
+                            "type": "object"
+                        },
+                        "type": "array"
+                    },
+                    "message": {
+                        "description": "至少包含一个非空白字符的文本",
+                        "minLength": 1,
+                        "pattern": "\\S",
+                        "type": "string"
+                    },
+                    "requestId": {
+                        "description": "至少包含一个非空白字符的文本",
+                        "minLength": 1,
+                        "pattern": "\\S",
+                        "type": "string"
+                    }
+                },
+                "required": ["code", "message", "requestId"],
+                "type": "object"
+            },
+            "AvatarSessionResponse": {
+                "$id": "#/components/schemas/SessionResponse",
+                "additionalProperties": false,
+                "description": "登录或恢复会话结果；凭据只通过 HttpOnly Cookie 传递",
+                "properties": {
+                    "csrfToken": {
+                        "description": "后续写请求提交的 CSRF 校验值，不是会话 token",
+                        "minLength": 1,
+                        "type": "string"
+                    },
+                    "user": {
+                        "$id": "#/components/schemas/User",
+                        "additionalProperties": false,
+                        "description": "当前会话用户，不返回密码、token 或数据库内部字段",
+                        "properties": {
+                            "avatarVersion": {
+                                "anyOf": [
+                                    {
+                                        "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                        "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                        "type": "string"
+                                    },
+                                    {
+                                        "type": "null"
+                                    }
+                                ],
+                                "description": "当前头像的不可变版本；为空或缺省时显示账号首字母"
+                            },
+                            "createdAt": {
+                                "description": "带 UTC 偏移的 ISO 8601 时间",
+                                "format": "scova-instant",
+                                "type": "string"
+                            },
+                            "email": {
+                                "description": "邮箱地址，账号服务负责规范化与唯一性判断",
+                                "maxLength": 254,
+                                "minLength": 3,
+                                "pattern": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+                                "type": "string"
+                            },
+                            "id": {
+                                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                "type": "string"
+                            },
+                            "preferences": {
+                                "$id": "#/components/schemas/Preferences",
+                                "additionalProperties": false,
+                                "description": "账号默认偏好；只影响后续创建的任务草稿",
+                                "properties": {
+                                    "defaultTimezone": {
+                                        "description": "明确的 IANA 时区，例如 Asia/Shanghai",
+                                        "format": "scova-timezone",
+                                        "type": "string"
+                                    },
+                                    "notificationPreference": {
+                                        "additionalProperties": false,
+                                        "description": "站内提醒偏好，不包含邮件或外部推送",
+                                        "properties": {
+                                            "mode": {
+                                                "anyOf": [
+                                                    {
+                                                        "const": "summary",
+                                                        "type": "string"
+                                                    },
+                                                    {
+                                                        "const": "important_change",
+                                                        "type": "string"
+                                                    },
+                                                    {
+                                                        "const": "off",
+                                                        "type": "string"
+                                                    }
+                                                ],
+                                                "description": "每次汇总、仅重要变化或关闭提醒"
+                                            },
+                                            "runIssues": {
+                                                "description": "是否提醒失败或不完整执行等运行问题",
+                                                "type": "boolean"
+                                            }
+                                        },
+                                        "required": ["mode", "runIssues"],
+                                        "type": "object"
+                                    }
+                                },
+                                "required": ["defaultTimezone", "notificationPreference"],
+                                "type": "object"
+                            }
+                        },
+                        "required": ["id", "email", "preferences", "createdAt"],
+                        "type": "object"
+                    }
+                },
+                "required": ["user", "csrfToken"],
+                "type": "object"
+            },
+            "AvatarState": {
+                "$id": "#/components/schemas/AvatarState",
+                "additionalProperties": false,
+                "description": "当前账号头像状态",
+                "properties": {
+                    "available": {
+                        "description": "当前部署是否已配置头像存储",
+                        "type": "boolean"
+                    },
+                    "version": {
+                        "anyOf": [
+                            {
+                                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "description": "当前账号头像版本，未设置为空"
+                    }
+                },
+                "required": ["available", "version"],
+                "type": "object"
+            },
+            "AvatarVersionQuery": {
+                "$id": "#/components/schemas/AvatarVersionQuery",
+                "additionalProperties": false,
+                "description": "头像写入的预期版本",
+                "properties": {
+                    "expectedVersion": {
+                        "anyOf": [
+                            {
+                                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                "type": "string"
+                            },
+                            {
+                                "const": "none",
+                                "type": "string"
+                            }
+                        ],
+                        "description": "当前头像版本；未设置头像时传none，防止并发覆盖"
+                    }
+                },
+                "required": ["expectedVersion"],
+                "type": "object"
+            },
             "Bookmark": {
                 "$id": "#/components/schemas/Bookmark",
                 "additionalProperties": false,
@@ -10509,6 +10703,19 @@
                         "additionalProperties": false,
                         "description": "当前会话用户，不返回密码、token 或数据库内部字段",
                         "properties": {
+                            "avatarVersion": {
+                                "anyOf": [
+                                    {
+                                        "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                        "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                        "type": "string"
+                                    },
+                                    {
+                                        "type": "null"
+                                    }
+                                ],
+                                "description": "当前头像的不可变版本；为空或缺省时显示账号首字母"
+                            },
                             "createdAt": {
                                 "description": "带 UTC 偏移的 ISO 8601 时间",
                                 "format": "scova-instant",
@@ -12985,6 +13192,19 @@
                 "additionalProperties": false,
                 "description": "当前会话用户，不返回密码、token 或数据库内部字段",
                 "properties": {
+                    "avatarVersion": {
+                        "anyOf": [
+                            {
+                                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "description": "当前头像的不可变版本；为空或缺省时显示账号首字母"
+                    },
                     "createdAt": {
                         "description": "带 UTC 偏移的 ISO 8601 时间",
                         "format": "scova-instant",
@@ -30290,6 +30510,23 @@
                                                         "description": "带 UTC 偏移的 ISO 8601 时间",
                                                         "format": "scova-instant",
                                                         "type": "string"
+                                                    },
+                                                    "webSearch": {
+                                                        "anyOf": [
+                                                            {
+                                                                "const": "disabled",
+                                                                "type": "string"
+                                                            },
+                                                            {
+                                                                "const": "openai_responses",
+                                                                "type": "string"
+                                                            },
+                                                            {
+                                                                "const": "anthropic_web_search",
+                                                                "type": "string"
+                                                            }
+                                                        ],
+                                                        "description": "研究搜索授权；省略时创建默认关闭，更新保留原值"
                                                     }
                                                 },
                                                 "required": [
@@ -30397,6 +30634,23 @@
                                                         "description": "带 UTC 偏移的 ISO 8601 时间",
                                                         "format": "scova-instant",
                                                         "type": "string"
+                                                    },
+                                                    "webSearch": {
+                                                        "anyOf": [
+                                                            {
+                                                                "const": "disabled",
+                                                                "type": "string"
+                                                            },
+                                                            {
+                                                                "const": "openai_responses",
+                                                                "type": "string"
+                                                            },
+                                                            {
+                                                                "const": "anthropic_web_search",
+                                                                "type": "string"
+                                                            }
+                                                        ],
+                                                        "description": "研究搜索授权；省略时创建默认关闭，更新保留原值"
                                                     }
                                                 },
                                                 "required": [
@@ -30504,6 +30758,23 @@
                                                         "description": "带 UTC 偏移的 ISO 8601 时间",
                                                         "format": "scova-instant",
                                                         "type": "string"
+                                                    },
+                                                    "webSearch": {
+                                                        "anyOf": [
+                                                            {
+                                                                "const": "disabled",
+                                                                "type": "string"
+                                                            },
+                                                            {
+                                                                "const": "openai_responses",
+                                                                "type": "string"
+                                                            },
+                                                            {
+                                                                "const": "anthropic_web_search",
+                                                                "type": "string"
+                                                            }
+                                                        ],
+                                                        "description": "研究搜索授权；省略时创建默认关闭，更新保留原值"
                                                     }
                                                 },
                                                 "required": [
@@ -31500,6 +31771,23 @@
                                             }
                                         ],
                                         "description": "供应商接口协议"
+                                    },
+                                    "webSearch": {
+                                        "anyOf": [
+                                            {
+                                                "const": "disabled",
+                                                "type": "string"
+                                            },
+                                            {
+                                                "const": "openai_responses",
+                                                "type": "string"
+                                            },
+                                            {
+                                                "const": "anthropic_web_search",
+                                                "type": "string"
+                                            }
+                                        ],
+                                        "description": "研究搜索授权；省略时创建默认关闭，更新保留原值"
                                     }
                                 },
                                 "required": ["protocol", "name", "baseUrl", "model", "apiKey"],
@@ -31558,6 +31846,23 @@
                                             }
                                         ],
                                         "description": "供应商接口协议"
+                                    },
+                                    "webSearch": {
+                                        "anyOf": [
+                                            {
+                                                "const": "disabled",
+                                                "type": "string"
+                                            },
+                                            {
+                                                "const": "openai_responses",
+                                                "type": "string"
+                                            },
+                                            {
+                                                "const": "anthropic_web_search",
+                                                "type": "string"
+                                            }
+                                        ],
+                                        "description": "研究搜索授权；省略时创建默认关闭，更新保留原值"
                                     }
                                 },
                                 "required": ["protocol", "name", "baseUrl", "model", "apiKey"],
@@ -31616,6 +31921,23 @@
                                             }
                                         ],
                                         "description": "供应商接口协议"
+                                    },
+                                    "webSearch": {
+                                        "anyOf": [
+                                            {
+                                                "const": "disabled",
+                                                "type": "string"
+                                            },
+                                            {
+                                                "const": "openai_responses",
+                                                "type": "string"
+                                            },
+                                            {
+                                                "const": "anthropic_web_search",
+                                                "type": "string"
+                                            }
+                                        ],
+                                        "description": "研究搜索授权；省略时创建默认关闭，更新保留原值"
                                     }
                                 },
                                 "required": ["protocol", "name", "baseUrl", "model", "apiKey"],
@@ -31698,6 +32020,23 @@
                                             "description": "带 UTC 偏移的 ISO 8601 时间",
                                             "format": "scova-instant",
                                             "type": "string"
+                                        },
+                                        "webSearch": {
+                                            "anyOf": [
+                                                {
+                                                    "const": "disabled",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "openai_responses",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "anthropic_web_search",
+                                                    "type": "string"
+                                                }
+                                            ],
+                                            "description": "研究搜索授权；省略时创建默认关闭，更新保留原值"
                                         }
                                     },
                                     "required": [
@@ -31785,6 +32124,23 @@
                                             "description": "带 UTC 偏移的 ISO 8601 时间",
                                             "format": "scova-instant",
                                             "type": "string"
+                                        },
+                                        "webSearch": {
+                                            "anyOf": [
+                                                {
+                                                    "const": "disabled",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "openai_responses",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "anthropic_web_search",
+                                                    "type": "string"
+                                                }
+                                            ],
+                                            "description": "研究搜索授权；省略时创建默认关闭，更新保留原值"
                                         }
                                     },
                                     "required": [
@@ -31872,6 +32228,23 @@
                                             "description": "带 UTC 偏移的 ISO 8601 时间",
                                             "format": "scova-instant",
                                             "type": "string"
+                                        },
+                                        "webSearch": {
+                                            "anyOf": [
+                                                {
+                                                    "const": "disabled",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "openai_responses",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "anthropic_web_search",
+                                                    "type": "string"
+                                                }
+                                            ],
+                                            "description": "研究搜索授权；省略时创建默认关闭，更新保留原值"
                                         }
                                     },
                                     "required": [
@@ -34142,6 +34515,23 @@
                                         "description": "编辑时读取的修订号",
                                         "minimum": 1,
                                         "type": "integer"
+                                    },
+                                    "webSearch": {
+                                        "anyOf": [
+                                            {
+                                                "const": "disabled",
+                                                "type": "string"
+                                            },
+                                            {
+                                                "const": "openai_responses",
+                                                "type": "string"
+                                            },
+                                            {
+                                                "const": "anthropic_web_search",
+                                                "type": "string"
+                                            }
+                                        ],
+                                        "description": "研究搜索授权；省略时创建默认关闭，更新保留原值"
                                     }
                                 },
                                 "required": ["protocol", "name", "baseUrl", "model", "revision"],
@@ -34205,6 +34595,23 @@
                                         "description": "编辑时读取的修订号",
                                         "minimum": 1,
                                         "type": "integer"
+                                    },
+                                    "webSearch": {
+                                        "anyOf": [
+                                            {
+                                                "const": "disabled",
+                                                "type": "string"
+                                            },
+                                            {
+                                                "const": "openai_responses",
+                                                "type": "string"
+                                            },
+                                            {
+                                                "const": "anthropic_web_search",
+                                                "type": "string"
+                                            }
+                                        ],
+                                        "description": "研究搜索授权；省略时创建默认关闭，更新保留原值"
                                     }
                                 },
                                 "required": ["protocol", "name", "baseUrl", "model", "revision"],
@@ -34268,6 +34675,23 @@
                                         "description": "编辑时读取的修订号",
                                         "minimum": 1,
                                         "type": "integer"
+                                    },
+                                    "webSearch": {
+                                        "anyOf": [
+                                            {
+                                                "const": "disabled",
+                                                "type": "string"
+                                            },
+                                            {
+                                                "const": "openai_responses",
+                                                "type": "string"
+                                            },
+                                            {
+                                                "const": "anthropic_web_search",
+                                                "type": "string"
+                                            }
+                                        ],
+                                        "description": "研究搜索授权；省略时创建默认关闭，更新保留原值"
                                     }
                                 },
                                 "required": ["protocol", "name", "baseUrl", "model", "revision"],
@@ -34350,6 +34774,23 @@
                                             "description": "带 UTC 偏移的 ISO 8601 时间",
                                             "format": "scova-instant",
                                             "type": "string"
+                                        },
+                                        "webSearch": {
+                                            "anyOf": [
+                                                {
+                                                    "const": "disabled",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "openai_responses",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "anthropic_web_search",
+                                                    "type": "string"
+                                                }
+                                            ],
+                                            "description": "研究搜索授权；省略时创建默认关闭，更新保留原值"
                                         }
                                     },
                                     "required": [
@@ -34437,6 +34878,23 @@
                                             "description": "带 UTC 偏移的 ISO 8601 时间",
                                             "format": "scova-instant",
                                             "type": "string"
+                                        },
+                                        "webSearch": {
+                                            "anyOf": [
+                                                {
+                                                    "const": "disabled",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "openai_responses",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "anthropic_web_search",
+                                                    "type": "string"
+                                                }
+                                            ],
+                                            "description": "研究搜索授权；省略时创建默认关闭，更新保留原值"
                                         }
                                     },
                                     "required": [
@@ -34524,6 +34982,23 @@
                                             "description": "带 UTC 偏移的 ISO 8601 时间",
                                             "format": "scova-instant",
                                             "type": "string"
+                                        },
+                                        "webSearch": {
+                                            "anyOf": [
+                                                {
+                                                    "const": "disabled",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "openai_responses",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "anthropic_web_search",
+                                                    "type": "string"
+                                                }
+                                            ],
+                                            "description": "研究搜索授权；省略时创建默认关闭，更新保留原值"
                                         }
                                     },
                                     "required": [
@@ -35627,6 +36102,23 @@
                                             "description": "带 UTC 偏移的 ISO 8601 时间",
                                             "format": "scova-instant",
                                             "type": "string"
+                                        },
+                                        "webSearch": {
+                                            "anyOf": [
+                                                {
+                                                    "const": "disabled",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "openai_responses",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "anthropic_web_search",
+                                                    "type": "string"
+                                                }
+                                            ],
+                                            "description": "研究搜索授权；省略时创建默认关闭，更新保留原值"
                                         }
                                     },
                                     "required": [
@@ -35714,6 +36206,23 @@
                                             "description": "带 UTC 偏移的 ISO 8601 时间",
                                             "format": "scova-instant",
                                             "type": "string"
+                                        },
+                                        "webSearch": {
+                                            "anyOf": [
+                                                {
+                                                    "const": "disabled",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "openai_responses",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "anthropic_web_search",
+                                                    "type": "string"
+                                                }
+                                            ],
+                                            "description": "研究搜索授权；省略时创建默认关闭，更新保留原值"
                                         }
                                     },
                                     "required": [
@@ -35801,6 +36310,23 @@
                                             "description": "带 UTC 偏移的 ISO 8601 时间",
                                             "format": "scova-instant",
                                             "type": "string"
+                                        },
+                                        "webSearch": {
+                                            "anyOf": [
+                                                {
+                                                    "const": "disabled",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "openai_responses",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "anthropic_web_search",
+                                                    "type": "string"
+                                                }
+                                            ],
+                                            "description": "研究搜索授权；省略时创建默认关闭，更新保留原值"
                                         }
                                     },
                                     "required": [
@@ -38048,6 +38574,1129 @@
                     }
                 },
                 "summary": "手动读取供应商余额与额度",
+                "tags": ["账号"]
+            }
+        },
+        "/api/v1/me/avatar": {
+            "delete": {
+                "description": "要求本人会话、Origin和CSRF，按预期版本清除头像引用并尝试清理旧对象。",
+                "operationId": "removeAvatar",
+                "parameters": [
+                    {
+                        "description": "当前头像版本；未设置头像时传none，防止并发覆盖",
+                        "in": "query",
+                        "name": "expectedVersion",
+                        "required": true,
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                    "type": "string"
+                                },
+                                {
+                                    "const": "none",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "$id": "#/components/schemas/SessionResponse",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarSessionResponse"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarSessionResponse"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarSessionResponse"
+                                }
+                            }
+                        },
+                        "description": "登录或恢复会话结果；凭据只通过 HttpOnly Cookie 传递"
+                    },
+                    "400": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "401": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "403": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "404": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "409": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "413": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "415": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "422": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "429": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "500": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "503": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    }
+                },
+                "summary": "移除账号头像",
+                "tags": ["账号"]
+            },
+            "get": {
+                "description": "读取当前账号头像版本及部署是否启用上传，不返回图床密钥或对象路径。",
+                "operationId": "getAvatarState",
+                "responses": {
+                    "200": {
+                        "$id": "#/components/schemas/AvatarState",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarState"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarState"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarState"
+                                }
+                            }
+                        },
+                        "description": "当前账号头像状态"
+                    },
+                    "400": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "401": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "403": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "404": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "409": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "413": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "415": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "422": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "429": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "500": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "503": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    }
+                },
+                "summary": "读取头像状态",
+                "tags": ["账号"]
+            },
+            "put": {
+                "description": "要求本人会话、Origin和CSRF；原始图片请求体最多5MiB，按预期版本原子替换，解码裁剪为256像素WebP并移除元信息。",
+                "operationId": "uploadAvatar",
+                "parameters": [
+                    {
+                        "description": "当前头像版本；未设置头像时传none，防止并发覆盖",
+                        "in": "query",
+                        "name": "expectedVersion",
+                        "required": true,
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                    "type": "string"
+                                },
+                                {
+                                    "const": "none",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "image/gif": {
+                            "schema": {
+                                "description": "原始图片字节，最多5MiB",
+                                "format": "binary",
+                                "type": "string"
+                            }
+                        },
+                        "image/jpeg": {
+                            "schema": {
+                                "description": "原始图片字节，最多5MiB",
+                                "format": "binary",
+                                "type": "string"
+                            }
+                        },
+                        "image/png": {
+                            "schema": {
+                                "description": "原始图片字节，最多5MiB",
+                                "format": "binary",
+                                "type": "string"
+                            }
+                        },
+                        "image/webp": {
+                            "schema": {
+                                "description": "原始图片字节，最多5MiB",
+                                "format": "binary",
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "$id": "#/components/schemas/SessionResponse",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarSessionResponse"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarSessionResponse"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarSessionResponse"
+                                }
+                            }
+                        },
+                        "description": "登录或恢复会话结果；凭据只通过 HttpOnly Cookie 传递"
+                    },
+                    "400": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "401": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "403": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "404": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "409": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "413": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "415": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "422": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "429": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "500": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "503": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    }
+                },
+                "summary": "上传或替换账号头像",
+                "tags": ["账号"]
+            }
+        },
+        "/api/v1/me/avatar/{version}": {
+            "get": {
+                "description": "仅允许当前会话读取本人当前头像版本；重定向至五分钟有效的私有图床签名地址，响应不缓存。",
+                "operationId": "getAvatarImage",
+                "parameters": [
+                    {
+                        "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                        "in": "path",
+                        "name": "version",
+                        "required": true,
+                        "schema": {
+                            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "302": {
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            },
+                            "multipart/form-data": {
+                                "schema": {}
+                            },
+                            "text/plain": {
+                                "schema": {}
+                            }
+                        }
+                    },
+                    "400": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "401": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "403": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "404": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "409": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "413": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "415": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "422": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "429": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "500": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "503": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarApiError"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    }
+                },
+                "summary": "读取当前头像图片",
                 "tags": ["账号"]
             }
         },

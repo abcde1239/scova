@@ -18,10 +18,13 @@
         "@node-rs/argon2": "catalog:",
         "@scova/connectors": "workspace:*",
         "@scova/db": "workspace:*",
+        "@scova/image-storage": "workspace:*",
         "@scova/models": "workspace:*",
+        "@scova/object-storage": "workspace:*",
         "@scova/shared": "workspace:*",
         "elysia": "^1.4.7",
         "ioredis": "catalog:",
+        "sharp": "catalog:",
         "srvx": "0.11.22"
     },
     "devDependencies": {

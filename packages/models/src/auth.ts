@@ -54,6 +54,11 @@ export const UserSchema = Type.Object(
         id: UuidSchema,
         email: EmailSchema,
         preferences: PreferencesSchema,
+        avatarVersion: Type.Optional(
+            Type.Union([UuidSchema, Type.Null()], {
+                description: '当前头像的不可变版本；为空或缺省时显示账号首字母',
+            }),
+        ),
         createdAt: InstantSchema,
     },
     {

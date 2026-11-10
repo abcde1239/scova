@@ -62,6 +62,14 @@ const api = http.createServer((request, response) => {
         response.end(JSON.stringify(sample));
         return;
     }
+    if (request.method === 'GET' && request.url === '/api/v1/me/avatar') {
+        response.writeHead(200, {
+            'content-type': 'application/json',
+            'cache-control': 'no-store',
+        });
+        response.end(JSON.stringify({ available: false, version: null }));
+        return;
+    }
     response.writeHead(404);
     response.end();
 });

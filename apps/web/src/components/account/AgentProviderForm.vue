@@ -71,6 +71,18 @@
             :disabled="pending"
         />
         <p v-if="message" class="field-error" role="alert" tabindex="-1">{{ message }}</p>
+        <task-config-field
+            v-model="draft.webSearch"
+            label="研究内置搜索"
+            kind="select"
+            :options="searchOptions"
+            :error="errors.webSearch"
+            :disabled="pending"
+        />
+        <p class="field-hint">
+            仅为研究搜索授权。请确认所选模型和地址支持该搜索接口；调用计入搜索与 Token
+            额度，并可能产生额外费用。关闭时使用部署的搜索服务。
+        </p>
         <div class="form-actions">
             <action-button attr-type="submit" :busy="pending" :disabled="uncertain"
                 >保存配置</action-button
@@ -118,6 +130,7 @@ const draft = reactive({
     baseUrl: props.provider?.baseUrl ?? 'https://api.openai.com/v1',
     model: props.provider?.model ?? '',
     protocol: String(props.provider?.protocol ?? 'openai_chat_completions'),
+    webSearch: String(props.provider?.webSearch ?? 'disabled'),
     apiKey: '',
 });
 const initial = JSON.stringify(draft);
@@ -150,6 +163,20 @@ const protocols = [
     { value: 'gemini', label: 'Gemini generateContent' },
 ];
 const preset = ref('custom');
+const searchOptions = computed(() => [
+    { value: 'disabled', label: '关闭内置搜索' },
+    ...(['openai_chat_completions', 'openai_json'].includes(draft.protocol)
+        ? [{ value: 'openai_responses', label: '允许 OpenAI Responses Web Search' }]
+        : draft.protocol === 'anthropic_messages'
+          ? [{ value: 'anthropic_web_search', label: '允许 Anthropic Web Search' }]
+          : []),
+]);
+watch(
+    () => draft.protocol,
+    () => {
+        draft.webSearch = 'disabled';
+    },
+);
 watch(preset, (value) => {
     const config = {
         openai: ['OpenAI', 'https://api.openai.com/v1', 'openai_chat_completions'],
@@ -164,6 +191,7 @@ watch(preset, (value) => {
         draft.protocol = config[2] as AgentProvider['protocol'];
         draft.model = '';
         draft.apiKey = '';
+        draft.webSearch = 'disabled';
     }
 });
 async function save() {
@@ -179,6 +207,7 @@ async function save() {
                 model: draft.model.trim(),
                 baseUrl: draft.baseUrl.trim(),
                 protocol: draft.protocol,
+                webSearch: draft.webSearch,
                 ...(draft.apiKey.trim() ? { apiKey: draft.apiKey.trim() } : {}),
                 revision: props.provider.revision,
             });

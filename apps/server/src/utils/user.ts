@@ -6,6 +6,7 @@ export function serializeUser(user: StoredUser) {
     return parseContract(UserSchema, {
         id: user.id,
         email: user.email,
+        avatarVersion: user.avatarVersion ?? null,
         preferences: {
             defaultTimezone: user.defaultTimezone,
             notificationPreference: user.notificationPreference,

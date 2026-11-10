@@ -7,6 +7,7 @@ export default defineConfig({
     test: {
         include: [
             'apps/server/tests/auth.integration.test.ts',
+            'apps/server/tests/avatar.integration.test.ts',
             'apps/server/tests/agent-providers.integration.test.ts',
         ],
         testTimeout: 30_000,

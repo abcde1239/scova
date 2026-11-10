@@ -7,7 +7,7 @@ import {
     createSafeHttpClient,
     createTavilySearch,
     createModelProvider,
-    createPageReader,
+    createHttpPageReader as createPageReader,
     createConnectorBundle,
     DEMO_URL,
     isPublicIp,

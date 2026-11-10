@@ -1,6 +1,8 @@
 # @scova/connectors
 
-Scova 的搜索、远程模型与安全网页阅读适配器。默认搜索为自部署 SearxNG，无需商业搜索 API 密钥；Tavily 仅在显式选择时启用。[本机部署与配置](../../docs/public/guides/search.md)。
+Scova 的搜索、远程模型与安全网页阅读适配器。默认使用自部署 SearxNG；支持显式配置 Tavily、DeepSeek/Perplexity 独立 API，以及授权的 OpenAI Responses/Anthropic 内置搜索。[部署与计费边界](../../docs/public/guides/search.md)。
+
+`createSearchApi({ protocol, apiKey, baseUrl? })` 接入独立服务；`createModelSearch({ protocol, apiKey, model, baseUrl })` 接入模型搜索，通过 `tokenReservation` 与返回的 `usage` 供调用方预留、结算。调用方必须在 `beforeAttempt` 中先持久预留预算；候选不能直接充当正文证据。
 
 搜索与阅读可以独立于模型使用：
 
@@ -13,16 +15,23 @@ const results = await search.search('IANA example domains', {
 });
 const first = results.results[0];
 if (first) {
-    const page = await createPageReader().read(first.originalUrl);
-    console.log(page.text, page.contentHash);
+    const reader = createPageReader();
+    try {
+        const page = await reader.read(first.originalUrl);
+        console.log(page.text, page.contentHash);
+    } finally {
+        await reader.close?.();
+    }
 }
 ```
 
-搜索结果是 `search_snippet`，保留原始/规范 URL 和引擎归因；`coverage` 记录上游失败、过滤与截断。只有阅读器实际提取的正文返回 `read_page`、采集时间、指纹、提取版本及实际 `fetchedUrl`。正文标记为不可信数据，不执行脚本或加载页面资源。指纹只覆盖返回的 `text`；`truncated` 表示覆盖不完整，不能据此前缀判断整页未变化。
+搜索结果是 `search_snippet`，保留原始/规范 URL 和引擎归因；`coverage` 记录上游失败、过滤与截断。只有阅读器实际提取的正文返回 `read_page`、采集时间、指纹、提取版本及实际 `fetchedUrl`。正文标记为不可信数据；脚本只用于生成 DOM，不视为 Agent 已完成执行。挑战页或登录页仍可能产生非空 Readability 文本。指纹只覆盖返回的 `text`；`truncated` 表示覆盖不完整，不能据此前缀判断整页未变化。
 
 SearxNG 在最多 30 条候选中按查询相关性排序后截取返回条目；相关性分数不证明来源可靠。内部客户端的 `engines` 仅接受部署白名单的去重子集，查询中的引擎切换语法会被移除。Worker 的共享搜索包装层负责 Redis 节流、冷却与缓存；`managedSearch` 装配关闭内层自动重试，由包装层逐次申请资格并记账。独立连接器不自建 Redis 连接。
 
-阅读器仅允许 HTTP/HTTPS 默认端口与公共 IP，拒绝混合公私 DNS，将已验证地址绑定实际连接，每跳重验（最多 3 跳）。内部 SearxNG 使用独立固定端点通道，仅允许该实例的 `/search` JSON 请求，禁止重定向，不向阅读器开放私网权限。所有调用最多 15 秒、下载最多 2 MiB，阅读器另限制正文长度和 DOM 数量。
+默认阅读器使用 Crawlee `PlaywrightCrawler` 驱动一次性 Chromium 上下文：先由安全 HTTP 客户端跟随最多 3 次重定向并提供主 HTML，再由浏览器在隔离上下文中执行 JavaScript，所有脚本/JSON/CSS 请求重新经过同一安全 HTTP 客户端。页面不能发起写请求、iframe/图片/下载、WebSocket、service worker 或二次导航；不转发 Cookie、Authorization 和 Set-Cookie。阅读器仅允许 HTTP/HTTPS 默认端口与公共 IP，拒绝混合公私 DNS，将已验证地址绑定实际连接，每跳重验。所有调用共享最多 15 秒 deadline，主 HTML/单资源最多 2 MiB、总资源最多 8 MiB、最多 32 个资源请求，正文和 DOM 另有限制。
+
+Worker 使用 Bun 时，完整 Reader 由 Node 子进程通过仓库 Vite+ loader 执行，Bun 仅通过受控行协议转发 HTTP、预算和取消，避免 Windows/Bun 的 Playwright WebSocket 兼容问题。`scripts/run-bun.mjs` 自动传入 Node 路径；独立启动 Bun 时可设置 `READER_NODE_EXECUTABLE`，默认查找 `node`。容器 `worker-runtime` 镜像预装 Chromium，设置 `PLAYWRIGHT_BROWSERS_PATH`。本地可用 `vp exec playwright install chromium` 安装浏览器；Linux 容器默认关闭 Chromium sandbox，依靠非 root、只读根文件系统、cap drop 和 no-new-privileges，宿主机默认启用 Chromium sandbox。
 
 供应商最多尝试 3 次，仅重试临时网络、429 和 5xx；`beforeAttempt(kind)` 每次尝试前执行，供调用方预留预算并拒绝后续请求。Run 累计预算、工具账本、证据授权由消费方负责。
 
@@ -52,6 +61,8 @@ const connectors = createConnectorBundle({
 ```sh
 vp test packages/connectors/tests/connectors.test.ts packages/connectors/tests/searxng.test.ts
 vp run test:connectors:runtime # Node/Bun 本地连接与提取，无外部查询
+vp run test:reader:browser     # 原生/Node 宿主真实 Chromium，受控 HTTP
+vp run test:reader:runtime     # Node/Bun 默认 Reader、预算拒绝与取消
 vp run test:search:live        # 真实 SearxNG，无需模型
 vp run test:search:read        # 真实搜索及正文读取
 vp run test:connectors:live    # SearxNG + 阅读 + 远程模型，有模型费用

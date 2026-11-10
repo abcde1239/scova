@@ -10,9 +10,12 @@
             :aria-controls="panelId"
             @click="show"
         >
-            <span v-if="signedIn" class="avatar trigger-avatar" aria-hidden="true">{{
-                initial
-            }}</span>
+            <account-avatar
+                v-if="signedIn"
+                class="trigger-avatar"
+                :email="session.user.value?.email"
+                :version="session.user.value?.avatarVersion"
+            />
             <app-icon v-else name="account" />
         </button>
         <dialog
@@ -34,7 +37,11 @@
                         :aria-current="route.path === '/account' ? 'page' : undefined"
                         @click="select('/account', $event)"
                     >
-                        <span class="avatar" aria-hidden="true">{{ initial }}</span>
+                        <account-avatar
+                            class="avatar"
+                            :email="session.user.value?.email"
+                            :version="session.user.value?.avatarVersion"
+                        />
                         <span class="drawer-identity">
                             <strong>我的账号</strong>
                             <span class="account-email">{{ session.user.value?.email }}</span>
@@ -93,6 +100,7 @@ import AppIcon from '@/components/common/AppIcon.vue';
 import NavigationButton from '@/components/common/NavigationButton.vue';
 import type { IconName } from '@/components/common/icons';
 import { useSession } from '@/composables/useSession';
+import AccountAvatar from '@/components/account/AccountAvatar.vue';
 
 defineProps<{ items: { path: string; label: string; icon: IconName }[] }>();
 const route = useRoute();
@@ -102,7 +110,6 @@ const panel = ref<HTMLDialogElement>();
 const open = ref(false);
 const panelId = `mobile-menu-${useId()}`;
 const signedIn = computed(() => !!session.user.value && session.phase.value === 'ready');
-const initial = computed(() => session.user.value?.email.slice(0, 1).toUpperCase());
 let media: MediaQueryList | undefined;
 
 function show() {

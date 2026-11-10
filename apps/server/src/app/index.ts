@@ -16,6 +16,7 @@ import { createSystemPlugin } from '@/router/system.ts';
 import { createFeedbackPlugin } from '@/router/feedback.ts';
 import { createCorsPlugin } from '@/http/cors';
 import { createAgentProviderPlugin } from '@/router/agent-providers';
+import { createAvatarPlugin } from '@/router/avatar';
 
 export { contractModels, HealthResponseSchema } from '@/app/contracts.ts';
 
@@ -50,6 +51,7 @@ export const createApiApp = (
         )
         .use(createSystemPlugin())
         .use(createAuthPlugin(services))
+        .use(createAvatarPlugin(services))
         .use(createAgentProviderPlugin(services))
         .use(createTaskPlugin(services))
         .use(createTaskDraftPlugin(services))

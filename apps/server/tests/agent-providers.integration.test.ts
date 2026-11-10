@@ -103,6 +103,59 @@ async function create(overrides = {}) {
     return (await response.json()) as AgentProvider;
 }
 describe('账号供应商的 HTTP、数据库与模型选择', () => {
+    it('内置搜索默认关闭、显式授权、旧客户端保留，协议变更需匹配且账号隔离', async () => {
+        const p = await create();
+        expect(p.webSearch).toBe('disabled');
+        const enabled = await request('PATCH', `/${p.id}`, {
+            ...input,
+            revision: p.revision,
+            webSearch: 'openai_responses',
+        });
+        expect(enabled.status).toBe(200);
+        const saved = (await enabled.json()) as AgentProvider;
+        expect(saved.webSearch).toBe('openai_responses');
+        expect((await activeAgentProvider(db, owner.id, p.id))?.webSearch).toBe('openai_responses');
+        expect(await activeAgentProvider(db, other.id, p.id)).toBeNull();
+        const legacy = await request('PATCH', `/${p.id}`, { ...input, revision: saved.revision });
+        expect(legacy.status).toBe(200);
+        const kept = (await legacy.json()) as AgentProvider;
+        expect(kept.webSearch).toBe('openai_responses');
+        expect(
+            (
+                await request('PATCH', `/${p.id}`, {
+                    ...input,
+                    protocol: 'gemini',
+                    revision: kept.revision,
+                })
+            ).status,
+        ).toBe(422);
+        expect(
+            (
+                await request(
+                    'PATCH',
+                    `/${p.id}`,
+                    { ...input, revision: kept.revision, webSearch: 'disabled' },
+                    other,
+                )
+            ).status,
+        ).toBe(404);
+        const disabled = await request('PATCH', `/${p.id}`, {
+            ...input,
+            protocol: 'gemini',
+            revision: kept.revision,
+            webSearch: 'disabled',
+        });
+        expect(disabled.status).toBe(200);
+        expect((await disabled.json()).webSearch).toBe('disabled');
+        expect(
+            (await request('POST', '', { ...input, webSearch: 'anthropic_web_search' })).status,
+        ).toBe(422);
+        expect(
+            (await create({ protocol: 'anthropic_messages', webSearch: 'anthropic_web_search' }))
+                .webSearch,
+        ).toBe('anthropic_web_search');
+        expect(providerModels).not.toHaveBeenCalled();
+    });
     beforeAll(async () => {
         await admin.connect();
         await migrateDatabase({ connectionString: scopedUrl.toString() });

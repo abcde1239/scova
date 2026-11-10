@@ -2,6 +2,17 @@ export const verificationTasks = {
     // Root-only verification commands live here instead of enlarging the root package manifest.
     // They remain addressable through `vp run <task>` for harness and focused checks.
     'test:search:live': { command: 'vpx scripts/smoke-search.ts --live', cache: false },
+    'test:reader:browser': {
+        command: 'vp test --config tests/reader-browser.vite.config.ts',
+        cache: false,
+    },
+    'test:reader:runtime': {
+        command: [
+            'vpx scripts/reader-runtime.ts',
+            'vpx scripts/run-bun.mjs scripts/reader-runtime.ts',
+        ],
+        cache: false,
+    },
     'test:search:read': { command: 'vpx scripts/smoke-search.ts --live --read', cache: false },
     'test:connectors:tavily': {
         command: 'vpx scripts/smoke-connectors.ts --live --provider=tavily',

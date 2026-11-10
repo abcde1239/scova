@@ -1,6 +1,32 @@
-# 本机 SearxNG 搜索
+# 搜索服务配置
 
 Scova 默认通过自部署 SearxNG 聚合网络搜索，使用免费的上游引擎，不需要搜索 API 密钥。模型可继续使用部署者提供的远程服务；单独搜索不依赖模型。搜索结果只代表候选资料，网页正文由安全阅读器另外采集。
+
+## 独立搜索 API
+
+在 Worker 环境中显式设置后重启 Worker：
+
+```dotenv
+SEARCH_PROVIDER=api
+SEARCH_API_PROTOCOL=deepseek
+SEARCH_API_KEY=your_search_api_key
+```
+
+`SEARCH_API_PROTOCOL` 支持 `deepseek`（`https://api.deepseek.com/v1/tools/search`）和 `perplexity`（`https://api.perplexity.ai/search`）。DeepSeek 搜索词最多 128 个 Unicode 码点，过长会明确失败；Perplexity 最多 2,000 个码点。Perplexity 可设置 `SEARCH_API_SEARCH_TYPE=web`（默认）或 `fast`。这些接口可能另行计费，独立密钥不会继承 `MODEL_API_KEY`。
+
+兼容服务可用 `SEARCH_API_BASE_URL` 指定 HTTPS API 根地址（含版本或前缀，省略具体接口路径），必须实现所选协议，不能只返回模型生成答案。`SEARCH_API_DNS_RESOLVER=auto` 沿用公网校验与 Fake-IP 可信解析，可选 `system|alidns|cloudflare|google`。请求禁止重定向，默认不重试或自动切换渠道。Worker 每次物理请求计 1 次搜索，最多保留 10 条候选；附带的正文、总结和答案不会进入证据。
+
+Tavily 继续通过 `SEARCH_PROVIDER=tavily` 与 `TAVILY_API_KEY` 显式启用；默认 `SEARCH_PROVIDER=searxng`。
+
+## 模型内置搜索
+
+在[账号 Agent 配置](agent-configuration.md)中编辑供应商的「研究内置搜索」。默认关闭；允许后，该供应商用于研究执行时，其内置搜索优先于部署搜索渠道。首批支持 OpenAI Responses Web Search 与 Anthropic Web Search；普通 OpenAI Chat Completions 兼容并不表示该地址实现 Responses 搜索。Gemini 等其他内置协议尚未接入。保存不调用搜索 API，也不会改变需求整理和报告问答的调用方式。
+
+每次请求限制最多 1 次搜索工具调用，预留 1 次搜索、16,384 输入 Token 和 1,024 输出 Token；成功后按供应商报告的实际 Token 结算（含 Anthropic 缓存输入），失败或用量未知保留预留，不自动重试或回退。预算不足不会发起请求。内置搜索也受 Run 截止时间和取消控制，单次最多 120 秒。上游不能硬限制搜索带入的输入 Token；若返回用量超出预留，Worker 将停止后续调用，预留额度并非供应商收费上限。
+
+只提取工具来源链接与标题，不使用模型生成答案、加密内容作为证据；来源正文仍由阅读器单独采集。升级需先执行新增数据库迁移，旧供应商保持内置搜索关闭。
+
+协议参考：[DeepSeek Search](https://api-docs.deepseek.com/api/search)、[Perplexity Search](https://docs.perplexity.ai/api-reference/search-post)、[OpenAI Web Search](https://developers.openai.com/api/docs/guides/tools-web-search)、[Anthropic Web Search](https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool)。
 
 完整本地开发使用 `vp run local:up` 将 PostgreSQL、Redis、SearXNG 一起启动，搜索地址为 `http://127.0.0.1:18080`，配置统一在根 `.env.local`，见[本地开发环境](local-development.md)。下面的 `search:up` 是仅启动搜索的独立方案，使用自己的配置、端口和 Compose 项目。
 
