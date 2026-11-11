@@ -1,3 +1,4 @@
+import { runStructuredFixture as runResearchAgent } from './structured-fixtures.ts';
 import { createHash } from 'node:crypto';
 import { MemorySaver } from '@langchain/langgraph';
 import type { RunnableConfig } from '@langchain/core/runnables';
@@ -9,7 +10,7 @@ import {
     type ReadPage,
     type SearchResponse,
 } from '@scova/connectors';
-import { deterministicPartial, runResearchAgent } from '../src/index.ts';
+import { deterministicPartial } from '../src/index.ts';
 import { researchWindow, scopedQuery } from '../src/research-context.ts';
 import type { AgentContext, AgentDependencies, AgentTools } from '../src/index.ts';
 
@@ -135,6 +136,407 @@ function fixture() {
 }
 
 describe('persistent bounded research Agent', () => {
+    it('uses the actual synthesis schema claim limit in the generated model prompt', async () => {
+        const { context, deps, tools } = fixture();
+        await runResearchAgent(context, deps);
+        const request = vi
+            .mocked(tools.model)
+            .mock.calls.find(([key]) => key === 'synthesize-0')![1];
+        const schema = request.schema as { properties: { claims: { maxItems: number } } };
+        expect(schema.properties.claims.maxItems).toBe(24);
+        expect(request.prompt).toContain(
+            `schema maximum of ${schema.properties.claims.maxItems} claims total`,
+        );
+        expect(request.prompt).not.toContain('schema maximum of 30 claims');
+    });
+    it('recovers an empty precise site query within the original search budget', async () => {
+        const { context, deps, tools, searchResponse } = fixture();
+        context.config.researchMode = 'collection';
+        context.budget.maxSearches = 3;
+        const recoveredUrl = 'https://official.example/docs/v1/deadline.html';
+        const model = tools.model;
+        tools.model = vi.fn<AgentTools['model']>(async (key, input) =>
+            key.startsWith('plan')
+                ? {
+                      mode: 'live',
+                      usage: { inputTokens: 1, outputTokens: 1, estimated: false },
+                      data: {
+                          queries: [
+                              {
+                                  query: 'Application deadline site:official.example/docs/v1/deadline.html',
+                                  questionIds: ['q0'],
+                              },
+                          ],
+                      },
+                  }
+                : model(key, input),
+        );
+        tools.search = vi.fn(async (_key, query) => ({
+            ...structuredClone(searchResponse),
+            query,
+            results: query.includes('site:official.example/docs/')
+                ? []
+                : [{ ...searchResponse.results[0]!, originalUrl: recoveredUrl, url: recoveredUrl }],
+        }));
+        tools.read = vi.fn(async (_key, requested) => ({
+            ...page,
+            originalUrl: requested,
+            fetchedUrl: requested,
+            url: requested,
+        }));
+        const output = await runResearchAgent(context, deps);
+        expect(vi.mocked(tools.search).mock.calls.map(([, query]) => query)).toEqual([
+            'Application deadline site:official.example/docs/v1/deadline.html',
+            'Application deadline site:official.example "v1" "deadline"',
+        ]);
+        expect(tools.read).toHaveBeenCalledExactlyOnceWith('read-0', recoveredUrl);
+        expect(output.coverage.research?.supplementalSearches).toBe(1);
+    });
+    it('does not read a conflicting version returned for a precise query', async () => {
+        const { context, deps, tools, searchResponse } = fixture();
+        context.config.researchMode = 'collection';
+        context.config.topic = 'Application deadline Node.js v22.12.0';
+        context.budget.maxSearches = 3;
+        const model = tools.model;
+        tools.model = vi.fn<AgentTools['model']>(async (key, input) =>
+            key.startsWith('plan')
+                ? {
+                      mode: 'live',
+                      usage: { inputTokens: 1, outputTokens: 1, estimated: false },
+                      data: {
+                          queries: [
+                              {
+                                  query: 'Application deadline site:nodejs.org/docs/v22.12.0/api/http.html',
+                                  questionIds: ['q0'],
+                              },
+                          ],
+                      },
+                  }
+                : model(key, input),
+        );
+        tools.search = vi.fn(async (_key, query) => {
+            const candidateUrl = `https://nodejs.org/docs/${query.includes('site:nodejs.org/docs/') ? 'v24.1.0' : 'v22.12.0'}/api/http.html`;
+            return {
+                ...structuredClone(searchResponse),
+                query,
+                results: [
+                    {
+                        ...searchResponse.results[0]!,
+                        title: 'Application deadline HTTP',
+                        url: candidateUrl,
+                        originalUrl: candidateUrl,
+                    },
+                ],
+            };
+        });
+        tools.read = vi.fn(async (_key, requested) => ({
+            ...page,
+            originalUrl: requested,
+            fetchedUrl: requested,
+            url: requested,
+        }));
+        const output = await runResearchAgent(context, deps);
+        expect(tools.read).toHaveBeenCalledExactlyOnceWith(
+            'read-0',
+            'https://nodejs.org/docs/v22.12.0/api/http.html',
+        );
+        expect(output.coverage.notes?.join(' ')).toContain('其他版本');
+        expect(tools.search).toHaveBeenCalledTimes(2);
+    });
+    it('retains the original module constraint after relaxing an exact site path', async () => {
+        const { context, deps, tools, searchResponse } = fixture();
+        context.config.researchMode = 'collection';
+        context.budget.maxSearches = 3;
+        const model = tools.model;
+        tools.model = vi.fn<AgentTools['model']>(async (key, input) =>
+            key.startsWith('plan')
+                ? {
+                      mode: 'live',
+                      usage: { inputTokens: 1, outputTokens: 1, estimated: false },
+                      data: {
+                          queries: [
+                              {
+                                  query: 'Application deadline site:nginx.org/en/docs/http/ngx_http_core_module.html',
+                                  questionIds: ['q0'],
+                              },
+                          ],
+                      },
+                  }
+                : model(key, input),
+        );
+        tools.search = vi.fn(async (_key, query) => {
+            const correct = !query.includes('site:nginx.org/en/docs/');
+            const candidateUrl = correct
+                ? 'https://nginx.org/en/docs/http/ngx_http_core_module.html'
+                : 'https://nginx.org/en/docs/stream/ngx_stream_core_module.html';
+            const candidates = [
+                candidateUrl,
+                ...(!correct ? ['https://mailman.nginx.org/pipermail/nginx/thread.html'] : []),
+            ];
+            return {
+                ...structuredClone(searchResponse),
+                query,
+                results: candidates.map((candidate) => ({
+                    ...searchResponse.results[0]!,
+                    title: 'Application deadline HTTP core module',
+                    url: candidate,
+                    originalUrl: candidate,
+                })),
+            };
+        });
+        tools.read = vi.fn(async (_key, requested) => ({
+            ...page,
+            originalUrl: requested,
+            fetchedUrl: requested,
+            url: requested,
+        }));
+        const output = await runResearchAgent(context, deps);
+        expect(tools.read).toHaveBeenCalledExactlyOnceWith(
+            'read-0',
+            'https://nginx.org/en/docs/http/ngx_http_core_module.html',
+        );
+        expect(tools.search).toHaveBeenCalledTimes(2);
+        expect(output.coverage.notes?.join(' ')).toContain('其他模块');
+    });
+    it('keeps a current-version request partial when the retrieved source does not confirm its version', async () => {
+        const { context, deps } = fixture();
+        context.config.researchMode = 'collection';
+        context.config.topic = 'Application deadline PostgreSQL current';
+        const output = await runResearchAgent(context, deps);
+        expect(output.pages).toHaveLength(1);
+        expect(output.coverage.completeness).toBe('partial');
+        expect(output.coverage.gaps.join(' ')).toContain('来源版本范围尚未确认');
+    });
+    it('searches a missing planned object even when its shared question already has a page', async () => {
+        const { context, deps, tools, searchResponse } = fixture();
+        context.config.researchMode = 'collection';
+        context.config.topic = 'Python 3.13 pathlib json';
+        context.config.goal = 'Compare public interfaces';
+        context.budget.maxSearches = 3;
+        const objects = ['pathlib', 'json'];
+        const texts = [
+            'Pathlib public interfaces include Path objects for filesystem paths. Navigation: json.',
+            'The json public interfaces include dumps and loads for serialization.',
+        ];
+        const requirements = objects.map((object) => ({
+            id: `brief-${object}`,
+            format: 'brief',
+            object,
+            field: 'public interfaces',
+            required: true,
+            questionIds: ['q0'],
+        }));
+        tools.model = vi.fn<AgentTools['model']>(async (key) => ({
+            mode: 'live',
+            usage: { inputTokens: 1, outputTokens: 1, estimated: false },
+            data: key.startsWith('plan')
+                ? {
+                      queries: [
+                          { query: 'Python 3.13 pathlib public interfaces', questionIds: ['q0'] },
+                      ],
+                      requirements,
+                  }
+                : {
+                      claims: texts.map((content, index) => ({
+                          kind: 'fact',
+                          text: content,
+                          questionIds: ['q0'],
+                          citations: [{ pageId: `read-${index}`, quote: content }],
+                          assessment: {
+                              relevance: 'direct',
+                              support: 'direct',
+                              role: 'answer',
+                              sourceRelation: 'unknown',
+                              reason: '原文接口',
+                              conditions: '',
+                              gap: '',
+                          },
+                      })),
+                      artifacts: [
+                          {
+                              format: 'brief',
+                              requirements: requirements.map((requirement, index) => ({
+                                  id: requirement.id,
+                                  text: texts[index],
+                                  claimIndexes: [index],
+                              })),
+                          },
+                      ],
+                  },
+        }));
+        tools.search = vi.fn(async (_key, query) => {
+            const object = query.includes('json') ? 'json' : 'pathlib';
+            const candidateUrl = `https://docs.python.org/3.13/library/${object}.html`;
+            return {
+                ...structuredClone(searchResponse),
+                query,
+                results: [
+                    {
+                        ...searchResponse.results[0]!,
+                        title: `${object} — Python 3.13 documentation`,
+                        url: candidateUrl,
+                        originalUrl: candidateUrl,
+                    },
+                ],
+            };
+        });
+        tools.read = vi.fn(async (_key, requested) => {
+            const index = requested.includes('json') ? 1 : 0;
+            return {
+                ...page,
+                title: `${objects[index]} — Python 3.13 documentation`,
+                originalUrl: requested,
+                fetchedUrl: requested,
+                url: requested,
+                text: texts[index]!,
+                contentHash: createHash('sha256').update(texts[index]!).digest('hex'),
+            };
+        });
+        const output = await runResearchAgent(context, deps);
+        expect(tools.search).toHaveBeenCalledTimes(2);
+        const focused = vi.mocked(tools.search).mock.calls[1]![1];
+        expect(focused).toContain('json');
+        expect(focused).not.toContain('pathlib');
+        expect(focused).toContain('Python 3.13');
+        expect(tools.read).toHaveBeenCalledTimes(2);
+        expect(output.pages.map((p) => p.title)).toEqual([
+            'pathlib — Python 3.13 documentation',
+            'json — Python 3.13 documentation',
+        ]);
+    });
+    it('revises a frozen report with discussion roles and no search calls', async () => {
+        const { context, deps, tools } = fixture();
+        context.conversation = {
+            version: 1,
+            reportId: crypto.randomUUID(),
+            questionId: crypto.randomUUID(),
+            operation: 'revise',
+            report: { title: '原报告', summary: '已保存发现', claims: ['第一点', '第二点'] },
+            messages: [
+                { role: 'user', content: '解释第二点' },
+                { role: 'assistant', content: '日期有条件' },
+                { role: 'user', content: '整理成新版报告' },
+            ],
+            sources: [
+                {
+                    id: crypto.randomUUID(),
+                    url,
+                    title: page.title,
+                    text: page.text,
+                    observedAt: page.collectedAt,
+                },
+            ],
+            omittedTurns: 0,
+        };
+        const result = await runResearchAgent(context, deps);
+        expect(tools.search).not.toHaveBeenCalled();
+        expect(tools.read).toHaveBeenCalledWith('read-0', url);
+        expect(result.claims.length).toBeGreaterThan(0);
+        const requests = vi.mocked(tools.model).mock.calls;
+        expect(requests.some(([key]) => key.startsWith('plan'))).toBe(false);
+        const synthesis = requests.find(([key]) => key === 'synthesize-0')![1];
+        expect(synthesis.messages).toEqual(context.conversation.messages);
+        expect(synthesis.prompt).toContain('第二点');
+        expect(result.coverage.gaps.join('')).toContain('未联网');
+    });
+    it('skips twenty unsupported candidates and uses the read budget for a later HTML source', async () => {
+        const { context, deps, tools, searchResponse } = fixture();
+        context.config.researchMode = 'collection';
+        context.budget.maxSearches = 3;
+        context.budget.maxPages = 1;
+        const original = searchResponse.results[0]!;
+        const candidates = [
+            ...Array.from({ length: 19 }, (_, i) => ({
+                ...original,
+                originalUrl: `https://files.example/${i}.pdf`,
+                url: `https://files.example/${i}.pdf`,
+            })),
+            {
+                ...original,
+                originalUrl: 'https://att.newsmth.net/nForum/att/Emacs/81563/431607',
+                url: 'https://att.newsmth.net/nForum/att/Emacs/81563/431607',
+                title: 'Emacs 词表附件',
+            },
+            original,
+        ];
+        let searchIndex = 0;
+        tools.search = vi.fn(async (_key, query) => ({
+            ...structuredClone(searchResponse),
+            query,
+            results: candidates.slice(searchIndex * 10, ++searchIndex * 10),
+        }));
+        const model = tools.model;
+        tools.model = vi.fn<AgentTools['model']>(async (key, input) =>
+            key.startsWith('plan')
+                ? {
+                      mode: 'live',
+                      usage: { inputTokens: 1, outputTokens: 1, estimated: false },
+                      data: {
+                          queries: [0, 1, 2].map((i) => ({
+                              query: `Application deadline ${i}`,
+                              questionIds: ['q0'],
+                          })),
+                      },
+                  }
+                : model(key, input),
+        );
+        const result = await runResearchAgent(context, deps);
+        expect(tools.read).toHaveBeenCalledExactlyOnceWith('read-0', url);
+        expect(result.pages).toHaveLength(1);
+        expect(result.coverage.notes?.join(' ')).toContain('已跳过 20 个');
+        expect(result.coverage.gaps.join(' ')).not.toMatch(/采集失败|读取预算/);
+    });
+
+    it('records unsupported explicit preferred sources as gaps without spending a read attempt', async () => {
+        const { context, deps, tools } = fixture();
+        const preferred = 'https://files.example/preferred.pdf';
+        context.config.researchMode = 'collection';
+        context.config.sourcePreferences.preferredUrls = [preferred];
+        context.budget.maxSearches = 1;
+        context.budget.maxPages = 1;
+        const result = await runResearchAgent(context, deps);
+        expect(tools.read).toHaveBeenCalledExactlyOnceWith('read-0', url);
+        expect(result.coverage.completeness).toBe('partial');
+        expect(result.coverage.gaps.join(' ')).toContain(
+            '优先来源是当前网页读取器不支持的文档或附件',
+        );
+        expect(result.coverage.gaps.join(' ')).toContain(preferred);
+    });
+
+    it('retains normalized provider body capability without storing the body in search checkpoints', async () => {
+        const { context, deps, tools, searchResponse, saver } = fixture();
+        context.config.researchMode = 'collection';
+        context.budget.maxSearches = 1;
+        context.budget.maxPages = 1;
+        const canonical = 'https://provider.example/report.pdf';
+        const originalUrl = `${canonical}?utm_source=search#page=2`;
+        context.config.sourcePreferences.preferredUrls = [canonical];
+        searchResponse.results = [
+            {
+                ...searchResponse.results[0]!,
+                originalUrl,
+                url: canonical,
+                page: { ...page, originalUrl, url: canonical, fetchedUrl: canonical },
+            },
+        ];
+        tools.read = vi.fn(async (_key, target) => ({
+            ...page,
+            originalUrl: target,
+            url: canonical,
+            fetchedUrl: canonical,
+        }));
+        const result = await runResearchAgent(context, deps);
+        expect(tools.read).toHaveBeenCalledExactlyOnceWith('read-0', canonical);
+        expect(result.pages[0]!.url).toBe(canonical);
+        expect(result.coverage.gaps.join(' ')).not.toContain('不支持的文档或附件');
+        const state = (await saver.getTuple(deps.config))!.checkpoint.channel_values.research as {
+            providerPageUrls: string[];
+            searches: { response: SearchResponse }[];
+        };
+        expect(state.providerPageUrls).toEqual([canonical]);
+        expect(state.searches[0]!.response.results[0]).not.toHaveProperty('page');
+    });
+
     it('collection keeps source content useful without requiring publication metadata', async () => {
         const { context, deps, tools } = fixture();
         context.config.researchMode = 'collection';
@@ -147,7 +549,7 @@ describe('persistent bounded research Agent', () => {
             .mocked(tools.model)
             .mock.calls.map(([, input]) => input.prompt)
             .join(' ');
-        expect(prompts).toContain('资料收集');
+        expect(prompts).toContain('Collection:');
     });
     it('keeps adaptive queries on the task topic instead of adding Agent architecture terms', async () => {
         const { context, deps, tools, searchResponse } = fixture();
@@ -568,10 +970,8 @@ describe('persistent bounded research Agent', () => {
             ]);
             expect(comparison[1][1].maxOutputTokens).toBe(comparison[0][1].maxOutputTokens * 2);
             for (const [, input] of comparison) {
-                expect(input.prompt.match(/本次调用输出硬上限为/g)).toHaveLength(1);
-                expect(input.prompt).toContain(
-                    `本次调用输出硬上限为${input.maxOutputTokens} tokens`,
-                );
+                expect(input.prompt.match(/hard cap /g)).toHaveLength(1);
+                expect(input.prompt).toContain(`hard cap ${input.maxOutputTokens} tokens`);
             }
             expect(
                 calls.reduce((sum, [, input]) => sum + input.maxOutputTokens, 0),
@@ -797,8 +1197,8 @@ describe('persistent bounded research Agent', () => {
             context.budget.maxInputTokens,
         );
         for (const [, input] of calls.filter(([key]) => key.startsWith('synthesize'))) {
-            expect(input.prompt).toContain(`本次调用输出硬上限为${input.maxOutputTokens} tokens`);
-            expect(input.prompt.match(/本次调用输出硬上限为/g)).toHaveLength(1);
+            expect(input.prompt).toContain(`hard cap ${input.maxOutputTokens} tokens`);
+            expect(input.prompt.match(/hard cap /g)).toHaveLength(1);
             expect(input.maxInputTokens).toBe(256000);
             expect(estimateModelInputTokens(input)).toBeGreaterThan(96000);
             expect(JSON.stringify(input.untrustedSources)).toContain(body);
@@ -914,7 +1314,7 @@ describe('persistent bounded research Agent', () => {
                       },
         }));
         const output = await runResearchAgent(context, deps);
-        expect(tools.model).toHaveBeenCalledTimes(2);
+        expect(tools.model).toHaveBeenCalledTimes(3);
         expect(output.coverage.completeness).toBe('partial');
         expect(output.coverage.reportValue?.questions[0].status).toBe('unresolved');
         expect(output.coverage.gaps.join(' ')).toContain('尚无直接回答');
@@ -927,6 +1327,7 @@ describe('persistent bounded research Agent', () => {
 
     it('gives synthesis its own output allocation and includes the end of a long source', async () => {
         const { context, deps, tools } = fixture();
+        context.budget.maxInputTokens = 60_000;
         const body = `${'这是背景资料。'.repeat(600)}最后结论：申请需提前准备。`;
         vi.mocked(tools.read).mockResolvedValue({
             ...page,
@@ -937,7 +1338,7 @@ describe('persistent bounded research Agent', () => {
         tools.model = vi.fn<AgentTools['model']>(async (key, input) => {
             if (key.startsWith('plan')) return original(key, input);
             expect(input.maxOutputTokens).toBeGreaterThan(1500);
-            expect(input.prompt).toContain('使用自己的话');
+            expect(input.prompt).toContain('in your own words');
             expect(JSON.stringify(input.untrustedSources)).toContain('最后结论');
             expect(estimateModelInputTokens(input)).toBeLessThanOrEqual(input.maxInputTokens);
             return {

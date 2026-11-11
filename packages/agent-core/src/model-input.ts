@@ -1,13 +1,13 @@
 import { ConnectorError, estimateModelInputTokens, type StructuredInput } from '@scova/connectors';
 import type { AgentPage } from './types.ts';
-
-export const COMPARISON_SOURCE_CHAR_LIMIT = 32_000;
+import { sourceExcerptSelector } from './source-excerpts.ts';
 
 /** Keep exact, separately delimited excerpts. A quote may never cross an omitted span. */
 export function fitSources(
     input: StructuredInput,
     pages: AgentPage[],
     prefixOnly = false,
+    focus: string[] = [],
 ): { input: StructuredInput; clipped: boolean } {
     // This is a soft planning target, not a tokenizer or a new rejection threshold. Count
     // its input overhead before fitting sources and leave room for JSON/estimation variance.
@@ -17,29 +17,18 @@ export function fitSources(
     );
     const bounded = {
         ...input,
-        prompt: `${input.prompt}\n输出篇幅：本次调用输出硬上限为${input.maxOutputTokens} tokens，包含JSON结构、引文和评估字段；完整JSON的软目标不超过${target} tokens。这是上限提示，不是必须写满的配额；token数只能估计，应提前收束并闭合JSON。${prefixOnly ? '每页最多4项重要且与任务相关的事实，无需凑满；保留全部pageId，无相关事实时facts为空。' : '先完整回答核心问题，再补充必要细节；围绕问题集中整理同一来源的证据和观点，合并同义或互补内容，保留不同观点、适用条件和冲突双方各自的引用。直接表述发现与结论，限制只在相关观点的评估字段说明一次，避免每条重复“部分交付”“证据不足”等笼统提醒；确无依据时仍标insufficient并具体说明缺少什么材料。删去泛泛背景和重复解释。'}只返回schema要求的JSON，不输出Markdown、开场白或分析过程。引文仅取足够支撑结论的最短逐字片段；不得为省篇幅删除关键条件、不确定性或冲突，也不得截句、伪造引文或省略必填字段。篇幅不足时减少次要条目。`,
+        prompt: `${input.prompt}\nOutput budget: hard cap ${input.maxOutputTokens} tokens, including JSON, quotations and assessments. Aim below ${target} tokens; this is a ceiling, not a quota. Estimate conservatively and finish complete JSON. ${prefixOnly ? 'At most four important task-relevant facts per page. Preserve every pageId; facts may be empty.' : 'Answer core questions first. Merge complementary evidence from the same source while preserving distinct conditions, perspectives and both sides of conflicts. Record concrete limitations once near the relevant claim; avoid repetitive generic caveats. Keep insufficient when evidence is missing and specify the missing material. Omit generic background and repetition.'} Return only schema-valid JSON, with no Markdown, preamble or reasoning trace. Generated user-facing prose must be Simplified Chinese. Quotes and literal extracted values retain original language. Use the shortest exact quote sufficient to support a claim, preserving material conditions. Never cut sentences, invent quotes or omit required fields; reduce secondary items instead.`,
     };
-    const bodies = pages.map((page) => Array.from(page.text));
+    const bodies = pages.map((page) => sourceExcerptSelector(page.text, focus));
     const project = (limit: number) =>
         pages.map((page, index) => {
-            const chars = bodies[index];
+            const body = bodies[index]!;
             const base = { pageId: page.id, url: page.url, questionIds: page.questionIds };
-            if (chars.length <= limit) return { ...base, text: page.text };
-            if (prefixOnly) return { ...base, text: chars.slice(0, limit).join('') };
-            const size = Math.floor(limit / 3);
-            const middle = Math.floor((chars.length - size) / 2);
-            return {
-                ...base,
-                excerpts: [
-                    chars.slice(0, size).join(''),
-                    chars.slice(middle, middle + size).join(''),
-                    chars.slice(chars.length - size).join(''),
-                ],
-            };
+            if (body.length <= limit) return { ...base, text: page.text };
+            return { ...base, ...body.select(limit) };
         });
     let low = 0;
     let high = Math.max(0, ...bodies.map((body) => body.length));
-    if (prefixOnly) high = Math.min(high, COMPARISON_SOURCE_CHAR_LIMIT);
     const withSources = (limit: number) => ({ ...bounded, untrustedSources: project(limit) });
     if (estimateModelInputTokens(withSources(high)) <= input.maxInputTokens)
         return { input: withSources(high), clipped: bodies.some((body) => body.length > high) };

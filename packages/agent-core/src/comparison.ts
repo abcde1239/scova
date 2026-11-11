@@ -1,5 +1,4 @@
 import { normalizeUrl } from '@scova/connectors';
-import { COMPARISON_SOURCE_CHAR_LIMIT } from './model-input.ts';
 import {
     AgentError,
     type AgentContext,
@@ -206,10 +205,6 @@ export function compareResearch(
             .map((e) => e.id);
     for (const page of manifest.pages) {
         const current = pages.find((p) => p.id === page.pageId)!;
-        if (Array.from(current.text).length > COMPARISON_SOURCE_CHAR_LIMIT)
-            gaps.push(
-                `比较模型仅查阅正文前${COMPARISON_SOURCE_CHAR_LIMIT}字符，后续正文未覆盖，不能据摘录判断无重要变化`,
-            );
         const old = previous.find((p) => p.url === page.url);
         if (!page.facts.length) {
             gaps.push(`来源未提取可验证事实，不能据空清单判断无变化：${page.url}`);
@@ -257,6 +252,8 @@ export function compareResearch(
                 fact.relevance === 'unknown' ||
                 fact.importance === 'unknown' ||
                 current.truncated ||
+                current.collection?.complete === false ||
+                current.extractionVersion.startsWith('search-api/') ||
                 (expectedBaseline && !ready) ||
                 (old && old.extractorVersion !== page.extractorVersion)
             ) {

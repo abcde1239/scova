@@ -7,6 +7,7 @@ import {
 import { assessPublication, normalizeUrl } from '@scova/connectors';
 import { researchWindow } from './research-context.ts';
 import type { AgentClaim, AgentContext, AgentPage } from './types.ts';
+import { assessmentPrompt } from './prompts.ts';
 
 export function readAssessment(value: unknown): ClaimAssessment | undefined {
     try {
@@ -23,11 +24,32 @@ export function taskQuestions(context: AgentContext) {
     ].map((text, index) => ({ id: `q${index}`, text }));
 }
 
+/** A configured lookup window alone does not make stable documentation a news request. */
+export function requiresFreshness(context: AgentContext): boolean {
+    const requested = [context.config.topic, context.config.goal, ...context.config.focusPoints]
+        .join('\n')
+        .split(/[，,。；;\n]|但是|但|不过|\b(?:however|but)\b/iu)
+        .filter(
+            (clause) =>
+                !/(?:不要求|不需要|无需|不必|不关注|不追踪|不研究|not\s+(?:require|need|track)|no\s+need)[\s\S]*(?:最新|近期|最近|新变化|latest|recent|new changes)/iu.test(
+                    clause,
+                ),
+        )
+        .join(' ');
+    return (
+        (context.config.researchMode === undefined && !!context.comparisonScopeHash) ||
+        /最新|近期|最近|本周|本月|今年|当前版本|截至|截止|何时发布|\b(?:latest|recent|current version|as of|deadline|20\d{2})\b/i.test(
+            requested,
+        )
+    );
+}
+
 export function buildReportValue(
     context: AgentContext,
     questions: { id: string; text: string }[],
     claims: AgentClaim[],
     pages: AgentPage[],
+    superseded: ReadonlySet<number> = new Set(),
 ): ReportValue {
     const window = researchWindow(context);
     const seen = new Set<string>();
@@ -63,6 +85,9 @@ export function buildReportValue(
         const omitted = duplicate || assessment?.relevance === 'unrelated';
         const main =
             !omitted &&
+            !superseded.has(claimIndex) &&
+            claim.kind !== 'insufficient' &&
+            !claim.uncertainty?.length &&
             questionIds.length > 0 &&
             claim.citations.length > 0 &&
             assessment?.relevance === 'direct' &&
@@ -76,9 +101,11 @@ export function buildReportValue(
                 ? '同一问题、类型和条件下的重复内容'
                 : assessment?.relevance === 'unrelated'
                   ? '模型评估与任务问题无关，未选入正文'
-                  : main
-                    ? '直接回应问题并有材料基础；支持关系来自模型自评'
-                    : '未形成有材料支撑的直接回答，保留为参考线索',
+                  : superseded.has(claimIndex)
+                    ? '同一成果字段已有后续综合版本补充条件，旧表述保留为参考。'
+                    : main
+                      ? '直接回应问题并有材料基础；支持关系来自模型自评'
+                      : '未形成有材料支撑的直接回答，保留为参考线索',
             basis: assessment ? 'model_assessment' : 'unassessed',
             timeScope,
             ...(assessment ? { assessment } : {}),
@@ -86,6 +113,7 @@ export function buildReportValue(
     });
     return {
         version: 1,
+        ...(!requiresFreshness(context) ? { timeless: true as const } : {}),
         ...(context.config.researchMode === 'collection'
             ? { researchMode: 'collection' as const }
             : {}),
@@ -101,9 +129,10 @@ export function buildReportValue(
                     return (
                         claim.kind !== 'insufficient' &&
                         s.assessment?.support === 'direct' &&
-                        !s.assessment.conditions &&
                         !s.assessment.gap &&
-                        (s.timeScope === 'within' || context.config.researchMode === 'collection')
+                        (s.timeScope === 'within' ||
+                            context.config.researchMode === 'collection' ||
+                            !requiresFreshness(context))
                     );
                 });
             const status = disputed
@@ -141,5 +170,4 @@ export function buildReportValue(
     };
 }
 
-export const valueAssessmentPrompt =
-    '逐条填写assessment：relevance区分direct直接回答/background背景/unrelated无关/unknown未判断；support区分direct直接支持/partial部分支持/none不支持/unknown未判断，不能仅因quote逐字真实就认定支持。role为answer/comparison/condition/risk/lead。sourceRelation仅在材料明确时用original或secondary，否则unknown，不凭域名数量声称独立核实。reason简述判断理由；conditions列出影响结论成立的假设，gap列出关键缺证，无则空字符串。优先回答原始核心问题，再补充探索线索；不要用通用建议或背景冒充答案，不强凑数量。同义信息合并但保留条件和冲突，无法回答明确说明。assessment是自评，不是独立核实。';
+export const valueAssessmentPrompt = assessmentPrompt;

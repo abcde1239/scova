@@ -1,5 +1,11 @@
 export * from './types.ts';
-export { comparisonFromExtractions } from './comparison-extraction.ts';
+export { unsupportedReadCandidate } from './read-candidates.ts';
+export {
+    comparisonFromExtractions,
+    comparisonSourceCoverage,
+    comparisonReceiptMatchesOutput,
+    isComparisonSourceCoverage,
+} from './comparison-extraction.ts';
 export { runResearchAgent, deterministicPartial, candidateFromCheckpoint } from './agent.ts';
 export {
     COMPARISON_VERSION,
