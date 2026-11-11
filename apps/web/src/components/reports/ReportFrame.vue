@@ -277,115 +277,80 @@ const budgetLabels = {
 </script>
 
 <style scoped>
+/* Scoped UnoCSS keeps the long control/state combinations readable. */
 .report-frame {
-    display: grid;
-    gap: 1.25rem;
-    inline-size: 100%;
-    max-inline-size: 100%;
-    min-inline-size: 0;
-    overflow-wrap: anywhere;
+    @apply report-grid w-full max-w-full;
 }
 .report-header,
 .report-summary,
 .coverage {
-    display: grid;
-    gap: 0.625rem;
-    min-inline-size: 0;
+    @apply layout-grid gap-2.5;
 }
 .answer-gaps a {
-    color: inherit;
-    text-underline-offset: 0.2em;
+    @apply text-inherit underline-offset-[0.2em];
 }
 .answer-gap-overview {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 0.25rem 0.75rem;
-    color: var(--scova-muted);
-    font-size: 0.875rem;
+    @apply flex flex-wrap items-baseline gap-[0.25rem_0.75rem] text-muted text-[0.875rem];
 }
 .answer-gap-overview a {
-    display: inline-flex;
-    align-items: center;
-    min-block-size: 2.75rem;
-    max-inline-size: 100%;
-    color: inherit;
-    text-underline-offset: 0.2em;
+    @apply inline-flex items-center min-h-11 max-w-full text-inherit underline-offset-[0.2em];
 }
 .scope-status {
-    display: inline-flex;
-    align-items: center;
-    min-block-size: 2.75rem;
-    justify-self: start;
-    color: var(--scova-muted);
-    text-underline-offset: 0.2em;
+    @apply inline-flex items-center min-h-11 justify-self-start text-muted underline-offset-[0.2em];
 }
 h2,
 h3,
 h4,
 p {
-    margin: 0;
+    @apply m-0;
 }
 h3 {
-    font-size: 1.25rem;
-    font-weight: 600;
+    @apply text-[1.25rem] font-semibold;
 }
 h4 {
-    font-size: 1rem;
-    font-weight: 600;
+    @apply text-[1rem] font-semibold;
 }
 .mode {
-    font-weight: 500;
+    @apply font-medium;
 }
 .published {
-    color: var(--scova-muted);
-    font-size: 0.875rem;
+    @apply text-muted text-[0.875rem];
 }
 .report-summary {
-    gap: 0.75rem;
+    @apply gap-3;
 }
 .report-summary > p {
-    white-space: pre-line;
+    @apply whitespace-pre-line;
 }
 .scope-status:focus-visible,
 .answer-gap-overview a:focus-visible,
 .answer-gaps a:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.1875rem;
+    @apply [outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.1875rem];
 }
 .metadata {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
-    gap: 0.5rem 1.25rem;
-    margin: 0;
+    @apply grid grid-cols-[repeat(auto-fit,_minmax(min(100%,_16rem),_1fr))] gap-[0.5rem_1.25rem] m-0;
 }
 dt {
-    color: var(--scova-muted);
+    @apply text-muted;
 }
 dd {
-    margin: 0;
+    @apply m-0;
 }
 ul {
-    margin: 0;
-    padding-inline-start: 1.5rem;
+    @apply pl-6 m-0;
 }
 .coverage {
-    padding-block: 0.75rem;
-    border-block: 0.0625rem solid color-mix(in srgb, var(--scova-border) 30%, transparent);
+    @apply pt-3 pb-3
+        [border-block:0.0625rem_solid_color-mix(in_srgb,_var(--scova-border)_30%,_transparent)];
 }
 summary {
-    min-block-size: 2.75rem;
-    cursor: pointer;
-    padding-block: 0.5rem;
+    @apply min-h-11 cursor-pointer pt-2 pb-2;
 }
 summary:focus-visible,
 #report-title:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
+    @apply [outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.25rem];
 }
 .coverage-body {
-    display: grid;
-    gap: 1rem;
-    padding-block-start: 1rem;
+    @apply grid gap-4 pt-4;
 }
 </style>

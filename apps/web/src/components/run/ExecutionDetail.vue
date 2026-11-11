@@ -1,14 +1,14 @@
 <template>
-    <article v-if="run" class="execution-detail">
+    <article v-if="run" class="execution-detail layout-stack pb-12">
         <section
             v-if="terminal"
-            class="detail-section scova-surface"
+            class="detail-section scova-surface report-grid [align-content:start] rounded-3 p-[clamp(1rem,_3%,_2rem)]"
             aria-labelledby="report-title"
         >
-            <h2 id="report-title">报告结果</h2>
+            <h2 class="text-[1.25rem] leading-[1.5] m-0" id="report-title">报告结果</h2>
             <router-link
                 v-if="execution.reportId.value"
-                class="scova-reference report-link"
+                class="scova-reference report-link keyboard-focus-wide [&&]:(inline-flex flex-wrap gap-2 items-center min-h-11 justify-self-start cursor-pointer)"
                 :to="`/reports/${execution.reportId.value}`"
                 >查看已发布报告<app-icon name="library"
             /></router-link>
@@ -39,9 +39,13 @@
             <p v-else>本次执行未完成报告交付。</p>
         </section>
 
-        <section class="execution-overview scova-surface" aria-labelledby="execution-status">
-            <div class="status-heading">
+        <section
+            class="execution-overview scova-surface layout-grid [align-content:start] gap-2.5 rounded-3 break-anywhere p-[clamp(1rem,_3%,_2rem)]"
+            aria-labelledby="execution-status"
+        >
+            <div class="status-heading flex flex-wrap items-center justify-between gap-4">
                 <h2
+                    class="text-[1.25rem] leading-[1.5] m-0 [.status-heading_&:is(h2)]:text-[1.75rem] [.status-heading_&:is(h2):focus-visible]:([outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.25rem])"
                     id="execution-status"
                     tabindex="-1"
                     :class="{
@@ -55,46 +59,75 @@
                             : executionStates[run.status][0]
                     }}
                 </h2>
-                <p class="mode">
+                <p class="mode text-primary font-semibold [.execution-overview_&:is(p)]:m-0">
                     {{ run.mode === 'demo' ? '演示模式 · Demo' : '真实查阅 · Live' }}
                 </p>
             </div>
-            <p>{{ executionStates[run.status][1] }}</p>
-            <p v-if="run.mode === 'demo'">此执行使用演示数据，不代表真实联网研究。</p>
-            <p v-if="executionOutcome(run)" class="outcome">{{ executionOutcome(run) }}</p>
-            <p v-if="executionFailure(run)">{{ executionFailure(run) }}</p>
-            <p class="run-timing">
+            <p class="[.execution-overview_&:is(p)]:m-0">{{ executionStates[run.status][1] }}</p>
+            <p class="[.execution-overview_&:is(p)]:m-0" v-if="run.mode === 'demo'">
+                此执行使用演示数据，不代表真实联网研究。
+            </p>
+            <p
+                v-if="executionOutcome(run)"
+                class="outcome text-[1.25rem] font-semibold [.execution-overview_&:is(p)]:m-0"
+            >
+                {{ executionOutcome(run) }}
+            </p>
+            <p class="[.execution-overview_&:is(p)]:m-0" v-if="executionFailure(run)">
+                {{ executionFailure(run) }}
+            </p>
+            <p class="run-timing [.execution-overview_&:is(p)]:m-0">
                 <time :datetime="run.startedAt ?? run.queuedAt">{{
                     time(run.startedAt ?? run.queuedAt)
                 }}</time
                 ><span v-if="elapsed"> · {{ elapsed }}</span>
             </p>
             <details class="execution-metadata">
-                <summary>执行标识与时间</summary>
-                <dl class="identity">
+                <summary
+                    class="cursor-pointer min-h-11 [display:list-item] [align-content:center] text-muted text-[0.875rem]"
+                >
+                    执行标识与时间
+                </summary>
+                <dl
+                    class="identity grid gap-4 grid-cols-[repeat(auto-fit,_minmax(min(100%,_19rem),_1fr))] pt-4 [border-top:0.0625rem_solid_var(--scova-border)] m-0"
+                >
                     <div>
-                        <dt>执行</dt>
-                        <dd>{{ run.id }}</dd>
+                        <dt class="text-muted">执行</dt>
+                        <dd
+                            class="mt-1 mb-0 mx-0 [.identity_&:is(dd)]:(text-[1rem] break-anywhere)"
+                        >
+                            {{ run.id }}
+                        </dd>
                     </div>
                     <div>
-                        <dt>固定任务版本</dt>
-                        <dd>{{ run.taskVersionId }}</dd>
+                        <dt class="text-muted">固定任务版本</dt>
+                        <dd
+                            class="mt-1 mb-0 mx-0 [.identity_&:is(dd)]:(text-[1rem] break-anywhere)"
+                        >
+                            {{ run.taskVersionId }}
+                        </dd>
                     </div>
                     <div>
-                        <dt>排队时间</dt>
-                        <dd>
+                        <dt class="text-muted">排队时间</dt>
+                        <dd
+                            class="mt-1 mb-0 mx-0 [.identity_&:is(dd)]:(text-[1rem] break-anywhere)"
+                        >
                             <time :datetime="run.queuedAt">{{ time(run.queuedAt) }}</time>
                         </dd>
                     </div>
                     <div v-if="run.startedAt">
-                        <dt>开始时间</dt>
-                        <dd>
+                        <dt class="text-muted">开始时间</dt>
+                        <dd
+                            class="mt-1 mb-0 mx-0 [.identity_&:is(dd)]:(text-[1rem] break-anywhere)"
+                        >
                             <time :datetime="run.startedAt">{{ time(run.startedAt) }}</time>
                         </dd>
                     </div>
                     <div v-if="run.finishedAt">
-                        <dt>结束时间</dt>
-                        <dd>
+                        <dt class="text-muted">结束时间</dt>
+                        <dd
+                            class="mt-1 mb-0 mx-0 [.identity_&:is(dd)]:(text-[1rem] break-anywhere)"
+                        >
                             <time :datetime="run.finishedAt">{{ time(run.finishedAt) }}</time>
                         </dd>
                     </div>
@@ -109,11 +142,20 @@
             :connection-text="connectionText"
         />
 
-        <section class="connection scova-glass scova-glass--tools" aria-label="执行连接">
-            <p v-if="execution.query.isPaused.value">
+        <section
+            class="connection scova-glass scova-glass--tools flex flex-wrap items-center justify-between gap-4 py-4 px-6"
+            aria-label="执行连接"
+        >
+            <p
+                class="[.connection_&:is(p)]:([flex:1_1_24rem] break-anywhere)"
+                v-if="execution.query.isPaused.value"
+            >
                 快照更新已暂停，当前展示上次成功读取的状态；恢复网络后将继续更新。
             </p>
-            <p v-else-if="execution.query.isError.value">
+            <p
+                class="[.connection_&:is(p)]:([flex:1_1_24rem] break-anywhere)"
+                v-else-if="execution.query.isError.value"
+            >
                 快照更新暂不可用，当前展示上次成功读取的状态。
             </p>
             <action-button
@@ -123,9 +165,14 @@
             >
         </section>
 
-        <div class="execution-columns">
-            <section class="detail-section scova-surface" aria-labelledby="coverage-title">
-                <h2 id="coverage-title">覆盖与局限</h2>
+        <div
+            class="execution-columns layout-grid gap-6 [@media(min-width:_52rem)]:grid-cols-[minmax(0,_1.15fr)_minmax(0,_1fr)]"
+        >
+            <section
+                class="detail-section scova-surface report-grid [align-content:start] rounded-3 p-[clamp(1rem,_3%,_2rem)]"
+                aria-labelledby="coverage-title"
+            >
+                <h2 class="text-[1.25rem] leading-[1.5] m-0" id="coverage-title">覆盖与局限</h2>
                 <template v-if="run.coverage">
                     <p :class="{ 'scova-partial': run.coverage.completeness === 'partial' }">
                         {{
@@ -137,7 +184,7 @@
                     <p v-if="run.coverage.completeness === 'complete'">
                         范围完整不代表互联网穷尽，也不保证所有事实已经验证。
                     </p>
-                    <ul v-if="run.coverage.gaps.length" class="coverage-gaps">
+                    <ul v-if="run.coverage.gaps.length" class="coverage-gaps pl-5 grid gap-3 m-0">
                         <li v-for="(gap, index) in run.coverage.gaps" :key="index">{{ gap }}</li>
                     </ul>
                     <p v-else>
@@ -173,8 +220,12 @@
                         </span>
                     </p>
                     <details v-if="run.coverage.notes?.length">
-                        <summary>查阅说明</summary>
-                        <ul>
+                        <summary
+                            class="cursor-pointer min-h-11 [display:list-item] [align-content:center] text-muted text-[0.875rem]"
+                        >
+                            查阅说明
+                        </summary>
+                        <ul class="pl-5 grid gap-3 m-0">
                             <li v-for="(note, index) in run.coverage.notes" :key="index">
                                 {{ note }}
                             </li>
@@ -184,8 +235,11 @@
                 <p v-else>尚未形成覆盖结论；不能将等待、失败或取消视为没有变化。</p>
             </section>
 
-            <section class="detail-section scova-surface" aria-labelledby="budget-title">
-                <h2 id="budget-title">用量与预算</h2>
+            <section
+                class="detail-section scova-surface report-grid [align-content:start] rounded-3 p-[clamp(1rem,_3%,_2rem)]"
+                aria-labelledby="budget-title"
+            >
+                <h2 class="text-[1.25rem] leading-[1.5] m-0" id="budget-title">用量与预算</h2>
                 <p>本次使用启动时的预算快照；修改任务后的新预算不会应用于此执行或其重试。</p>
                 <p v-if="run.coverage?.research">
                     正文成功 {{ run.coverage.research.readSuccess }} /
@@ -200,28 +254,46 @@
                         条需要补充材料，详情见报告引用。</span
                     >
                 </p>
-                <dl class="usage">
-                    <div>
-                        <dt>搜索调用</dt>
-                        <dd>{{ run.usage.searches }} / {{ run.budget.maxSearches }} 次</dd>
+                <dl class="usage grid gap-4 m-0">
+                    <div
+                        class="[.usage_&:is(div)]:(flex flex-wrap gap-[0.5rem_1rem] justify-between)"
+                    >
+                        <dt class="text-muted">搜索调用</dt>
+                        <dd class="mt-1 mb-0 mx-0 [.usage_&:is(dd)]:m-0">
+                            {{ run.usage.searches }} / {{ run.budget.maxSearches }} 次
+                        </dd>
                     </div>
-                    <div>
-                        <dt>网页读取</dt>
-                        <dd>{{ run.usage.pages }} / {{ run.budget.maxPages }} 次</dd>
+                    <div
+                        class="[.usage_&:is(div)]:(flex flex-wrap gap-[0.5rem_1rem] justify-between)"
+                    >
+                        <dt class="text-muted">网页读取</dt>
+                        <dd class="mt-1 mb-0 mx-0 [.usage_&:is(dd)]:m-0">
+                            {{ run.usage.pages }} / {{ run.budget.maxPages }} 次
+                        </dd>
                     </div>
-                    <div>
-                        <dt>模型输入</dt>
-                        <dd>{{ run.usage.inputTokens }} / {{ run.budget.maxInputTokens }} token</dd>
+                    <div
+                        class="[.usage_&:is(div)]:(flex flex-wrap gap-[0.5rem_1rem] justify-between)"
+                    >
+                        <dt class="text-muted">模型输入</dt>
+                        <dd class="mt-1 mb-0 mx-0 [.usage_&:is(dd)]:m-0">
+                            {{ run.usage.inputTokens }} / {{ run.budget.maxInputTokens }} token
+                        </dd>
                     </div>
-                    <div>
-                        <dt>模型输出</dt>
-                        <dd>
+                    <div
+                        class="[.usage_&:is(div)]:(flex flex-wrap gap-[0.5rem_1rem] justify-between)"
+                    >
+                        <dt class="text-muted">模型输出</dt>
+                        <dd class="mt-1 mb-0 mx-0 [.usage_&:is(dd)]:m-0">
                             {{ run.usage.outputTokens }} / {{ run.budget.maxOutputTokens }} token
                         </dd>
                     </div>
-                    <div>
-                        <dt>总时间预算</dt>
-                        <dd>{{ run.budget.maxDurationSeconds }} 秒</dd>
+                    <div
+                        class="[.usage_&:is(div)]:(flex flex-wrap gap-[0.5rem_1rem] justify-between)"
+                    >
+                        <dt class="text-muted">总时间预算</dt>
+                        <dd class="mt-1 mb-0 mx-0 [.usage_&:is(dd)]:m-0">
+                            {{ run.budget.maxDurationSeconds }} 秒
+                        </dd>
                     </div>
                 </dl>
                 <p>
@@ -232,8 +304,12 @@
             </section>
         </div>
 
-        <details class="execution-actions" open>
-            <summary>执行操作</summary>
+        <details class="execution-actions pl-4 pr-4" open>
+            <summary
+                class="cursor-pointer min-h-11 [display:list-item] [align-content:center] text-muted text-[0.875rem]"
+            >
+                执行操作
+            </summary>
             <run-actions :task-id="run.taskId" :run="run" />
         </details>
     </article>
@@ -254,7 +330,6 @@ import {
     executionFailure,
     type useExecution,
 } from '@/composables/useExecution';
-import '@/theme/glass.css';
 const props = defineProps<{ execution: ReturnType<typeof useExecution> }>();
 // Use the same browser connectivity signal as Query. An existing SSE connection
 // can retain its last open state while the browser pauses new network requests.
@@ -294,136 +369,3 @@ const exhaustedLabels = {
 };
 const time = (instant: string) => new Date(instant).toLocaleString('zh-CN', { hour12: false });
 </script>
-
-<style scoped>
-.execution-detail {
-    display: grid;
-    gap: 1rem;
-    min-inline-size: 0;
-    padding-block-end: 3rem;
-}
-.execution-overview,
-.detail-section {
-    display: grid;
-    align-content: start;
-    gap: 1.25rem;
-    padding: clamp(1rem, 3%, 2rem);
-    border-radius: 0.75rem;
-    min-inline-size: 0;
-    overflow-wrap: anywhere;
-}
-.execution-overview {
-    gap: 0.625rem;
-}
-.execution-overview p {
-    margin: 0;
-}
-summary {
-    cursor: pointer;
-    min-block-size: 2.75rem;
-    display: list-item;
-    align-content: center;
-    color: var(--scova-muted);
-    font-size: 0.875rem;
-}
-.execution-actions {
-    padding-inline: 1rem;
-}
-.status-heading {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-}
-h2 {
-    margin: 0;
-    font-size: 1.25rem;
-    line-height: 1.5;
-}
-.status-heading h2 {
-    font-size: 1.75rem;
-}
-.status-heading h2:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
-}
-.mode {
-    color: var(--scova-primary);
-    font-weight: 600;
-}
-.outcome {
-    font-size: 1.25rem;
-    font-weight: 600;
-}
-dl {
-    margin: 0;
-    display: grid;
-    gap: 1rem;
-}
-dt {
-    color: var(--scova-muted);
-}
-dd {
-    margin: 0.25rem 0 0;
-}
-.identity {
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr));
-    padding-block-start: 1rem;
-    border-top: 0.0625rem solid var(--scova-border);
-}
-.identity dd {
-    font-size: 1rem;
-    overflow-wrap: anywhere;
-}
-.connection {
-    padding: 1rem 1.5rem;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-}
-.connection p {
-    flex: 1 1 24rem;
-    overflow-wrap: anywhere;
-}
-.execution-columns {
-    display: grid;
-    gap: 1.5rem;
-    min-inline-size: 0;
-}
-.usage div {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem 1rem;
-    justify-content: space-between;
-}
-.usage dd {
-    margin: 0;
-}
-ul {
-    margin: 0;
-    padding-inline-start: 1.25rem;
-    display: grid;
-    gap: 0.75rem;
-}
-.report-link {
-    display: inline-flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    align-items: center;
-    min-block-size: 2.75rem;
-    justify-self: start;
-    cursor: pointer;
-}
-.report-link:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
-}
-@media (min-width: 52rem) {
-    .execution-columns {
-        grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
-    }
-}
-</style>

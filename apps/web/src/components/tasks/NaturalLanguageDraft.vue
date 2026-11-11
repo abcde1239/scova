@@ -1,31 +1,36 @@
 <template>
     <section
         ref="panel"
-        class="natural-language-draft scova-surface"
+        class="natural-language-draft scova-surface layout-stack rounded-3 break-anywhere p-[clamp(1rem,_3%,_1.5rem)]"
         aria-labelledby="natural-draft-title"
     >
-        <div class="draft-heading">
-            <h2 id="natural-draft-title">用 AI 整理需求</h2>
+        <div class="draft-heading flex items-center justify-between flex-wrap gap-2">
+            <h2 class="text-[1.25rem] leading-[1.5] m-0" id="natural-draft-title">
+                用 AI 整理需求
+            </h2>
             <info-dialog label="如何创建任务" title="AI 整理与手动填写">
-                <p>
+                <p class="m-0">
                     AI 整理：描述想研究的内容，由需求整理 Agent
                     根据你的回答继续澄清，核对搜索范围与交付形式后，建议标题、关注重点和执行计划，再由你检查、修改。
                 </p>
-                <p>
+                <p class="m-0">
                     手动填写：直接填写下方的任务配置，不调用需求整理
                     Agent。两种方式最终创建的是同一种任务。
                 </p>
-                <p>
+                <p class="m-0">
                     生成和应用草稿都不会保存任务或开始研究。检查表单并保存后，任务才会创建；研究由研究执行
                     Agent 负责。
                 </p>
-                <p>
+                <p class="m-0">
                     需求时区用于理解描述中的时间，默认沿用当前任务时区；也可以从列表另选。应用草稿后仍可修改执行计划。
                 </p>
             </info-dialog>
         </div>
-        <div v-if="manualMode" class="draft-result">
-            <p role="status">
+        <div
+            v-if="manualMode"
+            class="draft-result layout-stack [border-top:0.0625rem_solid_var(--scova-border)] pt-5 [&.draft-result_>_.scova-action-button]:justify-self-start"
+        >
+            <p class="m-0" role="status">
                 已进入手工配置。直接填写下方标题、目标、范围和输出形式，再保存任务。
             </p>
             <action-button
@@ -62,7 +67,7 @@
             @manual="enterManual"
         />
         <template v-else>
-            <p>
+            <p class="m-0">
                 AI
                 会根据描述提出需要澄清的问题，再结合你的回答整理搜索范围和交付形式。核对后才生成草稿。
             </p>
@@ -73,7 +78,7 @@
                 :error="draft.inputError.value"
                 :disabled="draft.unavailable.value"
             />
-            <p class="input-hint">最多 2000 字</p>
+            <p class="input-hint text-muted text-[0.875rem] m-0">最多 2000 字</p>
             <task-config-field
                 v-model="draft.timezone.value"
                 label="需求时区"
@@ -83,7 +88,7 @@
                 :error="draft.timezoneError.value"
                 :disabled="draft.unavailable.value"
             />
-            <div class="draft-buttons">
+            <div class="draft-buttons action-group">
                 <action-button
                     :disabled="draft.unavailable.value"
                     :busy="draft.pending.value"
@@ -109,45 +114,55 @@
             <div
                 v-if="draft.message.value"
                 ref="feedback"
-                class="draft-feedback"
+                class="draft-feedback keyboard-focus-wide"
                 role="status"
                 aria-live="polite"
                 tabindex="-1"
             >
-                <p>{{ draft.message.value }}</p>
+                <p class="m-0">{{ draft.message.value }}</p>
             </div>
             <section
                 v-if="draft.result.value"
-                class="draft-result"
+                class="draft-result layout-stack [border-top:0.0625rem_solid_var(--scova-border)] pt-5 [&.draft-result_>_.scova-action-button]:justify-self-start"
                 aria-labelledby="draft-result-title"
             >
-                <h3 id="draft-result-title">
+                <h3 class="text-[1.125rem] leading-[1.5] m-0" id="draft-result-title">
                     {{ draft.result.value.mode === 'model' ? '建议配置' : '待完善的配置' }}
                 </h3>
-                <p v-if="draft.result.value.manualReason">
+                <p class="m-0" v-if="draft.result.value.manualReason">
                     {{ manualReasons[draft.result.value.manualReason] }}
                 </p>
                 <details>
-                    <summary>本次解析原文</summary>
-                    <p class="original-text">{{ draft.result.value.inputText }}</p>
+                    <summary class="cursor-pointer min-h-11 pt-2 pb-2 keyboard-focus-wide">
+                        本次解析原文
+                    </summary>
+                    <p class="original-text mt-4 mb-0 whitespace-pre-wrap mx-0">
+                        {{ draft.result.value.inputText }}
+                    </p>
                 </details>
-                <ul v-if="draft.result.value.warnings.length" aria-label="解析警告">
+                <ul
+                    class="grid gap-3 pl-5 m-0"
+                    v-if="draft.result.value.warnings.length"
+                    aria-label="解析警告"
+                >
                     <li v-for="(warning, index) in draft.result.value.warnings" :key="index">
                         {{ warningLabel(warning.path) }}：{{ warning.message }}
                     </li>
                 </ul>
-                <dl class="draft-preview">
+                <dl class="draft-preview grid gap-4 m-0">
                     <div>
-                        <dt>建议标题</dt>
-                        <dd>{{ draft.result.value.config.title }}</dd>
+                        <dt class="text-muted">建议标题</dt>
+                        <dd class="mt-1 mb-0 mx-0">{{ draft.result.value.config.title }}</dd>
                     </div>
                     <div>
-                        <dt>建议计划</dt>
-                        <dd>{{ taskScheduleDescription(draft.result.value.config) }}</dd>
+                        <dt class="text-muted">建议计划</dt>
+                        <dd class="mt-1 mb-0 mx-0">
+                            {{ taskScheduleDescription(draft.result.value.config) }}
+                        </dd>
                     </div>
                     <div>
-                        <dt>执行预算</dt>
-                        <dd>
+                        <dt class="text-muted">执行预算</dt>
+                        <dd class="mt-1 mb-0 mx-0">
                             搜索 {{ draft.result.value.config.budget.maxSearches }} 次，读取
                             {{ draft.result.value.config.budget.maxPages }} 页，时长
                             {{ draft.result.value.config.budget.maxDurationSeconds }} 秒，输入
@@ -157,17 +172,17 @@
                     </div>
                 </dl>
                 <info-dialog label="查看生成详情" title="本次草稿生成详情">
-                    <p>
+                    <p class="m-0">
                         AI 问答调用 {{ draft.clarificationUsage.value.attempts }} 次 · 输入
                         {{ draft.clarificationUsage.value.inputTokens }} token · 输出
                         {{ draft.clarificationUsage.value.outputTokens }} token。
                     </p>
-                    <p>
+                    <p class="m-0">
                         模型调用 {{ draft.result.value.parsingUsage.attempts }} 次 · 输入
                         {{ draft.result.value.parsingUsage.inputTokens }} token · 输出
                         {{ draft.result.value.parsingUsage.outputTokens }} token
                     </p>
-                    <p>
+                    <p class="m-0">
                         {{
                             draft.result.value.parsingUsage.estimated ||
                             draft.clarificationUsage.value.estimated
@@ -176,7 +191,7 @@
                         }}用量独立统计，不计入后续研究预算。
                     </p>
                 </info-dialog>
-                <p v-if="draft.stale.value" class="stale-warning">
+                <p v-if="draft.stale.value" class="stale-warning [color:var(--scova-partial)] m-0">
                     原文、解析时区或表单已变化，此结果不能覆盖当前配置。请重新解析或继续手工填写。
                 </p>
                 <action-button :disabled="!draft.canApply.value" @click="apply"
@@ -301,87 +316,3 @@ async function cancel() {
     feedback.value?.focus();
 }
 </script>
-
-<style scoped>
-.natural-language-draft,
-.draft-result {
-    display: grid;
-    gap: 1rem;
-    min-inline-size: 0;
-}
-.natural-language-draft {
-    padding: clamp(1rem, 3%, 1.5rem);
-    border-radius: 0.75rem;
-    overflow-wrap: anywhere;
-}
-h2,
-h3,
-p {
-    margin: 0;
-}
-h2 {
-    font-size: 1.25rem;
-    line-height: 1.5;
-}
-h3 {
-    font-size: 1.125rem;
-    line-height: 1.5;
-}
-.draft-buttons {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-}
-.draft-heading {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-}
-.input-hint {
-    color: var(--scova-muted);
-    font-size: 0.875rem;
-}
-.draft-result {
-    border-block-start: 0.0625rem solid var(--scova-border);
-    padding-block-start: 1.25rem;
-}
-.draft-result > :deep(.scova-action-button) {
-    justify-self: start;
-}
-.original-text {
-    white-space: pre-wrap;
-    margin-block-start: 1rem;
-}
-summary {
-    cursor: pointer;
-    min-block-size: 2.75rem;
-    padding-block: 0.5rem;
-}
-.draft-feedback:focus-visible,
-summary:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
-}
-ul {
-    display: grid;
-    gap: 0.75rem;
-    margin: 0;
-    padding-inline-start: 1.25rem;
-}
-.draft-preview {
-    display: grid;
-    gap: 1rem;
-    margin: 0;
-}
-dt {
-    color: var(--scova-muted);
-}
-dd {
-    margin: 0.25rem 0 0;
-}
-.stale-warning {
-    color: var(--scova-partial);
-}
-</style>

@@ -1,7 +1,16 @@
 <template>
-    <section id="saved-evidence" class="evidence-appendix" aria-labelledby="saved-evidence-title">
-        <h3 id="saved-evidence-title" class="scova-content-title">来源与保存引用</h3>
-        <p class="scova-interface">
+    <section
+        id="saved-evidence"
+        class="evidence-appendix layout-grid gap-3.5 break-anywhere pt-4 pb-0 [border-top:0.0625rem_solid_var(--scova-border)] [scroll-margin-block-start:6rem]"
+        aria-labelledby="saved-evidence-title"
+    >
+        <h3
+            id="saved-evidence-title"
+            class="scova-content-title text-[1.25rem] font-semibold m-0 keyboard-focus-wide [.evidence-appendix_>_&:is(h3)]:[scroll-margin-block-start:6rem]"
+        >
+            来源与保存引用
+        </h3>
+        <p class="scova-interface m-0">
             每份来源集中保存引用，展开即可核对原文；不同保存版本分别列出。
         </p>
         <evidence-source-group
@@ -20,34 +29,3 @@ import { groupEvidence } from '@/utils/evidence-groups';
 const props = defineProps<{ report: Report }>();
 const groups = computed(() => groupEvidence(props.report.evidence));
 </script>
-
-<style scoped>
-.evidence-appendix {
-    display: grid;
-    gap: 0.875rem;
-    min-inline-size: 0;
-    overflow-wrap: anywhere;
-    padding-block: 1rem 0;
-    border-block-start: 0.0625rem solid var(--scova-border);
-}
-h3,
-p {
-    margin: 0;
-}
-h3 {
-    font-size: 1.25rem;
-    font-weight: 600;
-}
-.evidence-appendix,
-.evidence-appendix > h3,
-.evidence-entry {
-    scroll-margin-block-start: 6rem;
-}
-.evidence-entry {
-    min-inline-size: 0;
-}
-h3:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
-}
-</style>

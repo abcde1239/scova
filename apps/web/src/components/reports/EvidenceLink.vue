@@ -1,5 +1,7 @@
 <template>
-    <a class="evidence-link scova-citation-tools" :href="`#evidence-${evidence.id}`"
+    <a
+        class="evidence-link scova-citation-tools inline-flex min-h-11 items-center min-w-0 break-anywhere text-primary underline-offset-[0.2em] keyboard-focus-wide"
+        :href="`#evidence-${evidence.id}`"
         >{{ evidence.title }} · 核对保存引用</a
     >
 </template>
@@ -7,18 +9,3 @@
 import type { Evidence } from '@scova/models';
 defineProps<{ evidence: Evidence }>();
 </script>
-<style scoped>
-a {
-    display: inline-flex;
-    min-block-size: 2.75rem;
-    align-items: center;
-    min-inline-size: 0;
-    overflow-wrap: anywhere;
-    color: var(--scova-primary);
-    text-underline-offset: 0.2em;
-}
-a:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
-}
-</style>

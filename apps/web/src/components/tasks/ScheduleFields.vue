@@ -1,6 +1,6 @@
 <template>
-    <fieldset class="schedule-fields" :disabled="disabled">
-        <legend>执行计划</legend>
+    <fieldset class="schedule-fields layout-grid gap-6 [border:0] m-0 p-0" :disabled="disabled">
+        <legend class="text-[1.25rem] font-semibold mb-6 p-0">执行计划</legend>
         <task-config-field
             v-model="frequency"
             label="计划频率"
@@ -72,20 +72,3 @@ const frequencies = [
     { value: 'weekly', label: '每周' },
 ];
 </script>
-
-<style scoped>
-.schedule-fields {
-    display: grid;
-    gap: 1.5rem;
-    min-inline-size: 0;
-    margin: 0;
-    padding: 0;
-    border: 0;
-}
-legend {
-    font-size: 1.25rem;
-    font-weight: 600;
-    padding: 0;
-    margin-block-end: 1.5rem;
-}
-</style>

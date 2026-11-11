@@ -1,22 +1,33 @@
 <template>
-    <div class="execution-agent-select">
+    <div
+        class="execution-agent-select layout-grid gap-3 max-w-[36rem] [&.execution-agent-select_>_.scova-action-button]:justify-self-start"
+    >
         <app-select
             v-model="selection"
             label="执行 Agent 配置"
             :options="options"
             :disabled="disabled"
         />
-        <p v-if="query.isPending.value" role="status">正在读取执行 Agent 配置…</p>
+        <p class="text-muted break-anywhere m-0" v-if="query.isPending.value" role="status">
+            正在读取执行 Agent 配置…
+        </p>
         <template v-else-if="query.isError.value">
-            <p role="status">执行 Agent 配置读取失败，已保存的选择保持不变。</p>
+            <p class="text-muted break-anywhere m-0" role="status">
+                执行 Agent 配置读取失败，已保存的选择保持不变。
+            </p>
             <action-button :busy="query.isFetching.value" @click="query.refetch()"
                 >重试读取配置</action-button
             >
         </template>
-        <p v-else-if="query.data.value && !query.data.value.data.items.length">
+        <p
+            class="text-muted break-anywhere m-0"
+            v-else-if="query.data.value && !query.data.value.data.items.length"
+        >
             尚未添加个人配置，可前往账号设置添加。
         </p>
-        <p v-else>{{ hint || '此选择用于该任务的手动和计划执行，不改变账号默认配置。' }}</p>
+        <p class="text-muted break-anywhere m-0" v-else>
+            {{ hint || '此选择用于该任务的手动和计划执行，不改变账号默认配置。' }}
+        </p>
         <router-link class="scova-reference" :to="{ name: 'agent-settings' }"
             >管理 Agent 配置</router-link
         >
@@ -57,20 +68,3 @@ const options = computed(() => {
     return values;
 });
 </script>
-
-<style scoped>
-.execution-agent-select {
-    display: grid;
-    gap: 0.75rem;
-    min-inline-size: 0;
-    max-inline-size: 36rem;
-}
-p {
-    margin: 0;
-    color: var(--scova-muted);
-    overflow-wrap: anywhere;
-}
-.execution-agent-select > :deep(.scova-action-button) {
-    justify-self: start;
-}
-</style>

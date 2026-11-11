@@ -1,7 +1,20 @@
 <template>
-    <section ref="section" class="run-history" aria-labelledby="run-history-title">
-        <h2 id="run-history-title" ref="title" tabindex="-1">执行历史</h2>
-        <p>排队时间按 {{ timezone }} 显示；每次执行保留其固定配置版本。</p>
+    <section
+        ref="section"
+        class="run-history layout-grid gap-6 [border-top:0.0625rem_solid_var(--scova-border)] pt-8 [&.run-history_>_.scova-action-button]:justify-self-start"
+        aria-labelledby="run-history-title"
+    >
+        <h2
+            class="text-[1.25rem] leading-[1.6] m-0 keyboard-focus-wide"
+            id="run-history-title"
+            ref="title"
+            tabindex="-1"
+        >
+            执行历史
+        </h2>
+        <p class="[.run-history_>_&:is(p)]:text-muted">
+            排队时间按 {{ timezone }} 显示；每次执行保留其固定配置版本。
+        </p>
         <state-panel v-if="query.isPending.value" state="loading" />
         <state-panel
             v-else-if="query.isError.value && !items.length"
@@ -12,19 +25,29 @@
         />
         <template v-else>
             <state-panel v-if="!items.length" state="empty" message="此任务尚无执行记录" />
-            <ol v-else>
-                <li v-for="run in items" :key="run.id" class="history-entry">
-                    <router-link :to="`/runs/${run.id}`"
+            <ol class="grid gap-6 list-none m-0 p-0" v-else>
+                <li
+                    v-for="run in items"
+                    :key="run.id"
+                    class="history-entry layout-grid gap-3 break-anywhere [.history-entry_+_&.history-entry]:([border-top:0.0625rem_solid_var(--scova-border)] pt-6)"
+                >
+                    <router-link
+                        class="inline-flex items-center justify-self-start min-h-11 text-primary cursor-pointer underline-offset-[0.2em] keyboard-focus-wide"
+                        :to="`/runs/${run.id}`"
                         >{{ executionTitle(run) }} · 查看执行</router-link
                     >
-                    <p>{{ run.mode === 'demo' ? '演示模式 · Demo' : '真实查阅 · Live' }}</p>
-                    <p>
+                    <p class="[.run-history_>_&:is(p)]:text-muted">
+                        {{ run.mode === 'demo' ? '演示模式 · Demo' : '真实查阅 · Live' }}
+                    </p>
+                    <p class="[.run-history_>_&:is(p)]:text-muted">
                         排队于
                         <time :datetime="run.queuedAt">{{
                             localTaskTime(run.queuedAt, timezone)
                         }}</time>
                     </p>
-                    <p>固定配置版本：{{ run.taskVersionId }}</p>
+                    <p class="[.run-history_>_&:is(p)]:text-muted">
+                        固定配置版本：{{ run.taskVersionId }}
+                    </p>
                 </li>
             </ol>
             <state-panel
@@ -74,55 +97,3 @@ async function restore(operation: () => Promise<unknown>, always: boolean) {
 const retry = () => restore(() => query.refetch(), true);
 const more = () => restore(() => query.fetchNextPage(), false);
 </script>
-
-<style scoped>
-.run-history {
-    display: grid;
-    gap: 1.5rem;
-    min-inline-size: 0;
-    border-block-start: 0.0625rem solid var(--scova-border);
-    padding-block-start: 2rem;
-}
-h2 {
-    margin: 0;
-    font-size: 1.25rem;
-    line-height: 1.6;
-}
-ol {
-    display: grid;
-    gap: 1.5rem;
-    padding: 0;
-    margin: 0;
-    list-style: none;
-}
-.history-entry {
-    display: grid;
-    gap: 0.75rem;
-    min-inline-size: 0;
-    overflow-wrap: anywhere;
-}
-.history-entry + .history-entry {
-    border-block-start: 0.0625rem solid var(--scova-border);
-    padding-block-start: 1.5rem;
-}
-.run-history > p {
-    color: var(--scova-muted);
-}
-a {
-    display: inline-flex;
-    align-items: center;
-    justify-self: start;
-    min-block-size: 2.75rem;
-    color: var(--scova-primary);
-    cursor: pointer;
-    text-underline-offset: 0.2em;
-}
-a:focus-visible,
-h2:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
-}
-.run-history > :deep(.scova-action-button) {
-    justify-self: start;
-}
-</style>

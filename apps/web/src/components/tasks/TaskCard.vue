@@ -1,7 +1,15 @@
 <template>
-    <article class="task-card" :class="{ 'task-row': link }" :aria-labelledby="headingId">
-        <h2 :id="headingId">
+    <article
+        class="task-card [border-top:0.0625rem_solid_color-mix(in_srgb,_var(--scova-border)_30%,_transparent)] min-w-0 break-anywhere cursor-default py-4 px-0 [&.task-row]:(grid grid-cols-[minmax(0,_1fr)_minmax(15rem,_0.6fr)_auto] gap-[0.75rem_1.5rem] items-center) [@media(max-width:_53.999rem)]:[&.task-row]:grid-cols-[minmax(0,_1fr)_auto] [@media(max-width:_29.999rem)]:[&.task-row]:grid-cols-[minmax(0,_1fr)]"
+        :class="{ 'task-row': link }"
+        :aria-labelledby="headingId"
+    >
+        <h2
+            class="[.task-row_&:is(h2)]:(text-[1.125rem] m-0) [@media(max-width:_53.999rem)]:[.task-row_&:is(h2)]:col-span-full mt-0 mb-3 text-[1.25rem] leading-[1.5] font-semibold mx-0"
+            :id="headingId"
+        >
             <router-link
+                class="text-inherit no-underline cursor-pointer keyboard-focus-wide hover:(text-primary underline underline-offset-[0.2em])"
                 v-if="link"
                 :to="{
                     name: 'task-summary',
@@ -12,18 +20,26 @@
             >
             <template v-else>{{ task.title }}</template>
         </h2>
-        <dl>
-            <div>
-                <dt>状态</dt>
-                <dd>{{ labels[task.status] }}</dd>
+        <dl
+            class="[.task-row_&:is(dl)]:(grid grid-cols-[minmax(4rem,_0.6fr)_minmax(0,_1fr)] gap-3 text-[0.875rem]) flex flex-wrap gap-[1rem_3rem] m-0"
+        >
+            <div class="[dl_&:is(div)]:(grid gap-1.5 min-w-0)">
+                <dt class="text-muted">状态</dt>
+                <dd class="m-0">{{ labels[task.status] }}</dd>
             </div>
-            <div v-if="!link">
-                <dt>最近执行</dt>
-                <dd>
+            <div class="[dl_&:is(div)]:(grid gap-1.5 min-w-0)" v-if="!link">
+                <dt class="text-muted">最近执行</dt>
+                <dd class="m-0">
                     <template v-if="runs.isPending.value">正在读取</template>
                     <template v-else-if="runs.isError.value"
                         >暂不可用
-                        <button type="button" @click="runs.refetch()">重试</button></template
+                        <button
+                            class="keyboard-focus-wide min-h-11 font-inherit text-primary bg-transparent [border:0] cursor-pointer py-1.5 px-2"
+                            type="button"
+                            @click="runs.refetch()"
+                        >
+                            重试
+                        </button></template
                     >
                     <template v-else-if="latest"
                         ><time :datetime="latest.queuedAt">{{
@@ -34,9 +50,9 @@
                     <template v-else>尚无执行</template>
                 </dd>
             </div>
-            <div>
-                <dt>下次执行</dt>
-                <dd>
+            <div class="[dl_&:is(div)]:(grid gap-1.5 min-w-0)">
+                <dt class="text-muted">下次执行</dt>
+                <dd class="m-0">
                     <time v-if="task.nextRunAt" :datetime="task.nextRunAt">{{
                         localTaskTime(task.nextRunAt, timezone)
                     }}</time
@@ -46,7 +62,7 @@
         </dl>
         <navigation-button
             v-if="link"
-            class="task-history-link"
+            class="task-history-link text-inherit no-underline cursor-pointer keyboard-focus-wide [.task-row_&.task-history-link]:m-0 [@media(max-width:_29.999rem)]:[.task-row_&.task-history-link]:justify-self-start hover:(text-primary underline underline-offset-[0.2em]) [&&]:(inline-flex items-center min-h-11 max-w-full mt-4 text-primary)"
             icon="report"
             :to="{ name: 'report-history', query: { taskId: task.id } }"
             >报告历史</navigation-button
@@ -93,103 +109,3 @@ const runLabels: Record<RunStatus, string> = {
     failed: '失败',
 };
 </script>
-
-<style scoped>
-.task-card {
-    padding: 1rem 0;
-    border-block-start: 0.0625rem solid color-mix(in srgb, var(--scova-border) 30%, transparent);
-    min-inline-size: 0;
-    overflow-wrap: anywhere;
-    cursor: default;
-}
-.task-row {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(15rem, 0.6fr) auto;
-    gap: 0.75rem 1.5rem;
-    align-items: center;
-}
-.task-row h2 {
-    margin: 0;
-    font-size: 1.125rem;
-}
-.task-row .task-history-link {
-    margin: 0;
-}
-.task-row dl {
-    display: grid;
-    grid-template-columns: minmax(4rem, 0.6fr) minmax(0, 1fr);
-    gap: 0.75rem;
-    font-size: 0.875rem;
-}
-@media (max-width: 53.999rem) {
-    .task-row {
-        grid-template-columns: minmax(0, 1fr) auto;
-    }
-    .task-row h2 {
-        grid-column: 1 / -1;
-    }
-}
-@media (max-width: 29.999rem) {
-    .task-row {
-        grid-template-columns: minmax(0, 1fr);
-    }
-    .task-row .task-history-link {
-        justify-self: start;
-    }
-}
-h2 {
-    margin: 0 0 0.75rem;
-    font-size: 1.25rem;
-    line-height: 1.5;
-    font-weight: 600;
-}
-a {
-    color: inherit;
-    text-decoration: none;
-    cursor: pointer;
-}
-a:hover {
-    color: var(--scova-primary);
-    text-decoration: underline;
-    text-underline-offset: 0.2em;
-}
-.task-history-link {
-    display: inline-flex;
-    align-items: center;
-    min-block-size: 2.75rem;
-    max-inline-size: 100%;
-    margin-block-start: 1rem;
-    color: var(--scova-primary);
-}
-a:focus-visible,
-button:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
-}
-dl {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1rem 3rem;
-    margin: 0;
-}
-dl div {
-    display: grid;
-    gap: 0.375rem;
-    min-inline-size: 0;
-}
-dt {
-    color: var(--scova-muted);
-}
-dd {
-    margin: 0;
-}
-button {
-    min-block-size: 2.75rem;
-    padding: 0.375rem 0.5rem;
-    font: inherit;
-    color: var(--scova-primary);
-    background: transparent;
-    border: 0;
-    cursor: pointer;
-}
-</style>

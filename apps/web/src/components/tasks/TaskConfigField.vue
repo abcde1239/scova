@@ -68,83 +68,54 @@ const id = useId();
 </script>
 
 <style scoped>
+/* Scoped UnoCSS keeps the long control/state combinations readable. */
 .config-field {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0.5rem;
-    min-inline-size: 0;
+    @apply layout-grid grid-cols-[minmax(0,_1fr)] gap-2;
 }
 label {
-    font-weight: 500;
-    cursor: default;
-    min-inline-size: 0;
-    overflow-wrap: anywhere;
+    @apply font-medium cursor-default min-w-0 break-anywhere;
 }
 .config-field:has(input[type='checkbox']) {
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    min-block-size: 2.75rem;
+    @apply grid-cols-[minmax(0,_1fr)_auto] items-center min-h-11;
 }
 input[type='checkbox'] {
-    inline-size: 1.25rem;
-    block-size: 1.25rem;
-    margin: 0;
-    accent-color: var(--scova-primary);
-    cursor: pointer;
+    @apply w-5 h-5 [accent-color:var(--scova-primary)] cursor-pointer m-0;
 }
 .config-field :deep(.n-input) {
-    --n-font-size: 1rem !important;
-    inline-size: 100%;
-    max-inline-size: 100%;
-    min-inline-size: 0;
-    min-block-size: 2.75rem;
-    border-radius: 0.375rem;
+    @apply ![--n-font-size:1rem] w-full max-w-full min-w-0 min-h-11 rounded-1.5;
 }
 .config-field :deep(.n-input-wrapper),
 .config-field :deep(.n-input__input) {
-    min-inline-size: 0;
+    @apply min-w-0;
 }
 .config-field :deep(input),
 .config-field :deep(textarea) {
-    min-inline-size: 0;
-    font-size: 1rem;
-    cursor: text;
+    @apply min-w-0 text-[1rem] [cursor:text];
 }
 .config-field :deep(.n-input__input),
 .config-field :deep(.n-input__input-el) {
-    block-size: auto;
-    min-block-size: 2.75rem;
-    line-height: 1.5;
+    @apply h-auto min-h-11 leading-[1.5];
 }
 .config-field :deep(input[type='time']),
 .config-field :deep(input[type='datetime-local']) {
-    appearance: auto;
-    cursor: auto;
-    max-inline-size: 100%;
-    background: var(--scova-surface);
+    @apply [appearance:auto] [cursor:auto] max-w-full bg-surface;
 }
 .config-field:has(input[type='checkbox']) label {
-    min-block-size: 2.75rem;
-    display: flex;
-    align-items: center;
-    cursor: pointer;
+    @apply min-h-11 flex items-center cursor-pointer;
 }
 .field-error {
-    margin: 0;
-    color: var(--scova-danger);
-    overflow-wrap: anywhere;
+    @apply text-danger break-anywhere m-0;
 }
 input:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.1875rem;
+    @apply [outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.1875rem];
 }
 input:disabled {
-    cursor: not-allowed;
+    @apply cursor-not-allowed;
 }
 .config-field :deep(input[type='time']:disabled),
 .config-field :deep(input[type='time'][readonly]),
 .config-field :deep(input[type='datetime-local']:disabled),
 .config-field :deep(input[type='datetime-local'][readonly]) {
-    cursor: not-allowed;
+    @apply cursor-not-allowed;
 }
 </style>

@@ -1,34 +1,54 @@
 <template>
-    <div class="structured-content">
-        <ul v-if="format === 'list' && content.list" class="object-list" role="list">
-            <li v-for="entry in content.list.entries" :key="entry.id" class="object-card">
-                <h4 class="scova-content-title">{{ entry.name }}</h4>
-                <dl>
-                    <div v-for="field in entry.fields" :key="field.id" class="object-field">
-                        <dt>{{ field.label }}</dt>
-                        <dd><report-structured-value :report="report" :value="field" /></dd>
+    <div class="structured-content layout-grid gap-3 break-anywhere">
+        <ul
+            v-if="format === 'list' && content.list"
+            class="object-list grid grid-cols-[repeat(auto-fit,_minmax(min(100%,_20rem),_1fr))] gap-4 list-none m-0 p-0"
+            role="list"
+        >
+            <li
+                v-for="entry in content.list.entries"
+                :key="entry.id"
+                class="object-card layout-grid gap-3 break-anywhere [align-content:start] border-theme rounded-3 p-4 [@media(max-width:_40rem)]:(pl-1.5 pr-1.5)"
+            >
+                <h4 class="scova-content-title m-0">{{ entry.name }}</h4>
+                <dl class="grid gap-4 m-0">
+                    <div
+                        v-for="field in entry.fields"
+                        :key="field.id"
+                        class="object-field layout-grid gap-3 break-anywhere"
+                    >
+                        <dt class="font-semibold">{{ field.label }}</dt>
+                        <dd class="m-0">
+                            <report-structured-value :report="report" :value="field" />
+                        </dd>
                     </div>
                 </dl>
             </li>
         </ul>
         <div
             v-if="format === 'comparison' && content.comparison"
-            class="matrix-scroll"
+            class="matrix-scroll min-w-0 max-w-full [overflow-x:auto] [overscroll-behavior-inline:contain] keyboard-focus-wide"
             tabindex="0"
             role="region"
             aria-labelledby="object-comparison-caption"
         >
             <table
-                class="object-matrix"
+                class="object-matrix w-full [table-layout:fixed] [border-collapse:collapse]"
                 :style="{ minInlineSize: `${12 * (content.comparison.objects.length + 1)}rem` }"
             >
-                <caption id="object-comparison-caption">
+                <caption class="text-start pb-3" id="object-comparison-caption">
                     对象与共同维度对比
                 </caption>
                 <thead>
                     <tr>
-                        <th scope="col">共同维度</th>
                         <th
+                            class="border-theme text-start [vertical-align:top] break-anywhere [background:var(--scova-selected)] font-semibold p-3.5"
+                            scope="col"
+                        >
+                            共同维度
+                        </th>
+                        <th
+                            class="border-theme text-start [vertical-align:top] break-anywhere [background:var(--scova-selected)] font-semibold p-3.5"
                             v-for="object in content.comparison.objects"
                             :key="object.id"
                             scope="col"
@@ -39,14 +59,23 @@
                 </thead>
                 <tbody>
                     <tr v-for="dimension in content.comparison.dimensions" :key="dimension.id">
-                        <th scope="row">{{ dimension.label }}</th>
-                        <td v-for="object in content.comparison.objects" :key="object.id">
+                        <th
+                            class="border-theme text-start [vertical-align:top] break-anywhere [background:var(--scova-selected)] font-semibold p-3.5"
+                            scope="row"
+                        >
+                            {{ dimension.label }}
+                        </th>
+                        <td
+                            class="border-theme text-start [vertical-align:top] break-anywhere p-3.5"
+                            v-for="object in content.comparison.objects"
+                            :key="object.id"
+                        >
                             <report-structured-value
                                 v-if="cell(object.id, dimension.id)"
                                 :report="report"
                                 :value="cell(object.id, dimension.id)!"
                             />
-                            <p v-else class="scova-warning">未知：尚未保存此项资料</p>
+                            <p v-else class="scova-warning m-0">未知：尚未保存此项资料</p>
                         </td>
                     </tr>
                 </tbody>
@@ -64,76 +93,3 @@ const cell = (objectId: string, dimensionId: string) =>
         (entry) => entry.objectId === objectId && entry.dimensionId === dimensionId,
     );
 </script>
-<style scoped>
-.structured-content,
-.object-card,
-.object-field {
-    display: grid;
-    min-inline-size: 0;
-    gap: 0.75rem;
-    overflow-wrap: anywhere;
-}
-.object-list {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
-    gap: 1rem;
-    padding: 0;
-    margin: 0;
-    list-style: none;
-}
-.object-card {
-    align-content: start;
-    padding: 1rem;
-    border: 0.0625rem solid var(--scova-border);
-    border-radius: 0.75rem;
-}
-h4,
-p,
-dl,
-dd {
-    margin: 0;
-}
-dl {
-    display: grid;
-    gap: 1rem;
-}
-dt {
-    font-weight: 600;
-}
-.matrix-scroll {
-    min-inline-size: 0;
-    max-inline-size: 100%;
-    overflow-x: auto;
-    overscroll-behavior-inline: contain;
-}
-.object-matrix {
-    inline-size: 100%;
-    table-layout: fixed;
-    border-collapse: collapse;
-}
-caption {
-    text-align: start;
-    padding-block-end: 0.75rem;
-}
-th,
-td {
-    padding: 0.875rem;
-    border: 0.0625rem solid var(--scova-border);
-    text-align: start;
-    vertical-align: top;
-    overflow-wrap: anywhere;
-}
-th {
-    background: var(--scova-selected);
-    font-weight: 600;
-}
-.matrix-scroll:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
-}
-@media (max-width: 40rem) {
-    .object-card {
-        padding-inline: 0.375rem;
-    }
-}
-</style>

@@ -1,29 +1,46 @@
 <template>
-    <div class="structured-value scova-reading">
-        <p v-if="value.status !== 'supported'" class="scova-warning scova-interface">
+    <div class="structured-value scova-reading layout-grid gap-2 break-anywhere">
+        <p
+            v-if="value.status !== 'supported'"
+            class="scova-warning scova-interface whitespace-pre-wrap m-0"
+        >
             {{ value.status === 'unknown' ? '未知' : '部分资料，待核实'
             }}{{ value.gap ? `：${value.gap}` : '' }}
         </p>
-        <p v-if="value.text && value.status !== 'unknown'">{{ value.text }}</p>
+        <p class="whitespace-pre-wrap m-0" v-if="value.text && value.status !== 'unknown'">
+            {{ value.text }}
+        </p>
         <p
             v-for="notice in notices"
             :key="notice"
-            class="structured-notice scova-warning scova-interface"
+            class="structured-notice scova-warning scova-interface whitespace-pre-wrap m-0"
         >
             {{ notice }}
         </p>
         <p
             v-for="condition in conditions"
             :key="condition"
-            class="structured-condition scova-interface"
+            class="structured-condition scova-interface whitespace-pre-wrap m-0"
         >
             适用条件：{{ condition }}
         </p>
-        <p v-for="gap in gaps" :key="gap" class="structured-gap scova-warning scova-interface">
+        <p
+            v-for="gap in gaps"
+            :key="gap"
+            class="structured-gap scova-warning scova-interface whitespace-pre-wrap m-0"
+        >
             补充说明：{{ gap }}
         </p>
-        <nav v-if="indexes.length" class="structured-links scova-interface" aria-label="本项依据">
-            <a v-for="index in indexes" :key="index" :href="`#claim-${report.claims[index]!.id}`"
+        <nav
+            v-if="indexes.length"
+            class="structured-links scova-interface action-group"
+            aria-label="本项依据"
+        >
+            <a
+                class="inline-flex min-h-11 items-center text-primary underline-offset-[0.2em] keyboard-focus-wide"
+                v-for="index in indexes"
+                :key="index"
+                :href="`#claim-${report.claims[index]!.id}`"
                 >依据 {{ index + 1 }}</a
             >
         </nav>
@@ -70,31 +87,3 @@ const notices = computed(() =>
     ),
 );
 </script>
-<style scoped>
-.structured-value {
-    display: grid;
-    gap: 0.5rem;
-    min-inline-size: 0;
-    overflow-wrap: anywhere;
-}
-p {
-    margin: 0;
-    white-space: pre-wrap;
-}
-.structured-links {
-    display: flex;
-    gap: 0.75rem;
-    flex-wrap: wrap;
-}
-a {
-    display: inline-flex;
-    min-block-size: 2.75rem;
-    align-items: center;
-    color: var(--scova-primary);
-    text-underline-offset: 0.2em;
-}
-a:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
-}
-</style>

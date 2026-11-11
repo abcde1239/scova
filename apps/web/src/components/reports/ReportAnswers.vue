@@ -1,12 +1,12 @@
 <template>
     <section
         v-if="value"
-        class="answers"
+        class="answers report-grid max-w-full [&.answer]:(grid gap-5 min-w-0 max-w-full break-anywhere pt-5 [border-top:0.0625rem_solid_var(--scova-border)] [scroll-margin-block-start:6rem])"
         :class="`answers--${format}`"
         aria-labelledby="answers-title"
     >
-        <h3 id="answers-title" class="scova-content-title">{{ presentation.title }}</h3>
-        <p class="scova-interface">{{ presentation.description }}</p>
+        <h3 id="answers-title" class="scova-content-title m-0">{{ presentation.title }}</h3>
+        <p class="scova-interface m-0 [.assessment_&:is(p)]:mt-2">{{ presentation.description }}</p>
         <report-structured-content
             v-if="structured"
             :report="report"
@@ -15,40 +15,50 @@
         />
         <p
             v-else-if="format === 'list' || format === 'comparison'"
-            class="legacy-notice scova-interface"
+            class="legacy-notice scova-interface text-muted m-0 [.assessment_&:is(p)]:mt-2"
         >
             这份报告未保存对象与字段结构，以下保留原有问题与回答。
         </p>
         <component :is="structured ? 'details' : 'div'" class="answer-support">
-            <summary v-if="structured" class="scova-interface">查看完整依据与问题覆盖</summary>
-            <div class="answer-rows">
+            <summary
+                v-if="structured"
+                class="scova-interface min-h-11 pt-2 pb-2 cursor-pointer keyboard-focus-wide"
+            >
+                查看完整依据与问题覆盖
+            </summary>
+            <div class="answer-rows report-grid max-w-full">
                 <section
                     v-for="(question, questionIndex) in groupedQuestions"
                     :id="`question-${question.id}`"
                     :key="question.id"
-                    class="answer"
+                    class="answer report-grid max-w-full pt-5 [border-top:0.0625rem_solid_var(--scova-border)] [scroll-margin-block-start:6rem]"
                     :aria-labelledby="`question-title-${question.id}`"
                 >
-                    <header class="answer-heading">
+                    <header
+                        class="answer-heading layout-grid gap-2 max-w-full break-anywhere [.answers--research\_report_&.answer-heading]:(pt-3 pb-3 [border-bottom:0.0625rem_solid_var(--scova-border)])"
+                    >
                         <span
                             v-if="format !== 'brief'"
-                            class="answer-number scova-interface"
+                            class="answer-number scova-interface text-primary text-[1.25rem] font-semibold [font-variant-numeric:tabular-nums]"
                             aria-hidden="true"
                             >{{ String(questionIndex + 1).padStart(2, '0') }}</span
                         >
-                        <h4 :id="`question-title-${question.id}`" class="scova-content-title">
+                        <h4
+                            :id="`question-title-${question.id}`"
+                            class="scova-content-title m-0 [.answers--research\_report_.answer-heading_&:is(h4)]:(text-[1.375rem] leading-[1.6])"
+                        >
                             {{ question.text }}
                         </h4>
-                        <p class="scova-interface">
+                        <p class="scova-interface m-0 [.assessment_&:is(p)]:mt-2">
                             {{ question.priority === 'core' ? '核心问题' : '补充问题' }} ·
                             {{ statusLabels[question.status] }}
                         </p>
                     </header>
-                    <div class="answer-body">
+                    <div class="answer-body report-grid max-w-full">
                         <div
                             v-for="group in question.groups"
                             :key="group.key"
-                            class="answer-source"
+                            class="answer-source report-grid max-w-full"
                         >
                             <template v-for="index in group.indexes" :key="index">
                                 <template v-if="report.claims[index]">
@@ -59,25 +69,37 @@
                                         />
                                         <p
                                             v-if="selection(index)?.assessment?.conditions"
-                                            class="scova-interface"
+                                            class="scova-interface m-0 [.assessment_&:is(p)]:mt-2"
                                         >
                                             适用条件：{{ selection(index)?.assessment?.conditions }}
                                         </p>
                                         <details
                                             v-if="selection(index)?.assessment"
-                                            class="assessment scova-interface"
+                                            class="assessment scova-interface text-muted"
                                         >
-                                            <summary>回答说明</summary>
-                                            <p>
+                                            <summary
+                                                class="min-h-11 pt-2 pb-2 cursor-pointer keyboard-focus-wide"
+                                            >
+                                                回答说明
+                                            </summary>
+                                            <p class="m-0 [.assessment_&:is(p)]:mt-2">
                                                 评估说明：{{ selection(index)?.assessment?.reason }}
                                             </p>
-                                            <p v-if="selection(index)?.assessment?.gap">
+                                            <p
+                                                class="m-0 [.assessment_&:is(p)]:mt-2"
+                                                v-if="selection(index)?.assessment?.gap"
+                                            >
                                                 补充说明：{{ selection(index)?.assessment?.gap }}
                                             </p>
                                         </details>
                                     </template>
-                                    <p v-else class="shared-answer scova-interface">
-                                        <a :href="`#claim-${report.claims[index]!.id}`"
+                                    <p
+                                        v-else
+                                        class="shared-answer scova-interface m-0 [.assessment_&:is(p)]:mt-2"
+                                    >
+                                        <a
+                                            class="inline-flex min-h-11 items-center text-primary underline-offset-[0.2em] keyboard-focus-wide"
+                                            :href="`#claim-${report.claims[index]!.id}`"
                                             >查看前文相关结论</a
                                         >
                                     </p>
@@ -86,7 +108,7 @@
                         </div>
                         <p
                             v-if="question.gap"
-                            class="question-gap scova-interface"
+                            class="question-gap scova-interface text-muted m-0 [.assessment_&:is(p)]:mt-2"
                             :class="{
                                 'scova-warning':
                                     question.status === 'unresolved' ||
@@ -99,12 +121,21 @@
                 </section>
             </div>
         </component>
-        <details v-if="pending.length" id="report-pending" class="pending">
-            <summary id="pending-title" class="scova-interface">
+        <details
+            v-if="pending.length"
+            id="report-pending"
+            class="pending min-w-0 pt-2 pb-2 [border-top:0.0625rem_solid_var(--scova-border)]"
+        >
+            <summary
+                id="pending-title"
+                class="scova-interface min-h-11 pt-2 pb-2 cursor-pointer keyboard-focus-wide"
+            >
                 查看待核实材料（{{ pending.length }}）
             </summary>
-            <div class="pending-body">
-                <p class="scova-interface">以下材料尚无足够依据，不计入已确认回答。</p>
+            <div class="pending-body report-grid max-w-full pt-3 pb-3">
+                <p class="scova-interface m-0 [.assessment_&:is(p)]:mt-2">
+                    以下材料尚无足够依据，不计入已确认回答。
+                </p>
                 <report-claim
                     v-for="claim in pending"
                     :key="claim.id"
@@ -114,14 +145,26 @@
             </div>
         </details>
         <details v-if="references.length" class="references">
-            <summary class="scova-interface">参考与探索线索（{{ references.length }}条）</summary>
-            <div v-for="entry in references" :key="entry.claimIndex" class="reference">
+            <summary class="scova-interface min-h-11 pt-2 pb-2 cursor-pointer keyboard-focus-wide">
+                参考与探索线索（{{ references.length }}条）
+            </summary>
+            <div
+                v-for="entry in references"
+                :key="entry.claimIndex"
+                class="reference report-grid max-w-full pt-5 [border-top:0.0625rem_solid_var(--scova-border)] mt-5"
+            >
                 <report-claim :report="report" :claim="report.claims[entry.claimIndex]!" />
-                <p class="scova-interface">{{ entry.reason }}</p>
-                <p v-if="entry.assessment?.conditions" class="scova-interface">
+                <p class="scova-interface m-0 [.assessment_&:is(p)]:mt-2">{{ entry.reason }}</p>
+                <p
+                    v-if="entry.assessment?.conditions"
+                    class="scova-interface m-0 [.assessment_&:is(p)]:mt-2"
+                >
                     适用条件：{{ entry.assessment.conditions }}
                 </p>
-                <p v-if="entry.assessment?.gap" class="scova-warning scova-interface">
+                <p
+                    v-if="entry.assessment?.gap"
+                    class="scova-warning scova-interface m-0 [.assessment_&:is(p)]:mt-2"
+                >
                     补充说明：{{ entry.assessment.gap }}
                 </p>
             </div>
@@ -198,85 +241,3 @@ const selection = (index: number) =>
 const firstQuestion = (index: number) =>
     questions.value.find((question) => question.claimIndexes.includes(index))?.id;
 </script>
-<style scoped>
-.answers,
-.answer,
-.answer-source,
-.answer-heading,
-.answer-body,
-.answer-rows,
-.reference,
-.pending-body {
-    display: grid;
-    gap: 1.25rem;
-    min-inline-size: 0;
-    max-inline-size: 100%;
-    overflow-wrap: anywhere;
-}
-.answer-number {
-    color: var(--scova-primary);
-    font-size: 1.25rem;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-}
-.answer-heading {
-    gap: 0.5rem;
-}
-.pending {
-    min-inline-size: 0;
-    padding-block: 0.5rem;
-    border-block-start: 0.0625rem solid var(--scova-border);
-}
-.pending-body {
-    padding-block: 0.75rem;
-}
-.legacy-notice,
-.assessment,
-.question-gap {
-    color: var(--scova-muted);
-}
-.answer,
-.reference {
-    padding-block-start: 1.25rem;
-    border-block-start: 0.0625rem solid var(--scova-border);
-}
-.reference {
-    margin-block-start: 1.25rem;
-}
-.answers--research_report .answer-heading {
-    padding-block: 0.75rem;
-    border-block-end: 0.0625rem solid var(--scova-border);
-}
-.answers--research_report .answer-heading h4 {
-    font-size: 1.375rem;
-    line-height: 1.6;
-}
-h3,
-h4,
-p {
-    margin: 0;
-}
-summary {
-    min-block-size: 2.75rem;
-    padding-block: 0.5rem;
-    cursor: pointer;
-}
-.assessment p {
-    margin-block-start: 0.5rem;
-}
-a {
-    display: inline-flex;
-    min-block-size: 2.75rem;
-    align-items: center;
-    color: var(--scova-primary);
-    text-underline-offset: 0.2em;
-}
-.answer {
-    scroll-margin-block-start: 6rem;
-}
-a:focus-visible,
-summary:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
-}
-</style>

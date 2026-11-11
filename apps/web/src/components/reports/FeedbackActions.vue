@@ -1,10 +1,22 @@
 <template>
-    <section class="feedback-actions scova-interface" aria-labelledby="feedback-title">
-        <h2 id="feedback-title"><app-icon name="settings" />调整后续研究</h2>
-        <p>反馈仅供后续新执行捕获；不追溯在途执行或历史报告，也不修改配置版本与比较基线。</p>
-        <div class="feedback-selector">
+    <section
+        class="feedback-actions scova-interface layout-stack break-anywhere [border-top:0.0625rem_solid_var(--scova-border)] pt-8 pb-8"
+        aria-labelledby="feedback-title"
+    >
+        <h2 class="flex items-center gap-2 text-[1.25rem] m-0" id="feedback-title">
+            <app-icon name="settings" />调整后续研究
+        </h2>
+        <p class="m-0">
+            反馈仅供后续新执行捕获；不追溯在途执行或历史报告，也不修改配置版本与比较基线。
+        </p>
+        <div class="feedback-selector layout-stack break-anywhere">
             <label for="feedback-target">选择反馈资料或结论</label>
-            <select id="feedback-target" v-model="selection" :disabled="pending || needsRecheck">
+            <select
+                class="w-full min-w-0 max-w-full min-h-11 border-theme rounded-2 bg-surface text-default font-inherit cursor-pointer p-2.5 keyboard-focus-wide disabled:cursor-not-allowed"
+                id="feedback-target"
+                v-model="selection"
+                :disabled="pending || needsRecheck"
+            >
                 <option value="">请选择一个目标</option>
                 <optgroup label="本报告资料">
                     <option v-for="item in sources" :key="targetKey(item)" :value="targetKey(item)">
@@ -18,16 +30,18 @@
                 </optgroup>
             </select>
         </div>
-        <div v-if="selected" class="selected-target">
-            <h3>{{ selected.type === 'source' ? '所选资料' : '所选结论' }}</h3>
-            <p>{{ selected.label }}</p>
-            <p class="target-id">目标标识：{{ selected.id }}</p>
-            <p>
+        <div v-if="selected" class="selected-target layout-stack break-anywhere">
+            <h3 class="text-[1.125rem] m-0">
+                {{ selected.type === 'source' ? '所选资料' : '所选结论' }}
+            </h3>
+            <p class="m-0">{{ selected.label }}</p>
+            <p class="target-id text-muted m-0">目标标识：{{ selected.id }}</p>
+            <p class="m-0">
                 当前反馈：{{
                     !itemsKnown ? '尚未读取确认' : current ? feedbackLabels[current.kind] : '未设置'
                 }}
             </p>
-            <div class="feedback-buttons" aria-label="设置所选目标反馈">
+            <div class="feedback-buttons action-group" aria-label="设置所选目标反馈">
                 <action-button
                     v-for="action in feedbackKinds"
                     :key="action.kind"
@@ -47,27 +61,37 @@
                 </action-button>
             </div>
         </div>
-        <p v-if="query.isPending.value" role="status">正在读取当前生效反馈。</p>
-        <p v-else-if="query.isError.value" role="alert">{{ readError }}</p>
-        <p v-if="query.isError.value && itemsKnown">以下保留上次读取值，尚未确认当前状态。</p>
-        <p v-if="pending" role="status">正在提交反馈，请稍候。</p>
-        <p v-if="notice" role="status">{{ notice }}</p>
-        <p v-if="needsRecheck" class="scova-warning">请重新读取并核对当前生效项，再继续操作。</p>
+        <p class="m-0" v-if="query.isPending.value" role="status">正在读取当前生效反馈。</p>
+        <p class="m-0" v-else-if="query.isError.value" role="alert">{{ readError }}</p>
+        <p class="m-0" v-if="query.isError.value && itemsKnown">
+            以下保留上次读取值，尚未确认当前状态。
+        </p>
+        <p class="m-0" v-if="pending" role="status">正在提交反馈，请稍候。</p>
+        <p class="m-0" v-if="notice" role="status">{{ notice }}</p>
+        <p v-if="needsRecheck" class="scova-warning m-0">
+            请重新读取并核对当前生效项，再继续操作。
+        </p>
         <action-button :disabled="pending || query.isFetching.value" @click="reload">
             <app-icon name="retry" />重新读取反馈
         </action-button>
-        <details class="active-feedback">
-            <summary>
+        <details class="active-feedback border-theme rounded-2 min-w-0">
+            <summary class="cursor-pointer py-3.5 px-4 keyboard-focus-wide">
                 当前任务生效反馈（{{ itemsKnown ? `${items.length} / 200` : '尚未读取确认' }}）
             </summary>
-            <div class="active-feedback-body">
-                <p>这里列出任务当前设置，不表示这份报告已经使用这些反馈。</p>
-                <p v-if="query.isSuccess.value && !items.length">当前没有生效反馈。</p>
-                <ul v-if="items.length">
-                    <li v-for="item in items" :key="item.id">
-                        <div class="active-feedback-label">
-                            <p>{{ item.sourceId ? '资料' : '结论' }}：{{ describe(item) }}</p>
-                            <p>{{ feedbackLabels[item.kind] }}</p>
+            <div class="active-feedback-body layout-stack break-anywhere pt-0 pb-4 px-4">
+                <p class="m-0">这里列出任务当前设置，不表示这份报告已经使用这些反馈。</p>
+                <p class="m-0" v-if="query.isSuccess.value && !items.length">当前没有生效反馈。</p>
+                <ul class="list-none m-0 p-0" v-if="items.length">
+                    <li
+                        class="flex flex-wrap items-start gap-4 pt-4 pb-4 [border-top:0.0625rem_solid_var(--scova-border)]"
+                        v-for="item in items"
+                        :key="item.id"
+                    >
+                        <div class="active-feedback-label [flex:1_1_18rem] min-w-0">
+                            <p class="m-0">
+                                {{ item.sourceId ? '资料' : '结论' }}：{{ describe(item) }}
+                            </p>
+                            <p class="m-0">{{ feedbackLabels[item.kind] }}</p>
                         </div>
                         <action-button
                             :disabled="!canWrite"
@@ -126,93 +150,3 @@ function describe(item: Feedback) {
     return target ? `${target.label}（${target.id}）` : (item.sourceId ?? item.claimId);
 }
 </script>
-
-<style scoped>
-h2 {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-.feedback-actions,
-.feedback-selector,
-.selected-target,
-.active-feedback-body {
-    display: grid;
-    gap: 1rem;
-    min-inline-size: 0;
-    overflow-wrap: anywhere;
-}
-.feedback-actions {
-    border-block-start: 0.0625rem solid var(--scova-border);
-    padding-block: 2rem;
-}
-h2,
-h3,
-p {
-    margin: 0;
-}
-h2 {
-    font-size: 1.25rem;
-}
-h3 {
-    font-size: 1.125rem;
-}
-select {
-    inline-size: 100%;
-    min-inline-size: 0;
-    max-inline-size: 100%;
-    min-block-size: 2.75rem;
-    padding: 0.625rem;
-    border: 0.0625rem solid var(--scova-border);
-    border-radius: 0.5rem;
-    background: var(--scova-surface);
-    color: var(--scova-text);
-    font: inherit;
-    cursor: pointer;
-}
-select:disabled {
-    cursor: not-allowed;
-}
-.target-id {
-    color: var(--scova-muted);
-}
-.feedback-buttons {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-}
-.active-feedback {
-    border: 0.0625rem solid var(--scova-border);
-    border-radius: 0.5rem;
-    min-inline-size: 0;
-}
-summary {
-    padding: 0.875rem 1rem;
-    cursor: pointer;
-}
-.active-feedback-body {
-    padding: 0 1rem 1rem;
-}
-ul {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-}
-li {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: start;
-    gap: 1rem;
-    padding-block: 1rem;
-    border-block-start: 0.0625rem solid var(--scova-border);
-}
-.active-feedback-label {
-    flex: 1 1 18rem;
-    min-inline-size: 0;
-}
-select:focus-visible,
-summary:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
-}
-</style>

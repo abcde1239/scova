@@ -1,43 +1,63 @@
 <template>
     <component
         :is="embedded ? 'div' : 'details'"
-        class="evidence scova-citation-tools"
+        class="evidence scova-citation-tools [&&]:(min-w-0 [border-bottom:0.0625rem_solid_color-mix(in_srgb,_var(--scova-border)_30%,_transparent)] break-anywhere) [&.evidence--embedded]:[border:0]"
         :class="{ 'evidence--embedded': embedded }"
     >
-        <summary v-if="!embedded">{{ evidence.title }} · 查看原文引用</summary>
-        <div class="evidence-body">
-            <blockquote>{{ evidence.quote }}</blockquote>
-            <p v-if="evidence.snapshot?.truncated" class="scova-warning">
+        <summary
+            class="[.citation-metadata_&:is(summary)]:(min-h-11 font-normal) min-h-11 cursor-pointer font-medium py-2 px-0 keyboard-focus-wide"
+            v-if="!embedded"
+        >
+            {{ evidence.title }} · 查看原文引用
+        </summary>
+        <div class="evidence-body grid gap-2.5 pb-3 [.evidence--embedded_&.evidence-body]:p-0">
+            <blockquote
+                class="[border-left:0.1875rem_solid_var(--scova-primary)] [background:var(--scova-selected)] whitespace-pre-wrap m-0 py-3 px-4 [@media(max-width:_40rem)]:(pl-1.5 pr-1.5)"
+            >
+                {{ evidence.quote }}
+            </blockquote>
+            <p v-if="evidence.snapshot?.truncated" class="scova-warning m-0">
                 采集正文曾截断，引用仅代表已保存片段。
             </p>
-            <a v-if="link" :href="link" target="_blank" rel="noopener noreferrer"
+            <a
+                class="justify-self-start min-h-11 inline-flex items-center text-primary underline-offset-[0.2em] cursor-pointer keyboard-focus-wide"
+                v-if="link"
+                :href="link"
+                target="_blank"
+                rel="noopener noreferrer"
                 >打开原始来源（新窗口）</a
             >
-            <p v-else>原始来源链接不可用。</p>
-            <details class="citation-metadata">
-                <summary>采集与定位信息</summary>
-                <dl>
+            <p class="m-0" v-else>原始来源链接不可用。</p>
+            <details class="citation-metadata text-muted text-[0.8125rem]">
+                <summary
+                    class="[.citation-metadata_&:is(summary)]:(min-h-11 font-normal) min-h-11 cursor-pointer font-medium py-2 px-0 keyboard-focus-wide"
+                >
+                    采集与定位信息
+                </summary>
+                <dl
+                    class="grid gap-3 grid-cols-[repeat(auto-fit,_minmax(min(100%,_14rem),_1fr))] text-[0.875rem] m-0"
+                >
                     <div>
-                        <dt>原文定位</dt>
-                        <dd>{{ evidence.location }}</dd>
+                        <dt class="text-muted font-medium">原文定位</dt>
+                        <dd class="m-0">{{ evidence.location }}</dd>
                     </div>
                     <div v-if="evidence.snapshot">
-                        <dt>字符范围</dt>
-                        <dd>
+                        <dt class="text-muted font-medium">字符范围</dt>
+                        <dd class="m-0">
                             {{ evidence.snapshot.selector.start }}–{{
                                 evidence.snapshot.selector.end
                             }}（起点包含，终点不含）
                         </dd>
                     </div>
                     <div>
-                        <dt>查阅时间</dt>
-                        <dd>
+                        <dt class="text-muted font-medium">查阅时间</dt>
+                        <dd class="m-0">
                             <time :datetime="evidence.observedAt">{{ evidence.observedAt }}</time>
                         </dd>
                     </div>
                     <div v-if="evidence.snapshot">
-                        <dt>来源发布时间</dt>
-                        <dd>
+                        <dt class="text-muted font-medium">来源发布时间</dt>
+                        <dd class="m-0">
                             {{
                                 sourceDate(
                                     evidence.snapshot.sourceDates?.published,
@@ -52,12 +72,14 @@
                             evidence.snapshot.sourceDates.modified.status !== 'unknown'
                         "
                     >
-                        <dt>来源更新时间</dt>
-                        <dd>{{ sourceDate(evidence.snapshot.sourceDates.modified) }}</dd>
+                        <dt class="text-muted font-medium">来源更新时间</dt>
+                        <dd class="m-0">
+                            {{ sourceDate(evidence.snapshot.sourceDates.modified) }}
+                        </dd>
                     </div>
                 </dl>
             </details>
-            <p class="citation-history">
+            <p class="citation-history leading-[1.7] text-muted text-[0.875rem] m-0">
                 这里展示已保存的引用；来源网页的当前内容可能变化，完整采集正文过期后引用仍保留。
             </p>
         </div>
@@ -80,88 +102,3 @@ function sourceDate(
     return `${date.value}${date.precision === 'day' ? '（仅日期，时区未声明）' : date.precision === 'local' ? '（时区未声明）' : ''}`;
 }
 </script>
-
-<style scoped>
-.evidence {
-    min-inline-size: 0;
-    border-block-end: 0.0625rem solid color-mix(in srgb, var(--scova-border) 30%, transparent);
-    overflow-wrap: anywhere;
-}
-.evidence--embedded {
-    border: 0;
-}
-.evidence--embedded .evidence-body {
-    padding: 0;
-}
-.citation-metadata {
-    color: var(--scova-muted);
-    font-size: 0.8125rem;
-}
-.citation-metadata summary {
-    min-block-size: 2.75rem;
-    font-weight: 400;
-}
-.citation-history {
-    line-height: 1.7;
-}
-summary {
-    min-block-size: 2.75rem;
-    padding: 0.5rem 0;
-    cursor: pointer;
-    font-weight: 500;
-}
-.evidence-body {
-    display: grid;
-    gap: 0.625rem;
-    padding-block-end: 0.75rem;
-}
-blockquote {
-    margin: 0;
-    padding: 0.75rem 1rem;
-    border-inline-start: 0.1875rem solid var(--scova-primary);
-    background: var(--scova-selected);
-    white-space: pre-wrap;
-}
-dl {
-    display: grid;
-    gap: 0.75rem;
-    margin: 0;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
-    font-size: 0.875rem;
-}
-.citation-history,
-dt {
-    color: var(--scova-muted);
-}
-.citation-history {
-    font-size: 0.875rem;
-}
-dt {
-    font-weight: 500;
-}
-dd {
-    margin: 0;
-}
-p {
-    margin: 0;
-}
-a {
-    justify-self: start;
-    min-block-size: 2.75rem;
-    display: inline-flex;
-    align-items: center;
-    color: var(--scova-primary);
-    text-underline-offset: 0.2em;
-    cursor: pointer;
-}
-summary:focus-visible,
-a:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
-}
-@media (max-width: 40rem) {
-    blockquote {
-        padding-inline: 0.375rem;
-    }
-}
-</style>

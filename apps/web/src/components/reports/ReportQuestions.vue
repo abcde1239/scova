@@ -344,10 +344,9 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* Scoped UnoCSS keeps the long control/state combinations readable. */
 h2 {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
+    @apply flex items-center gap-2;
 }
 .questions,
 .question-form,
@@ -355,172 +354,99 @@ h2 {
 .question-state,
 .statement,
 .question-citation {
-    display: grid;
-    gap: 1rem;
-    min-inline-size: 0;
-    overflow-wrap: anywhere;
+    @apply layout-stack break-anywhere;
 }
 .questions {
-    inline-size: min(100%, 45rem);
-    gap: 1.5rem;
-    padding-block-start: 2rem;
-    border-block-start: 0.0625rem solid var(--scova-border);
+    @apply w-[min(100%,_45rem)] gap-6 pt-8 [border-top:0.0625rem_solid_var(--scova-border)];
 }
 .conversation-history,
 .conversation-artifacts {
-    display: grid;
-    gap: 1rem;
-    min-inline-size: 0;
+    @apply layout-stack;
 }
 .conversation-artifact {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-    align-items: center;
-    min-block-size: 2.75rem;
-    padding: 1rem;
-    border: 0.0625rem solid var(--scova-border);
-    border-radius: 0.75rem;
-    color: var(--scova-primary);
-    overflow-wrap: anywhere;
+    @apply action-row min-h-11 border-theme rounded-3 text-primary break-anywhere p-4;
 }
 .conversation-artifact:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
+    @apply [outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.25rem];
 }
 h2,
 h3,
 p {
-    margin: 0;
+    @apply m-0;
 }
 h2 {
-    font-size: 1.25rem;
-    font-weight: 600;
+    @apply text-[1.25rem] font-semibold;
 }
 h3 {
-    font-size: 1.125rem;
-    font-weight: 600;
+    @apply text-[1.125rem] font-semibold;
 }
 textarea {
-    box-sizing: border-box;
-    inline-size: 100%;
-    min-inline-size: 0;
-    min-block-size: 8rem;
-    padding: 0.75rem;
-    border: 0.0625rem solid var(--scova-border);
-    border-radius: 0.5rem;
-    color: var(--scova-text);
-    background: var(--scova-surface);
-    font: inherit;
-    line-height: 1.75;
-    resize: none;
-    cursor: text;
+    @apply box-border w-full min-w-0 min-h-[8rem] border-theme rounded-2 text-default bg-surface
+        [font-family:inherit] [font-size:inherit] [font-weight:inherit] [font-style:inherit]
+        leading-[1.75] [font-variant:inherit] [resize:none] [cursor:text] p-3;
 }
 textarea:focus-visible,
 h3:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
+    @apply [outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.25rem];
 }
 .question-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-    align-items: start;
+    @apply action-group items-start;
 }
 .questions button {
-    min-block-size: 2.75rem;
-    min-inline-size: 2.75rem;
-    max-inline-size: 100%;
-    padding: 0.625rem 1rem;
-    border: 0.0625rem solid var(--scova-border);
-    border-radius: 0.5rem;
-    background: var(--scova-surface);
-    color: var(--scova-primary);
-    font: inherit;
-    cursor: pointer;
-    overflow-wrap: anywhere;
+    @apply font-inherit min-h-11 min-w-11 max-w-full pt-2.5 pr-4 pb-2.5 pl-4 border-theme rounded-2
+        bg-surface text-primary cursor-pointer break-anywhere;
 }
 .questions button:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
+    @apply [outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.25rem];
 }
 .question-starters {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
+    @apply flex flex-wrap gap-2;
 }
 .question-starters button {
-    min-inline-size: 0;
-    max-inline-size: 100%;
-    min-block-size: 2.75rem;
-    padding: 0.5rem 0.75rem;
-    border: 0.0625rem solid var(--scova-border);
-    border-radius: 0.75rem;
-    background: var(--scova-surface);
-    color: var(--scova-primary);
-    font: inherit;
-    text-align: start;
-    overflow-wrap: anywhere;
-    cursor: pointer;
+    @apply font-inherit min-w-0 max-w-full min-h-11 pt-2 pr-3 pb-2 pl-3 border-theme rounded-3
+        bg-surface text-primary text-start break-anywhere cursor-pointer;
 }
 .question-starters button:hover {
-    background: var(--scova-selected);
+    @apply [background:var(--scova-selected)];
 }
 .question-starters button:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
+    @apply [outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.25rem];
 }
 .question-message {
-    display: grid;
-    gap: 0.5rem;
-    padding: 1rem;
-    border-radius: 0.75rem;
-    background: var(--scova-selected);
+    @apply grid gap-2 rounded-3 [background:var(--scova-selected)] p-4;
 }
 .message-label {
-    color: var(--scova-muted);
-    font-size: 0.875rem;
+    @apply text-muted text-[0.875rem];
 }
 .question-text,
 blockquote {
-    white-space: pre-wrap;
+    @apply whitespace-pre-wrap;
 }
 blockquote {
-    margin: 0;
-    padding: 0.75rem;
-    border-inline-start: 0.1875rem solid var(--scova-primary);
-    background: var(--scova-selected);
+    @apply [border-left:0.1875rem_solid_var(--scova-primary)] [background:var(--scova-selected)] m-0 p-3;
 }
 .statements {
-    padding: 0;
-    margin: 0;
-    display: grid;
-    gap: 2rem;
-    list-style: none;
+    @apply grid gap-8 list-none m-0 p-0;
 }
 .question-usage {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1rem 2rem;
-    margin: 0;
-    font-variant-numeric: tabular-nums;
+    @apply flex flex-wrap gap-[1rem_2rem] [font-variant-numeric:tabular-nums] m-0;
 }
 dt {
-    font-weight: 500;
+    @apply font-medium;
 }
 dd {
-    margin: 0;
+    @apply m-0;
 }
 .question-citation :deep(blockquote) {
-    padding: 0.75rem;
+    @apply p-3;
 }
 .question-citation :deep(.evidence-body) {
-    padding-inline: 0.75rem;
+    @apply pl-3 pr-3;
 }
 @media (max-width: 40rem) {
     .question-citation :deep(.evidence-body),
     .question-citation :deep(blockquote) {
-        padding-inline: 0.5rem;
+        @apply pl-2 pr-2;
     }
 }
 </style>

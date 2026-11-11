@@ -1,6 +1,11 @@
 <template>
-    <section class="run-actions scova-surface" aria-labelledby="run-actions-title">
-        <h2 id="run-actions-title">{{ run ? '执行操作' : '立即执行' }}</h2>
+    <section
+        class="run-actions scova-surface layout-stack rounded-3 break-anywhere p-[clamp(1rem,_3%,_2rem)] [&.run-actions_>_.scova-action-button]:justify-self-start"
+        aria-labelledby="run-actions-title"
+    >
+        <h2 class="text-[1.25rem] leading-[1.5] m-0" id="run-actions-title">
+            {{ run ? '执行操作' : '立即执行' }}
+        </h2>
         <p v-if="!run && taskStatus === 'archived'">归档任务不能启动执行。</p>
         <template v-else-if="canStart">
             <p v-if="run">
@@ -55,7 +60,7 @@
         <div
             v-if="actions.message.value"
             ref="feedback"
-            class="command-result"
+            class="command-result keyboard-focus-wide layout-stack [&.command-result_.scova-action-button]:justify-self-start"
             role="status"
             aria-live="polite"
             tabindex="-1"
@@ -84,7 +89,7 @@
                     · {{ executionStates[actions.result.value.run.status][0] }}
                 </p>
                 <router-link
-                    class="open-run scova-reference"
+                    class="open-run scova-reference keyboard-focus-wide [&&]:(inline-flex items-center gap-2 justify-self-start min-h-11 cursor-pointer)"
                     :to="`/runs/${actions.result.value.run.id}`"
                     >打开执行<app-icon name="run"
                 /></router-link>
@@ -146,43 +151,3 @@ watch(actions.phase, async (phase) => {
     if (actions.phase.value === phase) feedback.value?.focus();
 });
 </script>
-
-<style scoped>
-.run-actions {
-    display: grid;
-    gap: 1rem;
-    min-inline-size: 0;
-    padding: clamp(1rem, 3%, 2rem);
-    border-radius: 0.75rem;
-    overflow-wrap: anywhere;
-}
-h2 {
-    margin: 0;
-    font-size: 1.25rem;
-    line-height: 1.5;
-}
-.open-run:focus-visible,
-.command-result:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
-}
-.run-actions > :deep(.scova-action-button) {
-    justify-self: start;
-}
-.command-result {
-    display: grid;
-    gap: 1rem;
-    min-inline-size: 0;
-}
-.command-result :deep(.scova-action-button) {
-    justify-self: start;
-}
-.open-run {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    justify-self: start;
-    min-block-size: 2.75rem;
-    cursor: pointer;
-}
-</style>

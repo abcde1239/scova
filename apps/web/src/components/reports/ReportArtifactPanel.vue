@@ -192,208 +192,138 @@ function onKeydown(event: KeyboardEvent) {
 </script>
 
 <style scoped>
+/* Scoped UnoCSS keeps the long control/state combinations readable. */
 .report-artifact-panel {
-    display: grid;
-    grid-template-rows: auto minmax(0, 1fr);
-    gap: 0;
-    min-inline-size: 0;
-    max-inline-size: 100%;
-    padding: 0;
-    border: 0.0625rem solid color-mix(in srgb, var(--scova-border) 48%, transparent);
-    border-radius: 1.25rem;
-    background: color-mix(in srgb, var(--scova-selected) 25%, var(--scova-surface));
-    box-shadow:
-        0 1rem 3rem color-mix(in srgb, var(--scova-text) 9%, transparent),
-        0 0.125rem 0.5rem color-mix(in srgb, var(--scova-text) 3%, transparent);
-    overflow-wrap: anywhere;
-    overflow: clip;
-    align-self: start;
+    @apply layout-grid grid-rows-[auto_minmax(0,_1fr)] gap-0 max-w-full
+        [border:0.0625rem_solid_color-mix(in_srgb,_var(--scova-border)_48%,_transparent)] rounded-5
+        [background:color-mix(in_srgb,_var(--scova-selected)_25%,_var(--scova-surface))]
+        [box-shadow:0_1rem_3rem_color-mix(in_srgb,_var(--scova-text)_9%,_transparent),_0_0.125rem_0.5rem_color-mix(in_srgb,_var(--scova-text)_3%,_transparent)]
+        break-anywhere [overflow:clip] [align-self:start] p-0;
 }
 .report-artifact-panel--reading {
-    inline-size: 100%;
-    max-inline-size: 68rem;
-    justify-self: center;
-    box-shadow: none;
+    @apply w-full max-w-[68rem] justify-self-center [box-shadow:none];
 }
 .artifact-scroll {
-    display: grid;
-    align-content: start;
-    gap: 1.5rem;
-    min-inline-size: 0;
-    min-block-size: 0;
-    padding: 1rem;
-    scrollbar-gutter: stable;
-    scroll-behavior: smooth;
+    @apply layout-grid [align-content:start] gap-6 min-h-0 [scrollbar-gutter:stable]
+        [scroll-behavior:smooth] p-4;
 }
 .report-document {
-    background: var(--scova-surface);
-    padding: clamp(1rem, 3vw, 2.5rem);
-    border: 0.0625rem solid color-mix(in srgb, var(--scova-border) 24%, transparent);
-    border-radius: 0.875rem;
-    box-shadow: 0 0.125rem 0.75rem color-mix(in srgb, var(--scova-text) 3%, transparent);
+    @apply bg-surface [border:0.0625rem_solid_color-mix(in_srgb,_var(--scova-border)_24%,_transparent)]
+        rounded-3.5
+        [box-shadow:0_0.125rem_0.75rem_color-mix(in_srgb,_var(--scova-text)_3%,_transparent)]
+        p-[clamp(1rem,_3vw,_2.5rem)];
 }
 .deliverable-heading,
 .artifact-actions,
 .report-presentation,
 .report-sections {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.5rem 0.75rem;
-    min-inline-size: 0;
+    @apply flex flex-wrap items-center gap-[0.5rem_0.75rem] min-w-0;
 }
 .deliverable-heading {
-    align-items: start;
-    justify-content: space-between;
-    padding: 1rem 1.25rem;
-    border-block-end: 0.0625rem solid color-mix(in srgb, var(--scova-border) 28%, transparent);
-    background: var(--scova-surface);
+    @apply items-start justify-between pt-4 pr-5 pb-4 pl-5
+        [border-bottom:0.0625rem_solid_color-mix(in_srgb,_var(--scova-border)_28%,_transparent)]
+        bg-surface;
 }
 .deliverable-heading h2 {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    margin: 0;
-    font-size: 1rem;
-    font-weight: 600;
+    @apply flex items-center gap-2 text-[1rem] font-semibold m-0;
 }
 .deliverable-heading p {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.625rem;
-    margin: 0.375rem 0 0;
-    font-size: 0.875rem;
-    line-height: 1.6;
-    color: var(--scova-muted);
+    @apply flex flex-wrap items-center gap-2.5 mt-1.5 mr-0 mb-0 ml-0 text-[0.875rem] leading-[1.6]
+        text-muted;
 }
 .artifact-kind {
-    color: var(--scova-primary);
-    font-weight: 500;
+    @apply text-primary font-medium;
 }
 .deliverable-heading time {
-    font-size: 0.8125rem;
+    @apply text-[0.8125rem];
 }
 .artifact-close {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: none;
-    min-inline-size: 2.75rem;
-    min-block-size: 2.75rem;
-    padding: 0.5rem;
-    border: 0;
-    border-radius: 0.5rem;
-    background: transparent;
-    color: var(--scova-text);
-    font: inherit;
-    cursor: pointer;
+    @apply font-inherit inline-flex items-center justify-center flex-none min-w-11 min-h-11 [border:0]
+        rounded-2 bg-transparent text-default cursor-pointer p-2;
 }
 .artifact-close:hover {
-    background: var(--scova-selected);
+    @apply [background:var(--scova-selected)];
 }
 .artifact-close:focus-visible,
 .artifact-formats button:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
+    @apply [outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.25rem];
 }
 .artifact-actions :deep(.n-button),
 .report-sections :deep(.n-button) {
-    min-block-size: 2.75rem;
-    height: auto;
-    max-inline-size: 100%;
-    padding-block: 0.625rem;
+    @apply min-h-11 h-auto max-w-full pt-2.5 pb-2.5;
 }
 .artifact-actions :deep(.n-button__content),
 .report-sections :deep(.n-button__content) {
-    gap: 0.375rem;
-    white-space: normal;
+    @apply gap-1.5 whitespace-normal;
 }
 .artifact-formats {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.375rem;
-    inline-size: 100%;
+    @apply flex flex-wrap gap-1.5 w-full;
 }
 .artifact-formats button {
-    min-block-size: 2.75rem;
-    padding: 0.625rem 1rem;
-    border: 0.0625rem solid transparent;
-    border-radius: 0.625rem;
-    background: transparent;
-    color: var(--scova-muted);
-    font: inherit;
-    font-size: 0.875rem;
-    cursor: pointer;
-    transition:
-        background-color 180ms ease,
-        color 180ms ease;
+    @apply min-h-11 pt-2.5 pr-4 pb-2.5 pl-4 [border:0.0625rem_solid_transparent] rounded-2.5
+        bg-transparent text-muted [font-family:inherit] text-[0.875rem] [font-weight:inherit]
+        [font-style:inherit] leading-[inherit] [font-variant:inherit] cursor-pointer
+        [transition:background-color_180ms_ease,_color_180ms_ease];
 }
 .artifact-formats button[aria-pressed='true'] {
-    background: var(--scova-surface);
-    color: var(--scova-primary);
-    border-color: color-mix(in srgb, var(--scova-border) 35%, transparent);
-    box-shadow: 0 0.125rem 0.375rem color-mix(in srgb, var(--scova-text) 4%, transparent);
+    @apply bg-surface text-primary
+        [border-color:color-mix(in_srgb,_var(--scova-border)_35%,_transparent)]
+        [box-shadow:0_0.125rem_0.375rem_color-mix(in_srgb,_var(--scova-text)_4%,_transparent)];
 }
 .artifact-formats button:hover {
-    background: var(--scova-surface);
+    @apply bg-surface;
 }
 .report-sections {
-    flex-basis: 100%;
+    @apply [flex-basis:100%];
 }
 .report-document,
 .report-baseline {
-    min-inline-size: 0;
+    @apply min-w-0;
 }
 .report-baseline {
-    border-block-start: 0.0625rem solid color-mix(in srgb, var(--scova-border) 30%, transparent);
-    padding-block-start: 1rem;
-    padding-inline: 0.5rem;
+    @apply [border-top:0.0625rem_solid_color-mix(in_srgb,_var(--scova-border)_30%,_transparent)] pt-4
+        pl-2 pr-2;
 }
 .report-baseline :deep(.report-changes) {
-    padding: 0;
-    border: 0;
+    @apply [border:0] p-0;
 }
 .report-baseline :deep(.change-sides) {
-    grid-template-columns: minmax(0, 1fr);
+    @apply grid-cols-[minmax(0,_1fr)];
 }
 .report-artifact-panel--reading .report-baseline :deep(.change-sides) {
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+    @apply grid-cols-[repeat(auto-fit,_minmax(min(100%,_18rem),_1fr))];
 }
 .report-baseline :deep(.comparison-summary) {
-    padding: 0.75rem;
+    @apply p-3;
 }
 @media (max-width: 39.999rem) {
     .artifact-scroll {
-        padding: 0.5rem 0.25rem;
+        @apply pt-2 pr-1 pb-2 pl-1;
     }
     .deliverable-heading {
-        padding: 0.875rem;
+        @apply p-3.5;
     }
     .report-document {
-        padding: 1rem 0.25rem;
+        @apply pt-4 pr-1 pb-4 pl-1;
     }
     .report-sections :deep(.n-button) {
-        padding-inline: 0.625rem;
+        @apply pl-2.5 pr-2.5;
     }
 }
 @media (min-width: 64rem) {
     .report-artifact-panel:not(.report-artifact-panel--reading) {
-        position: sticky;
-        top: 1rem;
-        max-block-size: calc(100dvh - 6rem);
+        @apply sticky [top:1rem] max-h-[calc(100dvh_-_6rem)];
     }
     .report-artifact-panel:not(.report-artifact-panel--reading) .artifact-scroll {
-        overflow-y: auto;
-        overscroll-behavior-block: contain;
+        @apply [overflow-y:auto] [overscroll-behavior-block:contain];
     }
 }
 @media (prefers-reduced-motion: reduce) {
     .artifact-scroll {
-        scroll-behavior: auto;
+        @apply [scroll-behavior:auto];
     }
     .artifact-formats button {
-        transition: none;
+        @apply [transition:none];
     }
 }
 </style>
