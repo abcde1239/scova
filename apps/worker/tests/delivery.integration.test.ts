@@ -6,6 +6,7 @@ import {
     evidence as dbEvidence,
     runSources as dbRunSources,
     taskVersions as dbTaskVersions,
+    tasks as dbTasks,
     runs as dbRuns,
     notifications as dbNotifications,
     inboxItems as dbInboxItems,
@@ -25,7 +26,7 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { nodeScriptCommand } from '../../../scripts/process-runtime.mjs';
-import type { NotificationPreference, Report } from '@scova/models';
+import type { NotificationPreference, Report, TaskConfig } from '@scova/models';
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vite-plus/test';
@@ -41,6 +42,7 @@ import {
     type ConnectorBundle,
     type StructuredInput,
     type CallContext,
+    type ReadPage,
 } from '@scova/connectors';
 import { createAgentRepository } from '../src/repo/agent.ts';
 import { createRunRepository } from '../src/repo/runs.ts';
@@ -150,10 +152,17 @@ async function liveResearch(
         retryRead?: boolean;
         officialOnly?: boolean;
         condition?: string;
+        outputFormats?: TaskConfig['outputFormats'];
+        collection?: ReadPage['collection'];
+        structuredArtifacts?: boolean;
     } = {},
 ) {
     const initial = options.previous ?? (await seedRun(fixture.db, { mode: 'live' }));
-    if (options.notificationPreference || options.officialOnly) {
+    if (options.notificationPreference || options.officialOnly || options.outputFormats) {
+        if (options.outputFormats) {
+            initial.config.outputFormats = options.outputFormats;
+            initial.config.outputFormat = options.outputFormats[0]!;
+        }
         if (options.notificationPreference)
             initial.config.notificationPreference = options.notificationPreference;
         if (options.officialOnly)
@@ -199,6 +208,17 @@ async function liveResearch(
             ? new Date(Date.now() - 60_000).toISOString()
             : options.publication;
     let readRequests = 0;
+    const formats = options.outputFormats ?? [initial.config.outputFormat];
+    const requirements = formats.flatMap((format) =>
+        ['q0', 'q1'].map((id) => ({
+            id: `${format}-${id}`,
+            format,
+            questionIds: [id],
+            object: '',
+            field: id,
+            required: true,
+        })),
+    );
     const reader = createPageReader({
         maxTextChars: options.maxTextChars,
         http: {
@@ -228,9 +248,15 @@ async function liveResearch(
         reader: {
             async read(url, context) {
                 const page = await reader.read(url, context);
-                return options.extractionVersion
-                    ? { ...page, extractionVersion: options.extractionVersion }
-                    : page;
+                return {
+                    ...page,
+                    ...(options.extractionVersion
+                        ? { extractionVersion: options.extractionVersion }
+                        : {}),
+                    ...(options.collection
+                        ? { collection: structuredClone(options.collection) }
+                        : {}),
+                };
             },
         },
         search: {
@@ -304,43 +330,78 @@ async function liveResearch(
                     usage: { inputTokens: 1, outputTokens: 1, estimated: false },
                     data: (source
                         ? {
-                              claims: [
-                                  {
-                                      kind: claimKind,
-                                      assessment: {
-                                          relevance: 'direct',
-                                          support: 'direct',
-                                          role: 'answer',
-                                          sourceRelation: 'unknown',
-                                          reason: '受控原文直接回答测试问题',
-                                          conditions: options.condition ?? '',
-                                          gap: '',
-                                      },
-                                      text:
-                                          claimKind === 'fact'
-                                              ? source.text
-                                              : {
-                                                    inference: '基于原文推断还需继续查证',
-                                                    conflict: '两处来源的截止日期存在冲突',
-                                                    insufficient: '当前结论证据不足',
-                                                }[claimKind],
-                                      questionIds: ['q0', 'q1'],
-                                      citations:
-                                          claimKind === 'insufficient'
-                                              ? []
-                                              : (claimKind === 'conflict'
-                                                    ? sources!
-                                                    : [source]
-                                                ).map((entry) => ({
+                              ...(options.structuredArtifacts === false
+                                  ? {}
+                                  : {
+                                        artifacts: formats.map((format) => ({
+                                            format,
+                                            requirements: requirements
+                                                .filter((r) => r.format === format)
+                                                .map((r) => ({
+                                                    id: r.id,
+                                                    text: options.outputFormats
+                                                        ? `${format}独立归纳：申请期限需要结合原公告确认。`
+                                                        : claimKind === 'fact'
+                                                          ? source.text
+                                                          : {
+                                                                inference:
+                                                                    '基于原文推断还需继续查证',
+                                                                conflict:
+                                                                    '两处来源的截止日期存在冲突',
+                                                                insufficient: '当前结论证据不足',
+                                                            }[claimKind],
+                                                    claimIndexes: [
+                                                        options.outputFormats
+                                                            ? [...options.outputFormats]
+                                                                  .reverse()
+                                                                  .indexOf(format)
+                                                            : 0,
+                                                    ],
+                                                })),
+                                        })),
+                                    }),
+                              claims: (options.outputFormats
+                                  ? [...options.outputFormats].reverse()
+                                  : [undefined]
+                              ).map((format) => ({
+                                  ...(format ? { outputFormat: format } : {}),
+                                  kind: claimKind,
+                                  assessment: {
+                                      relevance: 'direct',
+                                      support: 'direct',
+                                      role: 'answer',
+                                      sourceRelation: 'unknown',
+                                      reason: '受控原文直接回答测试问题',
+                                      conditions: options.condition ?? '',
+                                      gap: '',
+                                  },
+                                  text: format
+                                      ? `${format}独立归纳：申请期限需要结合原公告确认。`
+                                      : claimKind === 'fact'
+                                        ? source.text
+                                        : {
+                                              inference: '基于原文推断还需继续查证',
+                                              conflict: '两处来源的截止日期存在冲突',
+                                              insufficient: '当前结论证据不足',
+                                          }[claimKind],
+                                  questionIds: ['q0', 'q1'],
+                                  citations:
+                                      claimKind === 'insufficient'
+                                          ? []
+                                          : (claimKind === 'conflict' ? sources! : [source]).map(
+                                                (entry) => ({
                                                     pageId: entry.pageId,
                                                     quote: options.badClaimQuote
                                                         ? 'UNLOCATABLE_CLAIM_QUOTE'
                                                         : entry.text,
-                                                })),
-                                  },
-                              ],
+                                                }),
+                                            ),
+                              })),
                           }
-                        : { queries: [{ query: '公共公告', questionIds: ['q0', 'q1'] }] }) as T,
+                        : {
+                              queries: [{ query: '公共公告', questionIds: ['q0', 'q1'] }],
+                              ...(options.structuredArtifacts === false ? {} : { requirements }),
+                          }) as T,
                 };
             },
         },
@@ -383,6 +444,67 @@ async function liveResearch(
 }
 
 describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）', () => {
+    it('persists independent artifact indexes and the primary summary without rewriting saved output after task edits', async () => {
+        const seed = await liveResearch({
+            outputFormats: ['list', 'brief'],
+            claimKind: 'inference',
+        });
+        const artifacts = seed.candidate.coverage.artifacts!;
+        expect(artifacts.map((artifact) => artifact.format)).toEqual(['list', 'brief']);
+        expect(artifacts[0].claimIndexes.map((index) => seed.candidate.claims[index].text)).toEqual(
+            ['list独立归纳：申请期限需要结合原公告确认。'],
+        );
+        expect(artifacts[1].claimIndexes.map((index) => seed.candidate.claims[index].text)).toEqual(
+            ['brief独立归纳：申请期限需要结合原公告确认。'],
+        );
+        const result = await delivery.deliver(seed.claimed.token, seed.candidate);
+        const saved = await fixture.db.query.reports.findFirst({
+            where: eq(dbReports.id, result.reportId),
+        });
+        expect(saved?.format).toBe('list');
+        expect(saved?.summary).toContain('list独立归纳');
+        expect(saved?.summary).not.toContain('brief独立归纳');
+        const storedRun = await fixture.db.query.runs
+            .findFirst({
+                where: eq(dbRuns.id, seed.run.id),
+            })
+            .then((row) => requiredDatabaseValue(row));
+        expect((storedRun.coverageJson as Report['coverage']).artifacts).toEqual(artifacts);
+        const storedClaims = await fixture.db.query.claims.findMany({
+            where: eq(dbClaims.reportId, result.reportId),
+        });
+        expect(storedClaims.map((entry) => entry.text).sort()).toEqual(
+            seed.candidate.claims.map((entry) => entry.text).sort(),
+        );
+        const nextVersion = await fixture.db
+            .insert(dbTaskVersions)
+            .values({
+                userId: seed.user.id,
+                taskId: seed.task.id,
+                version: seed.version.version + 1,
+                configJson: {
+                    ...seed.config,
+                    outputFormat: 'research_report',
+                    outputFormats: ['research_report'],
+                },
+                comparisonScopeHash: seed.version.comparisonScopeHash,
+            })
+            .returning()
+            .then((rows) => requiredDatabaseValue(rows[0]));
+        await fixture.db
+            .update(dbTasks)
+            .set({ currentVersionId: nextVersion.id })
+            .where(eq(dbTasks.id, seed.task.id));
+        const unchanged = await fixture.db.query.reports.findFirst({
+            where: eq(dbReports.id, result.reportId),
+        });
+        expect(unchanged).toEqual(saved);
+        expect(unchanged?.taskVersionId).toBe(seed.version.id);
+        expect(await delivery.deliver(seed.claimed.token, seed.candidate)).toEqual({
+            reportId: result.reportId,
+            reused: true,
+        });
+    });
     it.each([false, true])(
         'persists question answers and authenticates synthesis assessments (tampered=%s)',
         async (tampered) => {
@@ -420,6 +542,93 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
                 });
                 expect(report?.summary).toContain('查找可追溯资料');
             }
+        },
+    );
+    it.each(['valid', 'ledger_unknown', 'strip_plan', 'alter_required', 'forge_content'] as const)(
+        'authenticates frozen artifact requirements independently of checkpoint (%s)',
+        async (attack) => {
+            const seed = await liveResearch();
+            expect(seed.candidate.coverage.artifacts?.[0]?.coverage?.requirements).toHaveLength(2);
+            const call = await fixture.db.query.toolCalls.findFirst({
+                where: and(
+                    eq(dbToolCalls.runId, seed.run.id),
+                    sql`${dbToolCalls.operationKey} LIKE 'plan-0:%'`,
+                ),
+            });
+            expect(call?.status).toBe('succeeded');
+            if (attack === 'valid') {
+                const result = await delivery.deliver(seed.claimed.token, seed.candidate);
+                const saved = await fixture.db.query.runs.findFirst({
+                    where: eq(dbRuns.id, seed.run.id),
+                });
+                expect((saved!.coverageJson as Report['coverage']).artifacts).toEqual(
+                    seed.candidate.coverage.artifacts,
+                );
+                expect(result.reportId).toBeTruthy();
+                return;
+            }
+            let candidate = seed.candidate;
+            if (attack === 'ledger_unknown') {
+                await fixture.db
+                    .update(dbToolCalls)
+                    .set({ status: 'unknown' })
+                    .where(eq(dbToolCalls.id, call!.id));
+            } else if (attack === 'forge_content') {
+                candidate = structuredClone(candidate);
+                candidate.coverage.artifacts![0]!.coverage!.requirements[0]!.required = false;
+            } else {
+                const run = (await fixture.db.query.runs.findFirst({
+                    where: eq(dbRuns.id, seed.run.id),
+                }))!;
+                const ref = run.checkpointRef as {
+                    threadId: string;
+                    namespace: '';
+                    checkpointId: string;
+                    leaseEpoch: number;
+                };
+                const config = {
+                    configurable: {
+                        thread_id: ref.threadId,
+                        checkpoint_ns: '',
+                        checkpoint_id: ref.checkpointId,
+                    },
+                };
+                const tuple = (await saver.getTuple(config))!;
+                const checkpoint = structuredClone(tuple.checkpoint);
+                const state = checkpoint.channel_values.research as {
+                    artifactPolicy?: number;
+                    planningExtraction?: {
+                        response: { data: { requirements: { required: boolean }[] } };
+                    };
+                };
+                const repository = createAgentRepository(fixture.db, seed.claimed.token);
+                const context = {
+                    ...seed.context,
+                    ...(await repository.comparison()),
+                    usage: await repository.usage(),
+                };
+                expect(candidateFromCheckpoint(context, state)).toEqual(seed.candidate);
+                if (attack === 'strip_plan') {
+                    delete state.artifactPolicy;
+                    delete state.planningExtraction;
+                } else state.planningExtraction!.response.data.requirements[0]!.required = false;
+                checkpoint.id = crypto.randomUUID();
+                const saved = await saver.put(
+                    config,
+                    checkpoint,
+                    tuple.metadata!,
+                    checkpoint.channel_versions,
+                );
+                await repository.promoteCheckpoint({
+                    ...ref,
+                    checkpointId: saved.configurable!.checkpoint_id as string,
+                });
+                candidate = candidateFromCheckpoint(context, state);
+            }
+            await expect(delivery.deliver(seed.claimed.token, candidate)).rejects.toMatchObject({
+                code: 'INVALID_DELIVERY_EVIDENCE',
+            });
+            await assertEmpty(seed.run.id);
         },
     );
     it('delivers uncertain claims and comparison values without promoting fabricated quotes or baselines', async () => {
@@ -1206,6 +1415,73 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
         );
         await assertEmpty(second.run.id);
     });
+    it.each(['clipped', 'removed'] as const)(
+        '比较覆盖元数据须与不可变模型账本一致，checkpoint不能篡改或剥离 (%s)',
+        async (tampering) => {
+            const seed = await liveResearch();
+            const row = requiredDatabaseValue(
+                await fixture.db.query.runs.findFirst({ where: eq(dbRuns.id, seed.run.id) }),
+            );
+            const ref = row.checkpointRef as {
+                threadId: string;
+                namespace: '';
+                checkpointId: string;
+                leaseEpoch: number;
+            };
+            const config = {
+                configurable: {
+                    thread_id: ref.threadId,
+                    checkpoint_ns: '',
+                    checkpoint_id: ref.checkpointId,
+                },
+            };
+            const tuple = (await saver.getTuple(config))!;
+            const checkpoint = structuredClone(tuple.checkpoint);
+            const state = checkpoint.channel_values.research as {
+                comparisonExtractions: ComparisonExtraction[];
+            };
+            expect(state.comparisonExtractions[0]!.sourceCoverage).toMatchObject({
+                version: 1,
+                pages: [{ clipped: false }],
+            });
+            const receipt = state.comparisonExtractions[0]!;
+            const call = requiredDatabaseValue(
+                await fixture.db.query.toolCalls.findFirst({
+                    where: and(
+                        eq(dbToolCalls.runId, seed.run.id),
+                        sql`${dbToolCalls.operationKey} LIKE 'compare-facts-v1:%'`,
+                    ),
+                }),
+            );
+            expect(
+                (call.outputRef as { result: { sourceCoverage: unknown } }).result.sourceCoverage,
+            ).toEqual(receipt.sourceCoverage);
+            if (tampering === 'clipped') receipt.sourceCoverage!.pages[0]!.clipped = true;
+            else delete receipt.sourceCoverage;
+            checkpoint.id = crypto.randomUUID();
+            const saved = await saver.put(
+                config,
+                checkpoint,
+                tuple.metadata!,
+                checkpoint.channel_versions,
+            );
+            await createAgentRepository(fixture.db, seed.claimed.token).promoteCheckpoint({
+                ...ref,
+                checkpointId: saved.configurable!.checkpoint_id as string,
+            });
+            const comparison = await createAgentRepository(
+                fixture.db,
+                seed.claimed.token,
+            ).comparison();
+            const forged = candidateFromCheckpoint({ ...seed.context, ...comparison }, state);
+            if (tampering === 'clipped')
+                expect(forged.coverage.gaps.join(' ')).toContain('比较输入受预算限制');
+            await expect(delivery.deliver(seed.claimed.token, forged)).rejects.toMatchObject({
+                code: 'INVALID_DELIVERY_EVIDENCE',
+            });
+            await assertEmpty(seed.run.id);
+        },
+    );
     it.each(['inference', 'conflict'] as const)(
         '%s以明确标签和真实引用保存，冲突保留双方引用',
         async (kind) => {
@@ -1506,6 +1782,55 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
             expect(secondRun.outcome).not.toBe('no_important_change');
         },
     );
+    it('资源受限但未截断的正文以partial交付并保留本次采集状态，不推进完整基线', async () => {
+        const complete = await liveResearch();
+        await delivery.deliver(complete.claimed.token, complete.candidate);
+        const baseline = await fixture.db.query.baselines.findFirst({
+            where: eq(dbBaselines.taskId, complete.task.id),
+        });
+        expect(baseline?.completeRunId).toBe(complete.run.id);
+        const collection: ReadPage['collection'] = {
+            version: 1,
+            method: 'browser',
+            complete: false,
+            limitations: ['resource_limit'],
+        };
+        const limited = await liveResearch({ previous: complete, collection });
+        expect(limited.candidate.pages[0].truncated).toBe(false);
+        expect(limited.candidate.pages[0].contentHash).toBe(
+            complete.candidate.pages[0].contentHash,
+        );
+        expect(limited.candidate.coverage.completeness).toBe('partial');
+        expect(limited.candidate.changes?.every((change) => change.kind === 'uncertain')).toBe(
+            true,
+        );
+        const result = await delivery.deliver(limited.claimed.token, limited.candidate);
+        const report = await fixture.db.query.reports.findFirst({
+            where: eq(dbReports.id, result.reportId),
+        });
+        expect(report?.completeness).toBe('partial');
+        expect(JSON.stringify(report?.limitationsJson)).toContain('网页渲染或资源加载受限');
+        const observation = await fixture.db.query.runSources.findFirst({
+            where: eq(dbRunSources.runId, limited.run.id),
+            with: { snapshot: true },
+        });
+        expect(observation?.metadataJson).toMatchObject({ truncated: false, collection });
+        expect(observation?.snapshot?.textBody).toBe(limited.candidate.pages[0].text);
+        expect(
+            (
+                await fixture.db.query.baselines.findFirst({
+                    where: eq(dbBaselines.taskId, limited.task.id),
+                })
+            )?.completeRunId,
+        ).toBe(complete.run.id);
+        expect(
+            await fixture.db.query.runs.findFirst({ where: eq(dbRuns.id, limited.run.id) }),
+        ).toMatchObject({
+            status: 'partial',
+            outcome: 'inconclusive',
+        });
+    });
+
     it('保留正文与精确quote定位，partial原子交付1报告/Inbox/终态且不建基线', async () => {
         const seed = await research();
         const result = await delivery.deliver(seed.claimed.token, seed.candidate);
@@ -1729,6 +2054,139 @@ describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）',
             code: 'INVALID_DELIVERY_EVIDENCE',
         });
         await assertEmpty(seed.run.id);
+    });
+
+    it.each(['upgrade', 'delete'] as const)(
+        '提升checkpoint后%s采集状态仍须匹配不可变read账本，正文hash相同不能证明完整采集',
+        async (forgery) => {
+            const seed = await liveResearch({
+                collection: {
+                    version: 1,
+                    method: 'browser',
+                    complete: false,
+                    limitations: ['resource_failure'],
+                },
+            });
+            const run = await fixture.db.query.runs
+                .findFirst({ where: eq(dbRuns.id, seed.run.id) })
+                .then((row) => requiredDatabaseValue(row));
+            const ref = run.checkpointRef as {
+                threadId: string;
+                namespace: '';
+                checkpointId: string;
+                leaseEpoch: number;
+            };
+            const config = {
+                configurable: {
+                    thread_id: ref.threadId,
+                    checkpoint_ns: '',
+                    checkpoint_id: ref.checkpointId,
+                },
+            };
+            const tuple = (await saver.getTuple(config))!;
+            const checkpoint = structuredClone(tuple.checkpoint);
+            const state = checkpoint.channel_values.research as {
+                gaps: string[];
+                pages: AgentCandidate['pages'];
+            };
+            const originalHash = state.pages[0].contentHash;
+            const repository = createAgentRepository(fixture.db, seed.claimed.token);
+            const restoredContext = {
+                ...seed.context,
+                ...(await repository.comparison()),
+                usage: await repository.usage(),
+            };
+            expect(candidateFromCheckpoint(restoredContext, state)).toEqual(seed.candidate);
+            if (forgery === 'delete') delete state.pages[0].collection;
+            else
+                state.pages[0].collection = {
+                    version: 1,
+                    method: 'browser',
+                    complete: true,
+                    limitations: [],
+                };
+            state.gaps = [];
+            expect(state.pages[0].contentHash).toBe(originalHash);
+            checkpoint.id = crypto.randomUUID();
+            const saved = await saver.put(
+                config,
+                checkpoint,
+                tuple.metadata!,
+                checkpoint.channel_versions,
+            );
+            await createAgentRepository(fixture.db, seed.claimed.token).promoteCheckpoint({
+                ...ref,
+                checkpointId: saved.configurable!.checkpoint_id as string,
+            });
+            const forged = candidateFromCheckpoint(restoredContext, state);
+            await expect(delivery.deliver(seed.claimed.token, forged)).rejects.toMatchObject({
+                code: 'INVALID_DELIVERY_EVIDENCE',
+            });
+            await assertEmpty(seed.run.id);
+        },
+    );
+
+    it('删除并保存checkpoint中的采集缺口后，服务端仍恢复partial而非声称完整', async () => {
+        const seed = await liveResearch({
+            collection: {
+                version: 1,
+                method: 'browser',
+                complete: false,
+                limitations: ['render_timeout'],
+            },
+        });
+        const run = await fixture.db.query.runs
+            .findFirst({ where: eq(dbRuns.id, seed.run.id) })
+            .then((row) => requiredDatabaseValue(row));
+        const ref = run.checkpointRef as {
+            threadId: string;
+            namespace: '';
+            checkpointId: string;
+            leaseEpoch: number;
+        };
+        const config = {
+            configurable: {
+                thread_id: ref.threadId,
+                checkpoint_ns: '',
+                checkpoint_id: ref.checkpointId,
+            },
+        };
+        const tuple = (await saver.getTuple(config))!;
+        const checkpoint = structuredClone(tuple.checkpoint);
+        const state = checkpoint.channel_values.research as { gaps: string[] };
+        const repository = createAgentRepository(fixture.db, seed.claimed.token);
+        const restoredContext = {
+            ...seed.context,
+            ...(await repository.comparison()),
+            usage: await repository.usage(),
+        };
+        expect(candidateFromCheckpoint(restoredContext, state)).toEqual(seed.candidate);
+        state.gaps = [];
+        checkpoint.id = crypto.randomUUID();
+        const saved = await saver.put(
+            config,
+            checkpoint,
+            tuple.metadata!,
+            checkpoint.channel_versions,
+        );
+        await createAgentRepository(fixture.db, seed.claimed.token).promoteCheckpoint({
+            ...ref,
+            checkpointId: saved.configurable!.checkpoint_id as string,
+        });
+        const restored = candidateFromCheckpoint(restoredContext, state);
+        expect(restored.coverage.completeness).toBe('partial');
+        expect(restored.coverage.gaps.join(' ')).toContain('网页渲染或资源加载受限');
+        const delivered = await delivery.deliver(seed.claimed.token, restored);
+        expect(
+            await fixture.db.query.reports.findFirst({
+                where: eq(dbReports.id, delivered.reportId),
+            }),
+        ).toMatchObject({ completeness: 'partial' });
+        expect(
+            await fixture.db.query.baselines.findFirst({
+                where: eq(dbBaselines.taskId, seed.task.id),
+            }),
+        ).toBeUndefined();
     });
 
     it('取消事务先持有Run锁时，等待中的交付不得保存任何成果', async () => {

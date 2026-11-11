@@ -12,6 +12,7 @@ import { reportEndpoint } from '@/api/reports';
 import { toApiError } from '@/api/errors';
 import { useSessionLifecycle } from '@/composables/useSessionQuery';
 import type { SessionLifecycle } from '@/api/session';
+import { uniqueCoverageNotes } from '@/utils/report-coverage';
 
 export function validReportId(value: unknown): value is string {
     try {
@@ -57,7 +58,7 @@ export function claimEvidence(report: Report, claim: Claim) {
 export function reportIntegrity(report: Report) {
     return {
         partial: report.coverage.completeness === 'partial',
-        limitations: [...new Set([...report.limitations, ...report.coverage.gaps])],
+        limitations: uniqueCoverageNotes([...report.limitations, ...report.coverage.gaps]),
         demo: report.mode === 'demo',
     };
 }

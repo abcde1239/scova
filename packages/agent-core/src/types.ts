@@ -9,16 +9,18 @@ import type {
     FeedbackSnapshot,
     FeedbackEffect,
     ClaimAssessment,
+    ReportConversationContext,
 } from '@scova/models';
 import type { ModelResponse, ReadPage, SearchResponse, StructuredInput } from '@scova/connectors';
 
 export interface AgentTools {
     search: (operationKey: string, query: string) => Promise<SearchResponse>;
     read: (operationKey: string, url: string) => Promise<ReadPage>;
-    model: (operationKey: string, input: StructuredInput) => Promise<ModelResponse>;
+    model: (operationKey: string, input: StructuredInput) => Promise<AgentModelResponse>;
 }
 
 export interface AgentContext {
+    conversation?: ReportConversationContext;
     answerSupplementEnabled?: boolean;
     adaptiveSearchDisabled?: boolean;
     runId: string;
@@ -100,6 +102,7 @@ export interface AgentCitation {
 }
 
 export interface AgentClaim {
+    outputFormat?: TaskConfig['outputFormat'];
     assessment?: ClaimAssessment;
     kind: 'fact' | 'inference' | 'conflict' | 'insufficient';
     text: string;
@@ -114,9 +117,20 @@ export interface AgentClaim {
     )[];
 }
 
+export interface ComparisonSourceCoverage {
+    version: 1;
+    pages: { pageId: string; clipped: boolean }[];
+}
+
+export interface AgentModelResponse extends ModelResponse {
+    /** null identifies a reused legacy receipt whose actual input coverage is unknown. */
+    sourceCoverage?: ComparisonSourceCoverage | null;
+}
+
 export interface ComparisonExtraction {
     operationKey: string;
     response: ModelResponse;
+    sourceCoverage?: ComparisonSourceCoverage;
 }
 
 export interface AgentPage extends ReadPage {

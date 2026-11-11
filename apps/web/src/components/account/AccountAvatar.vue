@@ -1,6 +1,10 @@
 <template>
-    <span class="account-avatar" aria-hidden="true">
+    <span
+        class="account-avatar inline-grid place-items-center shrink-0 w-8 h-8 overflow-hidden rounded-[50%] [background:var(--scova-selected)] text-primary font-semibold"
+        aria-hidden="true"
+    >
         <img
+            class="w-full h-full [object-fit:cover]"
             v-if="renderedSource"
             :src="renderedSource"
             alt=""
@@ -39,23 +43,3 @@ watch(
     },
 );
 </script>
-
-<style scoped>
-.account-avatar {
-    display: inline-grid;
-    place-items: center;
-    flex-shrink: 0;
-    inline-size: 2rem;
-    block-size: 2rem;
-    overflow: hidden;
-    border-radius: 50%;
-    background: var(--scova-selected);
-    color: var(--scova-primary);
-    font-weight: 600;
-}
-img {
-    inline-size: 100%;
-    block-size: 100%;
-    object-fit: cover;
-}
-</style>

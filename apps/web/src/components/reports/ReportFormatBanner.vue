@@ -27,43 +27,29 @@ const formats = {
 </script>
 
 <style scoped>
+/* Scoped UnoCSS keeps the long control/state combinations readable. */
 .format-banner {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    align-items: center;
-    gap: 0.75rem 1.5rem;
-    padding: 1rem;
-    border-inline-start: 0.25rem solid var(--scova-primary);
-    background: var(--scova-selected);
-    min-inline-size: 0;
-    overflow-wrap: anywhere;
+    @apply flex flex-wrap justify-between items-center gap-[0.75rem_1.5rem]
+        [border-left:0.25rem_solid_var(--scova-primary)] [background:var(--scova-selected)] min-w-0
+        break-anywhere p-4;
 }
 p {
-    margin: 0;
-    line-height: 1.6;
+    @apply leading-[1.6] m-0;
 }
 .format-name {
-    font-weight: 650;
-    font-size: 1.125rem;
-    margin-block-end: 0.25rem;
+    @apply [font-weight:650] text-[1.125rem] mb-1;
 }
 .format-counts {
-    color: var(--scova-muted);
-    font-size: 0.875rem;
+    @apply text-muted text-[0.875rem];
 }
 .format-banner--list {
-    border-radius: 0.75rem;
-    border-inline-start: 0;
+    @apply rounded-3 [border-left:0];
 }
 .format-banner--comparison {
-    border: 0.0625rem solid var(--scova-border);
-    border-radius: 0.25rem;
+    @apply border-theme rounded-1;
 }
 .format-banner--research_report {
-    background: transparent;
-    padding-inline: 0;
-    border-inline: 0;
-    border-block: 0.1875rem double var(--scova-border);
+    @apply bg-transparent pl-0 pr-0 [border-inline:0]
+        [border-block:0.1875rem_double_var(--scova-border)];
 }
 </style>

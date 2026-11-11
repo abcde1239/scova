@@ -2,12 +2,27 @@ import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
-import { ConnectorError } from './types.ts';
+import { ConnectorError, type ReadDiagnostic } from './types.ts';
+import { readDiagnostics } from './read-diagnostics.ts';
 import { decodeWebText } from './web-text.ts';
 
 export interface ResolvedAddress {
     address: string;
     family: number;
+}
+
+/** Preserve DNS preference within each family without spending every attempt on one family. */
+function interleaveAddressFamilies(addresses: ResolvedAddress[]): ResolvedAddress[] {
+    const unique = [...new Map(addresses.map((address) => [address.address, address])).values()];
+    const preferred = unique[0]?.family;
+    const first = unique.filter((address) => address.family === preferred);
+    const second = unique.filter((address) => address.family !== preferred);
+    const result: ResolvedAddress[] = [];
+    for (let index = 0; index < Math.max(first.length, second.length); index++) {
+        if (first[index]) result.push(first[index]);
+        if (second[index]) result.push(second[index]);
+    }
+    return result;
 }
 
 export interface HttpResponse {
@@ -18,6 +33,7 @@ export interface HttpResponse {
 }
 
 export interface HttpOptions {
+    onReadDiagnostic?: (event: ReadDiagnostic) => void;
     responseEncoding?: 'web-text';
     method?: 'GET' | 'POST';
     headers?: Record<string, string>;
@@ -29,6 +45,8 @@ export interface HttpOptions {
 }
 
 export interface TransportOptions {
+    /** Only Reader enables this; a progressing body keeps the unchanged overall deadline. */
+    bodyIdleTimeoutMs?: number;
     responseEncoding?: 'web-text';
     method: 'GET' | 'POST';
     headers: Record<string, string>;
@@ -36,6 +54,8 @@ export interface TransportOptions {
     signal: AbortSignal;
     maxBytes: number;
     address: ResolvedAddress;
+    /** Trusted transport callback; only response headers end the IP connection budget. */
+    onResponseStarted?: () => void;
 }
 
 /** A privileged injection point: production callers should use the default pinned transport. */
@@ -59,7 +79,8 @@ export function isPublicIp(address: string): boolean {
             (a === 100 && b >= 64 && b <= 127) ||
             (a === 169 && b === 254) ||
             (a === 172 && b >= 16 && b <= 31) ||
-            (a === 192 && (b === 0 || b === 168 || (b === 88 && c === 99))) ||
+            (a === 192 &&
+                ((b === 0 && (c === 0 || c === 2)) || b === 168 || (b === 88 && c === 99))) ||
             (a === 198 && (b === 18 || b === 19 || (b === 51 && c === 100))) ||
             (a === 203 && b === 0 && c === 113)
         );
@@ -184,6 +205,7 @@ export const nodeHttpTransport: HttpTransport = (url, options) =>
                 },
             },
             (res) => {
+                options.onResponseStarted?.();
                 const headers: Record<string, string> = {};
                 for (const [name, value] of Object.entries(res.headers)) {
                     if (value !== undefined)
@@ -205,7 +227,19 @@ export const nodeHttpTransport: HttpTransport = (url, options) =>
                 }
                 const chunks: Buffer[] = [];
                 let bytes = 0;
+                let bodyTimer: ReturnType<typeof setTimeout> | undefined;
+                const progress = () => {
+                    clearTimeout(bodyTimer);
+                    if (options.bodyIdleTimeoutMs)
+                        bodyTimer = setTimeout(() => {
+                            const error = new ConnectorError('timeout', '来源响应体停止传输', true);
+                            reject(error);
+                            res.destroy(error);
+                        }, options.bodyIdleTimeoutMs);
+                };
+                progress();
                 res.on('data', (chunk: Buffer) => {
+                    progress();
                     bytes += chunk.length;
                     if (bytes > options.maxBytes) {
                         const error = new ConnectorError('response_too_large', '响应超过下载限制');
@@ -218,10 +252,12 @@ export const nodeHttpTransport: HttpTransport = (url, options) =>
                     reject(new ConnectorError('network', '响应流提前中断', true)),
                 );
                 res.on('close', () => {
+                    clearTimeout(bodyTimer);
                     if (!res.complete)
                         reject(new ConnectorError('network', '响应流未完整接收', true));
                 });
                 res.on('end', () => {
+                    clearTimeout(bodyTimer);
                     try {
                         if (options.responseEncoding === 'web-text') {
                             // Redirect/error payloads are never rendered. Preserve status and Location
@@ -266,17 +302,34 @@ export const nodeHttpTransport: HttpTransport = (url, options) =>
 
 export function createSafeHttpClient(
     config: {
-        resolve?: (hostname: string) => Promise<ResolvedAddress[]>;
+        resolve?: (hostname: string, signal?: AbortSignal) => Promise<ResolvedAddress[]>;
         transport?: HttpTransport;
         maxTimeoutMs?: number;
+        /** Bounded IP connection fallback for idempotent public reads; POST is never replayed. */
+        maxAddressAttempts?: number;
+        /** Bound connection/headers for each address; the body retains the overall deadline. */
+        addressTimeoutMs?: number;
+        /** A received body must keep making progress; omitted for model/search transports. */
+        bodyIdleTimeoutMs?: number;
     } = {},
 ): SafeHttpClient {
     const maxTimeoutMs = positiveLimit(config.maxTimeoutMs ?? 15_000, 120_000, 'HTTP超时上限');
-    const resolver =
+    const maxAddressAttempts = positiveLimit(config.maxAddressAttempts ?? 1, 3, '地址尝试上限');
+    const addressTimeoutMs = positiveLimit(config.addressTimeoutMs ?? 4000, 4000, '单地址超时');
+    const bodyIdleTimeoutMs =
+        config.bodyIdleTimeoutMs === undefined
+            ? undefined
+            : positiveLimit(config.bodyIdleTimeoutMs, 5000, '正文传输空闲超时');
+    const resolver: NonNullable<typeof config.resolve> =
         config.resolve ?? ((hostname: string) => lookup(hostname, { all: true, verbatim: true }));
     const transport = config.transport ?? nodeHttpTransport;
     const originTails = new Map<string, Promise<void>>();
-    const send: HttpTransport = async (url, options) => {
+    const send = async (
+        url: URL,
+        options: TransportOptions,
+        attemptTimeoutMs?: number,
+        diagnostics = readDiagnostics(undefined, 15_000),
+    ) => {
         const origin = url.origin;
         const previous = originTails.get(origin) ?? Promise.resolve();
         let release!: () => void;
@@ -285,17 +338,94 @@ export function createSafeHttpClient(
         });
         const tail = previous.then(() => current);
         originTails.set(origin, tail);
+        let stopWaiting: (() => void) | undefined;
         try {
-            await previous;
+            // Waiting for an earlier safe request counts towards the original
+            // overall deadline, but is not a failed IP connection attempt.
+            await diagnostics.stage('queue', () =>
+                Promise.race([
+                    previous,
+                    new Promise<never>((_resolve, reject) => {
+                        stopWaiting = () => reject(options.signal.reason);
+                        if (options.signal.aborted) stopWaiting();
+                        else options.signal.addEventListener('abort', stopWaiting, { once: true });
+                    }),
+                ]),
+            );
             if (options.signal.aborted) throw options.signal.reason;
-            return await transport(url, options);
+            const headersDone = diagnostics.begin('headers');
+            let bodyDone: ((error?: unknown) => void) | undefined;
+            const traced = {
+                ...options,
+                onResponseStarted: () => {
+                    headersDone();
+                    bodyDone ??= diagnostics.begin('body');
+                    options.onResponseStarted?.();
+                },
+            };
+            const request = async (transportOptions: TransportOptions) => {
+                try {
+                    const value = await transport(url, transportOptions);
+                    headersDone();
+                    bodyDone?.();
+                    return value;
+                } catch (error) {
+                    headersDone(error);
+                    bodyDone?.(error);
+                    throw error;
+                }
+            };
+            if (!attemptTimeoutMs) return await request(traced);
+            const controller = new AbortController();
+            let timer: ReturnType<typeof setTimeout> | undefined;
+            let onAbort: (() => void) | undefined;
+            const stopped = new Promise<never>((_resolve, reject) => {
+                const stop = (error: unknown) => {
+                    controller.abort(error);
+                    reject(error);
+                };
+                onAbort = () => stop(options.signal.reason);
+                options.signal.addEventListener('abort', onAbort, { once: true });
+                timer = setTimeout(
+                    () => stop(new ConnectorError('timeout', '来源连接或响应头超时', true)),
+                    attemptTimeoutMs,
+                );
+            });
+            try {
+                return await Promise.race([
+                    stopped,
+                    request({
+                        ...traced,
+                        signal: controller.signal,
+                        onResponseStarted: () => {
+                            // Once the server has responded, a slow successful body
+                            // must not be restarted on the next IP. Size and the
+                            // unchanged caller deadline still bound every byte.
+                            clearTimeout(timer);
+                            traced.onResponseStarted();
+                        },
+                    }),
+                ]);
+            } finally {
+                clearTimeout(timer);
+                if (onAbort) options.signal.removeEventListener('abort', onAbort);
+            }
         } finally {
+            if (stopWaiting) options.signal.removeEventListener('abort', stopWaiting);
             release();
-            if (originTails.get(origin) === tail) originTails.delete(origin);
+            // A cancelled queued request can finish before its predecessor.
+            // Keep its tail registered until the entire predecessor chain ends.
+            void tail.then(() => {
+                if (originTails.get(origin) === tail) originTails.delete(origin);
+            });
         }
     };
     return {
         request(value, options = {}) {
+            const diagnostics = readDiagnostics(
+                options.onReadDiagnostic,
+                Math.min(options.timeoutMs ?? 15_000, maxTimeoutMs),
+            );
             const maxBytes = positiveLimit(
                 options.maxBytes ?? 2 * 1024 * 1024,
                 2 * 1024 * 1024,
@@ -317,7 +447,7 @@ export function createSafeHttpClient(
                         try {
                             addresses = isIP(hostname)
                                 ? [{ address: hostname, family: isIP(hostname) }]
-                                : await resolver(hostname);
+                                : await diagnostics.stage('dns', () => resolver(hostname, signal));
                         } catch (error) {
                             if (error instanceof ConnectorError) throw error;
                             throw new ConnectorError('network', '来源域名解析失败', true);
@@ -331,21 +461,49 @@ export function createSafeHttpClient(
                             throw new ConnectorError('unsafe_url', '域名解析包含非公共网络地址');
                         }
                         if (signal.aborted) throw signal.reason;
-                        let response: Omit<HttpResponse, 'url'>;
-                        try {
-                            response = await send(url, {
-                                method: options.method ?? 'GET',
-                                headers,
-                                body: options.body,
-                                signal,
-                                maxBytes,
-                                responseEncoding: options.responseEncoding,
-                                address: addresses[0],
-                            });
-                        } catch (error) {
-                            if (error instanceof ConnectorError) throw error;
-                            throw new ConnectorError('network', '外部连接失败', true);
+                        let response: Omit<HttpResponse, 'url'> | undefined;
+                        const candidates = interleaveAddressFamilies(addresses).slice(
+                            0,
+                            (options.method ?? 'GET') === 'GET' ? maxAddressAttempts : 1,
+                        );
+                        for (const [index, address] of candidates.entries()) {
+                            try {
+                                response = await send(
+                                    url,
+                                    {
+                                        method: options.method ?? 'GET',
+                                        headers,
+                                        body: options.body,
+                                        signal,
+                                        maxBytes,
+                                        responseEncoding: options.responseEncoding,
+                                        bodyIdleTimeoutMs:
+                                            (options.method ?? 'GET') === 'GET'
+                                                ? bodyIdleTimeoutMs
+                                                : undefined,
+                                        address,
+                                    },
+                                    (options.method ?? 'GET') === 'GET' && maxAddressAttempts > 1
+                                        ? addressTimeoutMs
+                                        : undefined,
+                                    diagnostics,
+                                );
+                                break;
+                            } catch (error) {
+                                if (signal.aborted) throw signal.reason;
+                                const failure =
+                                    error instanceof ConnectorError
+                                        ? error
+                                        : new ConnectorError('network', '外部连接失败', true);
+                                if (
+                                    !['network', 'timeout'].includes(failure.code) ||
+                                    index === candidates.length - 1
+                                )
+                                    throw failure;
+                            }
                         }
+                        if (!response)
+                            throw new ConnectorError('network', '没有可连接的公网地址', true);
                         if (Buffer.byteLength(response.body, 'utf8') > maxBytes)
                             throw new ConnectorError('response_too_large', '响应超过下载限制');
                         if ([301, 302, 303, 307, 308].includes(response.status)) {

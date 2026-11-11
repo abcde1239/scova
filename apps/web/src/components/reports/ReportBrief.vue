@@ -5,9 +5,14 @@
             v-for="section in sections"
             :key="section.kind"
             :aria-labelledby="`claims-${section.kind}`"
-            class="claim-section"
+            class="claim-section layout-grid gap-5"
         >
-            <h3 :id="`claims-${section.kind}`" class="scova-content-title">{{ section.title }}</h3>
+            <h3
+                :id="`claims-${section.kind}`"
+                class="scova-content-title text-[1.25rem] font-semibold m-0"
+            >
+                {{ section.title }}
+            </h3>
             <report-claim
                 v-for="claim in section.claims"
                 :key="claim.id"
@@ -30,19 +35,3 @@ const props = withDefaults(defineProps<{ report: Report; showChanges?: boolean }
 });
 const sections = computed(() => reportSections(props.report));
 </script>
-
-<style scoped>
-.claim-section {
-    display: grid;
-    gap: 1.25rem;
-    min-inline-size: 0;
-}
-h3 {
-    margin: 0;
-    font-size: 1.25rem;
-    font-weight: 600;
-}
-p {
-    margin: 0;
-}
-</style>

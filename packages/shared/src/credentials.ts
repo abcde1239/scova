@@ -1,5 +1,67 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 
+export interface ProviderCredentials {
+    modelApiKey: string;
+    searchApi?: {
+        protocol: 'deepseek' | 'perplexity' | 'tavily';
+        baseUrl: string;
+        apiKey: string;
+        contentMode: 'prefer_api' | 'reader';
+    };
+}
+const providerPrefix = 'scova-provider:v2:';
+
+/** Keep legacy model-only records readable without a database migration. */
+export function sealProviderCredentials(
+    value: ProviderCredentials,
+    ownerId: string,
+    id: string,
+    key?: string,
+) {
+    return sealCredential(
+        value.searchApi ? providerPrefix + JSON.stringify(value) : value.modelApiKey,
+        ownerId,
+        id,
+        key,
+    );
+}
+export function openProviderCredentials(
+    value: string,
+    ownerId: string,
+    id: string,
+    key?: string,
+): ProviderCredentials {
+    const secret = openCredential(value, ownerId, id, key);
+    if (!secret.startsWith(providerPrefix)) return { modelApiKey: secret };
+    try {
+        const parsed = JSON.parse(secret.slice(providerPrefix.length));
+        const search = parsed.searchApi;
+        if (
+            typeof parsed.modelApiKey !== 'string' ||
+            !parsed.modelApiKey ||
+            !search ||
+            !['deepseek', 'perplexity', 'tavily'].includes(search.protocol) ||
+            typeof search.baseUrl !== 'string' ||
+            !search.baseUrl ||
+            typeof search.apiKey !== 'string' ||
+            !search.apiKey ||
+            !['prefer_api', 'reader'].includes(search.contentMode)
+        )
+            throw new Error();
+        return {
+            modelApiKey: parsed.modelApiKey,
+            searchApi: {
+                protocol: search.protocol,
+                baseUrl: search.baseUrl,
+                apiKey: search.apiKey,
+                contentMode: search.contentMode,
+            },
+        };
+    } catch {
+        throw new Error('账号供应商凭据格式无效，请重新保存配置');
+    }
+}
+
 export function credentialStorageReady(key = process.env.AGENT_CREDENTIAL_KEY) {
     return !!key && /^[a-f0-9]{64}$/i.test(key);
 }

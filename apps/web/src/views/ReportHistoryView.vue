@@ -1,9 +1,10 @@
 <template>
-    <section ref="container" class="report-history" aria-label="历史报告列表">
-        <div class="history-tools">
-            <label
+    <section ref="container" class="report-history layout-grid gap-6" aria-label="历史报告列表">
+        <div class="history-tools flex flex-wrap gap-[1rem_2rem] items-end">
+            <label class="layout-grid gap-2 max-w-full"
                 >筛选任务
                 <select
+                    class="[appearance:auto] min-w-0 max-w-full min-h-11 [font-family:inherit] [font-size:inherit] [font-weight:inherit] [font-style:inherit] leading-[1.5] [font-variant:inherit] text-default bg-surface border-theme rounded-2 cursor-pointer py-2 px-4 keyboard-focus-wide"
                     :value="taskId === null ? 'invalid' : (taskId ?? '')"
                     @change="changeFilter"
                 >
@@ -29,12 +30,16 @@
                 ><app-icon name="retry" />刷新报告</action-button
             >
         </div>
-        <div class="task-options-status">
-            <p v-if="tasks.query.isPending.value" role="status">
+        <div
+            class="task-options-status flex flex-wrap gap-4 items-center [&.task-options-status:empty]:hidden"
+        >
+            <p class="break-anywhere m-0" v-if="tasks.query.isPending.value" role="status">
                 正在读取任务选项，报告历史独立加载。
             </p>
             <template v-else-if="tasks.query.isError.value">
-                <p role="status">任务选项暂时无法读取；当前合法任务筛选仍可读取报告历史。</p>
+                <p class="break-anywhere m-0" role="status">
+                    任务选项暂时无法读取；当前合法任务筛选仍可读取报告历史。
+                </p>
                 <action-button :busy="tasks.query.isFetching.value" @click="retryTasks"
                     >重试任务选项</action-button
                 >
@@ -58,7 +63,7 @@
             @retry="retry"
         />
         <state-panel v-else-if="!items.length" state="empty" message="暂无报告" />
-        <div v-if="items.length" class="history-list">
+        <div v-if="items.length" class="history-list min-w-0">
             <report-history-entry
                 v-for="item in items"
                 :key="item.id"
@@ -215,57 +220,3 @@ onMounted(async () => {
     window.scrollTo({ top: position.scroll });
 });
 </script>
-
-<style scoped>
-.report-history {
-    display: grid;
-    gap: 1.5rem;
-    min-inline-size: 0;
-}
-.history-tools {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1rem 2rem;
-    align-items: end;
-}
-label {
-    display: grid;
-    gap: 0.5rem;
-    min-inline-size: 0;
-    max-inline-size: 100%;
-}
-select {
-    appearance: auto;
-    min-inline-size: 0;
-    max-inline-size: 100%;
-    min-block-size: 2.75rem;
-    font: inherit;
-    line-height: 1.5;
-    padding: 0.5rem 1rem;
-    color: var(--scova-text);
-    background: var(--scova-surface);
-    border: 0.0625rem solid var(--scova-border);
-    border-radius: 0.5rem;
-    cursor: pointer;
-}
-select:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
-}
-.task-options-status {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1rem;
-    align-items: center;
-}
-.task-options-status:empty {
-    display: none;
-}
-p {
-    margin: 0;
-    overflow-wrap: anywhere;
-}
-.history-list {
-    min-inline-size: 0;
-}
-</style>

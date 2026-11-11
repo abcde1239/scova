@@ -56,60 +56,39 @@ function activate(event: MouseEvent) {
 </script>
 
 <style scoped>
+/* Scoped UnoCSS keeps the long control/state combinations readable. */
 .action-spinner {
-    display: inline-block;
-    flex: 0 0 1em;
-    inline-size: 1em;
-    block-size: 1em;
-    border: 0.125em solid currentColor;
-    border-inline-end-color: transparent;
-    border-radius: 50%;
-    animation: action-spin 0.8s linear infinite;
-}
-@keyframes action-spin {
-    to {
-        transform: rotate(360deg);
-    }
+    @apply inline-block [flex:0_0_1em] w-[1em] h-[1em] [border:0.125em_solid_currentColor]
+        [border-inline-end-color:transparent] rounded-[50%] animate-action-spin;
 }
 @media (prefers-reduced-motion: reduce) {
     .action-spinner {
-        animation: none;
+        @apply [animation:none];
     }
 }
 .scova-action-button {
-    min-inline-size: 2.75rem;
-    min-block-size: 2.75rem;
-    block-size: auto;
-    max-inline-size: 100%;
-    padding: 0.625rem 1rem;
-    font-size: 1rem;
-    line-height: 1.5;
-    white-space: normal;
-    cursor: pointer;
+    @apply min-w-11 min-h-11 h-auto max-w-full pt-2.5 pr-4 pb-2.5 pl-4 text-[1rem] leading-[1.5]
+        whitespace-normal cursor-pointer;
 }
 .scova-action-button.scova-action--busy {
-    cursor: progress;
+    @apply cursor-progress;
 }
 .scova-action-button[aria-busy='true'] :deep(.app-icon) {
-    display: none;
+    @apply hidden;
 }
 .scova-action-button.scova-action--text {
-    min-inline-size: 0;
-    padding: 0.375rem 0;
+    @apply min-w-0 pt-1.5 pr-0 pb-1.5 pl-0;
 }
 .scova-action-button.scova-action--disabled {
-    cursor: not-allowed;
+    @apply cursor-not-allowed;
 }
 .scova-action-button :deep(*) {
-    cursor: inherit;
+    @apply cursor-inherit;
 }
 .scova-action-button :deep(.n-button__content) {
-    white-space: normal;
-    overflow-wrap: anywhere;
-    gap: 0.5em;
+    @apply whitespace-normal break-anywhere gap-[0.5em];
 }
 .scova-action-button:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.1875rem;
+    @apply [outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.1875rem];
 }
 </style>

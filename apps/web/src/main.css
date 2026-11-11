@@ -1,0 +1,314 @@
+/* Global entry: self-hosted interface fonts, resets, theme tokens and structural typography. */
+
+@import '@fontsource-variable/noto-sans-sc/wght.css';
+
+/* One variable Latin asset covers the required 400/500/600 interface weights. */
+@font-face {
+    font-family: 'Inter Variable';
+    font-style: normal;
+    font-display: swap;
+    font-weight: 400 600;
+    src: url('@fontsource-variable/inter/files/inter-latin-wght-normal.woff2')
+        format('woff2-variations');
+    unicode-range:
+        U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308,
+        U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+:root {
+    --scova-font-interface:
+        'Inter Variable', 'Noto Sans SC Variable', 'PingFang SC', 'Microsoft YaHei', system-ui,
+        sans-serif;
+    --scova-font-reading: 'Noto Serif SC Variable', 'Songti SC', 'STSong', 'SimSun', serif;
+    font-family: system-ui, -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+body {
+    min-width: 0;
+    margin: 0;
+}
+
+/* Inputs grow through their component's autosize policy, never a drag handle. */
+textarea {
+    resize: none !important;
+}
+
+html,
+body,
+#app,
+.scova-theme {
+    min-block-size: 100%;
+}
+
+h1 {
+    margin: 0 0 1rem;
+    font-size: 2rem;
+    font-weight: 600;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+
+p {
+    margin: 0;
+    font-size: 1rem;
+    line-height: 1.75;
+}
+
+.scova-theme {
+    --scova-select-radius: 0.5rem;
+    --scova-select-border: color-mix(in srgb, var(--scova-border) 65%, var(--scova-surface));
+    --scova-select-hover-border: color-mix(in srgb, var(--scova-primary) 60%, var(--scova-border));
+    --scova-select-focus-ring: color-mix(in srgb, var(--scova-primary) 12%, transparent);
+    min-block-size: 100%;
+    color: var(--scova-text);
+    background: var(--scova-canvas);
+    font-family: var(--scova-font-interface);
+    font-size: 1rem;
+    line-height: 1.6;
+    color-scheme: light;
+}
+
+.scova-theme--dark {
+    color-scheme: dark;
+}
+
+.scova-theme select:not([multiple]) {
+    appearance: none;
+    min-block-size: 2.75rem;
+    min-inline-size: 0;
+    max-inline-size: 100%;
+    padding: 0.625rem 2.5rem 0.625rem 0.875rem;
+    border: 0.0625rem solid var(--scova-select-border);
+    border-radius: var(--scova-select-radius);
+    background-color: var(--scova-surface);
+    background-image:
+        linear-gradient(45deg, transparent 50%, var(--scova-muted) 50%),
+        linear-gradient(135deg, var(--scova-muted) 50%, transparent 50%);
+    background-position:
+        calc(100% - 1.0625rem) 50%,
+        calc(100% - 0.75rem) 50%;
+    background-size: 0.3125rem 0.3125rem;
+    background-repeat: no-repeat;
+    color: var(--scova-text);
+    font: inherit;
+    line-height: 1.5;
+    cursor: pointer;
+    transition:
+        border-color 150ms,
+        box-shadow 150ms;
+}
+
+.scova-theme select:not(:disabled):hover {
+    border-color: var(--scova-select-hover-border);
+}
+
+.scova-theme select:not(:disabled):focus-visible {
+    border-color: var(--scova-primary);
+    outline: 0.0625rem solid var(--scova-primary);
+    outline-offset: 0.0625rem;
+    box-shadow: 0 0 0 0.1875rem var(--scova-select-focus-ring);
+}
+
+.scova-theme select:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.scova-theme select[aria-invalid='true']:not(:disabled) {
+    border-color: var(--scova-danger);
+}
+.scova-theme select[aria-invalid='true']:focus-visible {
+    outline-color: var(--scova-danger);
+    box-shadow: 0 0 0 0.1875rem color-mix(in srgb, var(--scova-danger) 12%, transparent);
+}
+
+.scova-theme select option {
+    background: var(--scova-surface);
+    color: var(--scova-text);
+}
+
+.scova-notifications.n-notification-container {
+    max-inline-size: calc(100vw - 2rem);
+}
+.scova-notifications .n-notification {
+    max-inline-size: 100%;
+    overflow-wrap: anywhere;
+    font-family: var(--scova-font-interface);
+}
+.scova-notifications .n-notification-main {
+    min-inline-size: 0;
+}
+@media (max-width: 40rem) {
+    .scova-notifications.n-notification-container {
+        inset-inline-end: 1rem;
+        inset-block-start: 1rem;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .scova-theme select {
+        transition: none;
+    }
+    .scova-notifications *,
+    .scova-notifications *::before,
+    .scova-notifications *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+.scova-reading :where(p, li),
+.scova-note :where(p, li) {
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+}
+
+:where(.scova-reading, .scova-note) :where(h2, h3) {
+    font-family: inherit;
+    font-size: 1.25em;
+    font-weight: 600;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+}
+
+.scova-table,
+.scova-warning,
+.scova-caption,
+.scova-citation-tools,
+.scova-question-tools,
+.scova-reading :where(table, button, input, select, textarea),
+.scova-note :where(table, button, input, select, textarea) {
+    font-family: var(--scova-font-interface);
+    font-size: 1rem;
+    font-weight: 400;
+    line-height: 1.75;
+}
+
+.scova-reading :where(button),
+.scova-note :where(button) {
+    font-weight: 500;
+}
+
+/* Opaque first: unsupported backdrop filtering remains fully readable. */
+.scova-glass {
+    background: var(--scova-surface);
+    color: var(--scova-text);
+    border: 0.0625rem solid var(--scova-border);
+    border-radius: 0.5rem;
+}
+
+.scova-glass--navigation {
+    --scova-glass-coverage: 92%;
+}
+.scova-glass--tools {
+    --scova-glass-coverage: 92%;
+}
+.scova-glass--report {
+    --scova-glass-coverage: 94%;
+}
+.scova-glass--menu {
+    --scova-glass-coverage: 96%;
+}
+
+@supports (backdrop-filter: blur(1rem)) and (background: color-mix(in srgb, white, transparent)) {
+    .scova-glass {
+        background: color-mix(
+            in srgb,
+            var(--scova-surface) var(--scova-glass-coverage, 94%),
+            transparent
+        );
+        backdrop-filter: blur(0.875rem);
+    }
+}
+
+/* Explicit solid rendering is also useful on unsupported media-query platforms. */
+.scova-glass.scova-glass--solid,
+[data-reduced-transparency='true'] .scova-glass {
+    background: var(--scova-surface);
+    backdrop-filter: none;
+    box-shadow: none;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+    .scova-glass {
+        background: var(--scova-surface);
+        backdrop-filter: none;
+        box-shadow: none;
+    }
+}
+
+/* Teleported Naive UI date/time panels share the application theme and rem geometry. */
+
+.scova-theme .n-date-panel {
+    inline-size: min(20rem, calc(100vw - 1rem));
+    max-block-size: calc(100dvh - 1rem);
+    overflow-y: auto;
+    grid-template-columns: minmax(0, 1fr);
+    container: scova-calendar / inline-size;
+}
+.scova-theme .n-date-panel-calendar {
+    min-inline-size: 0;
+    grid-template-columns: minmax(0, 1fr);
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+}
+.scova-theme .n-date-panel-month {
+    position: sticky;
+    inset-inline-start: 0;
+    min-inline-size: 0;
+    inline-size: 100%;
+    height: auto;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-rows: 2.25rem 1.75rem;
+    row-gap: 0.25rem;
+}
+.scova-theme .n-date-panel-month__month-year {
+    grid-area: 1 / 1 / 2 / 5;
+}
+.scova-theme .n-date-panel-month > :not(.n-date-panel-month__month-year) {
+    grid-row: 2;
+}
+@container scova-calendar (max-width: 18.125rem) {
+    .scova-theme .n-date-panel-calendar::after {
+        content: '左右滑动查看其余日期';
+        position: sticky;
+        inset-inline-start: 0;
+        padding-block-start: 0.5rem;
+        color: var(--scova-muted);
+        font-size: 0.75rem;
+        line-height: 1.5;
+    }
+}
+.scova-theme .n-time-picker-panel {
+    max-inline-size: calc(100vw - 1rem);
+    max-block-size: calc(100dvh - 1rem);
+    overflow: auto;
+}
+
+html:has(.mobile-drawer[open]) {
+    overflow: hidden;
+}
+
+[data-reduced-transparency='true'] .auth-layout .auth-card {
+    background: var(--scova-surface);
+    backdrop-filter: none;
+    box-shadow: none;
+}
+
+[data-reduced-transparency='true'] .auth-layout .auth-backdrop {
+    display: none;
+}
+
+[data-reduced-transparency='true'] .auth-layout .auth-motion {
+    display: none;
+}

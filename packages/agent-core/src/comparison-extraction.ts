@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { normalizeUrl } from '@scova/connectors';
 import { COMPARISON_BATCH_SIZE } from '@scova/models';
+import type { StructuredInput } from '@scova/connectors';
 export { COMPARISON_BATCH_SIZE, comparisonOutputLimits } from '@scova/models';
 import { manifestFromModel, validateComparisonManifest } from './comparison.ts';
 import {
@@ -11,6 +12,8 @@ import {
     type ComparisonExtraction,
     type ComparisonFact,
     type ComparisonManifest,
+    type ComparisonSourceCoverage,
+    type AgentModelResponse,
 } from './types.ts';
 
 export function comparisonBatches(pages: AgentPage[]) {
@@ -29,6 +32,67 @@ const record = (v: unknown): v is Record<string, unknown> =>
     !!v && typeof v === 'object' && !Array.isArray(v);
 const shortText = (v: unknown, max: number): v is string =>
     typeof v === 'string' && !!v.trim() && v.length <= max;
+
+/** Generated from the actual model input, never from its response text. */
+export function comparisonSourceCoverage(
+    input: Pick<StructuredInput, 'untrustedSources'>,
+): ComparisonSourceCoverage {
+    if (!Array.isArray(input.untrustedSources))
+        throw new AgentError('INVALID_STATE', '比较来源输入不合法');
+    return {
+        version: 1,
+        pages: input.untrustedSources.map((source: unknown) => {
+            if (!record(source) || !shortText(source.pageId, 100))
+                throw new AgentError('INVALID_STATE', '比较来源输入缺少页面身份');
+            return { pageId: source.pageId, clipped: typeof source.text !== 'string' };
+        }),
+    };
+}
+
+/** Keep transport metadata separate from the immutable model wire response. */
+export function comparisonReceipt(
+    operationKey: string,
+    response: AgentModelResponse,
+    input: StructuredInput,
+): ComparisonExtraction {
+    const { sourceCoverage, ...wire } = response;
+    return {
+        operationKey,
+        response: wire,
+        ...(sourceCoverage === null
+            ? {}
+            : { sourceCoverage: sourceCoverage ?? comparisonSourceCoverage(input) }),
+    };
+}
+
+export function isComparisonSourceCoverage(value: unknown): value is ComparisonSourceCoverage {
+    return (
+        record(value) &&
+        value.version === 1 &&
+        Array.isArray(value.pages) &&
+        value.pages.length <= 20 &&
+        new Set(value.pages.map((page: unknown) => (record(page) ? page.pageId : undefined)))
+            .size === value.pages.length &&
+        value.pages.every(
+            (page: unknown) =>
+                record(page) && shortText(page.pageId, 100) && typeof page.clipped === 'boolean',
+        )
+    );
+}
+
+/** Worker delivery uses the committed tool output to authenticate both receipt projections. */
+export function comparisonReceiptMatchesOutput(
+    receipt: ComparisonExtraction,
+    output: unknown,
+): boolean {
+    if (!record(output)) return false;
+    const { sourceCoverage, ...response } = output;
+    return (
+        (sourceCoverage === undefined || isComparisonSourceCoverage(sourceCoverage)) &&
+        isDeepStrictEqual(response, receipt.response) &&
+        isDeepStrictEqual(sourceCoverage, receipt.sourceCoverage)
+    );
+}
 const factKey = (f: Pick<ComparisonFact, 'subject' | 'predicate'>) =>
     `${f.subject.normalize('NFKC').trim()}::${f.predicate.normalize('NFKC').trim()}`;
 interface Pending {
@@ -124,7 +188,12 @@ export function comparisonFromExtractions(
     if (
         extractions.length > batches.length * 2 ||
         new Set(extractions.map((e) => e.operationKey)).size !== extractions.length ||
-        extractions.some((e) => !allowed.has(e.operationKey) || e.response.mode !== context.mode)
+        extractions.some(
+            (e) =>
+                !allowed.has(e.operationKey) ||
+                e.response.mode !== context.mode ||
+                (e.sourceCoverage !== undefined && !isComparisonSourceCoverage(e.sourceCoverage)),
+        )
     )
         throw new AgentError('INVALID_STATE', '比较分批记录不合法');
     if (!extractions.length)
@@ -141,6 +210,7 @@ export function comparisonFromExtractions(
         pages: [],
     };
     const uncertain: AgentChange[] = [];
+    const coverageGaps = new Set<string>();
     let incomplete = 0;
     for (const [i, batch] of batches.entries()) {
         const primary = extractions.find((e) => e.operationKey === comparisonOperation(i));
@@ -148,6 +218,28 @@ export function comparisonFromExtractions(
         const original = partition(primary?.response.data, context, batch);
         const requested = comparisonRepairPages(context, batch, primary?.response);
         const fixed = partition(repair?.response.data, context, requested);
+        for (const [receipt, expected] of [
+            [primary, batch],
+            [repair, requested],
+        ] as const) {
+            if (!receipt) continue;
+            if (receipt.sourceCoverage) {
+                if (
+                    !isDeepStrictEqual(
+                        receipt.sourceCoverage.pages.map((p) => p.pageId),
+                        expected.map((p) => p.id),
+                    )
+                )
+                    throw new AgentError('INVALID_STATE', '比较输入覆盖页面与批次不一致');
+                if (receipt.sourceCoverage.pages.some((p) => p.clipped))
+                    coverageGaps.add('比较输入受预算限制，仅查阅部分正文，不能据此判断无重要变化');
+            } else if (expected.some((p) => p.text.length > 32_000)) {
+                // Prior checkpoints sent only 32k prefixes and did not persist that coverage fact.
+                coverageGaps.add(
+                    '旧比较记录缺少完整输入覆盖证明，长正文可能仅查阅前32000字符，不能据此判断无重要变化',
+                );
+            }
+        }
         for (const page of batch) {
             const accepted = [...(original.facts.get(page.id) ?? [])];
             for (const fact of fixed.facts.get(page.id) ?? [])
@@ -190,6 +282,7 @@ export function comparisonFromExtractions(
     if (!checked || !isDeepStrictEqual(checked, manifest))
         throw new AgentError('INVALID_STATE', '比较分批清单损坏');
     const gaps = [
+        ...coverageGaps,
         ...(incomplete ? [`${incomplete}个来源的比较提取尚未完成，保留其他来源结果`] : []),
         ...(uncertain.length ? [`${uncertain.length}条比较线索缺少逐字依据，已标为待核实`] : []),
     ];

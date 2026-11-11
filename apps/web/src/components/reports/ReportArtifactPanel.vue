@@ -1,0 +1,329 @@
+<template>
+    <section
+        id="report-artifact"
+        ref="panel"
+        class="report-content report-artifact-panel"
+        :class="{ 'report-artifact-panel--reading': reading }"
+        aria-label="报告交付物"
+        @keydown="onKeydown"
+        @click="revealCitation"
+    >
+        <header class="deliverable-heading scova-interface">
+            <div>
+                <h2><app-icon name="report" />{{ reading ? '完整阅读' : '成果预览' }}</h2>
+                <p v-if="report">
+                    <span class="artifact-kind">{{ formatLabels[activeFormat] }}</span
+                    ><time :datetime="report.publishedAt">{{ savedDate }}</time>
+                </p>
+            </div>
+            <div v-if="report" class="artifact-actions">
+                <n-button v-if="reading" @click="emit('conversation')">
+                    <app-icon name="back" />返回研究对话
+                </n-button>
+                <template v-else>
+                    <n-button quaternary @click="emit('read')">
+                        完整阅读<app-icon name="source" />
+                    </n-button>
+                    <button
+                        type="button"
+                        class="artifact-close"
+                        aria-label="关闭成果预览"
+                        @click="emit('close')"
+                    >
+                        <app-icon name="close" />
+                    </button>
+                </template>
+            </div>
+        </header>
+        <div class="artifact-scroll">
+            <div v-if="report" class="report-presentation scova-interface">
+                <nav v-if="formats.length > 1" class="artifact-formats" aria-label="已生成成果">
+                    <button
+                        v-for="key in formats"
+                        :key="key"
+                        type="button"
+                        :aria-pressed="activeFormat === key"
+                        @click="format = key"
+                    >
+                        {{ formatLabels[key] }}
+                    </button>
+                </nav>
+                <nav class="report-sections" aria-label="报告内容导航">
+                    <n-button
+                        v-for="section in sections"
+                        :key="section.id"
+                        tag="a"
+                        quaternary
+                        type="primary"
+                        v-bind="{ href: `#${section.id}` }"
+                        @click="jump($event, section.id)"
+                    >
+                        <app-icon :name="section.icon" />{{ section.label }}
+                    </n-button>
+                </nav>
+            </div>
+            <div v-if="report && projected" class="report-document">
+                <keep-alive>
+                    <component
+                        :is="renderer"
+                        :key="`${report.id}-${activeFormat}`"
+                        :report="projected"
+                        :show-changes="false"
+                    />
+                </keep-alive>
+            </div>
+            <state-panel
+                v-else
+                :state="loading ? 'loading' : 'error'"
+                :message="loading ? '正在读取报告与引用' : errorMessage"
+                :retryable="retryable"
+                @retry="emit('retry')"
+            />
+            <section v-if="report" class="report-baseline" aria-label="历史变化与比较基线">
+                <report-changes :report="report" />
+            </section>
+        </div>
+    </section>
+</template>
+
+<script setup lang="ts">
+import { computed, ref } from 'vue';
+import { NButton } from 'naive-ui';
+import type { Report } from '@scova/models';
+import AppIcon from '@/components/common/AppIcon.vue';
+import type { IconName } from '@/components/common/icons';
+import StatePanel from '@/components/common/StatePanel.vue';
+import ReportBrief from '@/components/reports/ReportBrief.vue';
+import TopicListReport from '@/components/reports/TopicListReport.vue';
+import ComparisonReport from '@/components/reports/ComparisonReport.vue';
+import ResearchReport from '@/components/reports/ResearchReport.vue';
+import ReportChanges from '@/components/reports/ReportChanges.vue';
+import { artifactReport, savedArtifactFormats } from '@/utils/report-artifacts';
+
+const props = defineProps<{
+    report?: Report;
+    reading: boolean;
+    loading: boolean;
+    errorMessage: string;
+    retryable: boolean;
+}>();
+const format = defineModel<Report['format']>('format');
+const emit = defineEmits<{
+    close: [];
+    read: [];
+    conversation: [];
+    retry: [];
+}>();
+const panel = ref<HTMLElement>();
+const formatLabels = {
+    brief: '简报',
+    list: '主题清单',
+    comparison: '对比表',
+    research_report: '研究报告',
+};
+const renderers = {
+    brief: ReportBrief,
+    list: TopicListReport,
+    comparison: ComparisonReport,
+    research_report: ResearchReport,
+};
+const formats = computed(() => (props.report ? savedArtifactFormats(props.report) : []));
+const activeFormat = computed(() =>
+    format.value && formats.value.includes(format.value)
+        ? format.value
+        : (formats.value[0] ?? 'brief'),
+);
+const projected = computed(() =>
+    props.report ? artifactReport(props.report, activeFormat.value) : undefined,
+);
+const renderer = computed(() => renderers[activeFormat.value]);
+const savedDate = computed(() =>
+    props.report
+        ? new Intl.DateTimeFormat('zh-CN', {
+              month: 'long',
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+          }).format(new Date(props.report.publishedAt))
+        : '',
+);
+const sections: { id: string; label: string; icon: IconName }[] = [
+    { id: 'summary-title', label: '正文', icon: 'report' },
+    { id: 'report-changes-title', label: '变化', icon: 'retry' },
+    { id: 'saved-evidence-title', label: '来源', icon: 'source' },
+];
+function jump(event: MouseEvent, id: string) {
+    event.preventDefault();
+    const target = panel.value?.querySelector<HTMLElement>(`#${CSS.escape(id)}`);
+    if (!target) return;
+    target.tabIndex = -1;
+    target.style.scrollMarginBlockStart = '6rem';
+    target.focus({ preventScroll: true });
+    target.scrollIntoView({ block: 'start' });
+}
+function revealCitation(event: MouseEvent) {
+    if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const link = event.target instanceof Element ? event.target.closest('a[href^="#"]') : null;
+    const href = link?.getAttribute('href');
+    if (!href || !/^#(?:evidence-|answer-|claim-|question-)/.test(href)) return;
+    const target = panel.value?.querySelector<HTMLElement>(`#${CSS.escape(href.slice(1))}`);
+    if (!target) return;
+    event.preventDefault();
+    let parent = target.parentElement;
+    while (parent && parent !== panel.value) {
+        if (parent instanceof HTMLDetailsElement) parent.open = true;
+        parent = parent.parentElement;
+    }
+    target.focus({ preventScroll: true });
+    target.scrollIntoView({ block: 'nearest' });
+}
+function onKeydown(event: KeyboardEvent) {
+    if (
+        event.key !== 'Escape' ||
+        event.defaultPrevented ||
+        event.isComposing ||
+        (event.target instanceof Element &&
+            event.target.closest('input, textarea, select, dialog, [role="dialog"]'))
+    )
+        return;
+    event.preventDefault();
+    emit('close');
+}
+</script>
+
+<style scoped>
+/* Scoped UnoCSS keeps the long control/state combinations readable. */
+.report-artifact-panel {
+    @apply layout-grid grid-rows-[auto_minmax(0,_1fr)] gap-0 max-w-full
+        [border:0.0625rem_solid_color-mix(in_srgb,_var(--scova-border)_48%,_transparent)] rounded-5
+        [background:color-mix(in_srgb,_var(--scova-selected)_25%,_var(--scova-surface))]
+        [box-shadow:0_1rem_3rem_color-mix(in_srgb,_var(--scova-text)_9%,_transparent),_0_0.125rem_0.5rem_color-mix(in_srgb,_var(--scova-text)_3%,_transparent)]
+        break-anywhere [overflow:clip] [align-self:start] p-0;
+}
+.report-artifact-panel--reading {
+    @apply w-full max-w-[68rem] justify-self-center [box-shadow:none];
+}
+.artifact-scroll {
+    @apply layout-grid [align-content:start] gap-6 min-h-0 [scrollbar-gutter:stable]
+        [scroll-behavior:smooth] p-4;
+}
+.report-document {
+    @apply bg-surface [border:0.0625rem_solid_color-mix(in_srgb,_var(--scova-border)_24%,_transparent)]
+        rounded-3.5
+        [box-shadow:0_0.125rem_0.75rem_color-mix(in_srgb,_var(--scova-text)_3%,_transparent)]
+        p-[clamp(1rem,_3vw,_2.5rem)];
+}
+.deliverable-heading,
+.artifact-actions,
+.report-presentation,
+.report-sections {
+    @apply flex flex-wrap items-center gap-[0.5rem_0.75rem] min-w-0;
+}
+.deliverable-heading {
+    @apply items-start justify-between pt-4 pr-5 pb-4 pl-5
+        [border-bottom:0.0625rem_solid_color-mix(in_srgb,_var(--scova-border)_28%,_transparent)]
+        bg-surface;
+}
+.deliverable-heading h2 {
+    @apply flex items-center gap-2 text-[1rem] font-semibold m-0;
+}
+.deliverable-heading p {
+    @apply flex flex-wrap items-center gap-2.5 mt-1.5 mr-0 mb-0 ml-0 text-[0.875rem] leading-[1.6]
+        text-muted;
+}
+.artifact-kind {
+    @apply text-primary font-medium;
+}
+.deliverable-heading time {
+    @apply text-[0.8125rem];
+}
+.artifact-close {
+    @apply font-inherit inline-flex items-center justify-center flex-none min-w-11 min-h-11 [border:0]
+        rounded-2 bg-transparent text-default cursor-pointer p-2;
+}
+.artifact-close:hover {
+    @apply [background:var(--scova-selected)];
+}
+.artifact-close:focus-visible,
+.artifact-formats button:focus-visible {
+    @apply [outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.25rem];
+}
+.artifact-actions :deep(.n-button),
+.report-sections :deep(.n-button) {
+    @apply min-h-11 h-auto max-w-full pt-2.5 pb-2.5;
+}
+.artifact-actions :deep(.n-button__content),
+.report-sections :deep(.n-button__content) {
+    @apply gap-1.5 whitespace-normal;
+}
+.artifact-formats {
+    @apply flex flex-wrap gap-1.5 w-full;
+}
+.artifact-formats button {
+    @apply min-h-11 pt-2.5 pr-4 pb-2.5 pl-4 [border:0.0625rem_solid_transparent] rounded-2.5
+        bg-transparent text-muted [font-family:inherit] text-[0.875rem] [font-weight:inherit]
+        [font-style:inherit] leading-[inherit] [font-variant:inherit] cursor-pointer
+        [transition:background-color_180ms_ease,_color_180ms_ease];
+}
+.artifact-formats button[aria-pressed='true'] {
+    @apply bg-surface text-primary
+        [border-color:color-mix(in_srgb,_var(--scova-border)_35%,_transparent)]
+        [box-shadow:0_0.125rem_0.375rem_color-mix(in_srgb,_var(--scova-text)_4%,_transparent)];
+}
+.artifact-formats button:hover {
+    @apply bg-surface;
+}
+.report-sections {
+    @apply [flex-basis:100%];
+}
+.report-document,
+.report-baseline {
+    @apply min-w-0;
+}
+.report-baseline {
+    @apply [border-top:0.0625rem_solid_color-mix(in_srgb,_var(--scova-border)_30%,_transparent)] pt-4
+        pl-2 pr-2;
+}
+.report-baseline :deep(.report-changes) {
+    @apply [border:0] p-0;
+}
+.report-baseline :deep(.change-sides) {
+    @apply grid-cols-[minmax(0,_1fr)];
+}
+.report-artifact-panel--reading .report-baseline :deep(.change-sides) {
+    @apply grid-cols-[repeat(auto-fit,_minmax(min(100%,_18rem),_1fr))];
+}
+.report-baseline :deep(.comparison-summary) {
+    @apply p-3;
+}
+@media (max-width: 39.999rem) {
+    .artifact-scroll {
+        @apply pt-2 pr-1 pb-2 pl-1;
+    }
+    .deliverable-heading {
+        @apply p-3.5;
+    }
+    .report-document {
+        @apply pt-4 pr-1 pb-4 pl-1;
+    }
+    .report-sections :deep(.n-button) {
+        @apply pl-2.5 pr-2.5;
+    }
+}
+@media (min-width: 64rem) {
+    .report-artifact-panel:not(.report-artifact-panel--reading) {
+        @apply sticky [top:1rem] max-h-[calc(100dvh_-_6rem)];
+    }
+    .report-artifact-panel:not(.report-artifact-panel--reading) .artifact-scroll {
+        @apply [overflow-y:auto] [overscroll-behavior-block:contain];
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .artifact-scroll {
+        @apply [scroll-behavior:auto];
+    }
+    .artifact-formats button {
+        @apply [transition:none];
+    }
+}
+</style>

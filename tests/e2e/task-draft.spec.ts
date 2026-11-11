@@ -1,4 +1,4 @@
-import { chooseOption, chooseTimezone } from './support/select.ts';
+import { chooseOption, chooseOutputFormats, chooseTimezone } from './support/select.ts';
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import type {
     TaskDraftResponse,
@@ -205,7 +205,11 @@ const confirmedScope: TaskDraftScope = {
     outputFormat: parsed.outputFormat,
     researchMode: 'analysis',
 };
-async function generateDraft(page: Page, activation: 'click' | 'keyboard' | 'double' = 'click') {
+async function generateDraft(
+    page: Page,
+    activation: 'click' | 'keyboard' | 'double' = 'click',
+    formats = ['对比表'],
+) {
     const text = await original(page).inputValue();
     if (activation === 'keyboard') await parse(page).press('Enter');
     else await parse(page).click();
@@ -241,7 +245,7 @@ async function generateDraft(page: Page, activation: 'click' | 'keyboard' | 'dou
     await questions.getByLabel('限定官方来源', { exact: true }).check();
     await questions.getByRole('button', { name: '下一步', exact: true }).click();
     await chooseOption(page, '此次需要的工作', '分析研究');
-    await chooseOption(page, '希望得到的形式', '对比表');
+    await chooseOutputFormats(page, '希望得到的形式', formats);
     const confirm = questions.getByRole('button', { name: '确认范围并生成草稿', exact: true });
     if (activation === 'double') await confirm.dblclick();
     else if (activation === 'keyboard') await confirm.press('Enter');
@@ -254,6 +258,19 @@ const taskPosts = (calls: Awaited<ReturnType<typeof samples>>['calls']) =>
     calls.filter((call) => call.method === 'POST' && !call.path.startsWith('/api/v1/task-drafts'));
 const draftPosts = (calls: Awaited<ReturnType<typeof samples>>['calls']) =>
     calls.filter((call) => call.method === 'POST' && call.path === '/api/v1/task-drafts');
+
+test('自然需求确认传递多种成果目标，确认前不创建任务或执行', async ({ page }) => {
+    const { calls } = await samples(page.context());
+    await page.goto('/tasks/new');
+    await original(page).fill(inputText);
+    await generateDraft(page, 'click', ['简报', '对比表']);
+    await expect(apply(page)).toBeEnabled();
+    expect(draftPosts(calls)[0]!.body).toMatchObject({
+        searchScope: { outputFormat: 'brief', outputFormats: ['brief', 'comparison'] },
+    });
+    expect(taskPosts(calls)).toHaveLength(0);
+    expect(calls.some((call) => call.method === 'POST' && call.path.includes('/runs'))).toBe(false);
+});
 
 for (const width of [390, 1440]) {
     test(`AI交互澄清${width}：根据回答继续追问，最终范围与对话进入草稿而不创建任务`, async ({
@@ -344,7 +361,11 @@ for (const width of [390, 1440]) {
         expect(draftPosts(calls)).toHaveLength(0);
         await review.getByRole('button', { name: '下一步', exact: true }).click();
         await review.getByRole('button', { name: '下一步', exact: true }).click();
-        await expect(review.getByLabel('希望得到的形式', { exact: true })).toContainText('对比表');
+        await expect(
+            review
+                .getByRole('group', { name: '希望得到的形式', exact: true })
+                .getByRole('checkbox', { name: /^对比表/ }),
+        ).toBeChecked();
         await review.getByRole('button', { name: '确认范围并生成草稿', exact: true }).click();
         await expect(apply(page)).toBeEnabled();
         expect(draftPosts(calls)[0]!.body).toMatchObject({
@@ -512,7 +533,11 @@ async function noOverflow(page: Page) {
     );
     for (const target of await panel(page).locator('input,textarea,button').all()) {
         if (!(await target.isVisible())) continue;
-        const bounds = await target.boundingBox();
+        const hitTarget =
+            (await target.getAttribute('type')) === 'checkbox'
+                ? target.locator('xpath=ancestor::label[1]')
+                : target;
+        const bounds = await hitTarget.boundingBox();
         expect(bounds).not.toBeNull();
         expect(bounds!.x).toBeGreaterThanOrEqual(0);
         expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(page.viewportSize()!.width);

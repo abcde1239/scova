@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vite-plus/test';
 import { createModelProvider, type ModelProtocol, type SafeHttpClient } from '../src/index.ts';
+import { modelRequest } from '../src/model-protocol.ts';
 
 const schema = {
     type: 'object',
@@ -57,6 +58,39 @@ function setup(protocol: ModelProtocol, data: unknown) {
     return { request, model };
 }
 describe('native model protocols', () => {
+    it.each(['deepseek-flash', 'deepseek-v4-pro'])(
+        'uses the bounded JSON output allowance for content on official %s',
+        (model) => {
+            for (const baseUrl of ['https://api.deepseek.com', 'https://api.deepseek.com/v1/']) {
+                const request = modelRequest(
+                    'openai_json',
+                    baseUrl,
+                    model,
+                    'test-secret',
+                    input,
+                    [],
+                );
+                expect(request.body.thinking).toEqual({ type: 'disabled' });
+                expect(request.body.max_tokens).toBe(input.maxOutputTokens);
+                expect(request.body.response_format).toEqual({ type: 'json_object' });
+            }
+        },
+    );
+    it.each([
+        ['openai_json', 'https://proxy.example/v1', 'deepseek-flash'],
+        ['openai_json', 'https://api.deepseek.com.evil.example/v1', 'deepseek-flash'],
+        ['openai_json', 'https://api.deepseek.com/custom/v1', 'deepseek-flash'],
+        ['openai_json', 'https://api.deepseek.com/v1', 'deepseek-reasoner'],
+        ['openai_json', 'https://api.deepseek.com/v1', 'another-model'],
+        ['openai_chat_completions', 'https://api.deepseek.com/v1', 'deepseek-flash'],
+    ] as const)(
+        'keeps unrelated provider contracts for %s / %s / %s',
+        (protocol, baseUrl, model) => {
+            expect(
+                modelRequest(protocol, baseUrl, model, 'test-secret', input, []).body,
+            ).not.toHaveProperty('thinking');
+        },
+    );
     it.each(Object.keys(native) as ModelProtocol[])(
         'passes larger input/output budgets through %s and retains actual usage',
         async (protocol) => {
@@ -135,6 +169,42 @@ describe('native model protocols', () => {
                 } else expect(body.response_format.json_schema.schema).toEqual(schema);
             }
             expect(JSON.stringify(body)).toContain('untrusted');
+        },
+    );
+    it.each(['openai_chat_completions', 'openai_json', 'anthropic_messages', 'gemini'] as const)(
+        'preserves ordered conversation roles for %s and budgets the transcript',
+        async (protocol) => {
+            const { request, model } = setup(protocol, native[protocol]);
+            await model.generateStructured({
+                ...input,
+                messages: [
+                    { role: 'user', content: '上一轮问题' },
+                    { role: 'assistant', content: '上一轮回答' },
+                ],
+            });
+            const body = JSON.parse(request.mock.calls[0]![1]!.body!);
+            const messages =
+                protocol === 'gemini'
+                    ? body.contents
+                    : protocol === 'anthropic_messages'
+                      ? body.messages
+                      : body.messages.slice(1);
+            expect(messages.slice(0, 3).map((message: { role: string }) => message.role)).toEqual([
+                'user',
+                protocol === 'gemini' ? 'model' : 'assistant',
+                'user',
+            ]);
+            expect(JSON.stringify(messages[0])).toContain('上一轮问题');
+            expect(JSON.stringify(messages[1])).toContain('上一轮回答');
+            const limited = setup(protocol, native[protocol]);
+            await expect(
+                limited.model.generateStructured({
+                    ...input,
+                    maxInputTokens: 1000,
+                    messages: [{ role: 'user', content: '长历史'.repeat(1000) }],
+                }),
+            ).rejects.toThrow();
+            expect(limited.request).not.toHaveBeenCalled();
         },
     );
     it.each([

@@ -571,45 +571,69 @@ describe('Run API、事务 Outbox 与事件回放', () => {
             ).comparisonScopeHash,
         ).toBe(liveStored.comparisonScopeHash);
     });
-    it('freezes the selected format without editing the task; replay, mismatch and retry preserve semantics', async () => {
-        const auth = await register();
-        const task = await createTask(auth);
-        const key = 'format-freeze-123456789';
-        const start = (body: unknown, commandKey = key) =>
-            request(`/api/v1/tasks/${task.id}/runs`, {
-                method: 'POST',
-                headers: authHeaders(auth, { 'idempotency-key': commandKey }),
-                body: JSON.stringify(body),
+    it.each([false, true])(
+        'freezes selected formats without editing the task; replay, mismatch and retry preserve semantics (multiple=%s)',
+        async (multiple) => {
+            const auth = await register();
+            const task = await createTask(auth);
+            const key = 'format-freeze-123456789';
+            const start = (body: unknown, commandKey = key) =>
+                request(`/api/v1/tasks/${task.id}/runs`, {
+                    method: 'POST',
+                    headers: authHeaders(auth, { 'idempotency-key': commandKey }),
+                    body: JSON.stringify(body),
+                });
+            const command = multiple
+                ? { outputFormats: ['comparison', 'list'] }
+                : { outputFormat: 'comparison' };
+            const expectedConfig = multiple
+                ? { outputFormat: 'comparison', outputFormats: ['comparison', 'list'] }
+                : { outputFormat: 'comparison' };
+            const first = await start(command);
+            expect(first.status).toBe(202);
+            const original = (await json(first)).run;
+            const stored = await db.query.runs.findFirst({
+                where: eq(tables.runs.id, original.id),
             });
-        const first = await start({ outputFormat: 'comparison' });
-        expect(first.status).toBe(202);
-        const original = (await json(first)).run;
-        const stored = await db.query.runs.findFirst({ where: eq(tables.runs.id, original.id) });
-        expect(stored?.followupConfigJson).toMatchObject({ outputFormat: 'comparison' });
-        const version = await db.query.taskVersions.findFirst({
-            where: eq(tables.taskVersions.id, task.currentVersionId),
-        });
-        expect(version?.configJson).toMatchObject({ outputFormat: 'brief' });
-        expect((await json(await start({ outputFormat: 'comparison' }))).run.id).toBe(original.id);
-        expect((await start({ outputFormat: 'list' })).status).toBe(409);
-        const active = await json(await start({ outputFormat: 'list' }, 'format-active-123456789'));
-        expect(active.reused).toBe(true);
-        expect(active.run.id).toBe(original.id);
-        await db
-            .update(tables.runs)
-            .set({ status: 'failed', finishedAt: services.clock(), failureCode: 'EXECUTOR_FAILED' })
-            .where(eq(tables.runs.id, original.id));
-        const retried = await request(`/api/v1/runs/${original.id}/retry`, {
-            method: 'POST',
-            headers: authHeaders(auth, { 'idempotency-key': 'format-retry-123456789' }),
-            body: '{}',
-        });
-        expect(retried.status).toBe(202);
-        const retry = (await json(retried)).run;
-        expect(retry.taskVersionId).toBe(task.currentVersionId);
-        expect(retry.budget).toEqual(original.budget);
-        const retryStored = await db.query.runs.findFirst({ where: eq(tables.runs.id, retry.id) });
-        expect(retryStored?.followupConfigJson).toMatchObject({ outputFormat: 'comparison' });
-        expect(retryStored?.comparisonScopeHash).toBe(stored?.comparisonScopeHash);
-    });
+            expect(stored?.followupConfigJson).toMatchObject(expectedConfig);
+            const version = await db.query.taskVersions.findFirst({
+                where: eq(tables.taskVersions.id, task.currentVersionId),
+            });
+            expect(version?.configJson).toMatchObject({ outputFormat: 'brief' });
+            expect(
+                (version?.configJson as Record<string, unknown> | undefined)?.outputFormats,
+            ).toBeUndefined();
+            expect((await json(await start(command))).run.id).toBe(original.id);
+            expect((await start({ outputFormat: 'list' })).status).toBe(409);
+            if (multiple)
+                expect((await start({ outputFormats: ['list', 'comparison'] })).status).toBe(409);
+            const active = await json(
+                await start({ outputFormat: 'list' }, 'format-active-123456789'),
+            );
+            expect(active.reused).toBe(true);
+            expect(active.run.id).toBe(original.id);
+            await db
+                .update(tables.runs)
+                .set({
+                    status: 'failed',
+                    finishedAt: services.clock(),
+                    failureCode: 'EXECUTOR_FAILED',
+                })
+                .where(eq(tables.runs.id, original.id));
+            const retried = await request(`/api/v1/runs/${original.id}/retry`, {
+                method: 'POST',
+                headers: authHeaders(auth, { 'idempotency-key': 'format-retry-123456789' }),
+                body: '{}',
+            });
+            expect(retried.status).toBe(202);
+            const retry = (await json(retried)).run;
+            expect(retry.taskVersionId).toBe(task.currentVersionId);
+            expect(retry.budget).toEqual(original.budget);
+            const retryStored = await db.query.runs.findFirst({
+                where: eq(tables.runs.id, retry.id),
+            });
+            expect(retryStored?.followupConfigJson).toMatchObject(expectedConfig);
+            expect(retryStored?.comparisonScopeHash).toBe(stored?.comparisonScopeHash);
+        },
+    );
 });

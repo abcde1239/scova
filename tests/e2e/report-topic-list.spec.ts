@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import type { Page, TestInfo } from '@playwright/test';
+import type { Locator, Page, TestInfo } from '@playwright/test';
 
 // This test-only seam mounts actual compiled SFCs; HTTP/storage delivery is tested separately.
 interface ReportSample {
@@ -78,8 +78,12 @@ async function domMapping(page: Page) {
                 evidence: [...element.querySelectorAll('.citation')].map(
                     (citation) => citation.id.split('-evidence-')[1],
                 ),
-                quotes: [...element.querySelectorAll('blockquote')].map(
-                    (quote) => quote.textContent,
+                quotes: [...element.querySelectorAll('.citation')].map(
+                    (link) =>
+                        document
+                            .getElementById(link.getAttribute('href')!.slice(1))!
+                            .closest('.source-quote')!
+                            .querySelector('blockquote')!.textContent,
                 ),
             })),
         );
@@ -90,8 +94,10 @@ async function capture(page: Page, info: TestInfo, name: string) {
         contentType: 'image/png',
     });
 }
-async function assertReadableQuote(page: Page) {
-    const quote = article(page).locator('.citation blockquote').first();
+async function assertReadableQuote(
+    page: Page,
+    quote: Locator = article(page).locator('.evidence-appendix blockquote').first(),
+) {
     await expect(quote).toBeVisible();
     const charactersPerLine = await quote.evaluate((element) => {
         const style = getComputedStyle(element);
@@ -157,7 +163,7 @@ test('real SFCs: summary and claims precede scope notes; raw coverage and modes 
     const report = await open(page);
     for (const view of ['brief', 'topic-list'] as const) {
         await setView(page, view);
-        await expect(warning(page)).toContainText('未覆盖项目和来源详情见下方');
+        await expect(warning(page)).toContainText('查看来源覆盖说明');
         expect(
             await page.evaluate(() => {
                 const alert = document.querySelector('[aria-label="查阅范围说明"]')!;
@@ -250,6 +256,7 @@ test('real SFCs: full multiline content and script-like summary/quote stay inert
     const payload =
         '<img src="https://example.test/injected.png" onerror="window.quoteExecuted=true"><script>window.quoteExecuted=true</script>';
     report.summary = `保留摘要 ${payload}`;
+    report.claims = report.claims.filter((entry) => entry.kind !== 'insufficient');
     report.claims[0]!.text = `${'长结论：申请条件与截止日期必须逐项保留。'.repeat(60)}\n第二段\n${payload}`;
     report.claims[0]!.confidenceLabel = '完整证据说明：待核对的范围与原文条件';
     report.evidence[0]!.quote = `${'长引用上下文与原文条件。'.repeat(100)}\n${payload}`;
@@ -271,10 +278,11 @@ test('real SFCs: full multiline content and script-like summary/quote stay inert
         await expect(claim(page, report.claims[0]!.id).locator('.confidence')).toHaveText(
             `证据说明：${report.claims[0]!.confidenceLabel}`,
         );
-        const quoted = page.locator(
+        const reference = page.locator(
             `#claim-${report.claims[0]!.id}-evidence-${report.evidence[0]!.id}`,
         );
-        await quoted.locator('summary').press('Enter');
+        await reference.press('Enter');
+        const quoted = page.locator(`#evidence-${report.evidence[0]!.id}`);
         expect(await quoted.locator('blockquote').textContent()).toBe(report.evidence[0]!.quote);
         await expect(article(page).locator('script, img, iframe')).toHaveCount(0);
         expect(await page.evaluate(() => 'quoteExecuted' in window)).toBe(false);
@@ -290,16 +298,20 @@ test('real SFCs: keyboard opens and closes each quote and reaches safe original 
         await setView(page, view);
         for (const entry of report.claims)
             for (const evidenceId of entry.evidenceIds) {
-                const wrapper = page.locator(`#claim-${entry.id}-evidence-${evidenceId}`);
-                const summary = wrapper.locator('summary');
-                await summary.focus();
-                await summary.press('Enter');
-                await expect(wrapper.locator('blockquote')).toBeVisible();
+                const reference = page.locator(`#claim-${entry.id}-evidence-${evidenceId}`);
+                await reference.focus();
                 expect(
-                    await summary.evaluate((element) => getComputedStyle(element).outlineStyle),
+                    await reference.evaluate((element) => getComputedStyle(element).outlineStyle),
                 ).not.toBe('none');
+                await reference.press('Enter');
+                const wrapper = page.locator(`#evidence-${evidenceId}`);
+                const group = wrapper.locator(
+                    'xpath=ancestor::details[contains(@class,"evidence-source-group")]',
+                );
+                const summary = group.locator(':scope > summary');
+                await expect(wrapper.locator('blockquote')).toBeVisible();
                 const link = wrapper.getByRole('link', { name: '打开原始来源（新窗口）' });
-                await summary.press('Tab');
+                await wrapper.press('Tab');
                 await expect(link).toBeFocused();
                 await expect(link).toHaveAttribute(
                     'href',
@@ -349,15 +361,19 @@ test('real SFCs: narrow enlarged citations retain readable width in both layouts
     });
     for (const view of ['brief', 'topic-list'] as const) {
         await setView(page, view);
-        const toggle = article(page).locator('.citation summary').first();
-        await toggle.focus();
-        await toggle.press('Enter');
-        await assertReadableQuote(page);
+        const firstFact = report.claims.find((entry) => entry.kind === 'fact')!;
+        const reference = page.locator(
+            `#claim-${firstFact.id}-evidence-${firstFact.evidenceIds[0]}`,
+        );
+        await reference.focus();
+        await reference.press('Enter');
+        const quote = page.locator((await reference.getAttribute('href'))!).locator('blockquote');
+        await assertReadableQuote(page, quote);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
             true,
         );
         await expect(article(page).locator('.claim')).toHaveCount(report.claims.length);
-        expect(await article(page).locator('.citation blockquote').first().textContent()).toBe(
+        expect(await quote.textContent()).toBe(
             report.evidence.find(
                 (entry) =>
                     entry.id ===
@@ -425,10 +441,12 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
             await page.getByLabel('阅读字体').selectOption(dark ? 'sans' : 'serif');
             await page.getByLabel('测试主色').selectOption(dark ? 'pine' : 'iris');
             await expect(page.locator('.scova-theme--dark')).toHaveCount(dark ? 1 : 0);
-            const toggle = article(page).locator('.citation summary').first();
+            const toggle = article(page).locator('.evidence-source-group > summary').first();
             if (
-                (await article(page).locator('.citation details').first().getAttribute('open')) ===
-                null
+                (await article(page)
+                    .locator('.evidence-source-group')
+                    .first()
+                    .getAttribute('open')) === null
             ) {
                 await toggle.focus();
                 await toggle.press('Enter');

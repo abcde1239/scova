@@ -1,8 +1,32 @@
 import { describe, expect, it } from 'vite-plus/test';
 import { createConnectorBundle } from '@scova/connectors';
-import { readSearchConfig } from '../src/app/search-config.ts';
+import { readSearchConfig, effectiveSearchConfig } from '../src/app/search-config.ts';
 
 describe('deployment-owned search configuration', () => {
+    it('uses the selected account API and its own key before deployment config, without SearxNG wrapping', () => {
+        const searchApi = {
+            protocol: 'tavily' as const,
+            baseUrl: 'https://api.tavily.com',
+            apiKey: 'account-search-key',
+            contentMode: 'prefer_api' as const,
+        };
+        expect(
+            effectiveSearchConfig(
+                { SEARCH_PROVIDER: 'invalid', MODEL_API_KEY: 'model-key' },
+                { webSearch: 'disabled', searchApi },
+            ),
+        ).toEqual({ searchProvider: 'api', searchApi });
+        expect(
+            effectiveSearchConfig(
+                { SEARCH_PROVIDER: 'invalid' },
+                { webSearch: 'openai_responses' },
+            ),
+        ).toEqual({});
+        expect(() =>
+            effectiveSearchConfig({}, { webSearch: 'openai_responses', searchApi }),
+        ).toThrow();
+        expect(effectiveSearchConfig({}, {})).toMatchObject({ searchProvider: 'searxng' });
+    });
     it('retains SearxNG by default even if paid API and model keys exist', () => {
         const options = readSearchConfig({
             SEARCH_API_KEY: 'search-key',
@@ -12,7 +36,7 @@ describe('deployment-owned search configuration', () => {
         expect(options.searchApi).toBeUndefined();
     });
 
-    it.each(['deepseek', 'perplexity'])(
+    it.each(['deepseek', 'perplexity', 'tavily'])(
         'maps explicit %s configuration into a live bundle',
         (protocol) => {
             const options = readSearchConfig({

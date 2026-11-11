@@ -1,4 +1,5 @@
 export * from './types.ts';
+export * from './page-collection.ts';
 export type { ModelProtocol } from './model-protocol.ts';
 export * from './http.ts';
 export { createTavilySearch, createModelProvider, estimateModelInputTokens } from './providers.ts';

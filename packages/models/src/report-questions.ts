@@ -1,5 +1,6 @@
 import { Type, type Static } from '@sinclair/typebox';
 import { UuidSchema, InstantSchema, describeProperties } from './common.ts';
+import { OutputFormatsSchema } from './output-formats.ts';
 const QuestionUsageSchema = Type.Object(
     {
         attempts: Type.Integer({
@@ -24,7 +25,10 @@ const QuestionText = Type.String({
     description: '围绕报告的纯文本问题，最多2000字符',
 });
 export const ReportQuestionInputSchema = Type.Object(
-    { question: QuestionText },
+    {
+        question: QuestionText,
+        afterQuestionId: Type.Optional(Type.Union([UuidSchema, Type.Null()])),
+    },
     { additionalProperties: false, description: '仅查阅此报告授权引用，不启动搜索' },
 );
 export const QuestionCitationSchema = Type.Object(
@@ -40,10 +44,11 @@ export const QuestionCitationSchema = Type.Object(
 );
 export const QuestionStatementSchema = Type.Object(
     {
+        kind: Type.Optional(Type.Union([Type.Literal('fact'), Type.Literal('inference')])),
         text: Type.String({
             minLength: 1,
             maxLength: 2000,
-            description: '来自所列引用的逐字原文摘录，不构成事实真实性认证',
+            description: '基于报告证据的解释或归纳；引用原文须逐字匹配，不构成事实真实性认证',
         }),
         citations: Type.Array(QuestionCitationSchema, {
             minItems: 1,
@@ -80,12 +85,17 @@ export const ReportQuestionSchema = Type.Object(
         question: QuestionText,
         answer: QuestionAnswerSchema,
         followupRunId: Type.Union([UuidSchema, Type.Null()]),
+        revisionRunId: Type.Optional(Type.Union([UuidSchema, Type.Null()])),
         createdAt: InstantSchema,
     },
     { additionalProperties: false },
 );
 export const QuestionFollowupInputSchema = Type.Object(
-    { confirm: Type.Literal(true, { description: '明确同意使用原报告执行预算进行新搜索' }) },
+    {
+        confirm: Type.Literal(true, { description: '明确同意使用原报告执行预算生成新成果' }),
+        operation: Type.Optional(Type.Union([Type.Literal('research'), Type.Literal('revise')])),
+        outputFormats: Type.Optional(OutputFormatsSchema),
+    },
     { additionalProperties: false },
 );
 for (const schema of [
@@ -99,3 +109,44 @@ for (const schema of [
     describeProperties(schema);
 export type QuestionAnswer = Static<typeof QuestionAnswerSchema>;
 export type ReportQuestion = Static<typeof ReportQuestionSchema>;
+export const ReportConversationSchema = Type.Object(
+    {
+        reportId: UuidSchema,
+        turns: Type.Array(
+            Type.Object(
+                {
+                    ...ReportQuestionSchema.properties,
+                    answer: Type.Union([QuestionAnswerSchema, Type.Null()]),
+                },
+                { additionalProperties: false },
+            ),
+            { maxItems: 100 },
+        ),
+        hasEarlier: Type.Boolean(),
+        artifacts: Type.Optional(
+            Type.Array(
+                Type.Object(
+                    {
+                        reportId: UuidSchema,
+                        questionId: UuidSchema,
+                        runId: UuidSchema,
+                        operation: Type.Union([Type.Literal('research'), Type.Literal('revise')]),
+                        title: Type.String(),
+                    },
+                    { additionalProperties: false },
+                ),
+                { maxItems: 200 },
+            ),
+        ),
+        activeRun: Type.Optional(Type.Boolean()),
+    },
+    { additionalProperties: false },
+);
+export type ReportConversation = Static<typeof ReportConversationSchema>;
+describeProperties(ReportConversationSchema);
+export const ReportConversationQuerySchema = describeProperties(
+    Type.Object(
+        { beforeQuestionId: Type.Optional(UuidSchema) },
+        { additionalProperties: false, description: '读取指定轮次之前的会话历史，每页最多100轮' },
+    ),
+);

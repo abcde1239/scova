@@ -3,6 +3,12 @@ import { ConnectorError } from '@scova/connectors';
 import { classifyToolFailure, toolFailures } from '../src/utils/tool-failure.ts';
 
 describe('公开工具错误分类', () => {
+    it('keeps safe limit and format summaries broad enough for DOM/resources and decoded HTML', () => {
+        expect(toolFailures.TOOL_RESPONSE_TOO_LARGE[0]).toContain('资源数量');
+        expect(toolFailures.TOOL_RESPONSE_TOO_LARGE[0]).toContain('页面结构');
+        expect(toolFailures.TOOL_INVALID_RESPONSE[0]).toContain('内容类型');
+        expect(toolFailures.TOOL_INVALID_RESPONSE[0]).not.toContain('UTF-8');
+    });
     it.each([
         ['unsafe_url', 'TOOL_UNSAFE_URL'],
         ['network', 'TOOL_NETWORK'],

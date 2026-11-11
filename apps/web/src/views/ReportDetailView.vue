@@ -20,87 +20,14 @@
                 >
             </nav>
         </header>
-        <nav
-            v-if="questionIdentity"
-            class="workspace-actions scova-interface"
-            aria-label="工作区视图"
-        >
-            <n-button
-                v-bind="{ 'aria-pressed': readingOnly, 'aria-controls': 'report-conversation' }"
-                @click="readingOnly = !readingOnly"
-            >
-                <app-icon name="report" />{{ readingOnly ? '显示对话' : '专注阅读' }}
-            </n-button>
-            <n-button @click="openConversation"><app-icon name="question" />围绕报告提问</n-button>
-            <p>原运行日志保留在执行详情中。</p>
-        </nav>
         <div
             class="report-workspace"
-            :class="{ 'report-workspace--reading': readingOnly || !questionIdentity }"
+            :class="{
+                'report-workspace--reading': readingOnly || !questionIdentity,
+                'report-workspace--closed': !artifactOpen && !!report && !readingOnly,
+            }"
         >
-            <section class="report-content" aria-label="报告交付物">
-                <div class="deliverable-heading scova-interface">
-                    <h2><app-icon name="report" />报告交付物</h2>
-                    <span v-if="report">已保存 · {{ formatLabels[report.format] }}</span>
-                </div>
-                <div class="report-presentation scova-interface">
-                    <template v-if="report">
-                        <label for="report-format">报告形式</label>
-                        <select
-                            id="report-format"
-                            v-model="selectedFormat"
-                            aria-describedby="report-format-help"
-                        >
-                            <option value="brief">简报</option>
-                            <option value="list">主题清单</option>
-                            <option value="comparison">对比表</option>
-                            <option value="research_report">研究报告</option>
-                        </select>
-                        <p id="report-format-help">临时切换，刷新恢复保存形式。</p>
-                        <nav class="report-sections" aria-label="报告内容导航">
-                            <n-button
-                                tag="a"
-                                quaternary
-                                type="primary"
-                                v-bind="{ href: '#summary-title' }"
-                                @click="jump($event, 'summary-title')"
-                                ><app-icon name="report" />正文</n-button
-                            >
-                            <n-button
-                                tag="a"
-                                quaternary
-                                type="primary"
-                                v-bind="{ href: `#${changesTarget}` }"
-                                @click="jump($event, changesTarget)"
-                                ><app-icon name="retry" />变化</n-button
-                            >
-                            <n-button
-                                tag="a"
-                                quaternary
-                                type="primary"
-                                v-bind="{ href: '#saved-evidence-title' }"
-                                @click="jump($event, 'saved-evidence-title')"
-                                ><app-icon name="source" />来源</n-button
-                            >
-                        </nav>
-                    </template>
-                </div>
-                <component
-                    :is="renderer"
-                    v-if="report"
-                    :key="`${routeIdentity}-${selectedFormat}`"
-                    :report="report"
-                    :show-changes="false"
-                />
-                <state-panel
-                    v-if="!report"
-                    :state="valid && query.isPending.value ? 'loading' : 'error'"
-                    :message="valid && query.isPending.value ? '正在读取报告与引用' : error.message"
-                    :retryable="error.retryable && valid && query.isError.value"
-                    @retry="retry"
-                />
-            </section>
-            <div v-show="!readingOnly && !!questionIdentity" class="report-sidebar">
+            <div v-show="!readingOnly && !!questionIdentity" class="report-conversation-column">
                 <section
                     id="report-conversation"
                     class="report-companion"
@@ -108,9 +35,38 @@
                     tabindex="-1"
                 >
                     <header class="companion-heading scova-interface">
+                        <router-link
+                            v-if="report?.conversation"
+                            :to="`/reports/${report.conversation.reportId}?questionId=${report.conversation.questionId}`"
+                            >返回原报告对话</router-link
+                        >
                         <h2 id="report-next-title"><app-icon name="question" />对话与后续研究</h2>
                         <p>基于这份报告的保存证据作答。补充搜索需单独确认后续研究。</p>
                     </header>
+                    <button
+                        v-if="report"
+                        ref="artifactCard"
+                        type="button"
+                        class="report-artifact-card scova-interface"
+                        aria-controls="report-artifact"
+                        :aria-expanded="artifactOpen && !readingOnly"
+                        @click="openArtifact"
+                    >
+                        <app-icon name="report" />
+                        <span>
+                            <strong>{{ report.title }}</strong>
+                            <small
+                                >已保存 ·
+                                {{
+                                    savedArtifactFormats(report)
+                                        .map((format) => formatLabels[format])
+                                        .join('、')
+                                }}
+                                · 打开成果</small
+                            >
+                        </span>
+                        <app-icon name="source" />
+                    </button>
                     <report-questions
                         v-if="questionIdentity"
                         :key="questionIdentity"
@@ -204,10 +160,23 @@
                         </section>
                     </tool-section>
                 </section>
-                <section v-if="report" class="report-baseline" aria-label="历史变化与比较基线">
-                    <report-changes :report="report" />
-                </section>
             </div>
+            <transition name="artifact-pane">
+                <report-artifact-panel
+                    :key="routeIdentity"
+                    v-show="artifactOpen || readingOnly || !report"
+                    v-model:format="selectedFormat"
+                    :report="report"
+                    :reading="readingOnly"
+                    :loading="valid && query.isPending.value"
+                    :error-message="error.message"
+                    :retryable="error.retryable && valid && query.isError.value"
+                    @close="closeArtifact"
+                    @read="openReading"
+                    @conversation="openConversation"
+                    @retry="retry"
+                />
+            </transition>
         </div>
     </div>
 </template>
@@ -215,31 +184,26 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, toRaw, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { NButton } from 'naive-ui';
 import NavigationButton from '@/components/common/NavigationButton.vue';
 import ToolSection from '@/components/common/ToolSection.vue';
 import type { Report } from '@scova/models';
 import AppIcon from '@/components/common/AppIcon.vue';
-import ReportBrief from '@/components/reports/ReportBrief.vue';
-import TopicListReport from '@/components/reports/TopicListReport.vue';
-import ComparisonReport from '@/components/reports/ComparisonReport.vue';
-import ResearchReport from '@/components/reports/ResearchReport.vue';
+import ReportArtifactPanel from '@/components/reports/ReportArtifactPanel.vue';
 import FeedbackActions from '@/components/reports/FeedbackActions.vue';
 import FeedbackEffects from '@/components/reports/FeedbackEffects.vue';
 import BookmarkAction from '@/components/library/BookmarkAction.vue';
 import NotesPanel from '@/components/library/NotesPanel.vue';
 import ReportQuestions from '@/components/reports/ReportQuestions.vue';
-import ReportChanges from '@/components/reports/ReportChanges.vue';
 import {
     bookmarkOrigin,
     bookmarksPending,
     reportBookmarkSources,
 } from '@/composables/useBookmarks';
-import StatePanel from '@/components/common/StatePanel.vue';
 import { useReport } from '@/composables/useReport';
 import { reportEndpoint } from '@/api/reports';
 import { inboxReturn } from '@/composables/useInbox';
 import { useSessionLifecycle } from '@/composables/useSessionQuery';
+import { savedArtifactFormats } from '@/utils/report-artifacts';
 const route = useRoute();
 const lifecycle = useSessionLifecycle();
 const accountId = computed(() => lifecycle.session.user?.id);
@@ -327,6 +291,8 @@ const routeIdentity = computed(
 );
 const selectedFormat = ref<Report['format']>();
 const readingOnly = ref(false);
+const artifactOpen = ref(true);
+const artifactCard = ref<HTMLButtonElement>();
 const formatLabels = {
     brief: '简报',
     list: '主题清单',
@@ -345,19 +311,12 @@ watch(
     },
     { immediate: true, flush: 'sync' },
 );
-const renderers = {
-    brief: ReportBrief,
-    list: TopicListReport,
-    comparison: ComparisonReport,
-    research_report: ResearchReport,
-};
-const renderer = computed(() => renderers[selectedFormat.value ?? 'brief']);
-const changesTarget = 'report-changes-title';
 watch(
     routeIdentity,
     () => {
         questionIdentity.value = '';
         readingOnly.value = false;
+        artifactOpen.value = true;
     },
     { flush: 'sync' },
 );
@@ -369,26 +328,41 @@ watch(
     { immediate: true, flush: 'sync' },
 );
 const detail = ref<HTMLElement>();
-async function openConversation() {
+async function openArtifact() {
+    const identity = routeIdentity.value;
+    artifactOpen.value = true;
     readingOnly.value = false;
     await nextTick();
+    if (identity !== routeIdentity.value || !report.value) return;
+    detail.value?.querySelector<HTMLButtonElement>('.artifact-close')?.focus();
+}
+async function closeArtifact() {
+    if (readingOnly.value) return;
+    const identity = routeIdentity.value;
+    artifactOpen.value = false;
+    await nextTick();
+    if (identity === routeIdentity.value) artifactCard.value?.focus();
+}
+async function openReading() {
+    const identity = routeIdentity.value;
+    readingOnly.value = true;
+    artifactOpen.value = true;
+    await nextTick();
+    if (identity !== routeIdentity.value || !report.value) return;
+    const title = detail.value?.querySelector<HTMLElement>('#report-title');
+    title?.focus({ preventScroll: true });
+    title?.scrollIntoView({ block: 'start' });
+}
+async function openConversation() {
+    const identity = routeIdentity.value;
+    readingOnly.value = false;
+    artifactOpen.value = true;
+    await nextTick();
+    if (identity !== routeIdentity.value) return;
     const target = detail.value?.querySelector<HTMLElement>('#report-conversation');
     const input = target?.querySelector<HTMLTextAreaElement>('textarea:not([readonly])');
     (input ?? target)?.focus({ preventScroll: true });
     target?.scrollIntoView({ block: 'start', behavior: 'auto' });
-}
-async function jump(event: MouseEvent, id: string) {
-    event.preventDefault();
-    if (id === changesTarget) {
-        readingOnly.value = false;
-        await nextTick();
-    }
-    const target = detail.value?.querySelector<HTMLElement>(`#${CSS.escape(id)}`);
-    if (!target) return;
-    target.tabIndex = -1;
-    target.style.scrollMarginBlockStart = '6rem';
-    target.focus({ preventScroll: true });
-    target.scrollIntoView({ block: 'start' });
 }
 async function retry() {
     const restoreFocus = detail.value?.contains(document.activeElement);
@@ -401,283 +375,166 @@ async function retry() {
 </script>
 
 <style scoped>
+/* Scoped UnoCSS keeps the long control/state combinations readable. */
 .report-detail {
-    display: grid;
-    gap: 0.875rem;
-    min-inline-size: 0;
-}
-.workspace-heading,
-.workspace-actions,
-.deliverable-heading {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.75rem 1rem;
-    min-inline-size: 0;
+    @apply layout-grid gap-3.5;
 }
 .workspace-heading {
-    justify-content: space-between;
+    @apply flex flex-wrap items-center gap-[0.75rem_1rem] min-w-0;
 }
-.workspace-heading > div,
-.workspace-actions > * {
-    min-inline-size: 0;
-    overflow-wrap: anywhere;
+.workspace-heading {
+    @apply justify-between;
+}
+.workspace-heading > div {
+    @apply min-w-0 break-anywhere;
 }
 .workspace-eyebrow {
-    margin: 0;
-    font-weight: 600;
+    @apply font-semibold m-0;
 }
 .workspace-description,
-.workspace-actions p,
-.companion-heading p,
-.deliverable-heading span {
-    margin: 0;
-    color: var(--scova-muted);
-    font-size: 0.875rem;
-    line-height: 1.6;
+.companion-heading p {
+    @apply text-muted text-[0.875rem] leading-[1.6] m-0;
 }
 .workspace-description {
-    margin-block-start: 0.375rem;
+    @apply mt-1.5;
 }
-.workspace-actions :deep(.n-button__content) {
-    gap: 0.5rem;
-    white-space: normal;
-}
-.workspace-actions :deep(.n-button) {
-    min-block-size: 2.75rem;
-    height: auto;
-    padding-block: 0.625rem;
-}
-.workspace-actions :deep([aria-pressed='true']) {
-    color: var(--scova-primary);
-    background: var(--scova-selected);
-}
-.deliverable-heading {
-    justify-content: space-between;
-    padding-block-end: 1rem;
-    border-block-end: 0.0625rem solid var(--scova-border);
-}
-.deliverable-heading h2,
 .companion-heading h2 {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    margin: 0;
-    font-size: 1rem;
-    font-weight: 600;
+    @apply flex items-center gap-2 text-[1rem] font-semibold m-0;
 }
 .companion-heading {
-    display: grid;
-    gap: 0.5rem;
-    padding-block-end: 1.5rem;
-    border-block-end: 0.0625rem solid var(--scova-border);
-    margin-block-end: 1rem;
+    @apply grid gap-2 pb-6 [border-bottom:0.0625rem_solid_var(--scova-border)] mb-4;
 }
 .report-workspace {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 1rem;
-    align-items: start;
-    min-inline-size: 0;
+    @apply layout-stack relative grid-cols-[minmax(0,_1fr)] items-start;
 }
-.report-content,
-.report-sidebar,
-.report-baseline,
+.report-conversation-column,
 .report-companion {
-    min-inline-size: 0;
+    @apply min-w-0;
 }
-.report-sidebar {
-    display: grid;
-    gap: 1rem;
-    align-content: start;
-}
-.report-baseline {
-    padding: 1rem;
-    border: 0.0625rem solid var(--scova-border);
-    border-radius: 0.875rem;
-    background: var(--scova-surface);
-}
-.report-baseline :deep(.report-changes) {
-    padding: 0;
-    border: 0;
-}
-.report-baseline :deep(.change-sides) {
-    grid-template-columns: minmax(0, 1fr);
-}
-.report-baseline :deep(.comparison-summary) {
-    padding: 0.75rem 0;
-    border-inline-start: 0;
-}
-.report-content {
-    padding: clamp(1rem, 2vw, 2rem);
-    border: 0.0625rem solid var(--scova-border);
-    border-radius: 0.875rem;
-    background: var(--scova-surface);
+.report-conversation-column {
+    @apply grid gap-4 [align-content:start];
 }
 .report-companion {
-    display: grid;
-    gap: 0;
-    padding: 1rem;
-    border: 0.0625rem solid var(--scova-border);
-    border-radius: 0.875rem;
-    background: var(--scova-surface);
-    scroll-margin-block-start: 1rem;
+    @apply grid gap-0 border-theme rounded-3.5 bg-surface [scroll-margin-block-start:1rem] p-4;
 }
 .report-companion:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
+    @apply [outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.25rem];
 }
 .report-companion :deep(.questions),
 .report-companion :deep(.feedback-effects),
 .tool-section :deep(.feedback-actions),
 .tool-section :deep(.notes-panel),
 .tool-section :deep(.report-bookmarks) {
-    inline-size: 100%;
-    padding: 0;
-    border: 0;
-    background: transparent;
+    @apply w-full [border:0] bg-transparent p-0;
 }
 .report-companion :deep(.questions),
 .report-companion :deep(.feedback-effects) {
-    padding-block: 0.5rem 1.5rem;
+    @apply pt-2 pb-6;
 }
 .report-companion :deep(.tool-section h2) {
-    font-size: 1rem;
+    @apply text-[1rem];
 }
 .report-companion :deep(.tool-section h2 .n-icon) {
-    display: none;
+    @apply hidden;
 }
 .report-bookmarks {
-    display: grid;
-    gap: 1rem;
-    min-inline-size: 0;
-    overflow-wrap: anywhere;
-    border-block-start: 0.0625rem solid var(--scova-border);
-    padding-block: 1rem;
-}
-.report-presentation {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.5rem 0.875rem;
-    inline-size: 100%;
-    min-inline-size: 0;
-    padding-block: 1rem 1.5rem;
-}
-.report-presentation select {
-    inline-size: auto;
-    flex: 0 1 12rem;
-}
-.report-presentation p {
-    position: absolute;
-    inline-size: 1px;
-    block-size: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-}
-.report-sections {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    margin-inline-start: auto;
-}
-.report-sections :deep(.n-button) {
-    min-block-size: 2.75rem;
-    height: auto;
-    font-size: 1rem;
-}
-.report-sections :deep(.n-button__content) {
-    gap: 0.375rem;
+    @apply layout-stack break-anywhere [border-top:0.0625rem_solid_var(--scova-border)] pt-4 pb-4;
 }
 .report-bookmarks h2 {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
+    @apply flex items-center gap-2;
 }
 .report-source-history {
-    display: grid;
-    gap: 0.75rem;
-    min-inline-size: 0;
+    @apply layout-grid gap-3;
 }
 .report-bookmarks h2 {
-    margin: 0;
-    font-size: 1.25rem;
+    @apply text-[1.25rem] m-0;
 }
 select {
-    inline-size: 100%;
-    min-inline-size: 0;
-    max-inline-size: 100%;
-    min-block-size: 2.75rem;
-    padding: 0.625rem;
-    border: 0.0625rem solid var(--scova-border);
-    border-radius: 0.5rem;
-    background: var(--scova-surface);
-    color: var(--scova-text);
-    font: inherit;
-    cursor: pointer;
+    @apply font-inherit w-full min-w-0 max-w-full min-h-11 border-theme rounded-2 bg-surface
+        text-default cursor-pointer p-2.5;
 }
 select:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
+    @apply [outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.25rem];
 }
 select:disabled {
-    cursor: not-allowed;
+    @apply cursor-not-allowed;
 }
 .report-tools {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    padding: 0;
-    justify-self: start;
-    max-inline-size: 100%;
+    @apply flex flex-wrap gap-2 justify-self-start max-w-full p-0;
 }
-@media (min-width: 80rem) {
+@media (min-width: 64rem) {
     .report-workspace {
-        grid-template-columns: minmax(0, 1fr) minmax(22rem, 25rem);
-        gap: 1.5rem;
+        @apply grid-cols-[minmax(0,_0.9fr)_minmax(0,_1.1fr)] gap-6;
     }
-    .report-workspace--reading {
-        grid-template-columns: minmax(0, 1fr);
-    }
-    .report-workspace--reading .report-content {
-        inline-size: min(100%, 64rem);
-        justify-self: center;
+    .report-workspace--reading,
+    .report-workspace--closed {
+        @apply grid-cols-[minmax(0,_1fr)];
     }
 }
 @media (max-width: 39.999rem) {
-    .report-content,
-    .report-baseline,
     .report-companion {
-        padding: 0.5rem;
+        @apply p-2;
     }
-    .report-presentation {
-        gap: 0.5rem;
-        padding-block: 0.25rem 0.5rem;
-    }
-    .report-sections {
-        gap: 0.375rem;
-        margin-inline-start: 0;
-    }
-    .report-sections :deep(.n-button),
     .report-tools :deep(.navigation-button) {
-        padding-inline: 0.625rem;
+        @apply pl-2.5 pr-2.5;
     }
+}
+.report-artifact-card {
+    @apply font-inherit flex items-center gap-3 w-full min-w-0 min-h-11 mb-6 border-theme rounded-3
+        bg-surface text-default text-start cursor-pointer p-4;
+}
+.report-artifact-card > span:not(.app-icon) {
+    @apply layout-grid flex-1 gap-1.5 break-anywhere;
+}
+.report-artifact-card strong {
+    @apply font-medium;
+}
+.report-artifact-card small {
+    @apply text-muted text-[0.875rem];
+}
+.report-artifact-card:hover {
+    @apply [background:var(--scova-selected)];
+}
+.report-artifact-card {
+    @apply [transition:background-color_180ms_ease,_box-shadow_180ms_ease,_transform_180ms_ease];
+}
+.report-artifact-card:hover {
+    @apply [transform:translateY(-0.125rem)]
+        [box-shadow:0_0.375rem_1rem_color-mix(in_srgb,_var(--scova-text)_5%,_transparent)];
+}
+.artifact-pane-enter-active,
+.artifact-pane-leave-active {
+    @apply [transition:opacity_220ms_ease,_transform_220ms_cubic-bezier(0.2,_0.7,_0.2,_1)];
+}
+@media (min-width: 64rem) {
+    .artifact-pane-leave-active {
+        @apply absolute [top:0] [right:0] w-[calc(55%_-_0.75rem)] [pointer-events:none];
+    }
+}
+.artifact-pane-enter-from,
+.artifact-pane-leave-to {
+    @apply opacity-0 [transform:translateX(1.25rem)_scale(0.985)];
+}
+@media (prefers-reduced-motion: reduce) {
+    .artifact-pane-enter-active,
+    .artifact-pane-leave-active,
+    .report-artifact-card {
+        @apply [transition:none];
+    }
+    .artifact-pane-enter-from,
+    .artifact-pane-leave-to,
+    .report-artifact-card:hover {
+        @apply [transform:none];
+    }
+}
+.report-artifact-card:focus-visible {
+    @apply [outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.25rem];
 }
 a {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    min-block-size: 2.75rem;
-    color: var(--scova-primary);
-    cursor: pointer;
-    text-underline-offset: 0.2em;
-    overflow-wrap: anywhere;
+    @apply inline-flex items-center gap-2 min-h-11 text-primary cursor-pointer underline-offset-[0.2em]
+        break-anywhere;
 }
 a:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
+    @apply [outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.25rem];
 }
 </style>

@@ -1,7 +1,7 @@
 <template>
     <button
         type="button"
-        class="icon-button"
+        class="icon-button inline-flex items-center justify-center min-w-11 min-h-11 [border:0] rounded-1.5 bg-transparent text-inherit font-inherit cursor-pointer p-[0.5em] [&.icon-button:hover:enabled]:[background:color-mix(in_srgb,_currentColor_8%,_transparent)] focus-visible:([outline:0.125rem_solid_currentColor] [outline-offset:0.125rem]) disabled:cursor-not-allowed"
         :aria-label="label"
         :title="label"
         :disabled="disabled"
@@ -16,33 +16,3 @@ import type { IconName } from '@/components/common/icons';
 
 defineProps<{ icon: IconName; label: string; disabled?: boolean }>();
 </script>
-
-<style scoped>
-.icon-button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-inline-size: 2.75rem;
-    min-block-size: 2.75rem;
-    padding: 0.5em;
-    border: 0;
-    border-radius: 0.375rem;
-    background: transparent;
-    color: inherit;
-    font: inherit;
-    cursor: pointer;
-}
-
-.icon-button:hover:enabled {
-    background: color-mix(in srgb, currentColor 8%, transparent);
-}
-
-.icon-button:focus-visible {
-    outline: 0.125rem solid currentColor;
-    outline-offset: 0.125rem;
-}
-
-.icon-button:disabled {
-    cursor: not-allowed;
-}
-</style>

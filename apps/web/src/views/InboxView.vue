@@ -1,8 +1,9 @@
 <template>
-    <section ref="container" class="inbox-view" aria-label="报告收件箱">
-        <div class="inbox-tools">
-            <nav aria-label="收件箱筛选">
+    <section ref="container" class="inbox-view layout-grid gap-6" aria-label="报告收件箱">
+        <div class="inbox-tools flex flex-wrap justify-between gap-[1rem_2rem] items-center">
+            <nav class="flex flex-wrap gap-2" aria-label="收件箱筛选">
                 <router-link
+                    class="[nav_&:is(a)]:(inline-flex items-center min-h-11 text-muted no-underline cursor-pointer rounded-2 py-2 px-4) [nav_&:is(a)[aria-current='page']]:(text-primary bg-surface font-semibold) [nav_&:is(a):focus-visible]:([outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.25rem])"
                     v-for="option in filters"
                     :key="option.value"
                     :to="inboxPath(option.value)"
@@ -19,8 +20,10 @@
                 <app-icon name="retry" />刷新
             </action-button>
         </div>
-        <p v-if="actionError" role="alert">{{ actionError }}</p>
-        <p v-if="announcement" role="status" aria-live="polite">{{ announcement }}</p>
+        <p class="break-anywhere m-0" v-if="actionError" role="alert">{{ actionError }}</p>
+        <p class="break-anywhere m-0" v-if="announcement" role="status" aria-live="polite">
+            {{ announcement }}
+        </p>
         <state-panel v-if="query.isPending.value" state="loading" message="正在读取收件箱" />
         <state-panel
             v-else-if="query.isError.value"
@@ -40,7 +43,7 @@
                       : '暂无报告'
             "
         />
-        <div v-if="items.length" class="inbox-list">
+        <div v-if="items.length" class="inbox-list min-w-0">
             <inbox-entry
                 v-for="item in items"
                 :key="item.id"
@@ -168,49 +171,3 @@ onMounted(async () => {
     window.scrollTo({ top: restore.scroll });
 });
 </script>
-
-<style scoped>
-.inbox-view {
-    display: grid;
-    gap: 1.5rem;
-    min-inline-size: 0;
-}
-.inbox-tools {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    gap: 1rem 2rem;
-    align-items: center;
-}
-nav {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-}
-nav a {
-    display: inline-flex;
-    align-items: center;
-    min-block-size: 2.75rem;
-    padding: 0.5rem 1rem;
-    color: var(--scova-muted);
-    text-decoration: none;
-    cursor: pointer;
-    border-radius: 0.5rem;
-}
-nav a[aria-current='page'] {
-    color: var(--scova-primary);
-    background: var(--scova-surface);
-    font-weight: 600;
-}
-nav a:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
-}
-p {
-    margin: 0;
-    overflow-wrap: anywhere;
-}
-.inbox-list {
-    min-inline-size: 0;
-}
-</style>

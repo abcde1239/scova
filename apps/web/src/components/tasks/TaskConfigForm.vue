@@ -1,18 +1,22 @@
 <template>
     <form
         ref="form"
-        class="task-config-form"
+        class="task-config-form w-[min(100%,_44rem)] layout-grid gap-10 cursor-default"
         novalidate
         :aria-busy="task.pending.value"
         @submit.prevent="save"
     >
         <template v-if="editor">
-            <p>配置版本 {{ editor.revision.value }}。保存创建新版本，不开始执行，历史保持原样。</p>
-            <p>查阅范围变化后，下次完整执行将建立新基线，以保存结果为准。</p>
+            <p class="text-muted break-anywhere m-0 [details_>_&:is(p)]:mt-4">
+                配置版本 {{ editor.revision.value }}。保存创建新版本，不开始执行，历史保持原样。
+            </p>
+            <p class="text-muted break-anywhere m-0 [details_>_&:is(p)]:mt-4">
+                查阅范围变化后，下次完整执行将建立新基线，以保存结果为准。
+            </p>
             <p
                 v-if="editor.result.value && task.saved.value"
                 role="status"
-                class="save-success"
+                class="save-success text-default break-anywhere [border-left:0.25rem_solid_var(--scova-primary)] bg-surface m-0 p-4 keyboard-focus [details_>_&:is(p)]:mt-4"
                 tabindex="-1"
                 ref="successMessage"
             >
@@ -23,15 +27,15 @@
                 }}历史执行与报告保持原样。
             </p>
             <section
-                class="reload-panel"
+                class="reload-panel layout-stack [&.reload-panel--confirm]:(border-theme rounded-1.5 bg-surface p-5) [&.reload-panel_>_button]:justify-self-start"
                 :class="{ 'reload-panel--confirm': editor.reloadRequested.value }"
                 aria-label="重新读取任务"
             >
                 <template v-if="editor.reloadRequested.value">
-                    <p>
+                    <p class="text-muted break-anywhere m-0 [details_>_&:is(p)]:mt-4">
                         确认后会丢弃当前未保存草稿，读取服务器最新配置与修订依据。可以先复制需要手动合并的内容。
                     </p>
-                    <div class="save-actions">
+                    <div class="save-actions flex items-center flex-wrap gap-[1rem_2rem]">
                         <action-button
                             ref="reloadConfirm"
                             :busy="task.pending.value"
@@ -58,9 +62,13 @@
             @applied="focusConfiguration"
             @manual="enterManualConfiguration"
         />
-        <fieldset :disabled="locked">
-            <legend>查阅任务</legend>
-            <p v-if="manualConfiguration" role="status">
+        <fieldset class="layout-grid gap-6 [border:0] m-0 p-0" :disabled="locked">
+            <legend class="text-[1.25rem] font-semibold mb-6 p-0">查阅任务</legend>
+            <p
+                class="text-muted break-anywhere m-0 [details_>_&:is(p)]:mt-4"
+                v-if="manualConfiguration"
+                role="status"
+            >
                 手工配置已就绪：填写任务内容和范围后，点击“确认保存任务”。此过程不调用需求整理
                 Agent。
             </p>
@@ -74,8 +82,8 @@
                 :disabled="locked"
             />
         </fieldset>
-        <fieldset :disabled="locked">
-            <legend>时间与输出</legend>
+        <fieldset class="layout-grid gap-6 [border:0] m-0 p-0" :disabled="locked">
+            <legend class="text-[1.25rem] font-semibold mb-6 p-0">时间与输出</legend>
             <execution-agent-select v-model="task.draft.agentProviderId" :disabled="locked" />
             <task-config-field
                 v-model="task.draft.researchMode"
@@ -85,7 +93,7 @@
                 :error="task.fields.value.researchMode"
                 :disabled="locked"
             />
-            <p>
+            <p class="text-muted break-anywhere m-0 [details_>_&:is(p)]:mt-4">
                 资料收集汇集当前可读内容，不要求来源在查阅窗口内新发布；如需跟踪指定期间的新进展或核验推论，请选分析研究。
             </p>
             <task-config-field
@@ -104,7 +112,9 @@
                 :disabled="locked"
             />
             <template v-else>
-                <p>日期按 {{ browserTimezone }} 当地时间填写</p>
+                <p class="text-muted break-anywhere m-0 [details_>_&:is(p)]:mt-4">
+                    日期按 {{ browserTimezone }} 当地时间填写
+                </p>
                 <task-config-field
                     v-model="task.draft.start"
                     label="开始时间"
@@ -120,19 +130,23 @@
                     :disabled="locked"
                 />
             </template>
-            <task-config-field
-                v-model="task.draft.outputFormat"
+            <output-format-select
+                class="layout-grid gap-6 [border:0] m-0 p-0"
+                v-model="selectedFormats"
                 label="输出形式"
-                kind="select"
-                :options="outputs"
-                :error="task.fields.value.outputFormat"
+                :error="task.fields.value.outputFormats ?? task.fields.value.outputFormat"
                 :disabled="locked"
             />
             <output-examples />
         </fieldset>
-        <details ref="sources">
-            <summary>关注范围与来源偏好</summary>
-            <div class="field-group">
+        <details
+            class="min-w-0 [border-top:0.0625rem_solid_var(--scova-border)] pt-4"
+            ref="sources"
+        >
+            <summary class="min-h-11 pt-2 pb-2 font-semibold cursor-pointer keyboard-focus">
+                关注范围与来源偏好
+            </summary>
+            <div class="field-group grid gap-6 mt-4">
                 <list-input
                     v-for="field in sourceFields"
                     :key="field.key"
@@ -152,15 +166,25 @@
                     :error="task.fields.value.officialOnly"
                     :disabled="locked"
                 />
-                <p>每项可单独修改或删除；来源偏好不代表安全审核或官方身份认证。</p>
+                <p class="text-muted break-anywhere m-0 [details_>_&:is(p)]:mt-4">
+                    每项可单独修改或删除；来源偏好不代表安全审核或官方身份认证。
+                </p>
             </div>
         </details>
-        <details ref="budget" open>
-            <summary>单次执行预算</summary>
-            <p v-if="legacyBudget">
+        <details
+            class="min-w-0 [border-top:0.0625rem_solid_var(--scova-border)] pt-4"
+            ref="budget"
+            open
+        >
+            <summary class="min-h-11 pt-2 pb-2 font-semibold cursor-pointer keyboard-focus">
+                单次执行预算
+            </summary>
+            <p class="text-muted break-anywhere m-0 [details_>_&:is(p)]:mt-4" v-if="legacyBudget">
                 当前填写的预算低于新任务默认值。可按需调整后保存，再新建执行；重试旧执行仍使用原预算。
             </p>
-            <div class="field-group budget-grid">
+            <div
+                class="field-group budget-grid grid gap-6 mt-4 [@media(min-width:_40rem)]:grid-cols-[repeat(2,_minmax(0,_1fr))]"
+            >
                 <task-config-field
                     v-for="field in budgetFields"
                     :key="field.key"
@@ -177,7 +201,7 @@
                     :output="Number(task.draft.maxOutputTokens)"
                     :pages="Number(task.draft.maxPages)"
                 />
-                <p>
+                <p class="text-muted break-anywhere m-0 [details_>_&:is(p)]:mt-4">
                     预算按整次执行累计，包含规划、比较、综合和重试。时长最多{{
                         DEFAULT_TASK_BUDGET_LIMITS.maxDurationSeconds
                     }}秒，输入最多{{ DEFAULT_TASK_BUDGET_LIMITS.maxInputTokens }}、输出最多{{
@@ -188,6 +212,7 @@
             </info-dialog>
         </details>
         <schedule-fields
+            class="layout-grid gap-6 [border:0] m-0 p-0"
             v-model:frequency="task.draft.scheduleFrequency"
             v-model:timezone="task.draft.timezone"
             v-model:local-time="task.draft.scheduleLocalTime"
@@ -197,8 +222,8 @@
             :saved="editor?.serverPlan.value"
             :dirty="task.dirty.value"
         />
-        <fieldset :disabled="locked">
-            <legend>站内提醒</legend>
+        <fieldset class="layout-grid gap-6 [border:0] m-0 p-0" :disabled="locked">
+            <legend class="text-[1.25rem] font-semibold mb-6 p-0">站内提醒</legend>
             <task-config-field
                 v-model="task.draft.notificationMode"
                 label="结果提醒"
@@ -218,14 +243,14 @@
         <p
             v-if="task.message.value"
             ref="errorMessage"
-            class="save-error"
+            class="save-error text-danger break-anywhere m-0 keyboard-focus [details_>_&:is(p)]:mt-4 [&.edit-warning]:([border:0.0625rem_solid_var(--scova-danger)] [border-left:0.25rem_solid_var(--scova-danger)] rounded-1.5 [background:var(--scova-selected)] p-5)"
             :class="{ 'edit-warning': !!editor }"
             role="alert"
             tabindex="-1"
         >
             {{ task.message.value }}
         </p>
-        <div class="save-actions">
+        <div class="save-actions flex items-center flex-wrap gap-[1rem_2rem]">
             <action-button
                 attr-type="submit"
                 :busy="task.pending.value"
@@ -243,13 +268,20 @@
                 }}</action-button
             >
             <router-link
+                class="min-h-11 inline-flex items-center text-primary cursor-pointer underline-offset-[0.2em] keyboard-focus"
                 v-if="initialResponse"
                 :to="{ name: 'task-summary', params: { taskId: initialResponse.data.task.id } }"
                 >返回任务摘要</router-link
             >
-            <router-link :to="{ name: 'tasks' }">返回任务列表</router-link>
+            <router-link
+                class="min-h-11 inline-flex items-center text-primary cursor-pointer underline-offset-[0.2em] keyboard-focus"
+                :to="{ name: 'tasks' }"
+                >返回任务列表</router-link
+            >
         </div>
-        <p v-if="!editor">保存仅创建任务，不会开始执行。</p>
+        <p class="text-muted break-anywhere m-0 [details_>_&:is(p)]:mt-4" v-if="!editor">
+            保存仅创建任务，不会开始执行。
+        </p>
     </form>
 </template>
 
@@ -270,6 +302,7 @@ import {
 } from '@/composables/useCreateTask';
 import { useSessionLifecycle } from '@/composables/useSessionQuery';
 import TaskConfigField from '@/components/tasks/TaskConfigField.vue';
+import OutputFormatSelect from '@/components/tasks/OutputFormatSelect.vue';
 import TaskTokenBudget from '@/components/tasks/TaskTokenBudget.vue';
 import ListInput from '@/components/common/ListInput.vue';
 import ActionButton from '@/components/common/ActionButton.vue';
@@ -288,6 +321,16 @@ const editor = props.initialResponse
     : undefined;
 const creator = editor ? undefined : createTaskController(lifecycle);
 const task = editor ?? creator!;
+const selectedFormats = computed({
+    get: () =>
+        task.draft.outputFormats.length
+            ? task.draft.outputFormats
+            : [task.draft.outputFormat as import('@scova/models').OutputFormat],
+    set: (formats: import('@scova/models').OutputFormat[]) => {
+        task.draft.outputFormats = formats;
+        task.draft.outputFormat = formats[0] ?? 'brief';
+    },
+});
 const legacyBudget = computed(
     () =>
         Boolean(editor) &&
@@ -371,12 +414,6 @@ const researchModes = [
     { value: 'collection', label: '资料收集：整理来源信息' },
     { value: 'analysis', label: '分析研究：核对依据与时间' },
 ];
-const outputs = [
-    { value: 'brief', label: '简报' },
-    { value: 'list', label: '主题清单' },
-    { value: 'comparison', label: '对比表' },
-    { value: 'research_report', label: '研究报告' },
-];
 const notifications = [
     { value: 'summary', label: '每次汇总' },
     { value: 'important_change', label: '仅重要变化' },
@@ -438,110 +475,3 @@ onUnmounted(() => {
     task.dispose();
 });
 </script>
-
-<style scoped>
-.task-config-form {
-    inline-size: min(100%, 44rem);
-    min-inline-size: 0;
-    display: grid;
-    gap: 2.5rem;
-    cursor: default;
-}
-fieldset {
-    display: grid;
-    gap: 1.5rem;
-    min-inline-size: 0;
-    border: 0;
-    margin: 0;
-    padding: 0;
-}
-legend {
-    font-size: 1.25rem;
-    font-weight: 600;
-    padding: 0;
-    margin-block-end: 1.5rem;
-}
-details {
-    min-inline-size: 0;
-    border-block-start: 0.0625rem solid var(--scova-border);
-    padding-block-start: 1rem;
-}
-summary {
-    min-block-size: 2.75rem;
-    padding-block: 0.5rem;
-    font-weight: 600;
-    cursor: pointer;
-}
-.field-group {
-    display: grid;
-    gap: 1.5rem;
-    margin-block-start: 1rem;
-}
-p {
-    margin: 0;
-    color: var(--scova-muted);
-    overflow-wrap: anywhere;
-}
-details > p {
-    margin-block-start: 1rem;
-}
-.save-actions {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 1rem 2rem;
-}
-a {
-    min-block-size: 2.75rem;
-    display: inline-flex;
-    align-items: center;
-    color: var(--scova-primary);
-    cursor: pointer;
-    text-underline-offset: 0.2em;
-}
-.save-error {
-    color: var(--scova-danger);
-}
-.edit-warning {
-    padding: 1.25rem;
-    border: 0.0625rem solid var(--scova-danger);
-    border-inline-start: 0.25rem solid var(--scova-danger);
-    border-radius: 0.375rem;
-    background: var(--scova-selected);
-}
-.reload-panel {
-    display: grid;
-    gap: 1rem;
-    min-inline-size: 0;
-}
-.reload-panel--confirm {
-    padding: 1.25rem;
-    border: 0.0625rem solid var(--scova-border);
-    border-radius: 0.375rem;
-    background: var(--scova-surface);
-}
-.reload-panel > :deep(button) {
-    justify-self: start;
-}
-.save-success {
-    color: var(--scova-text);
-    padding: 1rem;
-    border-inline-start: 0.25rem solid var(--scova-primary);
-    background: var(--scova-surface);
-}
-.save-success:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.1875rem;
-}
-a:focus-visible,
-summary:focus-visible,
-.save-error:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.1875rem;
-}
-@media (min-width: 40rem) {
-    .budget-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-}
-</style>

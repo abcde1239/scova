@@ -2,7 +2,7 @@
     <div
         v-if="session.user.value && session.phase.value === 'ready'"
         ref="root"
-        class="account-menu"
+        class="account-menu relative shrink-0 [@media(max-width:_53.999rem)]:hidden"
         @pointerenter="enter"
         @pointerleave="leave"
         @focusout="blur"
@@ -12,7 +12,7 @@
         <n-button
             quaternary
             circle
-            class="account-trigger"
+            class="account-trigger [&&]:(min-w-11 min-h-11 h-auto) focus-visible:([outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.125rem])"
             v-bind="triggerAccessibility"
             @click="toggle"
         >
@@ -24,20 +24,22 @@
         <nav
             v-if="open"
             :id="panelId"
-            class="account-panel"
+            class="account-panel absolute [top:100%] [right:0] z-[20] grid gap-1 w-[min(19rem,_calc(100vw_-_2rem))] border-theme rounded-3 bg-surface break-anywhere p-3 [&.account-panel_.n-button]:(justify-start w-full min-h-11 h-auto whitespace-normal)"
             aria-label="账号操作"
             @click="navigateInside"
         >
-            <div class="account-identity">
-                <span class="identity-label">当前账号</span>
-                <strong>{{ session.user.value.email }}</strong>
+            <div class="account-identity layout-grid gap-1.5 pt-2 pb-3.5 px-2">
+                <span class="identity-label text-muted">当前账号</span>
+                <strong class="[.account-identity_&:is(strong)]:(text-[1rem] font-medium)">{{
+                    session.user.value.email
+                }}</strong>
             </div>
             <navigation-button to="/account" icon="account">账号</navigation-button>
             <navigation-button to="/account/agent" icon="settings">Agent 配置</navigation-button>
             <navigation-button to="/account/appearance" icon="appearance">外观</navigation-button>
             <action-button
                 quaternary
-                class="logout-action"
+                class="logout-action [&&]:(mt-2 [border:0] bg-transparent)"
                 :busy="session.logoutPending.value"
                 @click="session.logout"
             >
@@ -47,7 +49,7 @@
     </div>
     <navigation-button
         v-else-if="session.phase.value === 'ready'"
-        class="account-login"
+        class="account-login [@media(max-width:_53.999rem)]:[&&]:hidden"
         to="/login"
         icon="account"
         >登录</navigation-button
@@ -153,75 +155,3 @@ onUnmounted(() => {
     media?.removeEventListener('change', closeForResize);
 });
 </script>
-
-<style scoped>
-.account-menu {
-    position: relative;
-    flex-shrink: 0;
-}
-.account-trigger {
-    min-inline-size: 2.75rem;
-    min-block-size: 2.75rem;
-    height: auto;
-}
-.avatar {
-    display: grid;
-    place-items: center;
-    inline-size: 2rem;
-    block-size: 2rem;
-    border-radius: 50%;
-    background: var(--scova-selected);
-    color: var(--scova-primary);
-    font-size: 1rem;
-    font-weight: 600;
-}
-.account-trigger:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.125rem;
-}
-.account-panel {
-    position: absolute;
-    inset-block-start: 100%;
-    inset-inline-end: 0;
-    z-index: 20;
-    display: grid;
-    gap: 0.25rem;
-    inline-size: min(19rem, calc(100vw - 2rem));
-    padding: 0.75rem;
-    border: 0.0625rem solid var(--scova-border);
-    border-radius: 0.75rem;
-    background: var(--scova-surface);
-    overflow-wrap: anywhere;
-}
-.account-identity {
-    display: grid;
-    gap: 0.375rem;
-    min-inline-size: 0;
-    padding: 0.5rem 0.5rem 0.875rem;
-}
-.identity-label {
-    color: var(--scova-muted);
-}
-.account-identity strong {
-    font-size: 1rem;
-    font-weight: 500;
-}
-.account-panel :deep(.n-button) {
-    justify-content: start;
-    inline-size: 100%;
-    min-block-size: 2.75rem;
-    height: auto;
-    white-space: normal;
-}
-.logout-action {
-    margin-block-start: 0.5rem;
-    border: 0;
-    background: transparent;
-}
-@media (max-width: 53.999rem) {
-    .account-menu,
-    .account-login {
-        display: none;
-    }
-}
-</style>

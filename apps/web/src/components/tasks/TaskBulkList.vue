@@ -1,6 +1,9 @@
 <template>
-    <div class="task-bulk-list">
-        <div v-if="tasks.length || managing" class="bulk-toolbar">
+    <div class="task-bulk-list layout-stack">
+        <div
+            v-if="tasks.length || managing"
+            class="bulk-toolbar action-row justify-between gap-y-4 [@media(max-width:_47.999rem)]:items-start"
+        >
             <action-button
                 v-if="!managing"
                 ref="manageTrigger"
@@ -10,9 +13,15 @@
                 ><app-icon name="tasks" />批量管理</action-button
             >
             <template v-else>
-                <div class="bulk-selection">
-                    <p class="selection-count">已选 {{ actions.selected.value.length }} 个任务</p>
-                    <div class="selection-actions">
+                <div
+                    class="bulk-selection flex flex-wrap items-center gap-2 min-w-0 [@media(max-width:_47.999rem)]:[flex:1_1_100%]"
+                >
+                    <p
+                        class="selection-count [flex:0_0_auto] text-[0.875rem] font-semibold text-muted [@media(max-width:_47.999rem)]:[flex-basis:100%] [.bulk-toolbar_&:is(p)]:m-0"
+                    >
+                        已选 {{ actions.selected.value.length }} 个任务
+                    </p>
+                    <div class="selection-actions flex flex-wrap items-center gap-2 min-w-0">
                         <action-button
                             :disabled="locked || !tasks.length"
                             @click="actions.selectLoaded()"
@@ -27,13 +36,19 @@
                         >
                     </div>
                 </div>
-                <div class="bulk-actions">
-                    <action-button quaternary :disabled="actions.busy.value" @click="finishManaging"
+                <div
+                    class="bulk-actions flex flex-wrap items-center gap-2 min-w-0 ml-auto [@media(max-width:_47.999rem)]:([flex:1_1_100%] ml-0)"
+                >
+                    <action-button
+                        ref="finishTrigger"
+                        quaternary
+                        :disabled="actions.busy.value"
+                        @click="finishManaging"
                         >退出批量管理</action-button
                     >
                     <action-button
                         ref="clearTrigger"
-                        class="danger"
+                        class="danger danger-action"
                         :disabled="
                             unavailable || actions.pending.value || !actions.selected.value.length
                         "
@@ -44,34 +59,38 @@
                 </div>
             </template>
         </div>
-        <p v-if="managing" class="selection-note">
+        <p v-if="managing" class="selection-note text-muted text-[0.875rem] m-0">
             仅选择当前筛选下已加载的任务，每批最多
             {{ bulkTaskLimit }}
             个；加载更多不会自动选中。启用状态不代表正在执行，清除时会检查活动执行。
         </p>
         <div
-            v-if="actions.message.value || actions.results.value.length"
+            v-if="actions.message.value || failedResults.length"
             ref="feedback"
-            class="bulk-feedback"
+            class="bulk-feedback break-anywhere focus-visible:([outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.125rem])"
             role="status"
             tabindex="-1"
         >
-            <p>{{ actions.message.value }}</p>
-            <ul v-if="actions.results.value.length">
-                <li v-for="result in actions.results.value" :key="result.id">
+            <p v-if="actions.message.value">{{ actions.message.value }}</p>
+            <ul v-if="failedResults.length">
+                <li v-for="result in failedResults" :key="result.id">
                     {{ result.title }}：{{ result.message }}
                 </li>
             </ul>
         </div>
-        <div class="task-list">
+        <div class="task-list layout-grid">
             <div
                 v-for="task in tasks"
                 :key="task.id"
-                class="task-entry"
+                class="task-entry min-w-0 [&.task-entry.selecting]:(grid grid-cols-[auto_minmax(0,_1fr)] gap-x-4) [@media(max-width:_29.999rem)]:[&.task-entry.selecting]:gap-x-2"
                 :class="{ selecting: managing }"
             >
-                <label v-if="managing" class="task-select">
+                <label
+                    v-if="managing"
+                    class="task-select flex items-center [align-self:start] gap-2 min-h-11 mt-4 cursor-pointer [&.task-select:has(input:disabled)]:cursor-not-allowed [&.task-select:has(input:focus-visible)]:([outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.125rem])"
+                >
                     <input
+                        class="[.task-select_&:is(input)]:([accent-color:var(--scova-primary)] cursor-inherit m-0) [.confirmation-input_&:is(input)]:(box-border w-full min-w-0 min-h-11 [font-family:inherit] [font-size:inherit] [font-weight:inherit] [font-style:inherit] leading-[inherit] [font-variant:inherit] text-default bg-surface border-theme rounded-1.5 p-2)"
                         type="checkbox"
                         :aria-label="`选择任务：${task.title}`"
                         :checked="isSelected(task.id)"
@@ -81,21 +100,30 @@
                         "
                         @change="actions.toggle(task)"
                     />
-                    <span>选择</span>
+                    <span
+                        class="[.task-select_&:is(span)]:text-[0.875rem] [@media(max-width:_29.999rem)]:[.task-select_&:is(span)]:hidden"
+                        >选择</span
+                    >
                 </label>
                 <task-card :task="task" :filter="filter" :timezone="timezone" />
             </div>
         </div>
         <dialog
+            class="box-border w-[min(38rem,_calc(100%_-_2rem))] max-h-[calc(100dvh_-_2rem)] border-theme rounded-3 text-default bg-surface overflow-hidden p-[clamp(1rem,_4%,_2rem)] [&:is(dialog)[open]]:(grid grid-rows-[auto_minmax(0,_1fr)_auto] gap-6) [&:is(dialog)::backdrop]:[background:rgb(0_0_0_/_45%)]"
             ref="dialog"
             aria-labelledby="bulk-delete-title"
             aria-describedby="bulk-delete-consequence"
             @cancel.prevent="cancel"
         >
-            <h2 id="bulk-delete-title">
+            <h2
+                class="m-0 [dialog_&:is(h2)]:(text-[1.25rem] break-anywhere)"
+                id="bulk-delete-title"
+            >
                 永久清除 {{ actions.confirmation.value.length }} 个任务？
             </h2>
-            <div class="confirmation-body">
+            <div
+                class="confirmation-body break-anywhere min-h-0 overflow-auto [overscroll-behavior:contain]"
+            >
                 <p id="bulk-delete-consequence">
                     将永久删除以下任务及其配置版本、执行历史、报告、通知、报告笔记和问答，无法恢复。共享来源、网页快照和来源收藏保留。有活动执行或修订变化的任务不会被清除。
                 </p>
@@ -104,9 +132,10 @@
                         {{ item.data.task.title }}
                     </li>
                 </ul>
-                <label class="confirmation-input"
+                <label class="confirmation-input grid gap-2"
                     >请输入“{{ actions.phrase.value }}”以确认
                     <input
+                        class="[.confirmation-input_&:is(input)]:(box-border w-full min-w-0 min-h-11 [font-family:inherit] [font-size:inherit] [font-weight:inherit] [font-style:inherit] leading-[inherit] [font-variant:inherit] text-default bg-surface border-theme rounded-1.5 p-2)"
                         v-model="confirmationText"
                         :disabled="actions.pending.value"
                         autocomplete="off"
@@ -123,12 +152,12 @@
                     个任务
                 </p>
             </div>
-            <div class="dialog-actions">
+            <div class="dialog-actions action-row">
                 <action-button ref="cancelTrigger" :disabled="actions.pending.value" @click="cancel"
                     >取消</action-button
                 >
                 <action-button
-                    class="danger"
+                    class="danger danger-action"
                     :disabled="
                         confirmationText.trim() !== actions.phrase.value ||
                         !actions.confirmation.value.length
@@ -157,12 +186,16 @@ const props = defineProps<{
     unavailable: boolean;
 }>();
 const actions = useBulkTaskDeletion(() => props.tasks);
+const failedResults = computed(() =>
+    actions.results.value.filter((result) => result.status !== 'removed'),
+);
 const managing = ref(false);
 const confirmationText = ref('');
 const dialog = ref<HTMLDialogElement>();
 const cancelTrigger = ref<{ $el: HTMLButtonElement }>();
 const clearTrigger = ref<{ $el: HTMLButtonElement }>();
 const manageTrigger = ref<{ $el: HTMLButtonElement }>();
+const finishTrigger = ref<{ $el: HTMLButtonElement }>();
 const feedback = ref<HTMLElement>();
 const locked = computed(
     () => props.unavailable || actions.busy.value || !!actions.confirmation.value.length,
@@ -194,174 +227,14 @@ watch(actions.confirmation, async (items) => {
         dialog.value?.close();
         confirmationText.value = '';
         await nextTick();
-        if (actions.message.value) feedback.value?.focus();
+        if (actions.message.value || failedResults.value.length) feedback.value?.focus();
+        else if (actions.results.value.length) finishTrigger.value?.$el.focus();
     }
 });
-watch([actions.message, actions.busy], async ([value, busy]) => {
-    if (value && !busy) {
+watch([actions.message, actions.busy, failedResults], async ([value, busy, failures]) => {
+    if ((value || failures.length) && !busy) {
         await nextTick();
         feedback.value?.focus();
     }
 });
 </script>
-
-<style scoped>
-.task-bulk-list,
-.task-list {
-    display: grid;
-    min-inline-size: 0;
-}
-.task-bulk-list {
-    gap: 1rem;
-}
-.bulk-toolbar,
-.bulk-selection,
-.selection-actions,
-.bulk-actions,
-.dialog-actions {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.75rem;
-}
-.bulk-toolbar {
-    justify-content: space-between;
-    row-gap: 1rem;
-}
-.bulk-selection,
-.selection-actions,
-.bulk-actions {
-    min-inline-size: 0;
-    gap: 0.5rem;
-}
-.selection-count {
-    flex: 0 0 auto;
-    font-size: 0.875rem;
-    font-weight: 600;
-    color: var(--scova-muted);
-}
-.bulk-actions {
-    margin-inline-start: auto;
-}
-@media (max-width: 47.999rem) {
-    .bulk-toolbar {
-        align-items: flex-start;
-    }
-    .bulk-selection {
-        flex: 1 1 100%;
-    }
-    .selection-count {
-        flex-basis: 100%;
-    }
-    .bulk-actions {
-        flex: 1 1 100%;
-        margin-inline-start: 0;
-    }
-}
-.bulk-toolbar p,
-h2 {
-    margin: 0;
-}
-.selection-note {
-    margin: 0;
-    color: var(--scova-muted);
-    font-size: 0.875rem;
-}
-.task-entry {
-    min-inline-size: 0;
-}
-.task-entry.selecting {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    column-gap: 1rem;
-}
-.task-select {
-    display: flex;
-    align-items: center;
-    align-self: start;
-    gap: 0.5rem;
-    min-block-size: 2.75rem;
-    margin-block-start: 1rem;
-    cursor: pointer;
-}
-.task-select input {
-    margin: 0;
-    accent-color: var(--scova-primary);
-    cursor: inherit;
-}
-.task-select span {
-    font-size: 0.875rem;
-}
-.task-select:has(input:disabled) {
-    cursor: not-allowed;
-}
-.bulk-feedback,
-.confirmation-body {
-    overflow-wrap: anywhere;
-}
-.bulk-feedback:focus-visible,
-.task-select:has(input:focus-visible) {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.125rem;
-}
-.danger,
-.danger :deep(.n-button__content) {
-    color: var(--scova-danger);
-}
-.danger :deep(.n-button__border),
-.danger :deep(.n-button__state-border) {
-    border-color: var(--scova-danger);
-}
-dialog {
-    box-sizing: border-box;
-    inline-size: min(38rem, calc(100% - 2rem));
-    max-block-size: calc(100dvh - 2rem);
-    padding: clamp(1rem, 4%, 2rem);
-    border: 0.0625rem solid var(--scova-border);
-    border-radius: 0.75rem;
-    color: var(--scova-text);
-    background: var(--scova-surface);
-    overflow: hidden;
-}
-dialog[open] {
-    display: grid;
-    grid-template-rows: auto minmax(0, 1fr) auto;
-    gap: 1.5rem;
-}
-dialog h2 {
-    font-size: 1.25rem;
-    overflow-wrap: anywhere;
-}
-.confirmation-body {
-    min-block-size: 0;
-    overflow: auto;
-    overscroll-behavior: contain;
-}
-.confirmation-input {
-    display: grid;
-    gap: 0.5rem;
-}
-.confirmation-input input {
-    box-sizing: border-box;
-    inline-size: 100%;
-    min-inline-size: 0;
-    min-block-size: 2.75rem;
-    padding: 0.5rem;
-    font: inherit;
-    color: var(--scova-text);
-    background: var(--scova-surface);
-    border: 0.0625rem solid var(--scova-border);
-    border-radius: 0.375rem;
-}
-dialog::backdrop {
-    background: rgb(0 0 0 / 45%);
-}
-@media (max-width: 29.999rem) {
-    .task-entry.selecting {
-        column-gap: 0.5rem;
-    }
-    .task-select span {
-        display: none;
-    }
-}
-</style>

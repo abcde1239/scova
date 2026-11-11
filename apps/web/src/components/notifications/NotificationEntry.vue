@@ -1,15 +1,29 @@
 <template>
-    <article class="notification-entry" :aria-labelledby="`notification-title-${item.id}`">
-        <div class="notification-content">
-            <h2 :id="`notification-title-${item.id}`">{{ notificationLabel(item) }}</h2>
-            <p class="metadata">
-                <strong>{{ item.readAt ? '已读' : '未读' }}</strong>
+    <article
+        class="notification-entry flex flex-wrap gap-[1.5rem_2rem] items-start pt-8 pb-8 [border-bottom:0.0625rem_solid_var(--scova-border)] min-w-0"
+        :aria-labelledby="`notification-title-${item.id}`"
+    >
+        <div class="notification-content layout-stack [flex:1_1_30rem] break-anywhere">
+            <h2
+                class="text-[1.25rem] font-semibold leading-[1.6] m-0"
+                :id="`notification-title-${item.id}`"
+            >
+                {{ notificationLabel(item) }}
+            </h2>
+            <p class="metadata flex flex-wrap gap-[0.5rem_1.25rem] text-muted m-0">
+                <strong class="text-default font-medium">{{
+                    item.readAt ? '已读' : '未读'
+                }}</strong>
                 <span>{{ item.mode === 'demo' ? '演示执行' : '真实查阅' }}</span>
                 <span>{{ notificationStatus[item.runStatus] }}</span>
                 <time :datetime="item.createdAt">{{ localTaskTime(item.createdAt) }}</time>
             </p>
-            <p>{{ notificationMessage(item) }}</p>
-            <router-link :id="`notification-target-${item.id}`" :to="notificationTarget(item)">
+            <p class="m-0">{{ notificationMessage(item) }}</p>
+            <router-link
+                class="inline-flex items-center gap-2 justify-self-start min-h-11 max-w-full text-primary underline-offset-[0.2em] cursor-pointer keyboard-focus-wide"
+                :id="`notification-target-${item.id}`"
+                :to="notificationTarget(item)"
+            >
                 <app-icon :name="item.reportId ? 'report' : 'run'" />{{
                     item.reportId ? '阅读报告' : '查看执行'
                 }}
@@ -37,56 +51,3 @@ import { localTaskTime } from '@/composables/useTasks';
 defineProps<{ item: Notification; pending?: boolean; disabled?: boolean }>();
 const emit = defineEmits<{ read: [read: boolean] }>();
 </script>
-
-<style scoped>
-.notification-entry {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1.5rem 2rem;
-    align-items: start;
-    padding-block: 2rem;
-    border-block-end: 0.0625rem solid var(--scova-border);
-    min-inline-size: 0;
-}
-.notification-content {
-    display: grid;
-    gap: 1rem;
-    flex: 1 1 30rem;
-    min-inline-size: 0;
-    overflow-wrap: anywhere;
-}
-h2,
-p {
-    margin: 0;
-}
-h2 {
-    font-size: 1.25rem;
-    font-weight: 600;
-    line-height: 1.6;
-}
-.metadata {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem 1.25rem;
-    color: var(--scova-muted);
-}
-strong {
-    color: var(--scova-text);
-    font-weight: 500;
-}
-a {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    justify-self: start;
-    min-block-size: 2.75rem;
-    max-inline-size: 100%;
-    color: var(--scova-primary);
-    text-underline-offset: 0.2em;
-    cursor: pointer;
-}
-a:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
-}
-</style>

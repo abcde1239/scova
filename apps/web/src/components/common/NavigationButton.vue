@@ -3,7 +3,7 @@
         <n-button
             tag="a"
             v-bind="{ ...$attrs, href, 'aria-label': label }"
-            class="navigation-button"
+            class="navigation-button navigation-control"
             quaternary
             type="primary"
             @click="navigate"
@@ -24,20 +24,3 @@ import type { IconName } from '@/components/common/icons';
 defineOptions({ inheritAttrs: false });
 defineProps<{ to: RouteLocationRaw; icon?: IconName; label?: string }>();
 </script>
-
-<style scoped>
-.navigation-button {
-    min-block-size: 2.75rem;
-    height: auto;
-    max-inline-size: 100%;
-    padding: 0.5rem 0.875rem;
-    font-size: 1rem;
-    text-decoration: none;
-}
-.navigation-button :deep(.n-button__content) {
-    gap: 0.5em;
-    white-space: normal;
-    overflow-wrap: anywhere;
-    min-inline-size: 0;
-}
-</style>

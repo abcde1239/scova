@@ -1,7 +1,12 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vite-plus/test';
 import { ReportValueSchema, parseContract, type ClaimAssessment } from '@scova/models';
-import { buildReportValue, readAssessment, taskQuestions } from '../src/report-value.ts';
+import {
+    buildReportValue,
+    readAssessment,
+    requiresFreshness,
+    taskQuestions,
+} from '../src/report-value.ts';
 import type { AgentClaim, AgentContext, AgentPage } from '../src/types.ts';
 
 const assessment: ClaimAssessment = {
@@ -52,6 +57,32 @@ const build = (claims: AgentClaim[], pages = [page]) =>
     );
 
 describe('question-first report selection', () => {
+    it('recognizes negated freshness without erasing a separate positive requirement', () => {
+        const docs = {
+            ...context,
+            comparisonScopeHash: 'real-worker-hash',
+            config: {
+                ...context.config,
+                researchMode: 'analysis' as const,
+                topic: '缓存机制',
+                goal: '依据当前官方文档，不要求最近发生的新变化。',
+                focusPoints: [],
+            },
+        };
+        expect(requiresFreshness(docs)).toBe(false);
+        expect(
+            requiresFreshness({
+                ...docs,
+                config: { ...docs.config, goal: '不要求最近变化，但价格必须截至本周。' },
+            }),
+        ).toBe(true);
+        expect(
+            requiresFreshness({
+                ...docs,
+                config: { ...docs.config, focusPoints: ['最近的安全更新'] },
+            }),
+        ).toBe(true);
+    });
     it('collection answers source content without certifying unknown publication dates', () => {
         const collected = {
             ...context,
@@ -124,6 +155,101 @@ describe('question-first report selection', () => {
         const value = build([claim({ kind: 'insufficient', citations: [] })]);
         expect(value.questions[0].status).toBe('unresolved');
         expect(value.selections[0].placement).toBe('reference');
+    });
+    it('keeps a citation-downgraded claim out of the answer even when some citations survive', () => {
+        const value = build([claim({ kind: 'insufficient', uncertainty: ['quote_unmatched'] })]);
+        expect(value.selections[0].placement).toBe('reference');
+        expect(value.questions[0].status).toBe('unresolved');
+    });
+    it('retains known applicability conditions without inventing a missing requirement', () => {
+        const value = build([claim({ assessment: { ...assessment, conditions: '仅境内申请人' } })]);
+        expect(value.questions[0].status).toBe('supported');
+        expect(value.selections[0].assessment?.conditions).toBe('仅境内申请人');
+    });
+    it('keeps a source-overlapping superseded answer as reference and recomputes question links', () => {
+        const original = claim();
+        const revised = claim({ kind: 'inference', text: '同一内容补充了适用条件。' });
+        const value = parseContract(
+            ReportValueSchema,
+            buildReportValue(
+                context,
+                taskQuestions(context),
+                [original, revised],
+                [page],
+                new Set([0]),
+            ),
+        );
+        expect(value.selections[0].placement).toBe('reference');
+        expect(value.selections[0].reason).toContain('后续综合版本');
+        expect(value.questions[0].claimIndexes).toEqual([1]);
+    });
+    it('does not require publication dates for stable documentation without requested freshness', () => {
+        const docs = {
+            ...context,
+            config: { ...context.config, goal: '解释HTTP缓存条件请求机制', focusPoints: [] },
+        };
+        const value = parseContract(
+            ReportValueSchema,
+            buildReportValue(
+                docs,
+                taskQuestions(docs),
+                [claim()],
+                [{ ...page, publication: undefined }],
+            ),
+        );
+        expect(value.timeless).toBe(true);
+        expect(value.questions[0].status).toBe('supported');
+        expect(value.selections[0].timeScope).toBe('unknown');
+    });
+    it.each(['analysis', 'collection'] as const)(
+        'does not confuse a real Worker comparison hash with requested freshness in %s mode',
+        (researchMode) => {
+            const docs = {
+                ...context,
+                comparisonScopeHash: 'worker-scope-hash-present-for-every-run',
+                config: {
+                    ...context.config,
+                    topic: 'HTTP缓存',
+                    goal: '解释条件请求机制',
+                    focusPoints: [],
+                    researchMode,
+                },
+            };
+            expect(requiresFreshness(docs)).toBe(false);
+            const value = parseContract(
+                ReportValueSchema,
+                buildReportValue(
+                    docs,
+                    taskQuestions(docs),
+                    [claim()],
+                    [{ ...page, publication: undefined }],
+                ),
+            );
+            expect(value.timeless).toBe(true);
+            expect(value.questions[0].status).toBe('supported');
+            expect(
+                requiresFreshness({
+                    ...docs,
+                    config: { ...docs.config, goal: '最新HTTP规范有哪些变化' },
+                }),
+            ).toBe(true);
+        },
+    );
+    it('preserves freshness checks for legacy monitoring contexts', () => {
+        const legacy = {
+            ...context,
+            comparisonScopeHash: 'legacy-monitor',
+            config: { ...context.config, topic: '规范变化', goal: '解释行为', focusPoints: [] },
+        };
+        expect(requiresFreshness(legacy)).toBe(true);
+        const value = buildReportValue(
+            legacy,
+            taskQuestions(legacy),
+            [claim()],
+            [{ ...page, publication: undefined }],
+        );
+        expect(value.timeless).toBeUndefined();
+        expect(value.questions[0].status).toBe('provisional');
     });
     it('keeps conflicts and conditions distinct while omitting exact repetitions', () => {
         const value = build([

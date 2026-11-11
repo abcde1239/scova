@@ -442,6 +442,7 @@ export const runs = pgTable(
         }),
         baselineRunId: uuid('baseline_run_id'),
         followupConfigJson: jsonb('followup_config_json').$type<JsonValue>(),
+        conversationContextJson: jsonb('conversation_context_json').$type<JsonValue>(),
         feedbackSnapshotJson: jsonb('feedback_snapshot_json')
             .$type<JsonValue>()
             .notNull()
@@ -1399,12 +1400,20 @@ export const reportQuestions = pgTable(
         question: text('question').notNull(),
         answerJson: jsonb('answer_json').$type<JsonValue>(),
         followupRunId: uuid('followup_run_id'),
+        revisionRunId: uuid('revision_run_id'),
+        contextJson: jsonb('context_json').$type<JsonValue>(),
         createdAt: timestamp('created_at', { withTimezone: true, precision: 6, mode: 'date' })
             .notNull()
             .defaultNow(),
     },
     (table): PgTableExtraConfigValue[] => [
         uniqueIndex('report_questions_user_id_id_key').on(table.userId, table.id),
+        index('report_questions_conversation_idx').on(
+            table.userId,
+            table.reportId,
+            table.createdAt,
+            table.id,
+        ),
         foreignKey({
             name: 'report_questions_user_id_fkey',
             columns: [table.userId],
@@ -1422,6 +1431,13 @@ export const reportQuestions = pgTable(
         foreignKey({
             name: 'report_questions_user_id_followup_run_id_fkey',
             columns: [table.userId, table.followupRunId],
+            foreignColumns: [runs.userId, runs.id],
+        })
+            .onDelete('no action')
+            .onUpdate('no action'),
+        foreignKey({
+            name: 'report_questions_user_id_revision_run_id_fkey',
+            columns: [table.userId, table.revisionRunId],
             foreignColumns: [runs.userId, runs.id],
         })
             .onDelete('no action')

@@ -1,6 +1,11 @@
 <template>
-    <div class="provider-balance" :aria-busy="query.isFetching.value">
-        <div class="balance-controls">
+    <div
+        class="provider-balance layout-grid gap-2 mt-[0.85rem] text-[0.875rem]"
+        :aria-busy="query.isFetching.value"
+    >
+        <div
+            class="balance-controls [&>:first-child]:([flex:0_1_18rem] min-w-0 max-w-full) flex flex-wrap items-center gap-2 min-w-0"
+        >
             <app-select
                 :model-value="template"
                 compact
@@ -24,12 +29,23 @@
                 }}
             </action-button>
         </div>
-        <p v-if="!queried" class="balance-hint">按需读取供应商余额；中转站请选择对应方式。</p>
-        <p v-else-if="query.isFetching.value" role="status">正在读取供应商额度…</p>
-        <p v-if="query.isError.value" role="status" class="balance-error">{{ errorMessage }}</p>
+        <p v-if="!queried" class="balance-hint break-anywhere text-muted m-0">
+            按需读取供应商余额；中转站请选择对应方式。
+        </p>
+        <p class="break-anywhere m-0" v-else-if="query.isFetching.value" role="status">
+            正在读取供应商额度…
+        </p>
+        <p
+            v-if="query.isError.value"
+            role="status"
+            class="balance-error break-anywhere text-danger m-0"
+        >
+            {{ errorMessage }}
+        </p>
         <template v-if="query.data.value">
-            <ul class="balance-values" aria-label="供应商额度">
+            <ul class="balance-values grid gap-[0.35rem] list-none m-0 p-0" aria-label="供应商额度">
                 <li
+                    class="[&.depleted]:text-danger [.balance-values_&:is(li)]:(flex flex-wrap gap-[0.25rem_0.65rem] break-anywhere)"
                     v-for="(item, index) in query.data.value.data.items"
                     :key="index"
                     :class="{ depleted: item.remaining !== undefined && item.remaining <= 0 }"
@@ -47,14 +63,14 @@
                     >
                 </li>
             </ul>
-            <p class="balance-hint">
+            <p class="balance-hint break-anywhere text-muted m-0">
                 {{ query.isError.value ? '上次成功查询' : '查询时间' }}：<time
                     :datetime="query.data.value.data.checkedAt"
                     >{{ checkedAt }}</time
                 >。Key 限额不代表账号余额；查询结果不保证后续执行可用。
             </p>
         </template>
-        <p v-if="template === 'new_api'" class="balance-hint">
+        <p v-if="template === 'new_api'" class="balance-hint break-anywhere text-muted m-0">
             New API 返回原始额度点，站点换算规则可能不同；Key 未设限额仍受账号余额约束。
         </p>
     </div>
@@ -133,49 +149,3 @@ function refresh() {
     void query.refetch();
 }
 </script>
-
-<style scoped>
-.provider-balance {
-    display: grid;
-    gap: 0.5rem;
-    min-inline-size: 0;
-    margin-block-start: 0.85rem;
-    font-size: 0.875rem;
-}
-.balance-controls {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.5rem;
-    min-inline-size: 0;
-}
-.balance-controls > :first-child {
-    flex: 0 1 18rem;
-    min-inline-size: 0;
-    max-inline-size: 100%;
-}
-p {
-    margin: 0;
-    overflow-wrap: anywhere;
-}
-.balance-hint {
-    color: var(--scova-muted);
-}
-.balance-error,
-.depleted {
-    color: var(--scova-danger);
-}
-.balance-values {
-    display: grid;
-    gap: 0.35rem;
-    list-style: none;
-    margin: 0;
-    padding: 0;
-}
-.balance-values li {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.25rem 0.65rem;
-    overflow-wrap: anywhere;
-}
-</style>

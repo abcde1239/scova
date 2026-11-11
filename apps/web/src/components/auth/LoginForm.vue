@@ -1,12 +1,12 @@
 <template>
     <form
-        class="login-form"
+        class="login-form layout-grid gap-6 w-full [&.login-form_.n-input]:(![--n-font-size:1rem] min-h-11 rounded-3) [&.login-form_input]:(min-w-0 text-[1rem] [cursor:text])"
         novalidate
         :aria-busy="login.pending.value ? 'true' : undefined"
         @submit.prevent="submit"
     >
-        <div class="field">
-            <label :for="`${id}-email`">邮箱</label>
+        <div class="field layout-grid gap-2">
+            <label class="font-medium cursor-default" :for="`${id}-email`">邮箱</label>
             <n-input
                 ref="emailInput"
                 placeholder=""
@@ -22,13 +22,17 @@
                     'aria-describedby': login.fields.value.email ? `${id}-email-error` : undefined,
                 }"
             />
-            <p v-if="login.fields.value.email" :id="`${id}-email-error`" class="field-error">
+            <p
+                v-if="login.fields.value.email"
+                :id="`${id}-email-error`"
+                class="field-error flex items-start gap-1.5 text-danger text-[0.8125rem] leading-[1.5] break-anywhere m-0 [&.field-error_.app-icon]:mt-[0.1875rem]"
+            >
                 <app-icon name="warning" />
                 {{ login.fields.value.email }}
             </p>
         </div>
-        <div class="field">
-            <label :for="`${id}-password`">密码</label>
+        <div class="field layout-grid gap-2">
+            <label class="font-medium cursor-default" :for="`${id}-password`">密码</label>
             <n-input
                 ref="passwordInput"
                 placeholder=""
@@ -46,7 +50,11 @@
                         : undefined,
                 }"
             />
-            <p v-if="login.fields.value.password" :id="`${id}-password-error`" class="field-error">
+            <p
+                v-if="login.fields.value.password"
+                :id="`${id}-password-error`"
+                class="field-error flex items-start gap-1.5 text-danger text-[0.8125rem] leading-[1.5] break-anywhere m-0 [&.field-error_.app-icon]:mt-[0.1875rem]"
+            >
                 <app-icon name="warning" />
                 {{ login.fields.value.password }}
             </p>
@@ -56,7 +64,7 @@
             ref="errorMessage"
             role="alert"
             tabindex="-1"
-            class="form-error"
+            class="form-error rounded-3 text-danger [background:color-mix(in_srgb,_var(--scova-danger)_7%,_var(--scova-surface))] text-[0.875rem] break-anywhere m-0 py-3 px-3.5 keyboard-focus-wide"
         >
             {{ login.message.value }}
         </p>
@@ -99,57 +107,3 @@ onUnmounted(() => {
     login.dispose();
 });
 </script>
-
-<style scoped>
-.login-form {
-    display: grid;
-    gap: 1.5rem;
-    inline-size: 100%;
-    min-inline-size: 0;
-}
-.field {
-    display: grid;
-    gap: 0.5rem;
-    min-inline-size: 0;
-}
-label {
-    font-weight: 500;
-    cursor: default;
-}
-.login-form :deep(.n-input) {
-    --n-font-size: 1rem !important;
-    min-block-size: 2.75rem;
-    border-radius: 0.75rem;
-}
-.login-form :deep(input) {
-    min-inline-size: 0;
-    font-size: 1rem;
-    cursor: text;
-}
-.field-error {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.375rem;
-    margin: 0;
-    color: var(--scova-danger);
-    font-size: 0.8125rem;
-    line-height: 1.5;
-    overflow-wrap: anywhere;
-}
-.field-error :deep(.app-icon) {
-    margin-block-start: 0.1875rem;
-}
-.form-error {
-    margin: 0;
-    padding: 0.75rem 0.875rem;
-    border-radius: 0.75rem;
-    color: var(--scova-danger);
-    background: color-mix(in srgb, var(--scova-danger) 7%, var(--scova-surface));
-    font-size: 0.875rem;
-    overflow-wrap: anywhere;
-}
-.form-error:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
-}
-</style>

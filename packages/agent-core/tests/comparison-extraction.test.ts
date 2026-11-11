@@ -6,8 +6,12 @@ import {
     comparisonFromExtractions,
     comparisonOperation,
     comparisonRepairPages,
+    comparisonSourceCoverage,
+    comparisonReceipt,
+    comparisonReceiptMatchesOutput,
 } from '../src/comparison-extraction.ts';
 import type { AgentContext, AgentPage, ComparisonExtraction } from '../src/types.ts';
+import type { StructuredInput } from '@scova/connectors';
 
 function fixture() {
     const context = { runId: 'run', mode: 'live', comparisonScopeHash: 'scope' } as AgentContext;
@@ -52,6 +56,93 @@ function fixture() {
 }
 
 describe('partial comparison extraction', () => {
+    it('reconstructs legacy prefix coverage at 32k without rejecting already persisted receipts', () => {
+        const { context, pages, fact, receipt } = fixture();
+        const primary = receipt(0, [{ pageId: 'read-0', facts: [fact()] }]);
+        const source = { ...pages[0]!, text: pages[0]!.text.padEnd(32_000, ' ') };
+        expect(comparisonFromExtractions(context, [source], [primary]).gaps).toEqual([]);
+        source.text += 'tail';
+        expect(comparisonFromExtractions(context, [source], [primary]).gaps.join(' ')).toContain(
+            '旧比较记录缺少完整输入覆盖证明',
+        );
+        expect(comparisonReceiptMatchesOutput(primary, primary.response)).toBe(true);
+    });
+
+    it('reconstructs clipped coverage from receipts and accepts proven full long-page input', () => {
+        const { context, pages, fact, receipt } = fixture();
+        const primary = receipt(0, [{ pageId: 'read-0', facts: [fact()] }]);
+        const source = { ...pages[0]!, text: pages[0]!.text.padEnd(50_000, ' ') };
+        primary.sourceCoverage = { version: 1, pages: [{ pageId: source.id, clipped: false }] };
+        expect(comparisonFromExtractions(context, [source], [primary]).gaps).toEqual([]);
+        primary.sourceCoverage.pages[0]!.clipped = true;
+        expect(comparisonFromExtractions(context, [source], [primary]).gaps.join(' ')).toContain(
+            '比较输入受预算限制',
+        );
+    });
+
+    it('derives input coverage and preserves legacy replay without assigning new input coverage to old results', () => {
+        const { receipt } = fixture();
+        const response = receipt(0, []).response;
+        const input = {
+            untrustedSources: [
+                { pageId: 'read-0', text: 'full' },
+                { pageId: 'read-1', excerpts: ['head', 'tail'] },
+            ],
+        } as StructuredInput;
+        const coverage = comparisonSourceCoverage(input);
+        expect(coverage).toEqual({
+            version: 1,
+            pages: [
+                { pageId: 'read-0', clipped: false },
+                { pageId: 'read-1', clipped: true },
+            ],
+        });
+        expect(comparisonReceipt('compare-facts-v1', response, input).sourceCoverage).toEqual(
+            coverage,
+        );
+        const legacy = comparisonReceipt(
+            'compare-facts-v1',
+            { ...response, sourceCoverage: null },
+            input,
+        );
+        expect(legacy).toEqual({ operationKey: 'compare-facts-v1', response });
+        expect(comparisonReceiptMatchesOutput(legacy, response)).toBe(true);
+    });
+
+    it('authenticates coverage against immutable Worker model output including tampering and stripped metadata', () => {
+        const { receipt } = fixture();
+        const primary = receipt(0, []);
+        const coverage = { version: 1 as const, pages: [{ pageId: 'read-0', clipped: true }] };
+        const output = { ...primary.response, sourceCoverage: structuredClone(coverage) };
+        primary.sourceCoverage = structuredClone(coverage);
+        expect(comparisonReceiptMatchesOutput(primary, output)).toBe(true);
+        primary.sourceCoverage.pages[0]!.clipped = false;
+        expect(comparisonReceiptMatchesOutput(primary, output)).toBe(false);
+        delete primary.sourceCoverage;
+        expect(comparisonReceiptMatchesOutput(primary, output)).toBe(false);
+        primary.sourceCoverage = coverage;
+        expect(comparisonReceiptMatchesOutput(primary, primary.response)).toBe(false);
+    });
+
+    it.each(['foreign-page', 'duplicate-page', 'version', 'clipped-type'] as const)(
+        'rejects %s coverage metadata',
+        (kind) => {
+            const { context, pages, fact, receipt } = fixture();
+            const primary = receipt(0, [{ pageId: 'read-0', facts: [fact()] }]);
+            const coverage = { version: 1, pages: [{ pageId: 'read-0', clipped: false }] };
+            if (kind === 'foreign-page') coverage.pages[0]!.pageId = 'read-99';
+            if (kind === 'duplicate-page') coverage.pages.push({ ...coverage.pages[0]! });
+            if (kind === 'version') coverage.version = 99;
+            if (kind === 'clipped-type')
+                (coverage.pages[0] as unknown as Record<string, unknown>).clipped = 'false';
+            primary.sourceCoverage = coverage as NonNullable<
+                ComparisonExtraction['sourceCoverage']
+            >;
+            expect(() =>
+                comparisonFromExtractions(context, pages.slice(0, 1), [primary]),
+            ).toThrow();
+        },
+    );
     it('assigns ten-page output by batch size while keeping the old worst-case reservation', () => {
         const limits = comparisonOutputLimits(10, 16000);
         expect(limits).toEqual([

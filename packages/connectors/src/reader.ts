@@ -2,17 +2,21 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { normalizeUrl, positiveLimit, withDeadline } from './http.ts';
 import { createReaderHttpClient } from './reader-http.ts';
 import type { SafeHttpClient } from './http.ts';
-import { ConnectorError } from './types.ts';
+import { ConnectorError, PAGE_TEXT_CHAR_LIMIT } from './types.ts';
 import type { PageReader } from './types.ts';
 
-import { extractPage } from './page-extraction.ts';
+import { extractPageIsolated } from './page-extraction-process.ts';
 export { EXTRACTION_VERSION, pageFingerprint } from './page-extraction.ts';
 
 export function createHttpPageReader(
     options: { http?: SafeHttpClient; maxTextChars?: number } = {},
 ): PageReader {
     const http = options.http ?? createReaderHttpClient();
-    const maxText = positiveLimit(options.maxTextChars ?? 100_000, 200_000, '正文长度');
+    const maxText = positiveLimit(
+        options.maxTextChars ?? PAGE_TEXT_CHAR_LIMIT,
+        PAGE_TEXT_CHAR_LIMIT,
+        '正文长度',
+    );
     const origins = new Map<string, Promise<void>>();
     return {
         read(originalUrl, context = {}) {
@@ -66,7 +70,9 @@ export function createHttpPageReader(
                         await delay(200, undefined, { signal });
                         response = await request(error);
                     }
-                    return extractPage(originalUrl, response, maxText);
+                    return extractPageIsolated(originalUrl, response, maxText, undefined, false, {
+                        signal,
+                    });
                 },
             );
             return result.finally(() => {

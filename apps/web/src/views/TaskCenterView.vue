@@ -1,9 +1,15 @@
 <template>
-    <div class="task-center">
+    <div
+        class="task-center layout-stack [justify-items:stretch] cursor-default [&.task-center_>_.scova-action-button]:justify-self-start [&.task-center_>_.run-actions]:(pt-8 pb-0 [border-top:0.0625rem_solid_var(--scova-border)] rounded-0 bg-transparent px-0) [&.task-center_>_.task-lifecycle]:(pt-8 pb-0 [border-top:0.0625rem_solid_var(--scova-border)] rounded-0 bg-transparent px-0)"
+    >
         <template v-if="!taskId">
-            <div class="task-toolbar">
+            <div
+                class="task-toolbar flex flex-wrap items-center justify-between gap-[0.75rem_1.5rem] [@media(max-width:_47.999rem)]:(flex-col items-start)"
+            >
                 <task-filters :value="filter" @change="changeFilter" />
-                <div class="task-toolbar-actions">
+                <div
+                    class="task-toolbar-actions flex flex-wrap items-center justify-start gap-2 min-w-0"
+                >
                     <action-button
                         quaternary
                         :busy="query.isFetching.value"
@@ -12,7 +18,7 @@
                         <app-icon name="retry" />刷新
                     </action-button>
                     <navigation-button
-                        class="back-link"
+                        class="back-link keyboard-focus-wide [&&]:(inline-flex items-center min-h-11 justify-self-start text-primary cursor-pointer underline-offset-[0.2em])"
                         icon="create"
                         :to="{ name: 'task-create' }"
                     >
@@ -20,7 +26,9 @@
                     </navigation-button>
                 </div>
             </div>
-            <p class="scope-note">筛选已加载任务 · 时间按 {{ timezone }} 显示</p>
+            <p class="scope-note text-muted text-[0.875rem] m-0">
+                筛选已加载任务 · 时间按 {{ timezone }} 显示
+            </p>
             <state-panel v-if="query.isPending.value" state="loading" />
             <state-panel
                 v-else-if="query.isError.value && !query.data.value"
@@ -73,7 +81,7 @@
         </template>
         <template v-else>
             <navigation-button
-                class="back-link"
+                class="back-link keyboard-focus-wide [&&]:(inline-flex items-center min-h-11 justify-self-start text-primary cursor-pointer underline-offset-[0.2em])"
                 icon="back"
                 :to="{ name: 'tasks', query: { status: filter } }"
                 >返回任务</navigation-button
@@ -95,13 +103,13 @@
                     @retry="detail.refetch()"
                 />
                 <navigation-button
-                    class="back-link"
+                    class="back-link keyboard-focus-wide [&&]:(inline-flex items-center min-h-11 justify-self-start text-primary cursor-pointer underline-offset-[0.2em])"
                     icon="edit"
                     :to="{ name: 'task-edit', params: { taskId } }"
                     >编辑任务配置</navigation-button
                 >
-                <p class="scope-note">时间按 {{ timezone }} 显示</p>
-                <p class="scope-note">
+                <p class="scope-note text-muted text-[0.875rem] m-0">时间按 {{ timezone }} 显示</p>
+                <p class="scope-note text-muted text-[0.875rem] m-0">
                     任务启用表示允许后续计划；本次是否正在运行请查看执行历史。手动任务完成后仍会保持启用。
                 </p>
                 <task-card
@@ -110,13 +118,19 @@
                     :timezone="timezone"
                     :link="false"
                 />
-                <dl class="task-summary">
-                    <dt>查阅主题</dt>
-                    <dd>{{ detail.data.value.data.version.config.topic }}</dd>
-                    <dt>目标</dt>
-                    <dd>{{ detail.data.value.data.version.config.goal }}</dd>
-                    <dt>任务计划时区</dt>
-                    <dd>{{ detail.data.value.data.version.config.timezone }}</dd>
+                <dl class="task-summary grid gap-3 break-anywhere m-0">
+                    <dt class="[.task-summary_&:is(dt)]:text-muted">查阅主题</dt>
+                    <dd class="[.task-summary_&:is(dd)]:(mt-0 mb-4 mx-0)">
+                        {{ detail.data.value.data.version.config.topic }}
+                    </dd>
+                    <dt class="[.task-summary_&:is(dt)]:text-muted">目标</dt>
+                    <dd class="[.task-summary_&:is(dd)]:(mt-0 mb-4 mx-0)">
+                        {{ detail.data.value.data.version.config.goal }}
+                    </dd>
+                    <dt class="[.task-summary_&:is(dt)]:text-muted">任务计划时区</dt>
+                    <dd class="[.task-summary_&:is(dd)]:(mt-0 mb-4 mx-0)">
+                        {{ detail.data.value.data.version.config.timezone }}
+                    </dd>
                 </dl>
                 <task-run-history :task-id="detail.data.value.data.task.id" />
                 <run-actions
@@ -178,75 +192,3 @@ function changeFilter(value: TaskFilter) {
     void router.push({ name: 'tasks', query: { status: value } });
 }
 </script>
-
-<style scoped>
-.task-center {
-    display: grid;
-    justify-items: stretch;
-    gap: 1rem;
-    min-inline-size: 0;
-    cursor: default;
-}
-.scope-note {
-    color: var(--scova-muted);
-    margin: 0;
-    font-size: 0.875rem;
-}
-.task-toolbar {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem 1.5rem;
-}
-.task-toolbar-actions {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 0.5rem;
-    min-inline-size: 0;
-}
-@media (max-width: 47.999rem) {
-    .task-toolbar {
-        flex-direction: column;
-        align-items: flex-start;
-    }
-}
-.task-center > :deep(.scova-action-button) {
-    justify-self: start;
-}
-.back-link {
-    display: inline-flex;
-    align-items: center;
-    min-block-size: 2.75rem;
-    justify-self: start;
-    color: var(--scova-primary);
-    cursor: pointer;
-    text-underline-offset: 0.2em;
-}
-.back-link:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
-}
-.task-summary {
-    margin: 0;
-    display: grid;
-    gap: 0.75rem;
-    overflow-wrap: anywhere;
-}
-.task-summary dt {
-    color: var(--scova-muted);
-}
-.task-summary dd {
-    margin: 0 0 1rem;
-}
-.task-center > :deep(.run-actions),
-.task-center > :deep(.task-lifecycle) {
-    padding-inline: 0;
-    padding-block: 2rem 0;
-    border-block-start: 0.0625rem solid var(--scova-border);
-    border-radius: 0;
-    background: transparent;
-}
-</style>

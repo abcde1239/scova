@@ -5,6 +5,8 @@ import { normalizeUrl, withDeadline, type HttpOptions } from './http.ts';
 import { createReaderHttpClient } from './reader-http.ts';
 import { ConnectorError, type CallContext, type PageReader, type ReadPage } from './types.ts';
 import type { BrowserReaderOptions } from './browser-reader.ts';
+import { privateJsonLine } from './private-json.ts';
+import { readDiagnostics, isReadDiagnostic } from './read-diagnostics.ts';
 
 interface WireError {
     code: ConnectorError['code'];
@@ -13,7 +15,15 @@ interface WireError {
     status?: number;
 }
 interface HostMessage {
-    type: 'ready' | 'result' | 'error' | 'http' | 'beforeAttempt' | 'beforeDispatch';
+    type:
+        | 'ready'
+        | 'result'
+        | 'error'
+        | 'http'
+        | 'abortHttp'
+        | 'beforeAttempt'
+        | 'beforeDispatch'
+        | 'diagnostic';
     id: number;
     readId: number;
     url: string;
@@ -21,6 +31,7 @@ interface HostMessage {
     previousFailure?: WireError;
     result: ReadPage;
     error: WireError;
+    diagnostic?: unknown;
 }
 const hostFailure = () =>
     new ConnectorError('extraction_failed', 'Node 网页读取进程不可用，请检查 Node 和 Vite+ 安装');
@@ -51,6 +62,7 @@ export function createDelegatedReader(options: BrowserReaderOptions): PageReader
         }
     >();
     const inFlight = new Set<Promise<void>>();
+    const httpCalls = new Map<number, { readId: number; controller: AbortController }>();
     let host: ChildProcessWithoutNullStreams | undefined;
     let ready: Promise<void> | undefined;
     let ended: Promise<void> = Promise.resolve();
@@ -59,9 +71,17 @@ export function createDelegatedReader(options: BrowserReaderOptions): PageReader
     let closing: Promise<void> | undefined;
     let sequence = 0;
 
+    function abortHttp(readId?: number) {
+        for (const [id, request] of httpCalls) {
+            if (readId !== undefined && request.readId !== readId) continue;
+            request.controller.abort();
+            httpCalls.delete(id);
+        }
+    }
+
     function send(message: object) {
         if (!host?.stdin.writable || failed) return;
-        host.stdin.write(`${JSON.stringify(message)}\n`, () => undefined);
+        host.stdin.write(privateJsonLine(message), () => undefined);
     }
     function start(): Promise<void> {
         return (ready ??= new Promise<void>((resolve, reject) => {
@@ -85,6 +105,7 @@ export function createDelegatedReader(options: BrowserReaderOptions): PageReader
             );
             const fail = () => {
                 failed ??= hostFailure();
+                abortHttp();
                 reject(failed);
                 for (const call of calls.values()) call.reject(failed);
                 calls.clear();
@@ -115,13 +136,29 @@ export function createDelegatedReader(options: BrowserReaderOptions): PageReader
                     resolve();
                     return;
                 }
+                if (message.type === 'diagnostic') {
+                    const call = calls.get(message.readId);
+                    if (call && isReadDiagnostic(message.diagnostic))
+                        call.context.onReadDiagnostic?.(message.diagnostic);
+                    return;
+                }
+                if (message.type === 'abortHttp') {
+                    const request = httpCalls.get(message.id);
+                    if (request?.readId === message.readId) {
+                        request.controller.abort();
+                        httpCalls.delete(message.id);
+                    }
+                    return;
+                }
                 if (message.type === 'result' || message.type === 'error') {
+                    abortHttp(message.id);
                     const call = calls.get(message.id);
                     calls.delete(message.id);
                     if (message.type === 'result') call?.resolve(message.result);
                     else call?.reject(unpack(message.error));
                     return;
                 }
+                let httpController: AbortController | undefined;
                 const answer = (async () => {
                     try {
                         const call = calls.get(message.readId);
@@ -129,9 +166,15 @@ export function createDelegatedReader(options: BrowserReaderOptions): PageReader
                             throw new ConnectorError('aborted', '网页读取已停止');
                         let response;
                         if (message.type === 'http') {
+                            httpController = new AbortController();
+                            httpCalls.set(message.id, {
+                                readId: message.readId,
+                                controller: httpController,
+                            });
                             response = await http.request(message.url, {
                                 ...message.options,
-                                signal: call.signal,
+                                onReadDiagnostic: call.context.onReadDiagnostic,
+                                signal: AbortSignal.any([call.signal, httpController.signal]),
                             });
                         } else if (message.type === 'beforeAttempt') {
                             await call.context.beforeAttempt?.(
@@ -154,6 +197,9 @@ export function createDelegatedReader(options: BrowserReaderOptions): PageReader
                             send({ type: 'abort', id: message.readId });
                         }
                         send({ type: 'response', id: message.id, ok: false, error: pack(error) });
+                    } finally {
+                        if (httpCalls.get(message.id)?.controller === httpController)
+                            httpCalls.delete(message.id);
                     }
                 })();
                 inFlight.add(answer);
@@ -176,6 +222,12 @@ export function createDelegatedReader(options: BrowserReaderOptions): PageReader
             const id = ++sequence;
             const started = Date.now();
             const timeout = Math.min(context.timeoutMs ?? 15_000, 15_000);
+            const diagnosticsEnabled = !!context.onReadDiagnostic;
+            const diagnostics = readDiagnostics(context.onReadDiagnostic, timeout);
+            context = {
+                ...context,
+                onReadDiagnostic: diagnosticsEnabled ? diagnostics.relay : undefined,
+            };
             return withDeadline(
                 timeout,
                 context.signal
@@ -183,13 +235,14 @@ export function createDelegatedReader(options: BrowserReaderOptions): PageReader
                     : controller.signal,
                 async (signal) => {
                     const abort = () => {
+                        abortHttp(id);
                         send({ type: 'abort', id });
                         calls.get(id)?.reject(new ConnectorError('aborted', '网页读取已停止'));
                         calls.delete(id);
                     };
                     signal.addEventListener('abort', abort, { once: true });
                     try {
-                        await start();
+                        await diagnostics.stage('host', start);
                         if (signal.aborted) throw new ConnectorError('aborted', '网页读取已停止');
                         if (failed) throw failed;
                         return await new Promise<ReadPage>((resolve, reject) => {
@@ -203,6 +256,7 @@ export function createDelegatedReader(options: BrowserReaderOptions): PageReader
                                 type: 'read',
                                 id,
                                 originalUrl,
+                                diagnosticsEnabled,
                                 timeoutMs: Math.max(1, timeout - (Date.now() - started)),
                             });
                         });
@@ -219,6 +273,7 @@ export function createDelegatedReader(options: BrowserReaderOptions): PageReader
         close() {
             return (closing ??= (async () => {
                 closed = true;
+                abortHttp();
                 for (const controller of controllers) controller.abort();
                 if (!host) return;
                 send({ type: 'close' });

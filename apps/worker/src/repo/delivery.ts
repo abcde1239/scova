@@ -1,5 +1,5 @@
 import { requiredDatabaseValue } from '@/utils/database.ts';
-import { reportSummary } from '@/utils/report-summary.ts';
+import { primaryArtifactSummary } from '@/utils/report-summary.ts';
 import {
     type DatabaseClient,
     type Run,
@@ -29,6 +29,7 @@ import {
     candidateFromCheckpoint,
     deterministicPartial,
     manifestFromModel,
+    comparisonReceiptMatchesOutput,
     type AgentCandidate,
     type AgentContext,
     type ComparisonExtraction,
@@ -40,6 +41,7 @@ import {
     TaskConfigSchema,
     UsageSchema,
     parseContract,
+    ReportConversationContextSchema,
     readFeedbackSnapshot,
 } from '@scova/models';
 import { validatePublication, type ReadPage, type SearchResponse } from '@scova/connectors';
@@ -66,6 +68,14 @@ function output(call: ToolCall): unknown {
 }
 function contextFor(run: Run, config: AgentContext['config']): AgentContext {
     return {
+        ...(run.conversationContextJson
+            ? {
+                  conversation: parseContract(
+                      ReportConversationContextSchema,
+                      run.conversationContextJson,
+                  ),
+              }
+            : {}),
         runId: run.id,
         userId: run.userId,
         taskVersionId: run.taskVersionId,
@@ -186,6 +196,38 @@ export function createDeliveryRepository(db: DatabaseClient) {
                         if (!isDeepStrictEqual(supplied, candidate)) invalid();
                         if (!candidate.pages.length || !candidate.claims.length)
                             throw new RunExecutionError('NO_EVIDENCE');
+                        // Object/field coverage is founded on the frozen model plan, not a
+                        // caller-editable checkpoint projection. Removing its policy marker
+                        // must not hide a committed structured plan either.
+                        const research = proof.research as {
+                            artifactPolicy?: number;
+                            planningExtraction?: ComparisonExtraction;
+                        };
+                        const planning = research?.planningExtraction;
+                        const committedStructuredPlan = successful.some((call) => {
+                            if (call.tool !== 'model' || !/^plan-[01]:/.test(call.operationKey))
+                                return false;
+                            const response = output(call) as { data?: { requirements?: unknown } };
+                            return Array.isArray(response.data?.requirements);
+                        });
+                        if (committedStructuredPlan && !planning) invalid();
+                        if (research?.artifactPolicy !== undefined && research.artifactPolicy !== 1)
+                            invalid();
+                        // Demo, saved-evidence revision and failed planning use explicit
+                        // unknown coverage. They have no successful planning receipt to authenticate.
+                        if (planning) {
+                            if (
+                                research?.artifactPolicy !== 1 ||
+                                !/^plan-[01]$/.test(planning.operationKey) ||
+                                !successful.some(
+                                    (call) =>
+                                        call.tool === 'model' &&
+                                        call.operationKey.startsWith(`${planning.operationKey}:`) &&
+                                        isDeepStrictEqual(output(call), planning.response),
+                                )
+                            )
+                                invalid();
+                        }
                         // Quality assessments are accepted only with this Run's immutable model receipt.
                         for (const receipt of (
                             proof.research as { synthesisExtractions?: ComparisonExtraction[] }
@@ -226,14 +268,19 @@ export function createDeliveryRepository(db: DatabaseClient) {
                             )?.comparisonExtractions;
                             if (extractions) {
                                 for (const receipt of extractions) {
-                                    const extraction = successful.find(
-                                        (call) =>
-                                            call.tool === 'model' &&
-                                            call.operationKey.startsWith(
+                                    const extraction = successful.find((call) => {
+                                        if (
+                                            call.tool !== 'model' ||
+                                            !call.operationKey.startsWith(
                                                 `${receipt.operationKey}:`,
-                                            ) &&
-                                            isDeepStrictEqual(output(call), receipt.response),
-                                    );
+                                            )
+                                        )
+                                            return false;
+                                        return comparisonReceiptMatchesOutput(
+                                            receipt,
+                                            output(call),
+                                        );
+                                    });
                                     if (!extraction) invalid();
                                 }
                                 // candidateFromCheckpoint has already rebuilt all pages, valid facts,
@@ -266,6 +313,8 @@ export function createDeliveryRepository(db: DatabaseClient) {
                         // These checks are independent of a model/caller's completeness flag.
                         if (candidate.pages.some((page) => page.truncated))
                             gaps.push('存在已截断正文，无法保证完整查阅');
+                        if (candidate.pages.some((page) => page.collection?.complete === false))
+                            gaps.push('部分网页渲染或资源加载受限，无法保证完整查阅');
                         const unresolvedCalls = calls.filter(
                             (call) =>
                                 call.status !== 'succeeded' &&
@@ -346,6 +395,7 @@ export function createDeliveryRepository(db: DatabaseClient) {
                             delivery: classifyReportDelivery(
                                 candidate.coverage.reportValue,
                                 candidate.claims,
+                                candidate.coverage.artifacts,
                             ),
                             ...(notes.length ? { notes: [...new Set(notes)] } : {}),
                             gaps: [...new Set(gaps)],
@@ -412,6 +462,9 @@ export function createDeliveryRepository(db: DatabaseClient) {
                                         fetchedUrl: page.fetchedUrl,
                                         collectedAt: page.collectedAt,
                                         truncated: page.truncated,
+                                        ...(page.collection
+                                            ? { collection: { ...page.collection } }
+                                            : {}),
                                         untrusted: true,
                                     },
                                 })
@@ -461,6 +514,9 @@ export function createDeliveryRepository(db: DatabaseClient) {
                                     fetchStatus: 'succeeded',
                                     metadataJson: {
                                         truncated: page.truncated,
+                                        ...(page.collection
+                                            ? { collection: { ...page.collection } }
+                                            : {}),
                                         collectedAt: page.collectedAt,
                                         mode: page.mode,
                                         publication: page.publication
@@ -563,11 +619,13 @@ export function createDeliveryRepository(db: DatabaseClient) {
                                 taskVersionId: run.taskVersionId,
                                 baselineRunId: run.baselineRunId,
                                 title: candidate.title,
-                                summary: reportSummary(
+                                summary: primaryArtifactSummary(
                                     candidate.claims,
-                                    candidate.coverage.reportValue,
+                                    candidate.coverage,
                                 ),
-                                format: config.outputFormat,
+                                format:
+                                    candidate.coverage.artifacts?.[0]?.format ??
+                                    config.outputFormat,
                                 completeness: candidate.coverage.completeness,
                                 limitationsJson: candidate.coverage.gaps,
                                 feedbackEffectsJson: candidate.feedbackEffects ?? [],

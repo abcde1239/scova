@@ -70,8 +70,12 @@ async function claims(page: Page) {
                 evidenceIds: [...element.querySelectorAll('.citation')].map(
                     (citation) => citation.id.split('-evidence-')[1],
                 ),
-                quotes: [...element.querySelectorAll('blockquote')].map(
-                    (quote) => quote.textContent,
+                quotes: [...element.querySelectorAll('.citation')].map(
+                    (link) =>
+                        document
+                            .getElementById(link.getAttribute('href')!.slice(1))!
+                            .closest('.source-quote')!
+                            .querySelector('blockquote')!.textContent,
                 ),
             })),
         );
@@ -194,11 +198,11 @@ test('real SFC: complete claims and ordered old/new citation union survive Brief
                                 elements.map((element) => element.id.split(/-(?:old|new)-/)[1]),
                             ),
                     ).toEqual(ids);
-                    expect(await cell.locator('blockquote').allTextContents()).toEqual(
-                        ids.map(
-                            (id) => report.evidence.find((evidence) => evidence.id === id)!.quote,
-                        ),
-                    );
+                    expect(
+                        await cell
+                            .locator('.evidence-link')
+                            .evaluateAll((links) => links.map((link) => link.getAttribute('href'))),
+                    ).toEqual(ids.map((id) => `#evidence-${id}`));
                     expect(await cell.locator('.original-text').textContent()).toBe(
                         side === 'old'
                             ? (change.oldValue ?? '未提供旧值')
@@ -345,8 +349,8 @@ test('real SFC: raw HTML/Markdown/whitespace stay inert in values, reasons and s
     const changed = row(page, entry.id);
     expect(await changed.getByRole('rowheader').textContent()).toBe(raw);
     expect(await changed.locator('td .original-text').allTextContents()).toEqual([raw, raw, raw]);
-    const citation = changed.locator('.old-side .table-citation').first();
-    await citation.locator('summary').press('Enter');
+    await changed.locator('.old-side .evidence-link').first().press('Enter');
+    const citation = page.locator(`#evidence-${report.evidence[0]!.id}`);
     expect(await citation.locator('blockquote').textContent()).toBe(raw);
     await expect(article(page).locator('script,img,iframe')).toHaveCount(0);
     await expect(changed.locator('strong')).toHaveCount(0);
@@ -362,23 +366,31 @@ test('real SFC: each old/new citation opens by keyboard and Tab reaches its safe
     for (const change of report.changes)
         for (const side of ['old', 'new'] as const) {
             for (const id of side === 'old' ? change.oldEvidenceIds : change.newEvidenceIds) {
-                const citation = page.locator(`#comparison-${change.id}-${side}-${id}`);
-                const summary = citation.locator('summary');
-                await summary.focus();
-                await summary.press('Enter');
+                const reference = page.locator(
+                    `#comparison-${change.id}-${side}-${id} .evidence-link`,
+                );
+                await reference.focus();
+                expect(
+                    await reference.evaluate((element) => getComputedStyle(element).outlineStyle),
+                ).not.toBe('none');
+                await reference.press('Enter');
+                const citation = page.locator(`#evidence-${id}`);
+                const group = citation.locator(
+                    'xpath=ancestor::details[contains(@class,"evidence-source-group")]',
+                );
+                const summary = group.locator(':scope > summary');
                 await expect(citation.locator('blockquote')).toBeVisible();
                 const evidence = report.evidence.find((entry) => entry.id === id)!;
                 expect(await citation.locator('blockquote').textContent()).toBe(evidence.quote);
+                await citation.locator('.citation-metadata > summary').click();
                 await expect(citation).toContainText(evidence.location);
                 await expect(citation.locator('time')).toHaveAttribute(
                     'datetime',
                     evidence.observedAt,
                 );
                 const link = citation.getByRole('link', { name: '打开原始来源（新窗口）' });
-                expect(
-                    await summary.evaluate((element) => getComputedStyle(element).outlineStyle),
-                ).not.toBe('none');
-                await summary.press('Tab');
+                await citation.focus();
+                await citation.press('Tab');
                 await expect(link).toBeFocused();
                 await expect(link).toHaveAttribute('href', evidence.url);
                 await expect(link).toHaveAttribute('target', '_blank');
@@ -477,7 +489,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         const changed = report.changes.find((change) => change.kind === 'changed')!;
         const changedRow = row(page, changed.id);
         for (const side of ['old', 'new'])
-            await changedRow.locator(`.${side}-side summary`).first().press('Enter');
+            await changedRow.locator(`.${side}-side .evidence-link`).first().press('Enter');
         await article(page).locator('.claim summary').first().press('Enter');
         await page.evaluate(() => document.fonts.ready);
         for (const scheme of ['light', 'dark']) {
@@ -507,20 +519,24 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
                     await overflowSemantics(page);
                     await quoteWidths(page);
                     const fonts = await table(page)
-                        .locator('th,td,.table-citation summary,.table-citation blockquote')
+                        .locator('th,td,.table-citation .evidence-link')
                         .evaluateAll((elements) =>
                             elements.map((element) => getComputedStyle(element).fontFamily),
                         );
                     expect(fonts.every((font) => font.includes('Inter'))).toBe(true);
                     const controls = await changedRow
-                        .locator('details[open] summary,details[open] a')
+                        .locator('.evidence-link')
                         .evaluateAll((elements) =>
                             elements.map((element) => element.getBoundingClientRect().height),
                         );
+                    expect(controls.length).toBeGreaterThan(0);
                     expect(controls.every((height) => height >= (enlarged ? 88 : 44) - 1)).toBe(
                         true,
                     );
-                    await changedRow.locator('.old-side summary').first().scrollIntoViewIfNeeded();
+                    await changedRow
+                        .locator('.old-side .evidence-link')
+                        .first()
+                        .scrollIntoViewIfNeeded();
                     await page.screenshot({
                         path: info.outputPath(
                             `comparison-${width}-${scheme}-${family}${enlarged ? '-text200' : ''}.png`,

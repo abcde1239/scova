@@ -12,7 +12,7 @@ import {
 
 test.use({ actionTimeout: 15_000, navigationTimeout: 30_000 });
 
-test('完整工作台：反馈后的重要变化、收藏笔记真实冲突、中文隔离检索、四形式及显式关联研究', async ({
+test('完整工作台：反馈后的重要变化、收藏笔记真实冲突、中文隔离检索、保存成果及显式关联研究', async ({
     environment,
 }, info) => {
     const owner = await environment.owner();
@@ -143,8 +143,23 @@ test('完整工作台：反馈后的重要变化、收藏笔记真实冲突、�
             writes.push(new URL(request.url()).pathname);
     };
     page.on('request', onRequest);
-    for (const format of ['brief', 'list', 'comparison', 'research_report']) {
-        await page.getByLabel('报告形式', { exact: true }).selectOption(format);
+    await expect(page.getByLabel('报告形式', { exact: true })).toHaveCount(0);
+    for (const format of second.report.coverage.artifacts?.map((artifact) => artifact.format) ?? [
+        second.report.format,
+    ]) {
+        if ((second.report.coverage.artifacts?.length ?? 0) > 1)
+            await page
+                .getByRole('navigation', { name: '已生成成果', exact: true })
+                .getByRole('button', {
+                    name: {
+                        brief: '简报',
+                        list: '主题清单',
+                        comparison: '对比表',
+                        research_report: '研究报告',
+                    }[format],
+                    exact: true,
+                })
+                .click();
         expect(new URL(page.url()).pathname).toBe(`/reports/${second.report.id}`);
         await expect(page.locator('.report-frame')).toContainText(second.report.summary);
         expect(

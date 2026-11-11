@@ -1,6 +1,6 @@
 <template>
-    <div ref="root" class="bookmark-action scova-interface">
-        <div class="bookmark-buttons">
+    <div ref="root" class="bookmark-action scova-interface layout-grid gap-3 break-anywhere">
+        <div class="bookmark-buttons action-row">
             <action-button :disabled="!canWrite" :busy="pending" @click="act">
                 <app-icon :name="bookmark ? 'close' : 'bookmark'" />{{
                     bookmark ? '取消收藏' : '收藏来源'
@@ -9,7 +9,10 @@
             <action-button :disabled="pending || query.isFetching.value" @click="verify">
                 <app-icon name="retry" />核对收藏状态
             </action-button>
-            <router-link v-if="reportId" :to="libraryLink"
+            <router-link
+                class="inline-flex items-center gap-2 min-h-11 text-primary cursor-pointer underline-offset-[0.2em] keyboard-focus-wide"
+                v-if="reportId"
+                :to="libraryLink"
                 ><app-icon name="library" />查看收藏</router-link
             >
         </div>
@@ -56,31 +59,3 @@ async function act() {
     }
 }
 </script>
-
-<style scoped>
-.bookmark-action {
-    display: grid;
-    gap: 0.75rem;
-    min-inline-size: 0;
-    overflow-wrap: anywhere;
-}
-.bookmark-buttons {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-    align-items: center;
-}
-a {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    min-block-size: 2.75rem;
-    color: var(--scova-primary);
-    cursor: pointer;
-    text-underline-offset: 0.2em;
-}
-a:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
-}
-</style>

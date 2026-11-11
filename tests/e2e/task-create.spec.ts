@@ -1,4 +1,4 @@
-import { chooseOption, chooseTimezone } from './support/select.ts';
+import { chooseOption, chooseOutputFormats, chooseTimezone } from './support/select.ts';
 import { fillList } from './support/list-input.ts';
 import { expect, test, type Page } from '@playwright/test';
 import type { taskInput } from '../../apps/web/src/composables/useCreateTask.ts';
@@ -94,9 +94,31 @@ test('资料收集方式保存到配置且任务显示已启用', async ({ page 
     const saved = calls.find((call) => call.method === 'POST')?.body;
     expect(saved?.config).toMatchObject({ researchMode: 'collection', outputFormat: 'list' });
     await expect(page.locator('.task-card')).toContainText('已启用');
-    await expect(page.getByRole('combobox', { name: '本次输出形式', exact: true })).toContainText(
-        '主题清单',
-    );
+    const runFormats = page.getByRole('group', { name: '本次输出形式', exact: true });
+    await expect(runFormats).toContainText('留空沿用已保存配置');
+    await expect(runFormats.locator('input:checked')).toHaveCount(0);
+});
+
+test('任务保存多种采集目标，最后一个必选成果不能取消', async ({ page }) => {
+    const calls = await samples(page);
+    await page.goto('/tasks/new');
+    await fillMain(page);
+    await chooseOutputFormats(page, '输出形式', ['简报', '对比表']);
+    const group = page.getByRole('group', { name: '输出形式', exact: true });
+    await expect(group).toContainText('核心答案与重要发现');
+    await expect(group).toContainText('共同维度与差异依据');
+    await page.getByRole('button', { name: '确认保存任务', exact: true }).click();
+    await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
+    expect(calls.find((call) => call.method === 'POST')?.body?.config).toMatchObject({
+        outputFormat: 'brief',
+        outputFormats: ['brief', 'comparison'],
+    });
+    await page.goto('/tasks/new');
+    const brief = page
+        .getByRole('group', { name: '输出形式', exact: true })
+        .getByRole('checkbox', { name: /^简报/ });
+    await brief.click();
+    await expect(brief).toBeChecked();
 });
 
 for (const width of [320, 390, 1440]) {
@@ -252,8 +274,12 @@ for (const width of [1440, 320]) {
         if (width === 320)
             await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
         await page.goto('/tasks/new');
-        const output = page.getByRole('combobox', { name: '输出形式', exact: true });
-        const originalOutput = await output.textContent();
+        const output = page.getByRole('group', { name: '输出形式', exact: true });
+        const originalOutput = await output
+            .getByRole('checkbox')
+            .evaluateAll((elements) =>
+                elements.map((element) => (element as HTMLInputElement).checked),
+            );
         if (width === 320)
             await page.evaluate(() => {
                 document.documentElement.style.fontSize = '200%';
@@ -290,7 +316,13 @@ for (const width of [1440, 320]) {
         await page.keyboard.press('Escape');
         await expect(dialog).not.toBeVisible();
         await expect(trigger).toBeFocused();
-        await expect(output).toHaveText(originalOutput ?? '');
+        expect(
+            await output
+                .getByRole('checkbox')
+                .evaluateAll((elements) =>
+                    elements.map((element) => (element as HTMLInputElement).checked),
+                ),
+        ).toEqual(originalOutput);
         expect(calls.filter((call) => call.method !== 'GET')).toHaveLength(0);
     });
 }

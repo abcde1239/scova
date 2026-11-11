@@ -389,7 +389,7 @@ test('saved effects: current set/revoke and later report never rewrite the old r
     await expect(
         page.locator('.report-brief').getByText(saved.claims[0]!.text, { exact: true }),
     ).toBeVisible();
-    await page.locator('details.evidence summary').first().press('Enter');
+    await page.locator('.evidence-source-group > summary').first().press('Enter');
     await expect(page.locator('blockquote').first()).toHaveText(saved.evidence[0]!.quote);
     expect(state.reports[path]).toEqual(saved);
     expect(calls.filter((call) => call.method !== 'GET').map((call) => call.path)).toEqual([
@@ -498,7 +498,7 @@ for (const fault of [403, 404, 409, 503, 'protocol', 'invalid'] as const) {
         state.failure = fault;
         await staleBack(page);
         await expect(
-            page.locator('.report-content > .state-panel').getByRole('status'),
+            page.locator('.report-content .state-panel').getByRole('status'),
         ).toContainText(
             fault === 403
                 ? '无权'

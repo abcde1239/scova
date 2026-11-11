@@ -13,6 +13,7 @@ import {
     parseContract,
     type Evidence,
     type Report,
+    ReportConversationContextSchema,
 } from '@scova/models';
 import type { ApiServices } from '@/app/services';
 import {
@@ -216,7 +217,19 @@ function detail(row: StoredReport): Report {
                     return addEvidence(citation.evidence, row.runId);
                 }),
         }));
+        const conversation = row.run.conversationContextJson
+            ? parseContract(ReportConversationContextSchema, row.run.conversationContextJson)
+            : undefined;
         return parseContract(ReportSchema, {
+            ...(conversation
+                ? {
+                      conversation: {
+                          reportId: conversation.reportId,
+                          questionId: conversation.questionId,
+                          operation: conversation.operation,
+                      },
+                  }
+                : {}),
             ...summary(row),
             baselineRunId: row.baselineRunId,
             schemaVersion: row.schemaVersion,

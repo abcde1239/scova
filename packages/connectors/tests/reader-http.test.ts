@@ -1,12 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
-import { createReaderDnsResolver, createSafeHttpClient, type HttpTransport } from '../src/index.ts';
+import {
+    createReaderDnsResolver,
+    createSafeHttpClient,
+    type HttpTransport,
+    type SafeHttpClient,
+} from '../src/index.ts';
 
 afterEach(() => vi.unstubAllEnvs());
 const fake = { address: '198.18.0.126', family: 4 };
 const real = { address: '93.184.215.14', family: 4 };
 function fixture(ip = real.address) {
     const dnsHttp = {
-        request: vi.fn(async (url) => ({
+        request: vi.fn<SafeHttpClient['request']>(async (url) => ({
             url,
             status: 200,
             headers: {},
@@ -23,6 +28,42 @@ describe('Reader独立公网解析通道', () => {
         const resolve = createReaderDnsResolver({ lookup: async () => [fake], dnsHttp });
         expect(await resolve('article.example.com')).toEqual([real]);
         expect(dnsHttp.request).toHaveBeenCalledTimes(1);
+        expect(new URL(dnsHttp.request.mock.calls[0]![0]).hostname).toBe('cloudflare-dns.com');
+    });
+    it('auto keeps public system answers and explicit DNS provider choices', async () => {
+        const dnsHttp = fixture();
+        const lookup = vi.fn(async () => [real, { address: '2606:4700:4700::1111', family: 6 }]);
+        const automatic = createReaderDnsResolver({ mode: 'auto', lookup, dnsHttp });
+        expect(await automatic('article.example.com')).toEqual(await lookup());
+        expect(dnsHttp.request).not.toHaveBeenCalled();
+        for (const [mode, hostname] of [
+            ['alidns', 'dns.alidns.com'],
+            ['google', 'dns.google'],
+            ['cloudflare', 'cloudflare-dns.com'],
+        ]) {
+            dnsHttp.request.mockClear();
+            expect(
+                await createReaderDnsResolver({ mode, lookup, dnsHttp })('article.example.com'),
+            ).toEqual([real]);
+            expect(new URL(dnsHttp.request.mock.calls[0]![0]).hostname).toBe(hostname);
+        }
+    });
+    it('forwards cancellation to DoH and does not start DNS after cancellation', async () => {
+        const dnsHttp = fixture();
+        const resolve = createReaderDnsResolver({
+            mode: 'auto',
+            lookup: async () => [fake],
+            dnsHttp,
+        });
+        const controller = new AbortController();
+        await resolve('article.example.com', controller.signal);
+        expect(dnsHttp.request.mock.calls[0]![1]).toMatchObject({ signal: controller.signal });
+        controller.abort();
+        dnsHttp.request.mockClear();
+        await expect(resolve('article.example.com', controller.signal)).rejects.toMatchObject({
+            code: 'aborted',
+        });
+        expect(dnsHttp.request).not.toHaveBeenCalled();
     });
     it('system保留拒绝；混合私网解析不能触发回退', async () => {
         const dnsHttp = fixture(),

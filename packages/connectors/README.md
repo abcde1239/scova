@@ -25,11 +25,11 @@ if (first) {
 }
 ```
 
-搜索结果是 `search_snippet`，保留原始/规范 URL 和引擎归因；`coverage` 记录上游失败、过滤与截断。只有阅读器实际提取的正文返回 `read_page`、采集时间、指纹、提取版本及实际 `fetchedUrl`。正文标记为不可信数据；脚本只用于生成 DOM，不视为 Agent 已完成执行。挑战页或登录页仍可能产生非空 Readability 文本。指纹只覆盖返回的 `text`；`truncated` 表示覆盖不完整，不能据此前缀判断整页未变化。
+搜索结果是 `search_snippet`，保留原始/规范 URL 和引擎归因；`coverage` 记录上游失败、过滤与截断。只有阅读器实际提取的正文返回 `read_page`、采集时间、指纹、提取版本及实际 `fetchedUrl`。正文标记为不可信数据；脚本只用于生成 DOM，不视为 Agent 已完成执行。已识别的验证、登录和加载壳不作为正文。`text` 保留段落、代码换行与缩进、列表及表格行列分隔，指纹与引用位置均基于这份保存文本；提取策略变化使用新版本，不改写旧快照。`truncated` 只表示保存文本的长度裁剪，`collection` 另记录资源、渲染、受限预览和待交互内容。`content_restricted` 表示仅取得公开摘要或订阅预览，`interaction_required` 表示仍有分页或待交互正文，`visual_structure` 表示已保留图示文字，但未完整还原图形连接和空间关系；这些均为部分采集。`collection.complete=false` 的正文可核验引用，但不能证明整页没有变化；完整标记也不证明已跨页或遍历整个站点，历史输出缺少该字段不代表取得新的完整性证明。
 
 SearxNG 在最多 30 条候选中按查询相关性排序后截取返回条目；相关性分数不证明来源可靠。内部客户端的 `engines` 仅接受部署白名单的去重子集，查询中的引擎切换语法会被移除。Worker 的共享搜索包装层负责 Redis 节流、冷却与缓存；`managedSearch` 装配关闭内层自动重试，由包装层逐次申请资格并记账。独立连接器不自建 Redis 连接。
 
-默认阅读器使用 Crawlee `PlaywrightCrawler` 驱动一次性 Chromium 上下文：先由安全 HTTP 客户端跟随最多 3 次重定向并提供主 HTML，再由浏览器在隔离上下文中执行 JavaScript，所有脚本/JSON/CSS 请求重新经过同一安全 HTTP 客户端。页面不能发起写请求、iframe/图片/下载、WebSocket、service worker 或二次导航；不转发 Cookie、Authorization 和 Set-Cookie。阅读器仅允许 HTTP/HTTPS 默认端口与公共 IP，拒绝混合公私 DNS，将已验证地址绑定实际连接，每跳重验。所有调用共享最多 15 秒 deadline，主 HTML/单资源最多 2 MiB、总资源最多 8 MiB、最多 32 个资源请求，正文和 DOM 另有限制。
+默认阅读器先从安全下载的主 HTML 提取可用正文，正文尚未生成或主区动态数据未就绪时使用 Crawlee `PlaywrightCrawler` 驱动一次性 Chromium 上下文；费用等绑定字段仍显示加载失败时保留部分采集标记。主区内有实质说明的步骤导航会保留，普通菜单会清理。同步提取在可终止的 Node 子进程内运行，使用 Readability 轻量 DOM 保留长文；纯 ruby 注音结构可在有界、保真归一化后执行原结构节点上限。浏览器资源在有界窗口内加载，已有正文不会因可选资源超限被丢弃，受限状态随工具账本保存。所有脚本/JSON/CSS 请求重新经过同一安全 HTTP 客户端。页面不能发起写请求、iframe/图片/下载、WebSocket、service worker 或二次导航；不转发 Cookie、Authorization 和 Set-Cookie。阅读器仅允许 HTTP/HTTPS 默认端口与公共 IP，拒绝混合公私 DNS，将已验证地址绑定实际连接，每跳重验，公开 GET 最多尝试三个已校验地址。单地址连接计时从实际出站开始，响应头到达后正文继续受原总期限约束；排队也计入总期限。所有调用共享最多 15 秒 deadline，主 HTML/单资源最多 2 MiB、总资源最多 8 MiB、最多 32 次请求（含主文档），正文和 DOM 另有限制。
 
 Worker 使用 Bun 时，完整 Reader 由 Node 子进程通过仓库 Vite+ loader 执行，Bun 仅通过受控行协议转发 HTTP、预算和取消，避免 Windows/Bun 的 Playwright WebSocket 兼容问题。`scripts/run-bun.mjs` 自动传入 Node 路径；独立启动 Bun 时可设置 `READER_NODE_EXECUTABLE`，默认查找 `node`。容器 `worker-runtime` 镜像预装 Chromium，设置 `PLAYWRIGHT_BROWSERS_PATH`。本地可用 `vp exec playwright install chromium` 安装浏览器；Linux 容器默认关闭 Chromium sandbox，依靠非 root、只读根文件系统、cap drop 和 no-new-privileges，宿主机默认启用 Chromium sandbox。
 
@@ -71,6 +71,6 @@ vp run test:connectors:tavily  # 显式 Tavily + 阅读 + 模型，有外部费�
 
 真实烟测仅发送固定公开查询，搜索、读取、模型各最多尝试一次。模型输出最多 256 token，引用必须确实存在于采集正文；缺凭据输出 `NOT RUN`，不算真实通过。普通测试使用固定响应与本地 socket，不消耗真实密钥。
 
-网页读取通过独立 `READER_DNS_RESOLVER=auto` 兼容全Fake-IP解析，配置选项与模型一致，不继承 `MODEL_DNS_RESOLVER`；固定公网IP、逐跳校验、私网拦截及TLS验证仍生效。模型生成单次总预算最多120秒（含重试），搜索和网页读取最多15秒；调用方更短的超时和整次执行剩余时间始终优先。单次模型输入最多256,000、输出最多64,000 token，累计预算由调用方控制，供应商自身能力也会限制可用上下文和输出。供应商明确返回输出长度耗尽时抛出 `output_truncated`，即使残留 JSON 可解析也不交付为完整输出。模型目录仍保持原有短超时，不受生成上限影响。
+网页读取通过独立 `READER_DNS_RESOLVER=auto` 兼容全Fake-IP解析：先使用系统解析，仅当全部答案为Fake-IP时，经 Cloudflare 官方公网引导地址连接其 HTTPS DNS，保留原服务域名的 TLS 校验。可显式选择 `system|alidns|cloudflare|google`，不继承 `MODEL_DNS_RESOLVER`，模型默认回退仍为 AliDNS；固定公网IP、逐跳校验和私网拦截继续生效。公开 GET 在已验证地址间按地址族交错、有界切换，POST 不重放。模型生成单次总预算最多120秒（含重试），搜索和网页读取最多15秒；调用方更短的超时和整次执行剩余时间始终优先。单次模型输入最多256,000、输出最多64,000 token，累计预算由调用方控制，供应商自身能力也会限制可用上下文和输出。供应商明确返回输出长度耗尽时抛出 `output_truncated`，即使残留 JSON 可解析也不交付为完整输出。模型目录仍保持原有短超时，不受生成上限影响。
 
 模型 HTTP 402 或精确白名单额度错误码返回不可重试的 `model_quota_exceeded`，普通 429 仍按限流处理；不从任意错误消息推断余额。重试遵守有效的 `Retry-After`，等待超过当前调用期限时直接结束，不提前发起请求。

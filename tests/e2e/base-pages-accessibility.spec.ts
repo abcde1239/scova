@@ -140,8 +140,10 @@ test('基础页面真实服务六宽、文字放大和浅暗矩阵（实际读�
                             await expect(
                                 page.getByRole('note', { name: '查阅范围说明' }),
                             ).toBeVisible();
-                            const citation = page.locator('.report-frame details.evidence').first();
-                            await citation.locator('summary').press('Enter');
+                            const citation = page
+                                .locator('.report-frame .evidence-source-group')
+                                .first();
+                            await citation.locator(':scope > summary').press('Enter');
                             await expect(citation.locator('blockquote')).toBeVisible();
                             await checkLayout(page, scale);
                         }
@@ -267,11 +269,11 @@ test('键盘注册、登录、创建、执行、报告引用及菜单返回；�
         await expect(reportLink).toHaveAttribute('href', `/reports/${report.id}`);
         await tabTo(page, reportLink);
         await page.keyboard.press('Enter');
-        const summary = page.locator('.report-frame details.evidence summary').first();
+        const summary = page.locator('.report-frame .evidence-source-group > summary').first();
         await tabTo(page, summary);
         await page.keyboard.press('Enter');
         await expect(
-            page.locator('.report-frame details.evidence[open] blockquote').first(),
+            page.locator('.report-frame .evidence-source-group[open] blockquote').first(),
         ).toBeVisible();
         await page.setViewportSize({ width: 390, height: 844 });
         const menu = page.getByRole('button', { name: /^打开(个人侧栏|导航菜单)$/, exact: true });

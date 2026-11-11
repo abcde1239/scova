@@ -1,6 +1,7 @@
 import { Type, type Static } from '@sinclair/typebox';
 import { refineSchema } from './common.ts';
 import type { ReportValue } from './report-value.ts';
+import type { ReportArtifact } from './report-artifacts.ts';
 
 const count = (description: string) => Type.Integer({ minimum: 0, maximum: 20, description });
 export const ReportDeliverySchema = refineSchema(
@@ -11,7 +12,7 @@ export const ReportDeliverySchema = refineSchema(
                 Type.Literal('partial'),
                 Type.Literal('sources_only'),
             ]),
-            answeredQuestions: count('已有引用支撑回答的问题数，允许条件与分歧'),
+            answeredQuestions: count('必要对象与字段均已覆盖的问题数；旧报告沿用保存时的问题口径'),
             questionCount: count('本次请求的问题总数'),
             answeredCoreQuestions: count('已有引用支撑回答的核心问题数'),
             coreQuestionCount: count('原始目标及明确必答问题总数'),
@@ -30,7 +31,8 @@ export const ReportDeliverySchema = refineSchema(
         (v.status === 'answered'
             ? v.coreQuestionCount > 0 && v.answeredCoreQuestions === v.coreQuestionCount
             : v.status === 'partial'
-              ? v.answeredQuestions > 0 && v.answeredCoreQuestions < v.coreQuestionCount
+              ? v.questionCount > 0 &&
+                (v.coreQuestionCount === 0 || v.answeredCoreQuestions < v.coreQuestionCount)
               : v.answeredQuestions === 0),
 );
 export type ReportDelivery = Static<typeof ReportDeliverySchema>;
@@ -40,9 +42,10 @@ export type ReportDelivery = Static<typeof ReportDeliverySchema>;
 export function classifyReportDelivery(
     value: ReportValue | undefined,
     claims: readonly { kind: string }[],
+    artifacts?: readonly ReportArtifact[],
 ): ReportDelivery {
     const questions = value?.questions ?? [];
-    const answered = questions.filter((q) =>
+    const hasAnswer = (q: (typeof questions)[number]) =>
         q.claimIndexes.some((index) => {
             const selection = value?.selections.find((s) => s.claimIndex === index);
             return (
@@ -54,15 +57,28 @@ export function classifyReportDelivery(
                 ['direct', 'partial'].includes(selection.assessment.support) &&
                 selection.assessment.role !== 'lead'
             );
-        }),
-    );
+        });
+    const required =
+        artifacts?.flatMap((a) => a.coverage?.requirements ?? []).filter((r) => r.required) ?? [];
+    const answered = questions.filter((q) => {
+        if (!hasAnswer(q)) return false;
+        const requirements = required.filter((r) => r.questionIds.includes(q.id));
+        return requirements.every(
+            (r) =>
+                r.status === 'supported' &&
+                r.claimIndexes.length > 0 &&
+                r.claimIndexes.every(
+                    (index) => claims[index] && claims[index].kind !== 'insufficient',
+                ),
+        );
+    });
     const coreQuestionCount = questions.filter((q) => q.priority === 'core').length;
     const answeredCoreQuestions = answered.filter((q) => q.priority === 'core').length;
     return {
         status:
             coreQuestionCount > 0 && answeredCoreQuestions === coreQuestionCount
                 ? 'answered'
-                : answered.length
+                : questions.some(hasAnswer)
                   ? 'partial'
                   : 'sources_only',
         answeredQuestions: answered.length,

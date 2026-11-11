@@ -326,7 +326,7 @@ describe('Drizzle SQL 迁移与旧库无损接管', () => {
                         table: tablename,
                         data: (
                             await client.query(
-                                `SELECT md5(coalesce(jsonb_agg(${tablename === 'users' ? "to_jsonb(t) - 'avatar_version'" : 'to_jsonb(t)'} ORDER BY id)::text,'[]')) AS hash,count(*)::int AS count FROM "${tablename}" t`,
+                                `SELECT md5(coalesce(jsonb_agg(${tablename === 'users' ? "to_jsonb(t) - 'avatar_version'" : tablename === 'runs' ? "to_jsonb(t) - 'conversation_context_json'" : tablename === 'report_questions' ? "to_jsonb(t) - 'revision_run_id' - 'context_json'" : 'to_jsonb(t)'} ORDER BY id)::text,'[]')) AS hash,count(*)::int AS count FROM "${tablename}" t`,
                             )
                         ).rows[0],
                     });
@@ -342,6 +342,13 @@ describe('Drizzle SQL 迁移与旧库无损接管', () => {
             expect(
                 (await client.query('SELECT avatar_version FROM users WHERE id=$1', [user])).rows[0]
                     .avatar_version,
+            ).toBeNull();
+            expect(
+                (
+                    await client.query('SELECT conversation_context_json FROM runs WHERE id=$1', [
+                        run,
+                    ])
+                ).rows[0].conversation_context_json,
             ).toBeNull();
             // Original column values remain identical; new avatar references start at NULL.
             expect(

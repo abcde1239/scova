@@ -9,7 +9,11 @@ import {
     type SessionResponse,
 } from '@scova/models';
 import { createSessionLifecycle } from '@/api/session';
-import { createReportQuestionEndpoint, reportQuestionEndpoint } from '@/api/report-questions';
+import {
+    createReportQuestionEndpoint,
+    reportQuestionEndpoint,
+    reportConversationEndpoint,
+} from '@/api/report-questions';
 import { useReportQuestions } from '@/composables/useReportQuestions';
 import {
     questionAttempt,
@@ -113,7 +117,26 @@ function mount(
     selection?: unknown,
     initialReport: Report | null = reportFixture(),
 ) {
-    const lifecycle = setup(fetcher);
+    const lifecycle = setup(async (input, init) =>
+        (typeof input === 'string'
+            ? input
+            : input instanceof URL
+              ? input.href
+              : input.url
+        ).endsWith('/conversation')
+            ? Response.json({ reportId: id(1), turns: [], hasEarlier: false })
+            : fetcher(input, init),
+    );
+    const conversationOptions = lifecycle.queryOptions(
+        reportConversationEndpoint,
+        { params: { reportId: id(1) }, query: {} },
+        ['report-conversation', id(1)],
+    );
+    lifecycle.queryClient.setQueryData(conversationOptions.queryKey, {
+        pages: [{ data: { reportId: id(1), turns: [], hasEarlier: false }, status: 200 }],
+        pageParams: [undefined],
+    });
+    lifecycle.queryClient.setQueryDefaults(conversationOptions.queryKey, { staleTime: Infinity });
     const report = ref<Report>();
     report.value = initialReport ?? undefined;
     const reportId = ref(id(1));
@@ -382,7 +405,7 @@ describe('report-question action and owner lifecycle', () => {
             expect(await state.recover()).toBe(id(30));
             expect(state.answer.value?.answer.status).toBe('insufficient');
             expect(state.answer.value?.answer.usage.estimated).toBe(true);
-            expect(state.draft.value).toBe(rawQuestion);
+            expect(state.draft.value).toBe('');
             expect(new Headers(fetcher.mock.calls[1]?.[1]?.headers).get('idempotency-key')).toBe(
                 original?.key,
             );
@@ -537,6 +560,7 @@ describe('report-question action and owner lifecycle', () => {
         const { state, report } = mount(fetcher);
         state.draft.value = rawQuestion;
         await state.submit();
+        state.draft.value = rawQuestion;
         report.value = undefined;
         expect(state.answer.value).toBeUndefined();
         expect(state.draft.value).toBe(rawQuestion);

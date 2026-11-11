@@ -1,21 +1,33 @@
 <template>
     <section
         ref="root"
-        class="source-history"
+        class="source-history layout-grid gap-8 break-anywhere keyboard-focus-wide"
         :style="reading.variables"
         aria-labelledby="page-title"
         tabindex="-1"
     >
-        <nav class="history-actions scova-interface" aria-label="来源历史导航">
-            <router-link to="/library">返回资料库</router-link>
-            <router-link v-if="origin" :to="origin.path">返回刚才的报告</router-link>
+        <nav
+            class="history-actions scova-interface flex flex-wrap gap-[1rem_2rem]"
+            aria-label="来源历史导航"
+        >
+            <router-link
+                class="inline-flex items-center justify-self-start min-h-11 max-w-full text-primary cursor-pointer underline-offset-[0.2em] keyboard-focus-wide"
+                to="/library"
+                >返回资料库</router-link
+            >
+            <router-link
+                class="inline-flex items-center justify-self-start min-h-11 max-w-full text-primary cursor-pointer underline-offset-[0.2em] keyboard-focus-wide"
+                v-if="origin"
+                :to="origin.path"
+                >返回刚才的报告</router-link
+            >
         </nav>
-        <p>
+        <p class="m-0">
             每行是一份保存快照及其最近一次成功观测，并非逐次观测流水；观测成功不代表整次研究已交付报告。
         </p>
-        <p v-if="!state.valid.value" role="alert">来源或快照地址无效。</p>
+        <p class="m-0" v-if="!state.valid.value" role="alert">来源或快照地址无效。</p>
         <template v-else>
-            <div class="history-actions scova-interface">
+            <div class="history-actions scova-interface flex flex-wrap gap-[1rem_2rem]">
                 <action-button :disabled="state.query.isFetching.value" @click="reload"
                     >重新读取本页</action-button
                 >
@@ -23,14 +35,19 @@
                     >从第一页重新读取</action-button
                 >
             </div>
-            <p v-if="state.query.isPending.value" role="status">正在读取来源历史</p>
-            <p v-if="state.query.isError.value" role="alert">
+            <p class="m-0" v-if="state.query.isPending.value" role="status">正在读取来源历史</p>
+            <p class="m-0" v-if="state.query.isError.value" role="alert">
                 {{ sourceHistoryError(state.query.error.value) }}
             </p>
-            <p v-if="state.pageProblem.value || state.paginationError.value" role="alert">
+            <p
+                class="m-0"
+                v-if="state.pageProblem.value || state.paginationError.value"
+                role="alert"
+            >
                 {{ state.pageProblem.value || state.paginationError.value }}
             </p>
             <p
+                class="m-0"
                 v-if="
                     state.query.isSuccess.value &&
                     !state.items.value.length &&
@@ -39,39 +56,52 @@
             >
                 这一页没有保存快照。
             </p>
-            <ul class="snapshot-list">
-                <li v-for="item in state.items.value" :key="item.id" class="snapshot-entry">
+            <ul class="snapshot-list list-none m-0 p-0">
+                <li
+                    v-for="item in state.items.value"
+                    :key="item.id"
+                    class="snapshot-entry layout-grid gap-6 break-anywhere pt-6 pb-6 [border-bottom:0.0625rem_solid_var(--scova-border)]"
+                >
                     <router-link
                         :to="snapshotLink(item.id)"
                         :aria-current="
                             item.id.toLowerCase() === state.snapshotId.value ? 'page' : undefined
                         "
-                        class="scova-content-title"
+                        class="scova-content-title inline-flex items-center justify-self-start min-h-11 max-w-full text-primary cursor-pointer underline-offset-[0.2em] keyboard-focus-wide [&&]:text-[1.25rem]"
                         @click="selectionFocus = true"
                         >{{ item.title }}</router-link
                     >
-                    <dl class="scova-interface snapshot-metadata">
+                    <dl
+                        class="scova-interface snapshot-metadata flex flex-wrap gap-[1rem_2rem] m-0"
+                    >
                         <div>
-                            <dt>最近成功观测</dt>
-                            <dd>
+                            <dt class="text-muted">最近成功观测</dt>
+                            <dd class="m-0">
                                 <time :datetime="item.observedAt">{{ item.observedAt }}</time>
                             </dd>
                         </div>
                         <div>
-                            <dt>观测模式</dt>
-                            <dd>{{ item.mode === 'demo' ? '演示' : '真实' }}</dd>
+                            <dt class="text-muted">观测模式</dt>
+                            <dd class="m-0">{{ item.mode === 'demo' ? '演示' : '真实' }}</dd>
                         </div>
                         <div>
-                            <dt>上次读取正文状态</dt>
-                            <dd>{{ item.bodyStatus === 'available' ? '可用' : '已过期或清理' }}</dd>
+                            <dt class="text-muted">上次读取正文状态</dt>
+                            <dd class="m-0">
+                                {{ item.bodyStatus === 'available' ? '可用' : '已过期或清理' }}
+                            </dd>
                         </div>
                     </dl>
-                    <router-link :to="`/runs/${item.runId}`" class="scova-interface"
+                    <router-link
+                        :to="`/runs/${item.runId}`"
+                        class="scova-interface inline-flex items-center justify-self-start min-h-11 max-w-full text-primary cursor-pointer underline-offset-[0.2em] keyboard-focus-wide"
                         >查看该次执行</router-link
                     >
                 </li>
             </ul>
-            <nav class="history-actions scova-interface" aria-label="来源快照分页">
+            <nav
+                class="history-actions scova-interface flex flex-wrap gap-[1rem_2rem]"
+                aria-label="来源快照分页"
+            >
                 <action-button
                     v-if="state.previous.value.length"
                     :disabled="state.query.isFetching.value"
@@ -90,24 +120,30 @@
                     >下一页</action-button
                 >
             </nav>
-            <section v-if="state.snapshotId.value" class="selected-snapshot" aria-label="所选快照">
-                <div class="history-actions scova-interface">
+            <section
+                v-if="state.snapshotId.value"
+                class="selected-snapshot layout-grid gap-6 break-anywhere pt-8 [border-top:0.0625rem_solid_var(--scova-border)]"
+                aria-label="所选快照"
+            >
+                <div class="history-actions scova-interface flex flex-wrap gap-[1rem_2rem]">
                     <action-button
                         :disabled="state.detail.isFetching.value || state.blocked.value"
                         @click="state.detail.refetch()"
                         >重新读取所选快照</action-button
                     >
                 </div>
-                <p v-if="state.blocked.value" role="alert">
+                <p class="m-0" v-if="state.blocked.value" role="alert">
                     来源当前不可读取，请先重新读取来源历史。
                 </p>
-                <p v-else-if="state.detail.isPending.value" role="status">正在读取保存快照</p>
-                <p v-else-if="!state.snapshot.value" role="alert">
+                <p class="m-0" v-else-if="state.detail.isPending.value" role="status">
+                    正在读取保存快照
+                </p>
+                <p class="m-0" v-else-if="!state.snapshot.value" role="alert">
                     {{ sourceHistoryError(state.detail.error.value) }}
                 </p>
                 <snapshot-detail v-else :detail="state.snapshot.value" :body="state.body.value" />
             </section>
-            <p v-else>选择一份快照查看保留正文与保存片段。</p>
+            <p class="m-0" v-else>选择一份快照查看保留正文与保存片段。</p>
         </template>
     </section>
 </template>
@@ -180,64 +216,3 @@ watch(
     },
 );
 </script>
-
-<style scoped>
-.source-history,
-.snapshot-entry,
-.selected-snapshot {
-    display: grid;
-    gap: 1.5rem;
-    min-inline-size: 0;
-    overflow-wrap: anywhere;
-}
-.source-history {
-    gap: 2rem;
-}
-.snapshot-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-}
-.snapshot-entry {
-    padding-block: 1.5rem;
-    border-block-end: 0.0625rem solid var(--scova-border);
-}
-.history-actions,
-.snapshot-metadata {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1rem 2rem;
-}
-p,
-dl {
-    margin: 0;
-}
-dt {
-    color: var(--scova-muted);
-}
-dd {
-    margin: 0;
-}
-a {
-    display: inline-flex;
-    align-items: center;
-    justify-self: start;
-    min-block-size: 2.75rem;
-    max-inline-size: 100%;
-    color: var(--scova-primary);
-    cursor: pointer;
-    text-underline-offset: 0.2em;
-}
-a.scova-content-title {
-    font-size: 1.25rem;
-}
-a:focus-visible,
-.source-history:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
-}
-.selected-snapshot {
-    padding-block-start: 2rem;
-    border-block-start: 0.0625rem solid var(--scova-border);
-}
-</style>

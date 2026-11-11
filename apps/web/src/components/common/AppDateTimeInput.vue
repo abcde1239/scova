@@ -1,5 +1,8 @@
 <template>
-    <div ref="root" class="date-time-input">
+    <div
+        ref="root"
+        class="date-time-input min-w-0 w-full [&.date-time-input_.n-date-picker]:(w-full min-w-0) [&.date-time-input_.n-time-picker]:(w-full min-w-0) [&.date-time-input_.n-input]:![--n-font-size:1rem]"
+    >
         <n-config-provider
             abstract
             :locale="zhCN"
@@ -103,65 +106,3 @@ function labelInput() {
 onMounted(labelInput);
 onUpdated(labelInput);
 </script>
-
-<style scoped>
-.date-time-input {
-    min-inline-size: 0;
-    inline-size: 100%;
-}
-.date-time-input :deep(.n-date-picker),
-.date-time-input :deep(.n-time-picker) {
-    inline-size: 100%;
-    min-inline-size: 0;
-}
-.date-time-input :deep(.n-input) {
-    --n-font-size: 1rem !important;
-}
-/* A calendar needs seven columns. At enlarged text sizes, scroll this two-dimensional
-   region locally while keeping its date/time inputs and confirmation actions in view. */
-:global(.scova-theme .n-date-panel) {
-    inline-size: min(20rem, calc(100vw - 1rem));
-    max-block-size: calc(100dvh - 1rem);
-    overflow-y: auto;
-    grid-template-columns: minmax(0, 1fr);
-    container: scova-calendar / inline-size;
-}
-:global(.scova-theme .n-date-panel-calendar) {
-    min-inline-size: 0;
-    grid-template-columns: minmax(0, 1fr);
-    overflow-x: auto;
-    overscroll-behavior-inline: contain;
-}
-:global(.scova-theme .n-date-panel-month) {
-    position: sticky;
-    inset-inline-start: 0;
-    min-inline-size: 0;
-    inline-size: 100%;
-    height: auto;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    grid-template-rows: 2.25rem 1.75rem;
-    row-gap: 0.25rem;
-}
-:global(.scova-theme .n-date-panel-month__month-year) {
-    grid-area: 1 / 1 / 2 / 5;
-}
-:global(.scova-theme .n-date-panel-month > :not(.n-date-panel-month__month-year)) {
-    grid-row: 2;
-}
-@container scova-calendar (max-width: 18.125rem) {
-    :global(.scova-theme .n-date-panel-calendar::after) {
-        content: '左右滑动查看其余日期';
-        position: sticky;
-        inset-inline-start: 0;
-        padding-block-start: 0.5rem;
-        color: var(--scova-muted);
-        font-size: 0.75rem;
-        line-height: 1.5;
-    }
-}
-:global(.scova-theme .n-time-picker-panel) {
-    max-inline-size: calc(100vw - 1rem);
-    max-block-size: calc(100dvh - 1rem);
-    overflow: auto;
-}
-</style>

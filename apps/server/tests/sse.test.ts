@@ -11,6 +11,7 @@ function page(status: EventPage['run']['status'] = 'queued', events = true): Eve
     const now = new Date();
     return {
         run: {
+            conversationContextJson: null,
             id: runId,
             userId: randomUUID(),
             taskId: randomUUID(),

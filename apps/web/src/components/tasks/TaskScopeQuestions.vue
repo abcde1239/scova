@@ -1,18 +1,24 @@
 <template>
-    <section ref="panel" class="scope-questions" aria-labelledby="scope-question-title">
-        <h3 id="scope-question-title" tabindex="-1">核对搜索范围 · {{ step }}/3</h3>
-        <p v-if="summary">{{ summary }}</p>
+    <section
+        ref="panel"
+        class="scope-questions layout-grid gap-5"
+        aria-labelledby="scope-question-title"
+    >
+        <h3 class="break-anywhere m-0 keyboard-focus-wide" id="scope-question-title" tabindex="-1">
+            核对搜索范围 · {{ step }}/3
+        </h3>
+        <p class="break-anywhere m-0" v-if="summary">{{ summary }}</p>
         <details v-if="transcript?.length">
             <summary>已回答的需求澄清</summary>
-            <dl>
+            <dl class="break-anywhere grid gap-2 m-0">
                 <template v-for="(item, index) in transcript" :key="index"
-                    ><dt>{{ item.question }}</dt>
-                    <dd>{{ item.answer }}</dd></template
+                    ><dt class="text-muted">{{ item.question }}</dt>
+                    <dd class="break-anywhere m-0">{{ item.answer }}</dd></template
                 >
             </dl>
         </details>
         <template v-if="step === 1">
-            <p>你希望查到什么？哪些内容必须包含，哪些不需要？</p>
+            <p class="break-anywhere m-0">你希望查到什么？哪些内容必须包含，哪些不需要？</p>
             <task-config-field
                 v-model="goal"
                 label="希望回答的核心问题"
@@ -35,7 +41,9 @@
             />
         </template>
         <template v-else-if="step === 2">
-            <p>查哪些时间、哪些来源？不指定网址时，按已确认的问题搜索公开网页。</p>
+            <p class="break-anywhere m-0">
+                查哪些时间、哪些来源？不指定网址时，按已确认的问题搜索公开网页。
+            </p>
             <task-config-field
                 v-model="rangeKind"
                 label="搜索时间范围"
@@ -54,7 +62,9 @@
                 :disabled="disabled"
             />
             <template v-else>
-                <p>以下日期按浏览器当地时间 {{ browserTimezone }} 填写。</p>
+                <p class="break-anywhere m-0">
+                    以下日期按浏览器当地时间 {{ browserTimezone }} 填写。
+                </p>
                 <task-config-field
                     v-model="start"
                     label="搜索起始时间"
@@ -90,7 +100,7 @@
             />
         </template>
         <template v-else>
-            <p>只需要收集信息，还是需要分析？希望如何呈现结果？</p>
+            <p class="break-anywhere m-0">只需要收集信息，还是需要分析？希望如何呈现结果？</p>
             <task-config-field
                 v-model="researchMode"
                 label="此次需要的工作"
@@ -101,33 +111,34 @@
                 ]"
                 :disabled="disabled"
             />
-            <p>资料收集整理当前可读信息；分析研究还会核对时间适用性、依据与推论。</p>
-            <task-config-field
-                v-model="outputFormat"
+            <p class="break-anywhere m-0">
+                资料收集整理当前可读信息；分析研究还会核对时间适用性、依据与推论。
+            </p>
+            <output-format-select
+                v-model="outputFormats"
                 label="希望得到的形式"
-                kind="select"
-                :options="[
-                    { value: 'brief', label: '简报' },
-                    { value: 'list', label: '主题清单' },
-                    { value: 'comparison', label: '对比表' },
-                    { value: 'research_report', label: '研究报告' },
-                ]"
                 :disabled="disabled"
             />
-            <dl>
-                <dt>核心问题</dt>
-                <dd>{{ goal }}</dd>
-                <dt>搜索重点</dt>
-                <dd>{{ focusPoints.join('、') || '围绕核心问题' }}</dd>
-                <dt>时间范围</dt>
-                <dd>{{ rangeKind === 'rolling' ? `最近 ${days} 天` : `${start} 至 ${end}` }}</dd>
-                <dt>优先来源</dt>
-                <dd>{{ preferredUrls.join('、') || '公开网页' }}</dd>
+            <dl class="break-anywhere grid gap-2 m-0">
+                <dt class="text-muted">核心问题</dt>
+                <dd class="break-anywhere m-0">{{ goal }}</dd>
+                <dt class="text-muted">搜索重点</dt>
+                <dd class="break-anywhere m-0">{{ focusPoints.join('、') || '围绕核心问题' }}</dd>
+                <dt class="text-muted">时间范围</dt>
+                <dd class="break-anywhere m-0">
+                    {{ rangeKind === 'rolling' ? `最近 ${days} 天` : `${start} 至 ${end}` }}
+                </dd>
+                <dt class="text-muted">优先来源</dt>
+                <dd class="break-anywhere m-0">{{ preferredUrls.join('、') || '公开网页' }}</dd>
             </dl>
-            <p>确认后由需求整理 Agent 生成草稿，应用并保存后才会创建任务。</p>
+            <p class="break-anywhere m-0">
+                确认后由需求整理 Agent 生成草稿，应用并保存后才会创建任务。
+            </p>
         </template>
-        <p v-if="error" role="alert" class="scope-error">{{ error }}</p>
-        <div class="scope-actions">
+        <p v-if="error" role="alert" class="scope-error break-anywhere text-danger m-0">
+            {{ error }}
+        </p>
+        <div class="scope-actions action-group">
             <action-button :disabled="disabled" @click="emit('cancel')">返回需求描述</action-button>
             <action-button :disabled="disabled" @click="emit('manual')">手动填写</action-button>
             <action-button v-if="step > 1" :disabled="disabled" @click="move(-1)"
@@ -149,6 +160,7 @@ import {
     type TaskClarifications,
 } from '@scova/models';
 import TaskConfigField from '@/components/tasks/TaskConfigField.vue';
+import OutputFormatSelect from '@/components/tasks/OutputFormatSelect.vue';
 import ListInput from '@/components/common/ListInput.vue';
 import ActionButton from '@/components/common/ActionButton.vue';
 const props = defineProps<{
@@ -185,7 +197,14 @@ const end = ref(
     props.initial?.timeRange.kind === 'fixed' ? localTime(props.initial.timeRange.end) : '',
 );
 const researchMode = ref(props.initial?.researchMode ?? props.mode);
-const outputFormat = ref(props.initial?.outputFormat ?? props.format);
+const outputFormats = ref<import('@scova/models').OutputFormat[]>(
+    props.initial?.outputFormats ?? [
+        parseContract(
+            TaskDraftScopeSchema.properties.outputFormat,
+            props.initial?.outputFormat ?? props.format,
+        ),
+    ],
+);
 const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 function fixedInstant(value: string, key: 'start' | 'end') {
     const initial = props.initial?.timeRange;
@@ -218,7 +237,8 @@ function scope(validateStep = 3) {
                         end: fixedInstant(end.value, 'end'),
                     },
         researchMode: researchMode.value,
-        outputFormat: outputFormat.value,
+        outputFormat: outputFormats.value[0],
+        ...(outputFormats.value.length > 1 ? { outputFormats: outputFormats.value } : {}),
     });
 }
 async function move(delta: number) {
@@ -240,37 +260,3 @@ function advance() {
     }
 }
 </script>
-
-<style scoped>
-.scope-questions {
-    display: grid;
-    gap: 1.25rem;
-    min-inline-size: 0;
-}
-h3,
-p,
-dl,
-dd {
-    margin: 0;
-    overflow-wrap: anywhere;
-}
-dl {
-    display: grid;
-    gap: 0.5rem;
-}
-dt {
-    color: var(--scova-muted);
-}
-.scope-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-}
-.scope-error {
-    color: var(--scova-danger);
-}
-h3:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
-}
-</style>

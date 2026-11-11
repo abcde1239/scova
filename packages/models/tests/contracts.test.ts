@@ -127,6 +127,13 @@ const report: Report = {
 
 describe('共享任务与输入契约', () => {
     it('保存完整手工配置、不可变版本 DTO，并保留普通 JSON', () => {
+        expect(() =>
+            parseContract(TaskConfigSchema, {
+                ...config,
+                outputFormat: 'brief',
+                outputFormats: ['list'],
+            }),
+        ).toThrow();
         expect(parseContract(CreateTaskInputSchema, { config })).toEqual({ config });
         const version: TaskVersion = {
             id,

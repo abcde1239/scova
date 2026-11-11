@@ -65,6 +65,14 @@ async function samples(
                 baseUrl: input.baseUrl,
                 protocol: input.protocol,
                 webSearch: input.webSearch,
+                searchApi: input.searchApi
+                    ? {
+                          protocol: input.searchApi.protocol,
+                          baseUrl: input.searchApi.baseUrl,
+                          contentMode: input.searchApi.contentMode,
+                          hasApiKey: true,
+                      }
+                    : null,
             };
             items.push(entry);
             return route.fulfill({ status: 201, json: entry });
@@ -83,6 +91,14 @@ async function samples(
                 baseUrl: body.baseUrl,
                 protocol: body.protocol,
                 webSearch: body.webSearch,
+                searchApi: body.searchApi
+                    ? {
+                          protocol: body.searchApi.protocol,
+                          baseUrl: body.searchApi.baseUrl,
+                          contentMode: body.searchApi.contentMode,
+                          hasApiKey: true,
+                      }
+                    : null,
                 revision: entry.revision + 1,
             });
         } else {
@@ -92,6 +108,71 @@ async function samples(
         return route.fulfill({ json: entry });
     });
     return writes;
+}
+for (const width of [1440, 320]) {
+    test(`独立搜索API${width}：正文优先、独立密钥、保存回显与Reader选择`, async ({
+        page,
+    }, info) => {
+        const writes = await samples(page);
+        const external: string[] = [];
+        page.on('request', (request) => {
+            if (!request.url().startsWith('http://127.0.0.1:4189')) external.push(request.url());
+        });
+        await page.setViewportSize({ width, height: 1100 });
+        await page.emulateMedia({
+            colorScheme: width === 320 ? 'dark' : 'light',
+            reducedMotion: 'reduce',
+        });
+        await page.goto('/account/agent');
+        const card = page
+            .getByRole('listitem')
+            .filter({ has: page.getByRole('heading', { name: '日常研究', exact: true }) });
+        await card.getByRole('button', { name: '编辑', exact: true }).click();
+        if (width === 320)
+            await page.evaluate(() => {
+                document.documentElement.style.fontSize = '200%';
+            });
+        await chooseOption(page, '研究搜索方式', '独立搜索 API');
+        await expect(page.getByLabel('网页正文读取', { exact: true })).toContainText(
+            'API 正文优先，Reader 补读',
+        );
+        await expect(page.getByLabel('搜索 API 地址', { exact: true })).toHaveValue(
+            'https://api.deepseek.com/v1',
+        );
+        await page.getByLabel('搜索 API Key', { exact: true }).fill('fixture-search-secret');
+        await expect(page.getByLabel('API Key（留空保留）', { exact: true })).toHaveValue('');
+        expect(await page.getByLabel('搜索 API Key', { exact: true }).getAttribute('type')).toBe(
+            'password',
+        );
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+            true,
+        );
+        await page.screenshot({ path: info.outputPath('search-api-config.png'), fullPage: true });
+        await page.getByRole('button', { name: '保存配置', exact: true }).click();
+        await expect(card).toContainText('deepseek 搜索 · API 正文优先');
+        expect(writes[0]?.body).toMatchObject({
+            webSearch: 'disabled',
+            searchApi: {
+                protocol: 'deepseek',
+                apiKey: 'fixture-search-secret',
+                contentMode: 'prefer_api',
+            },
+        });
+        expect(writes[0]?.body).not.toHaveProperty('apiKey');
+        await card.getByRole('button', { name: '编辑', exact: true }).click();
+        await expect(
+            page.getByLabel('搜索 API Key（地址与协议不变时留空保留）', { exact: true }),
+        ).toHaveValue('');
+        await chooseOption(page, '网页正文读取', '始终使用 Reader 读取网页');
+        await page.getByRole('button', { name: '保存配置', exact: true }).click();
+        expect(writes[1]?.body.searchApi).not.toHaveProperty('apiKey');
+        await expect(card).toContainText('Reader 读取');
+        await card.getByRole('button', { name: '编辑', exact: true }).click();
+        await chooseOption(page, '研究搜索方式', '部署默认搜索');
+        await page.getByRole('button', { name: '保存配置', exact: true }).click();
+        expect(writes[2]?.body.searchApi).toBeNull();
+        expect(external).toEqual([]);
+    });
 }
 for (const width of [1440, 320]) {
     test(`内置搜索授权${width}：默认关闭、显式保存、编辑回显和协议切换撤权`, async ({
@@ -104,10 +185,10 @@ for (const width of [1440, 320]) {
             .getByRole('listitem')
             .filter({ has: page.getByRole('heading', { name: '日常研究', exact: true }) });
         await card.getByRole('button', { name: '编辑', exact: true }).click();
-        await expect(page.getByLabel('研究内置搜索', { exact: true })).toContainText(
-            '关闭内置搜索',
+        await expect(page.getByLabel('研究搜索方式', { exact: true })).toContainText(
+            '部署默认搜索',
         );
-        await chooseOption(page, '研究内置搜索', '允许 OpenAI Responses Web Search');
+        await chooseOption(page, '研究搜索方式', '允许 OpenAI Responses Web Search');
         await expect(page.locator('.provider-form')).toContainText('可能产生额外费用');
         await page.screenshot({ path: info.outputPath('search-permission.png'), fullPage: true });
         await page.getByRole('button', { name: '保存配置', exact: true }).click();
@@ -115,12 +196,12 @@ for (const width of [1440, 320]) {
         expect(writes[0]?.body.webSearch).toBe('openai_responses');
         expect(writes[0]?.body).not.toHaveProperty('apiKey');
         await card.getByRole('button', { name: '编辑', exact: true }).click();
-        await expect(page.getByLabel('研究内置搜索', { exact: true })).toContainText(
+        await expect(page.getByLabel('研究搜索方式', { exact: true })).toContainText(
             '允许 OpenAI Responses Web Search',
         );
         await chooseOption(page, '接口协议', 'Gemini generateContent');
-        await expect(page.getByLabel('研究内置搜索', { exact: true })).toContainText(
-            '关闭内置搜索',
+        await expect(page.getByLabel('研究搜索方式', { exact: true })).toContainText(
+            '部署默认搜索',
         );
         await page.getByRole('button', { name: '保存配置', exact: true }).click();
         await expect(card).not.toContainText('内置搜索已允许');

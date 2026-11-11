@@ -226,6 +226,12 @@ async function installApi(page: Page, value = state()) {
                   })
                 : route.fulfill({ status: value.questionStatus, json: failure() });
         }
+        if (path === `${reportPath}/conversation` && method === 'GET') {
+            if (value.owner !== 100) return route.fulfill({ status: 404, json: failure() });
+            return route.fulfill({
+                json: { reportId: value.report.id, turns: [value.question], hasEarlier: false },
+            });
+        }
         if (path === `${reportPath}/questions` && method === 'POST') {
             const question = {
                 ...value.question,
@@ -384,7 +390,8 @@ for (const mode of ['live'] as const) {
                     .filter({ has: page.getByText(label!, { exact: true }) })
                     .getByRole('definition'),
             ).toHaveText(text!);
-        await expect(modal(page).locator('select,input,textarea')).toHaveCount(0);
+        await expect(modal(page).getByRole('group', { name: '本次成果形式' })).toBeVisible();
+        await expect(modal(page).getByRole('checkbox')).toHaveCount(4);
         expect(posts(value)).toHaveLength(0);
         await modal(page)
             .getByRole('button', { name: '确认并建立后续执行', exact: true })
@@ -835,7 +842,7 @@ for (const scheme of ['light', 'dark'] as const) {
                     .evaluate((element) => {
                         element.scrollTop = 0;
                     });
-                await expect(modal(page).locator('#followup-dialog-consequences')).toBeInViewport();
+                await expect(modal(page).locator('[id$="-consequences"]')).toBeInViewport();
                 await modal(page)
                     .locator('.dialog-body')
                     .evaluate((element) => {
@@ -869,6 +876,55 @@ for (const scheme of ['light', 'dark'] as const) {
         });
     }
 }
+
+test('修订报告独立确认并冻结成果形式，未知结果同键重发且保留原报告', async ({ page }) => {
+    const value = await installApi(page);
+    value.command = () => ({ status: 503, json: failure() });
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await open(page);
+    const original = await page.locator('.report-brief').textContent();
+    const revision = page.getByRole('region', { name: '基于现有资料生成新版报告', exact: true });
+    const dialog = page.getByRole('dialog', { name: '确认生成新版报告', exact: true });
+    const trigger = revision.getByRole('button', { name: '基于现有资料生成新版报告', exact: true });
+    await trigger.click();
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText('不搜索网页或重新抓取来源');
+    await expect(
+        dialog
+            .locator('dl > div')
+            .filter({ has: page.getByText('搜索上限', { exact: true }) })
+            .getByRole('definition'),
+    ).toHaveText('0 次');
+    await dialog.locator('input[value="list"]').check();
+    await dialog.locator('input[value="research_report"]').check();
+    await page.keyboard.press('Escape');
+    await expect(dialog).not.toBeVisible();
+    await expect(trigger).toBeFocused();
+    expect(posts(value)).toHaveLength(0);
+    await trigger.click();
+    await expect(dialog.locator('input[value="list"]')).toBeChecked();
+    await dialog.getByRole('button', { name: '确认并生成新版报告', exact: true }).click();
+    const replay = revision.getByRole('button', { name: '使用同一请求重发', exact: true });
+    await expect(replay).toBeVisible();
+    const first = posts(value)[0]!;
+    expect(JSON.parse(first.body!)).toEqual({
+        confirm: true,
+        operation: 'revise',
+        outputFormats: ['list', 'research_report'],
+    });
+    await expect(
+        followup(page).getByRole('button', { name: '确认后建立独立后续执行', exact: true }),
+    ).toBeVisible();
+    value.command = () => ({ status: 202, json: { run: run(value.report), reused: false } });
+    await replay.click();
+    await expect(revision.getByRole('link', { name: '查看关联执行', exact: true })).toBeVisible();
+    expect(posts(value)).toHaveLength(2);
+    expect(posts(value)[1]!.key).toBe(first.key);
+    expect(posts(value)[1]!.body).toBe(first.body);
+    expect(await page.locator('.report-brief').textContent()).toBe(original);
+    await page.screenshot({ path: 'artifacts/report-conversation/desktop-dark.png' });
+});
 
 test('历史演示报告保留阅读，但不再提供创建后续研究', async ({ page }) => {
     const value = state();

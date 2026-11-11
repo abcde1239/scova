@@ -1,6 +1,5 @@
 import { type Task as StoredTask, type TaskVersion as StoredTaskVersion } from '@scova/db';
-import { createHash } from 'node:crypto';
-import { nextScheduledAt } from '@scova/shared';
+import { nextScheduledAt, researchComparisonScopeHash } from '@scova/shared';
 import {
     CreateTaskInputSchema,
     PageQuerySchema,
@@ -18,10 +17,6 @@ import { TASK_BUDGET_LIMITS } from '@/app/task-policy.ts';
 import { createTaskRepo, type TaskStore } from '@/repo/tasks.ts';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const hash = (value: string) => createHash('sha256').update(value).digest('hex');
-/** 检索与正文提取策略升级时递增，避免错误复用旧比较范围。 */
-const RETRIEVAL_STRATEGY_VERSION = 1;
-const EXTRACTION_STRATEGY_VERSION = 'readability-v1';
 
 function assertBudget(config: TaskConfig): void {
     const fieldErrors = Object.entries(TASK_BUDGET_LIMITS)
@@ -48,23 +43,9 @@ function stable(value: unknown): unknown {
     return value;
 }
 
-/** 语义范围不包含标题、计划时点、展示格式和提醒偏好，避免无关编辑重置基线。 */
+/** 交付形式现已影响采集目标；形式集合参与范围，首选打开顺序不参与。 */
 export function comparisonScopeHash(config: TaskConfig): string {
-    return hash(
-        JSON.stringify(
-            stable({
-                retrievalStrategyVersion: RETRIEVAL_STRATEGY_VERSION,
-                extractionStrategyVersion: EXTRACTION_STRATEGY_VERSION,
-                topic: config.topic,
-                goal: config.goal,
-                focusPoints: config.focusPoints,
-                exclusions: config.exclusions,
-                sourcePreferences: config.sourcePreferences,
-                timeRange: config.timeRange,
-                ...(config.researchMode === 'collection' ? { researchMode: 'collection' } : {}),
-            }),
-        ),
-    );
+    return researchComparisonScopeHash(config);
 }
 
 export function nextRunAt(config: TaskConfig, now: Date): Date | null {

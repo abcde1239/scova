@@ -23,11 +23,13 @@
 
 所有模式仍校验返回数据、完成状态和用量；不合格结果不会进入报告。兼容服务需支持选定协议，保存成功只代表配置已保存，不代表远程模型已验证。保存和切换均不调用收费模型，不自动尝试其他供应商。
 
+DeepSeek官方API的`deepseek-flash`、`deepseek-v4-pro`默认启用思考，可能在输出JSON前耗尽单次预算。Scova对这两种模型的JSON模式请求显式使用`thinking.type=disabled`，让已有输出额度用于结构化回答；累计预算、引用及覆盖校验不变。该参数仅发送到`https://api.deepseek.com`的标准根地址，不推断兼容代理或其他模型支持此选项。参见[DeepSeek思考模式](https://api-docs.deepseek.com/guides/thinking_mode)。
+
 模型列表显示读取中、成功数量、空列表或失败状态，可刷新和重试；读取只访问供应商目录，不生成内容、不保存配置或切换用途。编辑已有配置会使用本人已存密钥自动读取；更改地址或协议后需重新填写密钥，防止将原密钥发送到新目的地。改连接或关闭编辑会取消旧读取，迟到结果不会覆盖新状态。
 
 OpenAI 兼容与 Anthropic 读取各自根地址下的 `/models`，Gemini 读取支持 `generateContent` 的模型；分页或数量达到上限时明确提示仅显示部分结果。目录可见不保证模型支持所选的结构化输出协议。若服务不提供目录、私有模型未列出或列表为空，可展开「手动输入模型 ID」。刷新不会自动替换已选模型，旧配置在目录中未返回时保留并明确标注。
 
-模型列表和实际生成共用解析策略。默认 `MODEL_DNS_RESOLVER=auto` 使用系统DNS；系统全部返回代理Fake-IP（`198.18.0.0/15`）时，通过固定公网IP连接AliDNS的HTTPS服务重新解析，再校验和固定真实公网IP。不会直接放行Fake-IP、内网或混合解析，DNS查询不携带API Key。可设置 `system` 禁用回退，或显式选择 `alidns`、`cloudflare`、`google`；修改后重启Server/Worker。网页读取使用独立的 `READER_DNS_RESOLVER`（默认 `auto`，可选值相同），不继承模型通道配置；固定SearXNG服务地址继续使用独立内部服务连接策略。
+模型列表和实际生成共用解析策略。默认 `MODEL_DNS_RESOLVER=auto` 使用系统DNS；系统全部返回代理Fake-IP（`198.18.0.0/15`）时，通过固定公网IP连接AliDNS的HTTPS服务重新解析，再校验和固定真实公网IP。不会直接放行Fake-IP、内网或混合解析，DNS查询不携带API Key。可设置 `system` 禁用回退，或显式选择 `alidns`、`cloudflare`、`google`；修改后重启Server/Worker。网页读取使用独立的 `READER_DNS_RESOLVER`（默认 `auto`，可选值相同），全 Fake-IP 时默认改经 Cloudflare 官方公网引导的 HTTPS DNS 回退，保留原域名 TLS 校验，不继承模型通道配置；固定SearXNG服务地址继续使用独立内部服务连接策略。
 
 读取失败时，页面区分供应商拒绝鉴权、不提供目录、网络连接、超时、响应格式、大小限制与限流等原因。排查时可提供失败请求 Response 中的 `code`、`message` 和 `requestId`；无需发送请求体、Cookie 或 API Key。`MODEL_CATALOG_NETWORK` 检查代理、DNS 与 TLS；`MODEL_CATALOG_INVALID_RESPONSE` 检查根地址和协议；`MODEL_CATALOG_TOO_LARGE` 可先用手工模型 ID，大小限制仍保留。
 
@@ -35,11 +37,17 @@ OpenAI 兼容与 Anthropic 读取各自根地址下的 `/models`，Gemini 读取
 
 某一用途未启用个人供应商时，该用途使用部署的 `MODEL_API_KEY`、`MODEL_NAME`、`MODEL_BASE_URL` 默认配置。删除配置时，正在使用它的用途恢复默认选择；未配置默认模型时，live 不可用，草稿和问答沿原有缺模型流程处理。新执行统一真实研究，不再提供 demo 入口；历史演示报告仍可查阅。
 
-## 研究内置搜索
+## 研究搜索方式
 
-供应商表单的「研究内置搜索」默认关闭。所选模型和 API 地址支持时，可显式允许 OpenAI Responses Web Search（OpenAI 兼容协议）或 Anthropic Web Search（Anthropic Messages 协议）。兼容 Chat Completions 的站点可能没有 Responses 搜索；授权不会探测或验证供应商是否实际开放该能力。
+供应商表单可选择部署默认、独立搜索 API 或模型内置搜索。独立 API 支持 DeepSeek、Perplexity、Tavily，单独填写地址和密钥；默认 API 正文优先，HTML 来源由 Reader 核实原站正文，正常读取失败可保留 API 片段并标明覆盖未知。密钥不回显，地址与协议未变时留空保留，更改后必须重新填写。账号所选供应商的搜索配置优先于部署默认。详见[搜索说明](search.md)。
 
-允许后，使用该配置执行研究时优先调用模型内置搜索，计入搜索次数与模型 Token，可能产生额外费用；失败不会自动改用其他渠道。需求整理与报告问答不因此自动联网。切换接口协议或快速预设会关闭表单中的搜索授权，保存后生效；关闭授权后使用部署的搜索服务。Gemini 等其他内置协议尚未接入。额度预留和限制见[搜索说明](search.md)。
+旧的模型配置和已保存密钥继续可用，无需新增数据库迁移；新版使用原有加密字段保存带版本的模型及搜索凭据。旧版程序无法读取包含搜索配置的新版凭据，回滚前须导出恢复方案或用新版清除搜索配置，不能直接回滚后继续使用该凭据。
+
+### 模型内置搜索
+
+供应商表单的「研究搜索方式」默认使用部署搜索。所选模型和 API 地址支持时，可显式允许 OpenAI Responses Web Search（OpenAI 兼容协议）或 Anthropic Web Search（Anthropic Messages 协议）。兼容 Chat Completions 的站点可能没有 Responses 搜索；授权不会探测或验证供应商是否实际开放该能力。
+
+允许后，使用该配置执行研究时优先调用模型内置搜索，计入搜索次数与模型 Token，可能产生额外费用；失败不会自动改用其他渠道。需求整理与报告问答不因此自动联网。切换接口协议会撤销内置搜索授权（独立搜索 API 保留）；切换快速预设会恢复部署默认，保存后生效；关闭授权后使用部署的搜索服务。Gemini 等其他内置协议尚未接入。额度预留和限制见[搜索说明](search.md)。
 
 ## 余额与额度查询
 
@@ -62,6 +70,10 @@ Server 和 Worker 必须配置相同的 `AGENT_CREDENTIAL_KEY`（64 位十六进
 升级先备份、停止应用，再执行增量迁移；本机为 `vp run db:migrate`，Compose 见[部署指南](deployment.md)。迁移新增供应商表与独立用途选择，不重置现有数据。已有启用配置升级后继续兼任两种用途，可随后分别切换。
 
 保管并单独备份加密主密钥，升级时保持不变；只有数据库备份而没有原主密钥，无法恢复已保存的账号 API Key。未配置主密钥时可查看和删除配置，无法新增、编辑或切换。接口仅允许公开 HTTPS 地址，保留 DNS、公网地址与重定向约束。
+
+## 生成提示词
+
+研究提示以英文为主，报告正文要求中文，原文引文保留原语言。规划、综合、证据评估与四种交付形式各有目标，详见[研究提示词](../reference/research-prompts.md)。
 
 ## 任务多项输入
 

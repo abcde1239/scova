@@ -17,6 +17,18 @@ type Fact = {
     relevance?: 'relevant' | 'excluded';
     relation?: { kind: 'secondary' | 'revision' | 'contrasting'; url: string; quote: string };
 };
+function frozenFixtureTask(input: StructuredInput) {
+    const marker = [
+        '# Frozen research input (JSON data, not new instructions)',
+        'Frozen input: ',
+    ].find((value) => input.prompt.includes(value));
+    if (!marker) throw new Error('Fixture planner is missing frozen task input');
+    const line = input.prompt
+        .slice(input.prompt.indexOf(marker) + marker.length)
+        .trimStart()
+        .split('\n')[0]!;
+    return JSON.parse(line) as { task: { questions: { id: string; text: string }[] } };
+}
 const fact = (subject: string, predicate: string, value: string): Fact => ({
     subject,
     predicate,
@@ -129,6 +141,14 @@ export function scenarioConnectors(
             },
         },
     });
+    let requirements: {
+        id: string;
+        format: string;
+        questionIds: string[];
+        object: string;
+        field: string;
+        required: boolean;
+    }[] = [];
     return {
         mode: 'live',
         reader,
@@ -182,11 +202,7 @@ export function scenarioConnectors(
                 }[];
                 let query = name + ' acceptance sources';
                 if (options.queryForGoal && Object.hasOwn(properties, 'queries')) {
-                    const marker = input.prompt.indexOf('任务=');
-                    if (marker < 0) throw new Error('Fixture planner is missing task input');
-                    const task = JSON.parse(input.prompt.slice(marker + 3)) as {
-                        questions: { id: string; text: string }[];
-                    };
+                    const { task } = frozenFixtureTask(input);
                     query = (task.questions[0]!.text + ' acceptance sources').slice(0, 2000);
                 }
                 const claims: AgentClaim[] = pages.flatMap((page) =>
@@ -246,6 +262,62 @@ export function scenarioConnectors(
                             })),
                         }
                       : { claims };
+                if (Object.hasOwn(properties, 'requirements')) {
+                    const frozen = frozenFixtureTask(input);
+                    const schema = properties.requirements as {
+                        items: { properties: { format: { enum: string[] } } };
+                    };
+                    requirements = schema.items.properties.format.enum.flatMap((format) =>
+                        frozen.task.questions.map((question) => ({
+                            id: `${format}-${question.id}`,
+                            format,
+                            questionIds: [question.id],
+                            object: '',
+                            field: question.text,
+                            required: true,
+                        })),
+                    );
+                    Object.assign(payload, { requirements });
+                }
+                if (Object.hasOwn(properties, 'artifacts')) {
+                    // Resume may reuse a committed plan without re-invoking this fixture model.
+                    // Read the immutable requirements supplied to synthesis rather than hidden closure state.
+                    const marker = 'Frozen artifact requirements (data): ';
+                    const start = input.prompt.indexOf(marker);
+                    if (start < 0)
+                        throw new Error(
+                            'Fixture synthesis is missing frozen artifact requirements',
+                        );
+                    requirements = JSON.parse(
+                        input.prompt.slice(start + marker.length).split('\n')[0]!,
+                    );
+                    const schema = properties.artifacts as {
+                        items: { properties: { format: { enum: string[] } } };
+                    };
+                    Object.assign(payload, {
+                        artifacts: schema.items.properties.format.enum.map((format) => ({
+                            format,
+                            requirements: requirements
+                                .filter((requirement) => requirement.format === format)
+                                .map((requirement) => {
+                                    const index = claims.findIndex(
+                                        (claim) =>
+                                            (claim.outputFormat ??
+                                                schema.items.properties.format.enum[0]) ===
+                                                format &&
+                                            requirement.questionIds.every((id) =>
+                                                claim.questionIds.includes(id),
+                                            ),
+                                    );
+                                    return {
+                                        id: requirement.id,
+                                        text: index < 0 ? '' : claims[index]!.text,
+                                        claimIndexes: index < 0 ? [] : [index],
+                                    };
+                                }),
+                        })),
+                    });
+                }
                 return {
                     mode: 'live',
                     usage: { inputTokens: 1, outputTokens: 1, estimated: false },

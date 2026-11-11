@@ -1,9 +1,24 @@
 <template>
-    <nav v-if="items.length > 1" class="breadcrumbs" aria-label="面包屑导航">
-        <ol>
-            <li v-for="(item, index) in items" :key="item.label">
+    <nav
+        v-if="items.length > 1"
+        class="breadcrumbs text-muted text-[0.875rem] break-anywhere"
+        aria-label="面包屑导航"
+    >
+        <ol
+            class="[.breadcrumbs_&:is(ol)]:(flex flex-wrap items-center gap-1.5 min-w-0 list-none mt-0 mb-1.5 mx-0 p-0)"
+        >
+            <li
+                class="[.breadcrumbs_&:is(li)]:(flex flex-wrap items-center gap-1.5 min-w-0)"
+                v-for="(item, index) in items"
+                :key="item.label"
+            >
                 <app-icon v-if="index" name="chevron" />
-                <router-link v-if="item.to" :to="item.to">{{ item.label }}</router-link>
+                <router-link
+                    class="[.breadcrumbs_&:is(a)]:(inline-flex items-center min-h-11 text-primary underline-offset-[0.2em]) [.breadcrumbs_&:is(a):focus-visible]:([outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.125rem])"
+                    v-if="item.to"
+                    :to="item.to"
+                    >{{ item.label }}</router-link
+                >
                 <span v-else aria-current="page">{{ item.label }}</span>
             </li>
         </ol>
@@ -33,35 +48,3 @@ const items = computed(() => {
     return result;
 });
 </script>
-
-<style scoped>
-.breadcrumbs ol,
-.breadcrumbs li {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.375rem;
-    min-inline-size: 0;
-}
-.breadcrumbs ol {
-    list-style: none;
-    padding: 0;
-    margin: 0 0 0.375rem;
-}
-.breadcrumbs {
-    color: var(--scova-muted);
-    font-size: 0.875rem;
-    overflow-wrap: anywhere;
-}
-.breadcrumbs a {
-    display: inline-flex;
-    align-items: center;
-    min-block-size: 2.75rem;
-    color: var(--scova-primary);
-    text-underline-offset: 0.2em;
-}
-.breadcrumbs a:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.125rem;
-}
-</style>

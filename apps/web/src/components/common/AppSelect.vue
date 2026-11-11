@@ -349,251 +349,144 @@ defineExpose({ focus: () => trigger.value?.focus() });
 </script>
 
 <style scoped>
+/* Scoped UnoCSS keeps the long control/state combinations readable. */
 .app-select {
-    min-inline-size: 0;
+    @apply min-w-0;
 }
 .select-trigger {
-    display: flex;
-    align-items: center;
-    gap: 0.625rem;
-    inline-size: 100%;
-    min-block-size: 2.75rem;
-    padding: 0.625rem 0.875rem;
-    border: 0.0625rem solid var(--scova-select-border);
-    border-radius: var(--scova-select-radius);
-    background: var(--scova-surface);
-    color: var(--scova-text);
-    font: inherit;
-    line-height: 1.5;
-    text-align: start;
-    cursor: pointer;
-    transition:
-        border-color 150ms,
-        box-shadow 150ms,
-        background-color 150ms;
+    @apply flex items-center gap-2.5 w-full min-h-11 pt-2.5 pr-3.5 pb-2.5 pl-3.5
+        [border:0.0625rem_solid_var(--scova-select-border)] rounded-[var(--scova-select-radius)]
+        bg-surface text-default [font-family:inherit] [font-size:inherit] [font-weight:inherit]
+        [font-style:inherit] leading-[1.5] [font-variant:inherit] text-start cursor-pointer
+        [transition:border-color_150ms,_box-shadow_150ms,_background-color_150ms];
 }
 .select-value {
-    display: grid;
-    flex: 1;
-    min-inline-size: 0;
-    gap: 0.125rem;
-    overflow-wrap: anywhere;
+    @apply layout-grid flex-1 gap-0.5 break-anywhere;
 }
 .select-value small {
-    font-size: 0.75rem;
-    color: var(--scova-muted);
+    @apply text-[0.75rem] text-muted;
 }
 .select-leading {
-    display: grid;
-    place-items: center;
-    flex: none;
-    inline-size: 1.5rem;
-    block-size: 1.5rem;
-    color: var(--scova-primary);
+    @apply grid place-items-center flex-none w-6 h-6 text-primary;
 }
 .app-select--compact .select-leading {
-    inline-size: 1.25rem;
-    block-size: 1.25rem;
-    background: transparent;
+    @apply w-5 h-5 bg-transparent;
 }
 .app-select--compact .select-trigger {
-    padding: 0.5rem 0.75rem;
-    min-block-size: 2.75rem;
-    border-radius: var(--scova-select-radius);
+    @apply pt-2 pr-3 pb-2 pl-3 min-h-11 rounded-[var(--scova-select-radius)];
 }
 .select-chevron {
-    margin-inline-start: auto;
-    color: var(--scova-muted);
-    transition: transform 150ms;
+    @apply ml-auto text-muted [transition:transform_150ms];
 }
 [aria-expanded='true'] .select-chevron {
-    transform: rotate(180deg);
+    @apply [transform:rotate(180deg)];
 }
 .select-trigger:hover:not(:disabled) {
-    border-color: var(--scova-select-hover-border);
+    @apply [border-color:var(--scova-select-hover-border)];
 }
 .select-trigger:focus-visible,
 .select-trigger[aria-expanded='true'] {
-    outline: none;
-    border-color: var(--scova-primary);
-    box-shadow: 0 0 0 0.1875rem var(--scova-select-focus-ring);
+    @apply [outline:none] [border-color:var(--scova-primary)]
+        [box-shadow:0_0_0_0.1875rem_var(--scova-select-focus-ring)];
 }
 .select-trigger:disabled {
-    opacity: 0.55;
-    cursor: not-allowed;
+    @apply opacity-55 cursor-not-allowed;
 }
 .app-select--invalid .select-trigger:not(:disabled) {
-    border-color: var(--scova-danger);
+    @apply [border-color:var(--scova-danger)];
 }
 .app-select--invalid .select-trigger:focus-visible,
 .app-select--invalid .select-trigger[aria-expanded='true'] {
-    box-shadow: 0 0 0 0.1875rem color-mix(in srgb, var(--scova-danger) 12%, transparent);
+    @apply [box-shadow:0_0_0_0.1875rem_color-mix(in_srgb,_var(--scova-danger)_12%,_transparent)];
 }
 .select-panel {
-    position: fixed;
-    z-index: 2000;
-    display: flex;
-    flex-direction: column;
-    overflow: auto;
-    overscroll-behavior: contain;
-    padding: 0.5rem;
-    border: 0.0625rem solid color-mix(in srgb, var(--scova-border) 28%, transparent);
-    border-radius: 0.625rem;
-    background: var(--scova-surface);
-    color: var(--scova-text);
-    box-shadow:
-        0 0.75rem 2rem -0.5rem color-mix(in srgb, var(--scova-text) 14%, transparent),
-        0 0.125rem 0.5rem color-mix(in srgb, var(--scova-text) 4%, transparent);
-    font: 1rem/1.5 var(--scova-font-interface);
-    animation: select-reveal 150ms ease-out;
+    @apply fixed z-[2000] flex flex-col overflow-auto [overscroll-behavior:contain]
+        [border:0.0625rem_solid_color-mix(in_srgb,_var(--scova-border)_28%,_transparent)] rounded-2.5
+        bg-surface text-default
+        [box-shadow:0_0.75rem_2rem_-0.5rem_color-mix(in_srgb,_var(--scova-text)_14%,_transparent),_0_0.125rem_0.5rem_color-mix(in_srgb,_var(--scova-text)_4%,_transparent)]
+        [font-family:var(--scova-font-interface)] text-[1rem] leading-[1.5] font-normal
+        [font-style:normal] animate-select-reveal p-2;
 }
 .select-heading {
-    display: flex;
-    justify-content: space-between;
-    gap: 0.5rem;
-    flex: none;
-    padding: 0.375rem 0.625rem 0.625rem;
-    color: var(--scova-muted);
-    font-size: 0.75rem;
-    font-weight: 550;
+    @apply flex justify-between gap-2 flex-none pt-1.5 pr-2.5 pb-2.5 pl-2.5 text-muted text-[0.75rem]
+        [font-weight:550];
 }
 .select-count {
-    font-weight: 400;
+    @apply font-normal;
 }
 .select-panel--short .select-heading {
-    display: none;
+    @apply hidden;
 }
 .select-options {
-    padding: 0;
-    margin: 0;
-    list-style: none;
-    min-block-size: 2.75rem;
-    overflow: auto;
-    overscroll-behavior: contain;
-    scrollbar-width: thin;
-    scrollbar-color: color-mix(in srgb, var(--scova-border) 40%, transparent) transparent;
+    @apply list-none min-h-11 overflow-auto [overscroll-behavior:contain] [scrollbar-width:thin]
+        [scrollbar-color:color-mix(in_srgb,_var(--scova-border)_40%,_transparent)_transparent] m-0
+        p-0;
 }
 .select-option {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    min-block-size: 2.75rem;
-    padding: 0.625rem 0.75rem;
-    border-radius: 0.375rem;
-    cursor: pointer;
-    border: 0.0625rem solid transparent;
+    @apply flex items-center gap-2 min-h-11 pt-2.5 pr-3 pb-2.5 pl-3 rounded-1.5 cursor-pointer
+        [border:0.0625rem_solid_transparent];
 }
 .select-option + .select-option {
-    margin-block-start: 0.125rem;
+    @apply mt-0.5;
 }
 .select-option.is-active {
-    background: var(--scova-selected);
+    @apply [background:var(--scova-selected)];
 }
 .select-option[aria-selected='true'] {
-    font-weight: 500;
-    color: var(--scova-primary);
-    background: color-mix(in srgb, var(--scova-primary) 8%, var(--scova-surface));
+    @apply font-medium text-primary
+        [background:color-mix(in_srgb,_var(--scova-primary)_8%,_var(--scova-surface))];
 }
 .select-option.is-active[aria-selected='true'] {
-    background: color-mix(in srgb, var(--scova-primary) 13%, var(--scova-surface));
+    @apply [background:color-mix(in_srgb,_var(--scova-primary)_13%,_var(--scova-surface))];
 }
 .select-option-icon {
-    display: grid;
-    place-items: center;
-    inline-size: 1.75rem;
-    block-size: 1.75rem;
-    flex: none;
-    border-radius: 0.5rem;
-    background: var(--scova-surface);
+    @apply grid place-items-center w-7 h-7 flex-none rounded-2 bg-surface;
 }
 .select-option-copy {
-    display: grid;
-    min-inline-size: 0;
-    overflow-wrap: anywhere;
+    @apply layout-grid break-anywhere;
 }
 .select-option-copy small {
-    color: var(--scova-muted);
-    font-size: 0.8125rem;
+    @apply text-muted text-[0.8125rem];
 }
 .select-check {
-    display: grid;
-    place-items: center;
-    inline-size: 1.25rem;
-    block-size: 1.25rem;
-    flex: none;
-    margin-inline-start: auto;
-    color: var(--scova-primary);
-    font-size: 1rem;
+    @apply grid place-items-center w-5 h-5 flex-none ml-auto text-primary text-[1rem];
 }
 .select-swatch {
-    inline-size: 0.875rem;
-    block-size: 0.875rem;
-    flex: none;
-    border-radius: 50%;
-    box-shadow:
-        0 0 0 0.1875rem color-mix(in srgb, var(--scova-surface) 75%, transparent),
-        0 0 0 0.25rem color-mix(in srgb, var(--scova-border) 22%, transparent);
+    @apply w-3.5 h-3.5 flex-none rounded-[50%]
+        [box-shadow:0_0_0_0.1875rem_color-mix(in_srgb,_var(--scova-surface)_75%,_transparent),_0_0_0_0.25rem_color-mix(in_srgb,_var(--scova-border)_22%,_transparent)];
 }
 .select-search {
-    display: flex;
-    align-items: center;
-    flex: none;
-    gap: 0.5rem;
-    padding: 0.625rem 0.75rem;
-    margin-block-end: 0.5rem;
-    border: 0.0625rem solid var(--scova-select-border);
-    border-radius: var(--scova-select-radius);
-    color: var(--scova-muted);
-    background: var(--scova-surface);
+    @apply flex items-center flex-none gap-2 pt-2.5 pr-3 pb-2.5 pl-3 mb-2
+        [border:0.0625rem_solid_var(--scova-select-border)] rounded-[var(--scova-select-radius)]
+        text-muted bg-surface;
 }
 .select-search:focus-within {
-    border-color: var(--scova-primary);
+    @apply [border-color:var(--scova-primary)];
 }
 .select-search input {
-    inline-size: 100%;
-    min-inline-size: 0;
-    border: none;
-    outline: none;
-    background: transparent;
-    color: var(--scova-text);
-    font: inherit;
+    @apply font-inherit w-full min-w-0 [border:0] [outline:none] bg-transparent text-default;
 }
 .select-empty {
-    padding: 1.25rem 0.75rem;
-    margin: 0;
-    color: var(--scova-muted);
-    font-size: 0.875rem;
-    text-align: center;
+    @apply pt-5 pr-3 pb-5 pl-3 text-muted text-[0.875rem] text-center m-0;
 }
 @media (max-width: 30rem) {
     .app-select:not(.app-select--compact) .select-leading {
-        display: none;
+        @apply hidden;
     }
     .select-trigger {
-        gap: 0.375rem;
-        padding: 0.625rem;
+        @apply gap-1.5 p-2.5;
     }
     .select-chevron {
-        font-size: 1rem;
-    }
-}
-@keyframes select-reveal {
-    from {
-        opacity: 0;
-        transform: translateY(-0.25rem);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
+        @apply text-[1rem];
     }
 }
 @media (prefers-reduced-motion: reduce) {
     .select-trigger,
     .select-chevron {
-        transition: none;
+        @apply [transition:none];
     }
     .select-panel {
-        animation: none;
+        @apply [animation:none];
     }
 }
 </style>

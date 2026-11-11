@@ -17,9 +17,13 @@
         :bordered="false"
         :segmented="{ content: true }"
     >
-        <div class="info-content"><slot /></div>
+        <div
+            class="info-content layout-stack break-anywhere text-[1rem] leading-[1.7] [&.info-content_p]:m-0 [&.info-content_dl]:m-0"
+        >
+            <slot />
+        </div>
         <template #footer>
-            <div class="info-actions">
+            <div class="info-actions action-group justify-end">
                 <action-button type="primary" @click="show = false">知道了</action-button>
             </div>
         </template>
@@ -34,24 +38,3 @@ import AppIcon from '@/components/common/AppIcon.vue';
 defineProps<{ title: string; label: string; wide?: boolean }>();
 const show = ref(false);
 </script>
-
-<style scoped>
-.info-actions {
-    display: flex;
-    justify-content: flex-end;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-}
-.info-content {
-    display: grid;
-    gap: 1rem;
-    min-inline-size: 0;
-    overflow-wrap: anywhere;
-    font-size: 1rem;
-    line-height: 1.7;
-}
-.info-content :deep(p),
-.info-content :deep(dl) {
-    margin: 0;
-}
-</style>

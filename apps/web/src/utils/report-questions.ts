@@ -28,18 +28,24 @@ export function questionTextError(question: string) {
         parseContract(ReportQuestionInputSchema, { question });
         return '';
     } catch {
-        return question.length > 2000 ? '问题不能超过 2000 个 UTF-16 码元。' : '请输入非空白问题。';
+        return question.length > 2000 ? '问题不能超过 2000字。' : '请输入非空白问题。';
     }
 }
 export function questionAttempt(
     reportId: string,
     question: string,
     key: string = crypto.randomUUID(),
+    afterQuestionId?: string | null,
 ) {
     parseContract(UuidSchema, reportId);
     parseContract(ReportQuestionInputSchema, { question });
     parseContract(IdempotencyHeadersSchema, { 'idempotency-key': key });
-    return Object.freeze({ reportId, question, key });
+    return Object.freeze({
+        reportId,
+        question,
+        key,
+        ...(afterQuestionId !== undefined ? { afterQuestionId } : {}),
+    });
 }
 export type QuestionAttempt = ReturnType<typeof questionAttempt>;
 
@@ -76,7 +82,8 @@ export function validateQuestion(
         }
         if (
             !statement.text.trim() ||
-            !statement.citations.some((citation) => citation.quote.includes(statement.text))
+            (statement.kind !== 'inference' &&
+                !statement.citations.some((citation) => citation.quote.includes(statement.text)))
         )
             invalidQuestion('回答内容不是所列引用的逐字摘录');
     }

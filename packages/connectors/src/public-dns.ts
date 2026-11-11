@@ -45,9 +45,11 @@ export function createPublicDnsResolver(
         createSafeHttpClient({
             resolve: async () => [{ address: server.address, family: 4 }],
         });
-    return async (hostname: string): Promise<ResolvedAddress[]> => {
+    return async (hostname: string, signal?: AbortSignal): Promise<ResolvedAddress[]> => {
+        if (signal?.aborted) throw new ConnectorError('aborted', '域名解析已取消');
         if (mode === 'auto' || mode === 'system') {
             const addresses = await systemLookup(hostname);
+            if (signal?.aborted) throw new ConnectorError('aborted', '域名解析已取消');
             if (
                 mode === 'system' ||
                 !addresses.length ||
@@ -64,6 +66,7 @@ export function createPublicDnsResolver(
             timeoutMs: 5000,
             maxBytes: 65536,
             maxRedirects: 0,
+            signal,
         });
         if (response.status !== 200) throw new ConnectorError('network', '可信DNS查询失败');
         let value: unknown;

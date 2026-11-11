@@ -180,180 +180,104 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* Scoped UnoCSS keeps the long control/state combinations readable. */
 .mobile-navigation {
-    display: none;
+    @apply hidden;
 }
-:global(html:has(.mobile-drawer[open])) {
-    overflow: hidden;
-}
+
 .menu-trigger,
 .close-trigger,
 .menu-panel a {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.625em;
-    min-block-size: 2.75rem;
-    min-inline-size: 2.75rem;
-    padding: 0.625rem 0.875rem;
-    border: 0;
-    border-radius: 0.375rem;
-    color: inherit;
-    background: transparent;
-    font: inherit;
-    text-decoration: none;
-    cursor: pointer;
+    @apply font-inherit inline-flex items-center gap-[0.625em] min-h-11 min-w-11 pt-2.5 pr-3.5 pb-2.5
+        pl-3.5 [border:0] rounded-1.5 text-inherit bg-transparent no-underline cursor-pointer;
 }
 .menu-trigger {
-    justify-content: center;
-    padding: 0.375rem;
-    border-radius: 50%;
+    @apply justify-center rounded-[50%] p-1.5;
 }
 .mobile-drawer {
-    position: fixed;
-    inset-block: 0;
-    inset-inline: 0 auto;
-    inline-size: min(22rem, calc(100% - 2rem));
-    max-inline-size: 100%;
-    block-size: 100dvh;
-    max-block-size: 100dvh;
-    margin: 0;
-    padding: 0;
-    border: 0;
-    background: var(--scova-surface);
-    color: var(--scova-text);
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    transform: translateX(0);
-    transition: transform 0.18s ease-out;
+    @apply fixed [inset-block:0] [inset-inline:0_auto] w-[min(22rem,_calc(100%_-_2rem))] max-w-full
+        h-[100dvh] max-h-[100dvh] [border:0] bg-surface text-default [overflow-y:auto]
+        [overscroll-behavior:contain] [transform:translateX(0)] [transition:transform_0.18s_ease-out]
+        m-0 p-0;
 }
 @starting-style {
     .mobile-drawer[open] {
-        transform: translateX(-100%);
+        @apply [transform:translateX(-100%)];
     }
 }
 @media (prefers-reduced-motion: reduce) {
     .mobile-drawer {
-        transition: none;
+        @apply [transition:none];
     }
 }
 .mobile-drawer::backdrop {
-    background: rgb(0 0 0 / 28%);
+    @apply [background:rgb(0_0_0_/_28%)];
 }
 .drawer-content {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-    min-block-size: 100%;
-    min-inline-size: 0;
-    padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom));
+    @apply flex flex-col gap-4 min-h-full min-w-0 pt-[max(1rem,_env(safe-area-inset-top))] pr-4
+        pb-[max(1rem,_env(safe-area-inset-bottom))] pl-4;
 }
 .drawer-heading {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 0.75rem;
-    font-weight: 600;
+    @apply grid grid-cols-[minmax(0,_1fr)_auto] items-center gap-3 font-semibold;
 }
 .close-trigger {
-    justify-content: center;
-    padding: 0.625rem;
-    flex-shrink: 0;
-    margin-inline-start: auto;
-    grid-column: 2;
-    grid-row: 1;
-    align-self: start;
+    @apply justify-center shrink-0 ml-auto [grid-column:2] [grid-row:1] [align-self:start] p-2.5;
 }
 .drawer-account {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 0.75rem 0.5rem;
-    grid-column: 1 / -1;
-    grid-row: 1;
-    min-inline-size: 0;
-    color: inherit;
-    text-decoration: none;
-    border-radius: 0.5rem;
-    cursor: pointer;
+    @apply layout-grid grid-cols-[minmax(0,_1fr)_auto] gap-[0.75rem_0.5rem] col-span-full [grid-row:1]
+        text-inherit no-underline rounded-2 cursor-pointer;
 }
 .drawer-identity {
-    display: grid;
-    gap: 0.375rem;
-    min-inline-size: 0;
-    overflow-wrap: anywhere;
-    grid-column: 1;
-    grid-row: 2;
+    @apply layout-grid gap-1.5 break-anywhere [grid-column:1] [grid-row:2];
 }
 .drawer-identity strong {
-    font-size: 1rem;
-    font-weight: 600;
+    @apply text-[1rem] font-semibold;
 }
 .account-email {
-    color: var(--scova-muted);
-    font-size: 0.875rem;
-    font-weight: 400;
+    @apply text-muted text-[0.875rem] font-normal;
 }
 .drawer-account > .app-icon {
-    grid-column: 2;
-    grid-row: 2;
-    align-self: center;
-    color: var(--scova-muted);
+    @apply [grid-column:2] [grid-row:2] [align-self:center] text-muted;
 }
 .drawer-account:hover .drawer-identity strong {
-    color: var(--scova-primary);
+    @apply text-primary;
 }
 .avatar {
-    display: grid;
-    place-items: center;
-    flex-shrink: 0;
-    inline-size: 3.25rem;
-    block-size: 3.25rem;
-    border-radius: 50%;
-    background: var(--scova-selected);
-    color: var(--scova-primary);
+    @apply grid place-items-center shrink-0 w-[3.25rem] h-[3.25rem] rounded-[50%]
+        [background:var(--scova-selected)] text-primary;
 }
 .trigger-avatar {
-    inline-size: 2rem;
-    block-size: 2rem;
-    font-weight: 600;
+    @apply w-8 h-8 font-semibold;
 }
 .menu-panel {
-    display: grid;
-    gap: 0.25rem;
+    @apply grid gap-1;
 }
 .drawer-footer {
-    display: grid;
-    gap: 0.5rem;
-    padding-block-start: 0.5rem;
-    border-block-start: 0.0625rem solid color-mix(in srgb, var(--scova-border) 30%, transparent);
+    @apply grid gap-2 pt-2
+        [border-top:0.0625rem_solid_color-mix(in_srgb,_var(--scova-border)_30%,_transparent)];
 }
 .drawer-footer :deep(.n-button) {
-    justify-content: start;
-    border: 0;
-    background: transparent;
+    @apply justify-start [border:0] bg-transparent;
 }
 .logout-error {
-    color: var(--scova-danger);
-    overflow-wrap: anywhere;
+    @apply text-danger break-anywhere;
 }
 .menu-panel a[aria-current='page'],
 .menu-panel a:hover,
 .menu-trigger:hover,
 .close-trigger:hover {
-    background: var(--scova-selected);
-    color: var(--scova-primary);
+    @apply [background:var(--scova-selected)] text-primary;
 }
 .menu-panel a[aria-current='page'] {
-    text-decoration: underline;
-    text-underline-offset: 0.25em;
+    @apply underline underline-offset-[0.25em];
 }
 a:focus-visible,
 button:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.125rem;
+    @apply [outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.125rem];
 }
 @media (max-width: 53.999rem) {
     .mobile-navigation {
-        display: block;
+        @apply block;
     }
 }
 </style>

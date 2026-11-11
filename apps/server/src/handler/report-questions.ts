@@ -1,4 +1,5 @@
 import type { Context } from 'elysia';
+import type { OutputFormat } from '@scova/models';
 import type { ApiServices } from '@/app/services';
 import { requireCsrf, requireSession } from '@/http/session.ts';
 import { createReportQuestionService } from '@/service/report-questions.ts';
@@ -36,7 +37,25 @@ export function createReportQuestionHandlers(services: ApiServices) {
             set.headers['cache-control'] = 'no-store';
             return questions.get(session.userId, params.reportId, params.questionId!);
         },
-        async followup(this: void, { request, set, params }: Http) {
+        async conversation(
+            this: void,
+            { request, set, params, query }: Http & { query: { beforeQuestionId?: string } },
+        ) {
+            const session = await requireSession(request, services);
+            set.headers['cache-control'] = 'no-store';
+            return questions.conversation(session.userId, params.reportId, query.beforeQuestionId);
+        },
+        async followup(
+            this: void,
+            {
+                request,
+                set,
+                params,
+                body,
+            }: Http & {
+                body: { operation?: 'research' | 'revise'; outputFormats?: OutputFormat[] };
+            },
+        ) {
             const session = await requireSession(request, services);
             requireCsrf(request, session, services);
             const result = await questions.followup(
@@ -44,6 +63,8 @@ export function createReportQuestionHandlers(services: ApiServices) {
                 params.reportId,
                 params.questionId!,
                 key(request),
+                body.operation,
+                body.outputFormats,
             );
             set.status = 202;
             set.headers['cache-control'] = 'no-store';

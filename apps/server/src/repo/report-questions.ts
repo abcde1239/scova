@@ -1,7 +1,19 @@
-import { queryRows, sql as querySql, and, eq, isNull, type ReportQuestion } from '@scova/db';
+import {
+    queryRows,
+    sql as querySql,
+    and,
+    eq,
+    isNull,
+    lte,
+    desc,
+    inArray,
+    lt,
+    or,
+    type ReportQuestion,
+} from '@scova/db';
 import * as tables from '@scova/db';
 import { createHash } from 'node:crypto';
-import type { QuestionAnswer } from '@scova/models';
+import type { QuestionAnswer, ReportConversationContext } from '@scova/models';
 import type { ApiServices } from '@/app/services';
 import { ApiError } from '@/utils/errors.ts';
 import { createTaskDraftRepo } from '@/repo/task-drafts.ts';
@@ -49,10 +61,39 @@ export function createQuestionBudgetRepo(services: ApiServices) {
 
 export function createReportQuestionRepo(services: Pick<ApiServices, 'db' | 'clock'>) {
     return {
-        async claim(userId: string, reportId: string, question: string, key: string) {
+        async expire(userId: string, reportId: string, timeoutMs: number, answer: QuestionAnswer) {
+            await services
+                .db()
+                .update(tables.reportQuestions)
+                .set({ answerJson: answer })
+                .where(
+                    and(
+                        eq(tables.reportQuestions.userId, userId),
+                        eq(tables.reportQuestions.reportId, reportId),
+                        isNull(tables.reportQuestions.answerJson),
+                        lte(
+                            tables.reportQuestions.createdAt,
+                            new Date(services.clock().getTime() - timeoutMs - 30_000),
+                        ),
+                    ),
+                );
+        },
+        async claim(
+            userId: string,
+            reportId: string,
+            question: string,
+            key: string,
+            afterQuestionId?: string | null,
+        ) {
             const scope = `report:${reportId}:question`;
             const keyHash = hash(key);
-            const payloadHash = hash(JSON.stringify({ reportId, question }));
+            const payloadHash = hash(
+                JSON.stringify({
+                    reportId,
+                    question,
+                    ...(afterQuestionId !== undefined ? { afterQuestionId } : {}),
+                }),
+            );
             return services.db().transaction(async (tx) => {
                 // 锁报告仅串行化幂等认领，不持锁等待模型。
                 const locked = await queryRows<{ id: string }>(
@@ -97,9 +138,37 @@ export function createReportQuestionRepo(services: Pick<ApiServices, 'db' | 'clo
                         );
                     return { row, reused: true };
                 }
+                const latest = await tx.query.reportQuestions.findFirst({
+                    where: and(
+                        eq(tables.reportQuestions.userId, userId),
+                        eq(tables.reportQuestions.reportId, reportId),
+                    ),
+                    orderBy: [
+                        desc(tables.reportQuestions.createdAt),
+                        desc(tables.reportQuestions.id),
+                    ],
+                });
+                if (latest && !latest.answerJson)
+                    throw new ApiError(409, 'CONVERSATION_BUSY', '上一轮仍在处理中，请先读取会话');
+                if (afterQuestionId !== undefined && (latest?.id ?? null) !== afterQuestionId)
+                    throw new ApiError(
+                        409,
+                        'CONVERSATION_CHANGED',
+                        '会话已有新消息，请刷新历史后再发送',
+                    );
                 const row = await tx
                     .insert(tables.reportQuestions)
-                    .values({ userId: userId, reportId: reportId, question: question })
+                    .values({
+                        userId,
+                        reportId,
+                        question,
+                        createdAt: new Date(
+                            Math.max(
+                                services.clock().getTime(),
+                                (latest?.createdAt.getTime() ?? 0) + 1,
+                            ),
+                        ),
+                    })
                     .returning()
                     .then(firstRow);
                 await tx
@@ -116,6 +185,76 @@ export function createReportQuestionRepo(services: Pick<ApiServices, 'db' | 'clo
                     .then(firstRow);
                 return { row, reused: false };
             });
+        },
+        list(userId: string, reportId: string, limit = 101, before?: ReportQuestion) {
+            return services
+                .db()
+                .query.reportQuestions.findMany({
+                    where: and(
+                        eq(tables.reportQuestions.userId, userId),
+                        eq(tables.reportQuestions.reportId, reportId),
+                        ...(before
+                            ? [
+                                  or(
+                                      lt(tables.reportQuestions.createdAt, before.createdAt),
+                                      and(
+                                          eq(tables.reportQuestions.createdAt, before.createdAt),
+                                          lt(tables.reportQuestions.id, before.id),
+                                      ),
+                                  ),
+                              ]
+                            : []),
+                    ),
+                    orderBy: [
+                        desc(tables.reportQuestions.createdAt),
+                        desc(tables.reportQuestions.id),
+                    ],
+                    limit,
+                })
+                .then((rows) => rows.reverse());
+        },
+        artifacts(userId: string, runIds: string[]) {
+            if (!runIds.length) return Promise.resolve([]);
+            return services.db().query.reports.findMany({
+                where: and(
+                    eq(tables.reports.userId, userId),
+                    inArray(tables.reports.runId, runIds),
+                ),
+                columns: { id: true, runId: true, title: true },
+                orderBy: [tables.reports.publishedAt, tables.reports.id],
+                limit: 200,
+            });
+        },
+        async activeRun(userId: string, runIds: string[]) {
+            if (!runIds.length) return false;
+            return !!(await services.db().query.runs.findFirst({
+                where: and(
+                    eq(tables.runs.userId, userId),
+                    inArray(tables.runs.id, runIds),
+                    inArray(tables.runs.status, [
+                        'queued',
+                        'running',
+                        'recovering',
+                        'cancel_requested',
+                    ]),
+                ),
+                columns: { id: true },
+            }));
+        },
+        async saveContext(row: ReportQuestion, context: ReportConversationContext) {
+            await services
+                .db()
+                .update(tables.reportQuestions)
+                .set({ contextJson: context })
+                .where(
+                    and(
+                        eq(tables.reportQuestions.id, row.id),
+                        eq(tables.reportQuestions.userId, row.userId),
+                        isNull(tables.reportQuestions.answerJson),
+                    ),
+                )
+                .returning()
+                .then(firstRow);
         },
         find(userId: string, reportId: string, id: string) {
             return services

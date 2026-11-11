@@ -144,250 +144,169 @@ watch([() => props.log.lastSeq, selected, errorsOnly, follow], async () => {
 </script>
 
 <style scoped>
+/* Scoped UnoCSS keeps the long control/state combinations readable. */
 .job {
-    display: grid;
-    min-inline-size: 0;
-    border: 0.0625rem solid color-mix(in srgb, var(--scova-border) 40%, transparent);
-    border-radius: 0.75rem;
-    overflow: hidden;
-    background: var(--scova-surface);
+    @apply layout-grid [border:0.0625rem_solid_color-mix(in_srgb,_var(--scova-border)_40%,_transparent)]
+        rounded-3 overflow-hidden bg-surface;
 }
 .stages {
-    padding: 1rem;
-    background: color-mix(in srgb, var(--scova-selected) 50%, var(--scova-surface));
-    display: grid;
-    align-content: start;
-    gap: 0.25rem;
-    min-inline-size: 0;
+    @apply layout-grid [background:color-mix(in_srgb,_var(--scova-selected)_50%,_var(--scova-surface))]
+        [align-content:start] gap-1 p-4;
 }
 .eyebrow {
-    margin: 0 0 0.75rem;
-    padding-inline: 0.5rem;
-    color: var(--scova-muted);
-    font-size: 0.8125rem;
+    @apply mt-0 mr-0 mb-3 ml-0 pl-2 pr-2 text-muted text-[0.8125rem];
 }
 .stages button {
-    display: flex;
-    align-items: center;
-    gap: 0.625rem;
-    inline-size: 100%;
-    min-block-size: 2.75rem;
-    padding: 0.625rem;
-    background: transparent;
-    border: 0;
-    border-radius: 0.375rem;
-    color: var(--scova-text);
-    font: inherit;
-    text-align: start;
-    cursor: pointer;
+    @apply font-inherit flex items-center gap-2.5 w-full min-h-11 bg-transparent [border:0] rounded-1.5
+        text-default text-start cursor-pointer p-2.5;
 }
 .stages button:hover {
-    background: var(--scova-selected);
+    @apply [background:var(--scova-selected)];
 }
 .stages button[aria-pressed='true'] {
-    background: var(--scova-selected);
-    box-shadow: inset 0.1875rem 0 var(--scova-primary);
+    @apply [background:var(--scova-selected)] [box-shadow:inset_0.1875rem_0_var(--scova-primary)];
 }
 .stages button > .stage-label {
-    flex: 1;
-    min-inline-size: 0;
-    overflow-wrap: anywhere;
+    @apply flex-1 min-w-0 break-anywhere;
 }
 .stages small {
-    display: block;
-    color: var(--scova-muted);
-    font-size: 0.75rem;
-    line-height: 1.6;
+    @apply block text-muted text-[0.75rem] leading-[1.6];
 }
 .stages .failed > .app-icon {
-    color: var(--scova-danger);
+    @apply text-danger;
 }
 .stages .warned:not(.failed) > .app-icon {
-    color: var(--scova-partial);
+    @apply [color:var(--scova-partial)];
 }
 .console {
-    min-inline-size: 0;
-    display: flex;
-    flex-direction: column;
+    @apply min-w-0 flex flex-col;
 }
 .log-heading {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-    padding: 1rem 1.25rem;
-    border-block-end: 0.0625rem solid color-mix(in srgb, var(--scova-border) 30%, transparent);
+    @apply action-row justify-between pt-4 pr-5 pb-4 pl-5
+        [border-bottom:0.0625rem_solid_color-mix(in_srgb,_var(--scova-border)_30%,_transparent)];
 }
 h2 {
-    margin: 0;
-    font-size: 1rem;
+    @apply text-[1rem] m-0;
 }
 .log-heading p {
-    margin: 0.25rem 0 0;
-    color: var(--scova-muted);
-    font-size: 0.8125rem;
+    @apply mt-1 mr-0 mb-0 ml-0 text-muted text-[0.8125rem];
 }
 .log-controls {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1rem;
-    font-size: 0.8125rem;
+    @apply flex flex-wrap gap-4 text-[0.8125rem];
 }
 .log-controls label {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.375rem;
-    min-block-size: 2.75rem;
-    cursor: pointer;
+    @apply inline-flex items-center gap-1.5 min-h-11 cursor-pointer;
 }
 input {
-    accent-color: var(--scova-primary);
+    @apply [accent-color:var(--scova-primary)];
 }
 .log-viewport {
-    block-size: 32rem;
-    max-block-size: 65dvh;
-    min-block-size: 12rem;
-    overflow: auto;
-    overscroll-behavior: contain;
-    scrollbar-gutter: stable;
-    padding-block: 0.75rem;
-    background: color-mix(in srgb, var(--scova-canvas) 55%, var(--scova-surface));
+    @apply h-[32rem] max-h-[65dvh] min-h-[12rem] overflow-auto [overscroll-behavior:contain]
+        [scrollbar-gutter:stable] pt-3 pb-3
+        [background:color-mix(in_srgb,_var(--scova-canvas)_55%,_var(--scova-surface))];
 }
 .log-lines {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-    font-size: 0.8125rem;
-    line-height: 1.8;
+    @apply list-none [font-family:ui-monospace,_SFMono-Regular,_Consolas,_monospace] text-[0.8125rem]
+        leading-[1.8] m-0 p-0;
 }
 .log-lines li {
-    display: grid;
-    grid-template-columns: 2.5rem 4.5rem minmax(0, 1fr) auto;
-    gap: 0.75rem;
-    padding: 0.3125rem 1rem 0.3125rem 0.5rem;
+    @apply grid grid-cols-[2.5rem_4.5rem_minmax(0,_1fr)_auto] gap-3 pt-[0.3125rem] pr-4 pb-[0.3125rem]
+        pl-2;
 }
 .log-lines li:hover {
-    background: var(--scova-selected);
+    @apply [background:var(--scova-selected)];
 }
 .line-number,
 time,
 .line-duration {
-    color: var(--scova-muted);
-    font-variant-numeric: tabular-nums;
+    @apply text-muted [font-variant-numeric:tabular-nums];
 }
 .line-number {
-    text-align: end;
-    user-select: none;
+    @apply text-end [user-select:none];
 }
 .line-message {
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
+    @apply whitespace-pre-wrap break-anywhere;
 }
 .error {
-    background: color-mix(in srgb, var(--scova-danger) 7%, transparent);
+    @apply [background:color-mix(in_srgb,_var(--scova-danger)_7%,_transparent)];
 }
 .error .line-message {
-    color: var(--scova-danger);
+    @apply text-danger;
 }
 .warning {
-    background: color-mix(in srgb, var(--scova-partial) 6%, transparent);
+    @apply [background:color-mix(in_srgb,_var(--scova-partial)_6%,_transparent)];
 }
 .warning .line-message {
-    color: var(--scova-partial);
+    @apply [color:var(--scova-partial)];
 }
 .guidance {
-    display: block;
-    font: inherit;
-    color: var(--scova-muted);
+    @apply font-inherit block text-muted;
 }
 .error-label {
-    font-size: 0.75rem;
-    font-weight: 600;
-    margin-inline-end: 0.5rem;
+    @apply text-[0.75rem] font-semibold mr-2;
 }
 code {
-    display: block;
-    font: inherit;
-    font-size: 0.75rem;
-    opacity: 0.85;
+    @apply block [font-family:inherit] text-[0.75rem] [font-weight:inherit] [font-style:inherit]
+        leading-[inherit] [font-variant:inherit] opacity-85;
 }
 .log-footer {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.875rem 1.25rem;
-    font-size: 0.8125rem;
-    color: var(--scova-muted);
-    overflow-wrap: anywhere;
+    @apply flex items-center gap-2 pt-3.5 pr-5 pb-3.5 pl-5 text-[0.8125rem] text-muted break-anywhere;
 }
 .connection-dot {
-    inline-size: 0.4375rem;
-    block-size: 0.4375rem;
-    flex-shrink: 0;
-    border-radius: 50%;
-    background: var(--scova-muted);
+    @apply w-[0.4375rem] h-[0.4375rem] shrink-0 rounded-[50%] [background:var(--scova-muted)];
 }
 .connection-dot.active {
-    background: var(--scova-primary);
+    @apply [background:var(--scova-primary)];
 }
 .log-note,
 .log-empty {
-    padding: 0.75rem 1.25rem;
-    margin: 0;
-    font-size: 0.875rem;
-    color: var(--scova-muted);
+    @apply pt-3 pr-5 pb-3 pl-5 text-[0.875rem] text-muted m-0;
 }
 button:focus-visible,
 input:focus-visible,
 .log-viewport:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: -0.125rem;
+    @apply [outline:0.125rem_solid_var(--scova-primary)] [outline-offset:-0.125rem];
 }
 @media (min-width: 56rem) {
     .job {
-        grid-template-columns: 14rem minmax(0, 1fr);
+        @apply grid-cols-[14rem_minmax(0,_1fr)];
     }
     .stages {
-        border-inline-end: 0.0625rem solid color-mix(in srgb, var(--scova-border) 30%, transparent);
+        @apply [border-right:0.0625rem_solid_color-mix(in_srgb,_var(--scova-border)_30%,_transparent)];
     }
 }
 @media (max-width: 55.999rem) {
     .stages {
-        grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
+        @apply grid-cols-[repeat(auto-fit,_minmax(min(100%,_9rem),_1fr))];
     }
     .eyebrow {
-        grid-column: 1 / -1;
+        @apply col-span-full;
     }
     .stages button {
-        font-size: 0.8125rem;
+        @apply text-[0.8125rem];
     }
     .stages button > small {
-        display: none;
+        @apply hidden;
     }
 }
 @media (max-width: 34rem) {
     .log-lines li {
-        grid-template-columns: 1.5rem minmax(0, 1fr);
-        gap: 0.25rem 0.625rem;
+        @apply grid-cols-[1.5rem_minmax(0,_1fr)] gap-[0.25rem_0.625rem];
     }
     time {
-        grid-column: 2;
-        font-size: 0.6875rem;
+        @apply [grid-column:2] text-[0.6875rem];
     }
     .line-number {
-        grid-row: span 2;
+        @apply [grid-row:span_2];
     }
     .line-message {
-        grid-column: 2;
+        @apply [grid-column:2];
     }
     .line-duration {
-        grid-column: 2;
-        font-size: 0.75rem;
+        @apply [grid-column:2] text-[0.75rem];
     }
     .log-heading {
-        padding-inline: 1rem;
+        @apply pl-4 pr-4;
     }
 }
 </style>

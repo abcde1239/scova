@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vite-plus/test';
+import { createHash } from 'node:crypto';
 import {
     ConnectorError,
     createConnectorBundle,
@@ -34,6 +35,87 @@ function fixture(
 }
 
 describe('raw search API compatibility', () => {
+    it.each(['deepseek', 'tavily'] as const)(
+        '%s requests original body and keeps provenance separate from snippets',
+        async (protocol) => {
+            const body = 'The plan costs $20 per month when billed annually.';
+            const resultItem = {
+                ...item(),
+                content: protocol === 'tavily' ? 'Relevant snippet only' : body,
+                raw_content: protocol === 'tavily' ? body : undefined,
+            };
+            const { source, transport } = fixture(
+                protocol,
+                { results: [resultItem], answer: 'Generated answer is not evidence' },
+                { contentMode: 'prefer_api' },
+            );
+            const result = await source.search('pricing');
+            expect(JSON.parse(transport.mock.calls[0][1].body!)).toMatchObject(
+                protocol === 'deepseek'
+                    ? { need_content: true }
+                    : { include_raw_content: true, include_answer: false },
+            );
+            expect(result.results[0].page).toMatchObject({
+                kind: 'read_page',
+                text: body,
+                originalUrl: item().url,
+                contentHash: createHash('sha256').update(body).digest('hex'),
+                extractionVersion: `search-api/${protocol}/v1`,
+                truncated: false,
+                untrusted: true,
+            });
+            expect(JSON.stringify(result)).not.toContain('Generated answer');
+        },
+    );
+    it.each(['', '   ', null, undefined])(
+        'leaves absent body %s for Reader instead of promoting summaries',
+        async (content) => {
+            const { source } = fixture(
+                'deepseek',
+                { results: [{ ...item(), content, summary: 'Generated summary' }] },
+                { contentMode: 'prefer_api' },
+            );
+            const result = await source.search('query');
+            expect(result.results[0].page).toBeUndefined();
+            expect(result.results[0].snippet).toBe(item().snippet);
+        },
+    );
+    it('Perplexity snippets still require Reader even with content preference enabled', async () => {
+        const { source } = fixture('perplexity', undefined, { contentMode: 'prefer_api' });
+        expect((await source.search('query')).results[0].page).toBeUndefined();
+    });
+    it('bounds aggregate body bytes without splitting Unicode or accepting unsafe result URLs', async () => {
+        const results = Array.from({ length: 10 }, (_, i) => ({
+            ...item(`https://source.example/${i}`),
+            content: '😀中'.repeat(80_000),
+        }));
+        // A privileged injected HTTP fixture avoids exceeding the transport response cap here.
+        const api = createSearchApi({
+            protocol: 'deepseek',
+            apiKey: 'key',
+            contentMode: 'prefer_api',
+            maxResults: 10,
+            http: {
+                request: async () => ({
+                    url: 'https://api.deepseek.com/v1/tools/search',
+                    ...json({
+                        results: [
+                            ...results,
+                            { ...item('http://127.0.0.1/'), content: 'private body' },
+                        ],
+                    }),
+                }),
+            },
+        });
+        const response = await api.search('query');
+        const bodies = response.results.map((entry) => entry.page?.text ?? '');
+        expect(bodies.reduce((sum, body) => sum + Buffer.byteLength(body), 0)).toBeLessThanOrEqual(
+            800_000,
+        );
+        expect(bodies.join('')).not.toContain('�');
+        expect(JSON.stringify(response)).not.toContain('private body');
+        expect(Buffer.byteLength(JSON.stringify(response))).toBeLessThan(2 * 1024 * 1024);
+    });
     it.each(['deepseek', 'perplexity'] as const)(
         'sends the documented %s request and returns only candidate snippets',
         async (protocol) => {

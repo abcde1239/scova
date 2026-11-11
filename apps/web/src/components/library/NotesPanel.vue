@@ -1,13 +1,18 @@
 <template>
     <section
         ref="panel"
-        class="notes-panel"
+        class="notes-panel layout-grid gap-6 break-anywhere w-[min(100%,_45rem)] keyboard-focus-wide"
         :style="reading.variables"
         :aria-labelledby="`${id}-title`"
         tabindex="-1"
     >
-        <h2 :id="`${id}-title`" class="scova-interface"><app-icon name="edit" />纯文本笔记</h2>
-        <p v-if="!available" class="scova-interface" role="status">
+        <h2
+            :id="`${id}-title`"
+            class="scova-interface flex items-center gap-2 text-[1.25rem] font-semibold m-0"
+        >
+            <app-icon name="edit" />纯文本笔记
+        </h2>
+        <p v-if="!available" class="scova-interface m-0" role="status">
             报告暂时不可用；本地稿仍保留，可复制。恢复读取前不能新建、保存、删除或重放。
         </p>
         <div
@@ -19,10 +24,11 @@
                     items.length ||
                     previous.length)
             "
-            class="notes-tools scova-interface"
+            class="notes-tools scova-interface report-grid"
         >
             <label :for="`${id}-target`">笔记目标</label>
             <select
+                class="box-border w-full min-w-0 min-h-11 border-theme rounded-2 bg-surface text-default font-inherit cursor-pointer p-2.5 keyboard-focus-wide disabled:cursor-not-allowed"
                 :id="`${id}-target`"
                 :value="selection"
                 :disabled="editor.pending.value || editor.reading.value"
@@ -37,7 +43,7 @@
                     {{ item.label }}
                 </option>
             </select>
-            <div class="notes-actions">
+            <div class="notes-actions action-group items-start">
                 <action-button
                     :disabled="!currentTarget || editor.pending.value || editor.reading.value"
                     @click="begin"
@@ -57,37 +63,51 @@
         </div>
         <note-editor :state="editor" :available="available" @close="closeEditor" />
         <template v-if="available">
-            <p v-if="query.isPending.value" class="scova-interface" role="status">正在读取笔记。</p>
-            <p v-if="query.isError.value" class="scova-interface" role="alert">
+            <p v-if="query.isPending.value" class="scova-interface m-0" role="status">
+                正在读取笔记。
+            </p>
+            <p v-if="query.isError.value" class="scova-interface m-0" role="alert">
                 {{ noteReadError(query.error.value) }}
             </p>
-            <p v-if="query.isError.value && items.length" class="scova-interface">
+            <p v-if="query.isError.value && items.length" class="scova-interface m-0">
                 以下保留上次读取值，请重新读取以确认。
             </p>
             <p
                 v-if="query.isSuccess.value && !items.length"
-                class="scova-interface empty-copy"
+                class="scova-interface empty-copy m-0"
                 role="status"
             >
                 暂无笔记
             </p>
-            <ul class="notes-list">
-                <li v-for="note in items" :key="note.id" class="note-entry">
-                    <p class="note-body scova-note">{{ note.body }}</p>
-                    <p class="note-target scova-interface">{{ targetLabel(note) }}</p>
-                    <div class="notes-actions scova-interface">
-                        <details class="note-details">
-                            <summary>笔记详情</summary>
-                            <dl>
+            <ul class="notes-list list-none min-w-0 m-0 p-0">
+                <li
+                    v-for="note in items"
+                    :key="note.id"
+                    class="note-entry layout-grid gap-2.5 break-anywhere pt-6 pb-6 [border-bottom:0.0625rem_solid_var(--scova-border)]"
+                >
+                    <p class="note-body scova-note whitespace-pre-wrap m-0">{{ note.body }}</p>
+                    <p class="note-target scova-interface text-muted text-[0.875rem] m-0">
+                        {{ targetLabel(note) }}
+                    </p>
+                    <div class="notes-actions scova-interface action-group items-start">
+                        <details
+                            class="note-details min-w-0 max-w-full [&.note-details[open]]:[flex-basis:100%]"
+                        >
+                            <summary
+                                class="min-h-11 pt-2.5 pb-2.5 box-border cursor-pointer text-muted keyboard-focus-wide"
+                            >
+                                笔记详情
+                            </summary>
+                            <dl class="flex flex-wrap gap-[1rem_2rem] m-0">
                                 <div>
-                                    <dt>
+                                    <dt class="text-muted">
                                         {{ note.target.kind === 'report' ? '报告' : '来源' }}目标
                                     </dt>
-                                    <dd>{{ note.target.id }}</dd>
+                                    <dd class="m-0">{{ note.target.id }}</dd>
                                 </div>
                                 <div>
-                                    <dt>最近编辑</dt>
-                                    <dd>
+                                    <dt class="text-muted">最近编辑</dt>
+                                    <dd class="m-0">
                                         <time :datetime="note.updatedAt">{{ note.updatedAt }}</time>
                                     </dd>
                                 </div>
@@ -99,6 +119,7 @@
                             >编辑笔记</action-button
                         >
                         <router-link
+                            class="inline-flex items-center min-h-11 text-primary cursor-pointer underline-offset-[0.2em] keyboard-focus-wide"
                             v-if="note.target.kind === 'report'"
                             :to="`/reports/${note.target.id}`"
                             >打开关联报告</router-link
@@ -106,7 +127,10 @@
                     </div>
                 </li>
             </ul>
-            <nav class="notes-actions scova-interface" aria-label="笔记分页">
+            <nav
+                class="notes-actions scova-interface action-group items-start"
+                aria-label="笔记分页"
+            >
                 <action-button
                     v-if="previous.length"
                     :disabled="query.isFetching.value || editor.pending.value"
@@ -243,115 +267,3 @@ onUnmounted(() => window.removeEventListener('beforeunload', beforeUnload));
 onBeforeRouteLeave(canLeave);
 onBeforeRouteUpdate(canLeave);
 </script>
-
-<style scoped>
-h2 {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-.notes-panel,
-.notes-tools,
-.note-entry {
-    display: grid;
-    gap: 1.25rem;
-    min-inline-size: 0;
-    overflow-wrap: anywhere;
-}
-.note-target {
-    color: var(--scova-muted);
-    font-size: 0.875rem;
-}
-.note-details {
-    min-inline-size: 0;
-    max-inline-size: 100%;
-}
-.note-details[open] {
-    flex-basis: 100%;
-}
-summary {
-    min-block-size: 2.75rem;
-    padding-block: 0.625rem;
-    box-sizing: border-box;
-    cursor: pointer;
-    color: var(--scova-muted);
-}
-summary:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
-}
-.notes-panel {
-    inline-size: min(100%, 45rem);
-    gap: 1.5rem;
-}
-h2,
-p {
-    margin: 0;
-}
-h2.scova-interface {
-    font-size: 1.25rem;
-    font-weight: 600;
-}
-select {
-    box-sizing: border-box;
-    inline-size: 100%;
-    min-inline-size: 0;
-    min-block-size: 2.75rem;
-    padding: 0.625rem;
-    border: 0.0625rem solid var(--scova-border);
-    border-radius: 0.5rem;
-    background: var(--scova-surface);
-    color: var(--scova-text);
-    font: inherit;
-    cursor: pointer;
-}
-select:disabled {
-    cursor: not-allowed;
-}
-.notes-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    min-inline-size: 0;
-}
-.note-entry {
-    padding-block: 1.5rem;
-    gap: 0.625rem;
-    border-block-end: 0.0625rem solid var(--scova-border);
-}
-.note-body {
-    white-space: pre-wrap;
-}
-dl {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1rem 2rem;
-    margin: 0;
-}
-dt {
-    color: var(--scova-muted);
-}
-dd {
-    margin: 0;
-}
-.notes-actions {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: start;
-    gap: 0.75rem;
-}
-a {
-    display: inline-flex;
-    align-items: center;
-    min-block-size: 2.75rem;
-    color: var(--scova-primary);
-    cursor: pointer;
-    text-underline-offset: 0.2em;
-}
-a:focus-visible,
-select:focus-visible,
-.notes-panel:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
-}
-</style>

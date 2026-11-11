@@ -31,6 +31,7 @@ import type { RunLeaseToken } from '@/utils/runs.ts';
 import { loadBaseline } from '@/repo/comparison.ts';
 import { toolFailures, type ToolFailureCode } from '@/utils/tool-failure.ts';
 import type { AgentBaseline } from '@scova/agent-core';
+import { normalizeUrl } from '@scova/connectors';
 
 export type AgentTool = 'search' | 'read' | 'model';
 export type AgentJson =
@@ -82,6 +83,7 @@ export interface AgentRepository {
     readAuthorizedCheckpoint(): Promise<AgentCheckpointRef | null>;
     promoteCheckpoint(ref: AgentCheckpointRef): Promise<void>;
     readPages(options?: { allowDeadline?: boolean }): Promise<AgentJson[]>;
+    searchPage?(url: string): Promise<AgentJson | null>;
 }
 
 export class AgentPersistenceError extends Error {
@@ -508,6 +510,46 @@ export function createAgentRepository(db: DatabaseClient, token: RunLeaseToken):
                     .then((rows) => requiredDatabaseValue(rows[0]));
             });
         },
+        searchPage: (url) =>
+            fence(async (tx, run) => {
+                const wanted = normalizeUrl(url);
+                const calls = await tx.query.toolCalls.findMany({
+                    where: and(
+                        eq(dbToolCalls.userId, run.userId),
+                        eq(dbToolCalls.runId, run.id),
+                        eq(dbToolCalls.tool, 'search'),
+                        eq(dbToolCalls.status, 'succeeded'),
+                        lte(dbToolCalls.finishedAt, run.deadlineAt!),
+                    ),
+                    orderBy: [desc(dbToolCalls.finishedAt), desc(dbToolCalls.attemptNo)],
+                });
+                for (const call of calls) {
+                    const output = completedOutput(call);
+                    if (
+                        !output ||
+                        typeof output !== 'object' ||
+                        Array.isArray(output) ||
+                        !Array.isArray(output.results)
+                    )
+                        continue;
+                    for (const result of output.results) {
+                        if (
+                            !result ||
+                            typeof result !== 'object' ||
+                            Array.isArray(result) ||
+                            typeof result.url !== 'string' ||
+                            !result.page
+                        )
+                            continue;
+                        try {
+                            if (normalizeUrl(result.url) === wanted) return result.page;
+                        } catch {
+                            /* Ignore malformed old results. */
+                        }
+                    }
+                }
+                return null;
+            }),
         readPages: (options = {}) =>
             withRunFence(
                 db,

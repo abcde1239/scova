@@ -1,31 +1,51 @@
 <template>
-    <div class="avatar-settings" :aria-busy="pending ? 'true' : undefined">
+    <div
+        class="avatar-settings layout-grid grid-cols-[5rem_minmax(0,_1fr)] items-start gap-[0.75rem_1.25rem] [@media(max-width:_35.999rem)]:(flex items-center flex-wrap gap-5)"
+        :aria-busy="pending ? 'true' : undefined"
+    >
         <account-avatar
-            class="profile-avatar"
+            class="profile-avatar [&&]:([grid-row:1_/_span_2] w-[5rem] h-[5rem] text-[2rem])"
             :email="user?.email"
             :version="user?.avatarVersion"
             :preview="preview"
         />
-        <p class="account-email">{{ user?.email }}</p>
-        <div class="avatar-details">
-            <p class="help">JPEG、PNG、GIF 或 WebP，最大5 MiB。居中裁成方形，动图使用第一帧。</p>
-            <p v-if="query.isPending.value" role="status">正在读取头像设置…</p>
-            <p v-else-if="query.isError.value" class="scova-failure" role="alert">
+        <p
+            class="account-email break-anywhere [grid-column:2] min-w-0 text-muted m-0 [@media(max-width:_35.999rem)]:[flex:1_1_12rem]"
+        >
+            {{ user?.email }}
+        </p>
+        <div
+            class="avatar-details [grid-column:2] layout-grid gap-3 [@media(max-width:_35.999rem)]:[flex:1_0_100%]"
+        >
+            <p class="help break-anywhere text-muted m-0">
+                JPEG、PNG、GIF 或 WebP，最大5 MiB。居中裁成方形，动图使用第一帧。
+            </p>
+            <p class="break-anywhere m-0" v-if="query.isPending.value" role="status">
+                正在读取头像设置…
+            </p>
+            <p
+                v-else-if="query.isError.value"
+                class="scova-failure break-anywhere m-0"
+                role="alert"
+            >
                 头像设置暂时无法读取，请刷新重试。
             </p>
-            <p v-else-if="!query.data.value?.data.available" class="help">
+            <p
+                v-else-if="!query.data.value?.data.available"
+                class="help break-anywhere text-muted m-0"
+            >
                 当前部署尚未启用头像上传。
             </p>
             <input
                 ref="input"
-                class="file-input"
+                class="file-input hidden"
                 type="file"
                 accept="image/jpeg,image/png,image/gif,image/webp"
                 aria-label="选择头像文件"
                 :disabled="pending || !query.data.value?.data.available"
                 @change="choose"
             />
-            <div class="avatar-actions">
+            <div class="avatar-actions flex flex-wrap gap-2">
                 <action-button
                     :disabled="pending || !query.data.value?.data.available"
                     @click="input?.click()"
@@ -47,8 +67,11 @@
                     >刷新头像</action-button
                 >
             </div>
-            <p v-if="file" class="help">已选择 {{ file.name }}，上传后生效。</p>
+            <p v-if="file" class="help break-anywhere text-muted m-0">
+                已选择 {{ file.name }}，上传后生效。
+            </p>
             <p
+                class="break-anywhere m-0"
                 v-if="message"
                 :class="{ 'scova-failure': !success }"
                 :role="success ? 'status' : 'alert'"
@@ -85,59 +108,3 @@ function choose(event: Event) {
     target.value = '';
 }
 </script>
-
-<style scoped>
-.avatar-settings {
-    display: grid;
-    grid-template-columns: 5rem minmax(0, 1fr);
-    align-items: flex-start;
-    gap: 0.75rem 1.25rem;
-    min-inline-size: 0;
-}
-.profile-avatar {
-    grid-row: 1 / span 2;
-    inline-size: 5rem;
-    block-size: 5rem;
-    font-size: 2rem;
-}
-.avatar-details {
-    grid-column: 2;
-    display: grid;
-    gap: 0.75rem;
-    min-inline-size: 0;
-}
-.account-email {
-    grid-column: 2;
-    min-inline-size: 0;
-}
-.avatar-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-}
-p {
-    margin: 0;
-    overflow-wrap: anywhere;
-}
-.help,
-.account-email {
-    color: var(--scova-muted);
-}
-.file-input {
-    display: none;
-}
-@media (max-width: 35.999rem) {
-    .avatar-settings {
-        display: flex;
-        align-items: center;
-        flex-wrap: wrap;
-        gap: 1.25rem;
-    }
-    .account-email {
-        flex: 1 1 12rem;
-    }
-    .avatar-details {
-        flex: 1 0 100%;
-    }
-}
-</style>

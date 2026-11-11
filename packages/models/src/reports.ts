@@ -15,6 +15,7 @@ import {
 import { CoverageSchema } from './runs.ts';
 import { validReportValueClaims } from './report-value.ts';
 import { classifyReportDelivery } from './report-delivery.ts';
+import { validReportArtifacts } from './report-artifact-validation.ts';
 import { SourceDatesSchema } from './source-dates.ts';
 import { FeedbackEffectsSchema } from './feedback.ts';
 
@@ -162,6 +163,16 @@ const ReportObject = Type.Object(
         taskVersionId: UuidSchema,
         baselineRunId: Type.Union([UuidSchema, Type.Null()]),
         schemaVersion: Type.Literal(1),
+        conversation: Type.Optional(
+            Type.Object(
+                {
+                    reportId: UuidSchema,
+                    questionId: UuidSchema,
+                    operation: Type.Union([Type.Literal('research'), Type.Literal('revise')]),
+                },
+                { additionalProperties: false },
+            ),
+        ),
         title: NonEmptyTextSchema,
         summary: NonEmptyTextSchema,
         format: OutputFormatSchema,
@@ -180,11 +191,32 @@ const ReportObject = Type.Object(
         feedbackEffects: Type.Optional(FeedbackEffectsSchema),
         publishedAt: InstantSchema,
     },
-    { additionalProperties: false, description: '四种展示形式共用的不可变报告 DTO' },
+    { additionalProperties: false, description: '包含已生成成果索引、结论及证据的不可变报告 DTO' },
 );
 export const ReportSchema = refineSchema(ReportObject, 'ScovaReport', (value) => {
+    const artifacts = value.coverage.artifacts;
+    if (!validReportArtifacts(artifacts, value.claims, value.coverage.reportValue)) return false;
+    if (
+        artifacts &&
+        (new Set(artifacts.map((artifact) => artifact.format)).size !== artifacts.length ||
+            artifacts[0]?.format !== value.format ||
+            artifacts.some(
+                (artifact) =>
+                    !artifact.claimIndexes.length ||
+                    artifact.claimIndexes.some((index) => !value.claims[index]),
+            ) ||
+            new Set(artifacts.flatMap((artifact) => artifact.claimIndexes)).size !==
+                value.claims.length ||
+            new Set(artifacts.flatMap((artifact) => artifact.claimIndexes)).size !==
+                artifacts.reduce((sum, artifact) => sum + artifact.claimIndexes.length, 0))
+    )
+        return false;
     if (value.coverage.delivery) {
-        const expected = classifyReportDelivery(value.coverage.reportValue, value.claims);
+        const expected = classifyReportDelivery(
+            value.coverage.reportValue,
+            value.claims,
+            artifacts,
+        );
         if (
             Object.entries(expected).some(
                 ([key, item]) => Reflect.get(value.coverage.delivery!, key) !== item,

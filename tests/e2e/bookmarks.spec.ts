@@ -301,9 +301,9 @@ test('HTTP sample: report create201, library context, delete204 and original cit
     expect(state.writes.at(-1)?.path).toBe(`/api/v1/bookmarks/${id(40)}`);
     await page.goBack();
     await expect(page.locator('.report-brief')).toHaveText(original, { useInnerText: true });
-    await page.locator('details.evidence summary').first().press('Enter');
+    await page.locator('.evidence-source-group > summary').first().press('Enter');
     await expect(page.locator('blockquote').first()).toHaveText(report().evidence[0]!.quote);
-    await expect(page.locator('img')).toHaveCount(0);
+    await expect(page.locator('.report-brief img')).toHaveCount(0);
     expect(external).toEqual([]);
     expect(state.writes.every((write) => /\/bookmarks(?:\/|$)/.test(write.path))).toBe(true);
 });
@@ -723,7 +723,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
                 );
             }
         }
-        await expect(page.locator('img')).toHaveCount(0);
+        await expect(entries(page).locator('img')).toHaveCount(0);
         expect(external).toEqual([]);
         expect(errors).toEqual([]);
     });

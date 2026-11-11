@@ -16,6 +16,28 @@ function tokens(value: unknown) {
     return value as number;
 }
 
+/** These official models enable thinking by default. Bounded JSON calls need
+ * their output allowance for the response; never send provider options to a proxy. */
+function boundedJsonOptions(protocol: ModelProtocol, base: string, model: string) {
+    if (protocol !== 'openai_json' || !['deepseek-flash', 'deepseek-v4-pro'].includes(model))
+        return {};
+    try {
+        const url = new URL(base);
+        if (
+            url.origin === 'https://api.deepseek.com' &&
+            ['', '/', '/v1'].includes(url.pathname) &&
+            !url.username &&
+            !url.password &&
+            !url.search &&
+            !url.hash
+        )
+            return { thinking: { type: 'disabled' } };
+    } catch {
+        /* Endpoint validation retains its existing error path. */
+    }
+    return {};
+}
+
 export function modelRequest(
     protocol: ModelProtocol,
     baseUrl: string | undefined,
@@ -44,15 +66,7 @@ export function modelRequest(
                 model,
                 max_tokens: input.maxOutputTokens,
                 system: messages[0]?.content ?? '',
-                messages: [
-                    {
-                        role: 'user',
-                        content: messages
-                            .slice(1)
-                            .map((message) => message.content)
-                            .join('\n\n'),
-                    },
-                ],
+                messages: messages.slice(1).map(({ role, content }) => ({ role, content })),
                 tools: [
                     {
                         name: 'scova_output',
@@ -69,12 +83,10 @@ export function modelRequest(
             headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
             body: {
                 systemInstruction: { parts: [{ text: messages[0]?.content ?? '' }] },
-                contents: [
-                    {
-                        role: 'user',
-                        parts: messages.slice(1).map((message) => ({ text: message.content })),
-                    },
-                ],
+                contents: messages.slice(1).map((message) => ({
+                    role: message.role === 'assistant' ? 'model' : 'user',
+                    parts: [{ text: message.content }],
+                })),
                 generationConfig: {
                     maxOutputTokens: input.maxOutputTokens,
                     responseMimeType: 'application/json',
@@ -89,6 +101,7 @@ export function modelRequest(
         headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
         body: {
             model,
+            ...boundedJsonOptions(protocol, base, model),
             messages:
                 protocol === 'openai_json'
                     ? messages.map((message, index) =>

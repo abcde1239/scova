@@ -42,6 +42,7 @@ describe('未保存任务草稿契约', () => {
                 .searchScope,
         ).toEqual(scope);
         for (const invalid of [
+            { ...scope, outputFormats: ['brief', 'list'] },
             { ...scope, goal: ' ' },
             { ...scope, focusPoints: Array(11).fill('内容') },
             {

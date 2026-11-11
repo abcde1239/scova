@@ -20,6 +20,8 @@ apps/web/src/
 - 使用 Vue 3 `<script setup lang="ts">`，SFC 按 template、script、必要时 style 排列。组件文件 PascalCase，模板组件 kebab-case，composable 命名 useXxx，`@/` 指向 src。
 - 页面保持薄层，把独立展示单元移入按功能组织的 components，把复用交互放 composables，远程调用放 api。Props/emits、路由参数使用明确类型，不照搬参考项目中的 any 或弱类型 Props。
 - 采用 naive-ui 显式组件导入，UnoCSS 维护 page-container、卡片、表单和空态等语义 shortcut；集中处理主题，不在页面复制大段全局 CSS。
+- 样式默认使用 UnoCSS 模板原子类，hover、focus、显隐、简单动画、过渡和响应式效果也沿用 UnoCSS。配置统一放在 `apps/web/unocss.config.ts`；高频组合提取用途明确的 shortcuts，状态或断点组合可使用 variant group。shortcut 命名避免与预设已有规则或变体冲突。
+- 全局 CSS 仅由 `main.ts` 引入 `@/main.css`，集中保存字体声明、基础重置、结构性排版和第三方弹层适配。`styles/reading-fonts.css` 是阅读字体按需加载的性能例外，不承载页面样式。复杂动画可保留 scoped CSS；类名组合过长、拆分后难以阅读的局部控件也允许 scoped，优先使用简短的 UnoCSS `@apply` 规则或语义 shortcuts，不强行堆叠长类名。
 - 全仓格式统一由根 Vite+ fmt 管理：4 空格缩进、单引号、100 字符行宽，分号沿用工具默认规则；前端不另设格式覆盖。文本由根 `.gitattributes` 统一检出为 LF，避免 Windows 的 `core.autocrlf` 与格式检查冲突；自动识别的二进制文件保持原始字节。Vue/TS 使用 import type 分离类型。
 - 字号、间距、圆角、控件尺寸与响应式断点默认使用 `rem`，保留浏览器默认根字号，行高使用无单位值。容器结合百分比、弹性布局和 `min/max/clamp` 自适应；局部图标等需要随当前文字缩放时可使用 `em`。`px` 仅用于确有需要的特殊情况，并在代码或变更说明中解释用途；测试视口和图片原始分辨率的像素不属于页面布局尺寸。避免固定高度裁切放大后的文字，并验证窄屏及 200% 文字放大。
 - 保持 loading/empty/error/success 状态、可重试错误、键盘焦点和移动端基础适配。异步读取可取消，卸载/换参数时终止旧请求，防止迟到响应覆盖新状态。

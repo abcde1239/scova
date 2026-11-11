@@ -1,15 +1,17 @@
+import { runStructuredFixture as runResearchAgent } from './structured-fixtures.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { MemorySaver } from '@langchain/langgraph';
 import { describe, expect, it, vi } from 'vite-plus/test';
 import { normalizeUrl, type ReadPage } from '@scova/connectors';
 import {
     compareResearch,
-    runResearchAgent,
+    candidateFromCheckpoint,
     type AgentBaseline,
     type AgentCandidate,
     type AgentContext,
     type AgentTools,
     type ComparisonFact,
+    type ComparisonExtraction,
 } from '../src/index.ts';
 
 type Fact = Omit<ComparisonFact, 'id'>;
@@ -221,16 +223,33 @@ async function execute(
         pages.set(key, selected);
         return result;
     });
+    const checkpointer = new MemorySaver();
+    const graphConfig = { configurable: { thread_id: randomUUID() } };
     const output = await runResearchAgent(ctx, {
         tools,
-        checkpointer: new MemorySaver(),
-        config: { configurable: { thread_id: randomUUID() } },
+        checkpointer,
+        config: graphConfig,
         promote: async () => {},
     });
-    return { output, ctx, tools, reads };
+    return { output, ctx, tools, reads, checkpointer, graphConfig };
 }
 
 describe('two-run continuous comparison through the persistent graph', () => {
+    it('does not certify complete-page comparisons from API extracts even when locally untruncated', async () => {
+        const result = await execute([
+            source('/api-extract', 'Price free.', [
+                fact('service', 'price', 'free', 'Price free.'),
+            ]),
+        ]);
+        const pages = structuredClone(result.output.pages);
+        const manifest = structuredClone(result.output.manifest!);
+        pages[0].extractionVersion = 'search-api/deepseek/v1';
+        pages[0].truncated = false;
+        manifest.pages[0].extractorVersion = pages[0].extractionVersion;
+        const comparison = compareResearch(result.ctx, pages, manifest);
+        expect(comparison.changes[0].kind).toBe('uncertain');
+        expect(comparison.gaps.join(' ')).toContain('不能声明没有重要变化');
+    });
     it('英语材料：重复、同URL费用变化、新增、转载和排除分别分类并保留双方引用', async () => {
         const first = await execute([
             source('/english/lesson-1', 'B1 subtitles free', [
@@ -544,7 +563,7 @@ describe('two-run continuous comparison through the persistent graph', () => {
             'new',
         );
     });
-    it('never calls a long-page suffix covered when the comparison model only sees a prefix', async () => {
+    it('marks budget-clipped comparison partial while retaining the long-page tail', async () => {
         const front = 'Price free. ' + 'Navigation data. '.repeat(2100);
         const old = source('/long', `${front} Deadline November 15.`, [
             fact('item', 'price', 'free', 'Price free.'),
@@ -555,10 +574,57 @@ describe('two-run continuous comparison through the persistent graph', () => {
             baseline(first.output),
         );
         expect(next.output.coverage.completeness).toBe('partial');
-        expect(next.output.coverage.gaps.join(' ')).toContain('后续正文未覆盖');
-        expect(
-            compareResearch(next.ctx, next.output.pages, next.output.manifest!).gaps.join(' '),
-        ).toContain('后续正文未覆盖');
+        expect(next.output.coverage.gaps.join(' ')).toContain('比较输入受预算限制');
+        const comparisonCall = vi
+            .mocked(next.tools.model)
+            .mock.calls.find(([, input]) =>
+                input.prompt.includes('Extract stable facts for longitudinal comparison'),
+            );
+        expect(JSON.stringify(comparisonCall?.[1].untrustedSources)).toContain(
+            'Deadline November 22.',
+        );
+    });
+    it('rebuilds missing legacy long-page coverage gaps from checkpoint receipts after resume', async () => {
+        const run = await execute([
+            source('/legacy-long', 'Price free. ' + 'Navigation data. '.repeat(2100), [
+                fact('item', 'price', 'free', 'Price free.'),
+            ]),
+        ]);
+        const saved = (await run.checkpointer.getTuple(run.graphConfig))!;
+        const state = structuredClone(saved.checkpoint.channel_values.research) as {
+            gaps: string[];
+            comparisonExtractions: ComparisonExtraction[];
+        };
+        expect(state.comparisonExtractions[0]!.sourceCoverage?.version).toBe(1);
+        state.gaps = [];
+        const current = candidateFromCheckpoint(run.ctx, state);
+        expect(current.coverage.completeness).toBe('partial');
+        expect(current.coverage.gaps.join(' ')).toContain('比较输入受预算限制');
+        for (const receipt of state.comparisonExtractions) delete receipt.sourceCoverage;
+        const legacy = candidateFromCheckpoint(run.ctx, state);
+        expect(legacy.coverage.completeness).toBe('partial');
+        expect(legacy.coverage.gaps.join(' ')).toContain('旧比较记录缺少完整输入覆盖证明');
+    });
+    it('keeps legacy manifest-only checkpoints partial when long-page input coverage is unknown', async () => {
+        const run = await execute([
+            source('/manifest-only-long', 'Price free. ' + 'Navigation data. '.repeat(2100), [
+                fact('item', 'price', 'free', 'Price free.'),
+            ]),
+        ]);
+        const saved = (await run.checkpointer.getTuple(run.graphConfig))!;
+        const state = structuredClone(saved.checkpoint.channel_values.research) as {
+            gaps: string[];
+            manifest?: AgentCandidate['manifest'];
+            comparisonExtractions?: ComparisonExtraction[];
+        };
+        expect(state.manifest).toBeDefined();
+        delete state.comparisonExtractions;
+        state.gaps = [];
+        const legacy = candidateFromCheckpoint(run.ctx, state);
+        expect(legacy.comparison).toBe('completed');
+        expect(legacy.manifest).toEqual(state.manifest);
+        expect(legacy.coverage.completeness).toBe('partial');
+        expect(legacy.coverage.gaps.join(' ')).toContain('旧比较记录缺少完整输入覆盖证明');
     });
     it.each([
         ['15 November 2026', 'November 15, 2026'],

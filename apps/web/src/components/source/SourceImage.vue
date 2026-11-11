@@ -2,10 +2,11 @@
     <figure
         v-if="image && !failed"
         v-show="loaded"
-        class="source-image"
+        class="source-image [@container_source-item_(max-width:30rem)]:[&:not(.source-image--report)]:w-[min(5.5rem,100%)] [@container_source-item_(max-width:20rem)]:[&:not(.source-image--report)]:w-[min(4.5rem,100%)] [flex:0_1_auto] w-[min(9.375rem,_100%)] max-w-full m-0 [&.source-image--report]:w-[min(100%,_42.5rem)]"
         :class="{ 'source-image--report': variant === 'report' }"
     >
         <img
+            class="[@container_source-item_(max-width:30rem)]:[.source-image:not(.source-image--report)_&]:[aspect-ratio:1] block w-full [aspect-ratio:3_/_2] [object-fit:cover] rounded-2 [.source-image--report_&:is(img)]:([aspect-ratio:auto] h-auto [object-fit:contain])"
             :key="image.src"
             :src="image.src"
             :alt="image.alt"
@@ -13,7 +14,9 @@
             @load="loaded = true"
             @error="failed = true"
         />
-        <figcaption>{{ image.concept ? '概念图 · ' : '' }}{{ image.attribution }}</figcaption>
+        <figcaption class="mt-2 text-[0.875rem] leading-[1.6] break-anywhere text-muted">
+            {{ image.concept ? '概念图 · ' : '' }}{{ image.attribution }}
+        </figcaption>
     </figure>
 </template>
 
@@ -40,47 +43,3 @@ watch(
     { flush: 'sync' },
 );
 </script>
-
-<style scoped>
-.source-image {
-    flex: 0 1 auto;
-    inline-size: min(9.375rem, 100%);
-    max-inline-size: 100%;
-    margin: 0;
-}
-img {
-    display: block;
-    inline-size: 100%;
-    aspect-ratio: 3 / 2;
-    object-fit: cover;
-    border-radius: 0.5rem;
-}
-figcaption {
-    margin-block-start: 0.5rem;
-    font-size: 0.875rem;
-    line-height: 1.6;
-    overflow-wrap: anywhere;
-    color: var(--scova-muted);
-}
-.source-image--report {
-    inline-size: min(100%, 42.5rem);
-}
-.source-image--report img {
-    aspect-ratio: auto;
-    block-size: auto;
-    object-fit: contain;
-}
-@container source-item (max-width: 30rem) {
-    .source-image:not(.source-image--report) {
-        inline-size: min(5.5rem, 100%);
-    }
-    .source-image:not(.source-image--report) img {
-        aspect-ratio: 1;
-    }
-}
-@container source-item (max-width: 20rem) {
-    .source-image:not(.source-image--report) {
-        inline-size: min(4.5rem, 100%);
-    }
-}
-</style>
