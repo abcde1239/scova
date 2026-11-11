@@ -16,7 +16,7 @@ import {
 
 import { captureFeedbackSnapshot } from '@scova/db/feedback';
 import { TaskConfigSchema, parseContract } from '@scova/models';
-import { dueSchedule, effectiveRunScopeHash } from '@scova/shared';
+import { dueSchedule, effectiveRunScopeHash, researchComparisonScopeHash } from '@scova/shared';
 import { SchedulerTaskError } from '@/utils/scheduler.ts';
 
 export interface ScheduledTaskResult {
@@ -131,7 +131,7 @@ export function createSchedulerRepository(database: DatabaseClient): SchedulerRe
                                 taskId: taskId,
                                 taskVersionId: version.id,
                                 comparisonScopeHash: effectiveRunScopeHash(
-                                    version.comparisonScopeHash,
+                                    researchComparisonScopeHash(config),
                                     mode,
                                 ),
                                 mode: mode,

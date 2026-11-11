@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vite-plus/test';
 import type { AgentClaim } from '@scova/agent-core';
-import { reportSummary } from '../src/utils/report-summary.ts';
-import type { ReportValue } from '@scova/models';
+import { primaryArtifactSummary, reportSummary } from '../src/utils/report-summary.ts';
+import type { Coverage, ReportValue } from '@scova/models';
 const claim = (kind: AgentClaim['kind'], text: string): AgentClaim => ({
     kind,
     text,
@@ -9,6 +9,73 @@ const claim = (kind: AgentClaim['kind'], text: string): AgentClaim => ({
     citations: [],
 });
 describe('report overview', () => {
+    it('covers each frozen object before adding more detail from the broad core question', () => {
+        const claims = [
+            claim('inference', 'no-cache 允许存储，但每次复用前必须向源站验证。'),
+            claim('inference', 'no-store 禁止缓存存储本次响应。'),
+            claim(
+                'inference',
+                'ETag 标识资源版本，并通过 If-None-Match 验证；匹配时返回无正文的 304。',
+            ),
+            claim('insufficient', '未核实的扩展观点不应进入摘要。'),
+        ];
+        const selections: ReportValue['selections'] = claims.map((entry, claimIndex) => ({
+            claimIndex,
+            questionIds: ['q0'],
+            placement: 'main',
+            reason: '测试原文',
+            basis: 'model_assessment',
+            timeScope: 'unknown',
+            assessment: {
+                relevance: 'direct',
+                support: 'direct',
+                role: 'answer',
+                sourceRelation: 'unknown',
+                reason: '材料支持',
+                conditions: claimIndex === 2 ? '针对 GET 缓存验证。' : '',
+                gap: '',
+            },
+        }));
+        const summary = primaryArtifactSummary(claims, {
+            reportValue: {
+                version: 1,
+                questions: [
+                    {
+                        id: 'q0',
+                        text: '比较缓存控制并解释验证流程',
+                        priority: 'core',
+                        status: 'supported',
+                        claimIndexes: [0, 1, 2, 3],
+                        gap: '',
+                    },
+                ],
+                selections,
+            },
+            artifacts: [
+                {
+                    format: 'brief',
+                    claimIndexes: [0, 1, 2, 3],
+                    coverage: {
+                        version: 1,
+                        requirements: ['no-cache', 'no-store', 'ETag'].map((object, index) => ({
+                            id: `r${index}`,
+                            questionIds: ['q0'],
+                            object,
+                            field: '行为',
+                            required: true,
+                            status: 'supported',
+                            claimIndexes: [index],
+                            gap: '',
+                        })),
+                    },
+                },
+            ],
+        });
+        for (const item of claims.slice(0, 3)) expect(summary).toContain(item.text);
+        expect(summary).toContain('针对 GET 缓存验证。');
+        expect(summary).not.toContain('未核实的扩展观点');
+        expect(Array.from(summary).length).toBeLessThanOrEqual(2000);
+    });
     const value = (): ReportValue => ({
         version: 1,
         questions: [
@@ -77,6 +144,80 @@ describe('report overview', () => {
         expect(summary).toContain('详细回答见正文');
         expect(summary).not.toContain('长');
     });
+    it('preserves legacy overview behavior when no artifact snapshot exists', () => {
+        const claims = [claim('fact', '11月5日截止。'), claim('inference', '仅供参考。')];
+        const reportValue = value();
+        expect(primaryArtifactSummary(claims, { reportValue })).toBe(
+            reportSummary(claims, reportValue),
+        );
+        expect(primaryArtifactSummary(claims, {})).toBe(reportSummary(claims));
+    });
+    it('keeps other artifacts and their insufficiency counts out of the primary overview', () => {
+        const claims = [
+            claim('inference', '其他形式的推断。'),
+            claim('insufficient', '其他形式缺失的证据。'),
+            claim('fact', '清单主成果的核实事实。'),
+        ];
+        const summary = primaryArtifactSummary(claims, {
+            artifacts: [
+                { format: 'list', claimIndexes: [2] },
+                { format: 'research_report', claimIndexes: [0, 1] },
+            ],
+        });
+        expect(summary).toBe('清单主成果的核实事实。');
+    });
+    it('remaps noncontiguous primary claims and retains their selection conditions without mutating the union', () => {
+        const claims = [
+            claim('inference', '仅其他形式中的回答。'),
+            claim('inference', '主成果第二条。'),
+            claim('fact', '主成果已核实的截止日期。'),
+        ];
+        const reportValue = value();
+        reportValue.questions[0].claimIndexes = [2];
+        reportValue.selections[0].claimIndex = 2;
+        const coverage = {
+            reportValue,
+            artifacts: [
+                { format: 'brief' as const, claimIndexes: [2, 1] },
+                { format: 'list' as const, claimIndexes: [0] },
+            ],
+        };
+        const original = structuredClone({ claims, coverage });
+        const summary = primaryArtifactSummary(claims, coverage);
+        expect(summary).toContain('主成果已核实的截止日期。');
+        expect(summary).toContain('适用条件：仅限境内');
+        expect(summary).not.toContain('仅其他形式中的回答');
+        expect({ claims, coverage }).toEqual(original);
+    });
+    it('recomputes missing answers and dispute status within the primary artifact', () => {
+        const claims = [
+            claim('conflict', '仅其他形式有争议的结论。'),
+            claim('fact', '主成果独立支持的事实。'),
+        ];
+        const reportValue = value();
+        reportValue.questions[0].status = 'disputed';
+        reportValue.questions[0].claimIndexes = [0, 1];
+        reportValue.questions[1].status = 'provisional';
+        reportValue.questions[1].claimIndexes = [0];
+        reportValue.questions[1].gap = '仅其他形式的内部缺口。';
+        reportValue.selections = [
+            { ...reportValue.selections[0], claimIndex: 0, questionIds: ['q0', 'q1'] },
+            { ...reportValue.selections[0], claimIndex: 1 },
+        ];
+        const summary = primaryArtifactSummary(claims, {
+            reportValue,
+            artifacts: [
+                { format: 'brief', claimIndexes: [1] },
+                { format: 'research_report', claimIndexes: [0] },
+            ],
+        });
+        expect(summary).toContain('主要结论');
+        expect(summary).toContain('主成果独立支持的事实。');
+        expect(summary).toContain('暂无直接回答');
+        expect(summary).toContain('本成果尚无该问题的直接回答');
+        expect(summary).not.toContain('不同来源');
+        expect(summary).not.toContain('仅其他形式');
+    });
     const assessed = (texts: string[], questions: string[], links: number[][]): ReportValue => ({
         version: 1,
         questions: questions.map((text, i) => ({
@@ -104,6 +245,78 @@ describe('report overview', () => {
                 gap: '',
             },
         })),
+    });
+    const structured = (
+        texts: string[],
+        groups: number[][],
+    ): Pick<Coverage, 'artifacts' | 'reportValue'> => ({
+        reportValue: assessed(
+            texts,
+            ['机制及恢复条件'],
+            texts.map(() => [0]),
+        ),
+        artifacts: [
+            {
+                format: 'research_report',
+                claimIndexes: texts.map((_, index) => index),
+                coverage: {
+                    version: 1,
+                    requirements: groups.map((claimIndexes, index) => ({
+                        id: `r${index}`,
+                        questionIds: ['q0'],
+                        object: '操作机制',
+                        field: `字段${index}`,
+                        required: true,
+                        status: 'supported',
+                        claimIndexes,
+                        gap: '',
+                    })),
+                },
+            },
+        ],
+    });
+    it('keeps the mechanism and prerequisite chain instead of choosing the shortest example', () => {
+        const texts = [
+            '并发更新时后手等待先手，先手提交后重新计算 WHERE，仅仍匹配时继续。',
+            '预定义目标行的简单更新通常足够。',
+            '先手提交且实际更新或删除该行时，后手会收到并发更新错误。',
+            '收到该错误后，应中止当前事务并从开头重试整个事务。',
+        ];
+        const coverage = structured(texts, [
+            [0, 1],
+            [2, 3],
+        ]);
+        coverage.reportValue!.selections[1].assessment!.role = 'condition';
+        coverage.reportValue!.selections[2].assessment!.role = 'risk';
+        coverage.reportValue!.selections[2].assessment!.conditions = '不仅是锁定；先手实际提交。';
+        const claims = texts.map((text) => claim('inference', text));
+        const before = structuredClone({ claims, coverage });
+        const summary = primaryArtifactSummary(claims, coverage);
+        for (const text of texts) expect(summary).toContain(text);
+        expect(summary.indexOf(texts[2])).toBeLessThan(summary.indexOf(texts[3]));
+        expect(summary).toContain('不仅是锁定；先手实际提交。');
+        expect({ claims, coverage }).toEqual(before);
+    });
+    it('does not let a previously selected member hide the rest of a compound field', () => {
+        const texts = ['已知机制。', '触发条件下会报错。', '收到该错误后重试整个操作。'];
+        const summary = primaryArtifactSummary(
+            texts.map((text) => claim('inference', text)),
+            structured(texts, [[0], [0, 1, 2]]),
+        );
+        for (const text of texts) expect(summary).toContain(text);
+        expect(summary.split(texts[0])).toHaveLength(2);
+    });
+    it('defers an oversized chain without retaining only its short context-dependent action', () => {
+        const texts = ['独立的已知机制。', '必要前提。'.repeat(370), '收到该错误后重试。'];
+        const summary = primaryArtifactSummary(
+            texts.map((text) => claim('inference', text)),
+            structured(texts, [[0], [1, 2]]),
+        );
+        expect(summary).toContain(texts[0]);
+        expect(summary).not.toContain(texts[2]);
+        expect(summary).toContain('另有1项已取得的信息及完整条件见正文');
+        expect(summary).toContain('包括操作机制 · 字段1');
+        expect(Array.from(summary).length).toBeLessThanOrEqual(2000);
     });
     it('deduplicates shared answers and prefers the specific cleanup answer for the second question', () => {
         const texts = [
@@ -387,7 +600,7 @@ describe('report overview', () => {
     });
     it('keeps explicit insufficiency instead of manufacturing a summary', () => {
         expect(reportSummary([claim('insufficient', '未完成内容归纳。')])).toBe(
-            '需要补充材料：未完成内容归纳。',
+            '内容需要补充材料，请查看下方正文和来源。',
         );
     });
     it('keeps uncertainty visible even when the overview prioritizes cited inference', () => {

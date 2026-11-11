@@ -106,6 +106,15 @@ const bundle: ConnectorBundle = {
                         claims: [
                             {
                                 kind: 'fact',
+                                assessment: {
+                                    relevance: 'direct',
+                                    support: 'direct',
+                                    role: 'answer',
+                                    sourceRelation: 'unknown',
+                                    reason: '测试公告直接回答申请截止日期',
+                                    conditions: '',
+                                    gap: '',
+                                },
                                 text: pages![0]!.text,
                                 questionIds: ['q0'],
                                 citations: [{ pageId: pages![0]!.pageId, quote: pages![0]!.text }],
@@ -126,6 +135,7 @@ const runtime = createAgentRuntime({
     checkpointSchema: schema,
     bundle,
     enableDelivery: true,
+    env: { ...process.env, SEARCH_ADAPTIVE_ENABLED: 'false' },
 });
 try {
     await connectDatabase(db);
@@ -166,6 +176,7 @@ try {
                 id: run.id,
                 status: run.status,
                 failureCode: run.failureCode,
+                coverage: run.coverageJson,
                 baselineRunId: run.baselineRunId,
                 comparisonScopeHash: run.comparisonScopeHash,
             },

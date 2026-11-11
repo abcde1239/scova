@@ -22,7 +22,12 @@ import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-import { dueSchedule, effectiveRunScopeHash, resolveScheduledDate } from '@scova/shared';
+import {
+    dueSchedule,
+    effectiveRunScopeHash,
+    researchComparisonScopeHash,
+    resolveScheduledDate,
+} from '@scova/shared';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vite-plus/test';
 import { createSchedulerRepository } from '../src/repo/scheduler.ts';
 import { SchedulerService } from '../src/service/scheduler.ts';
@@ -178,7 +183,10 @@ describe('PostgreSQL 周期调度事务', () => {
             status: 'queued',
             taskVersionId: s.version.id,
             budgetJson: s.config.budget,
-            comparisonScopeHash: effectiveRunScopeHash(s.version.comparisonScopeHash, 'live'),
+            comparisonScopeHash: effectiveRunScopeHash(
+                researchComparisonScopeHash(s.config),
+                'live',
+            ),
         });
         expect(
             await db
@@ -369,7 +377,10 @@ describe('PostgreSQL 周期调度事务', () => {
                 .then((row) => requiredDatabaseValue(row)),
         ).toMatchObject({
             mode: 'live',
-            comparisonScopeHash: effectiveRunScopeHash(s.version.comparisonScopeHash, 'live'),
+            comparisonScopeHash: effectiveRunScopeHash(
+                researchComparisonScopeHash(s.config),
+                'live',
+            ),
         });
     });
 

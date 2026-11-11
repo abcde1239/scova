@@ -1,5 +1,5 @@
 import { type DatabaseClient } from '@scova/db';
-import { openCredential } from '@scova/shared/credentials';
+import { openProviderCredentials, type ProviderCredentials } from '@scova/shared/credentials';
 import { activeAgentProvider } from '@/repo/agent-providers.ts';
 import { installedCheckpointVersion } from '@/utils/checkpoint-version.ts';
 import { classifyToolFailure } from '@/utils/tool-failure.ts';
@@ -11,10 +11,12 @@ import { Redis } from 'ioredis';
 import { createSearchStateRepository } from '@/repo/search.ts';
 import { createManagedSearch } from '@/service/search.ts';
 import { searchScope } from '@/utils/search-scope.ts';
-import { readSearchConfig } from '@/app/search-config.ts';
+import { effectiveSearchConfig } from '@/app/search-config.ts';
 import {
     runResearchAgent,
     deterministicPartial,
+    comparisonSourceCoverage,
+    type AgentModelResponse,
     type AgentCandidate,
     type AgentContext,
     type AgentTools,
@@ -22,9 +24,12 @@ import {
 import {
     ConnectorError,
     MODEL_CALL_TIMEOUT_MS,
+    PAGE_TEXT_CHAR_LIMIT,
     createConnectorBundle,
     estimateModelInputTokens,
+    normalizeUrl,
     withDeadline,
+    validPageCollection,
     type CallContext,
     type ConnectorBundle,
     type ReadPage,
@@ -45,6 +50,7 @@ import {
 import type { RunExecutionContext, RunExecutor } from '@/service/runs.ts';
 import { RunExecutionError, type RunLeaseToken, type RunProgressEvent } from '@/utils/runs.ts';
 import { createDeliveryService } from '@/service/delivery.ts';
+import { readSource } from '@/service/source-reader.ts';
 
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 const emptyUsage = (): Usage => ({
@@ -71,9 +77,10 @@ function readPage(value: unknown, mode: 'demo' | 'live'): ReadPage {
         page.mode !== mode ||
         typeof page.text !== 'string' ||
         !page.text.trim() ||
-        page.text.length > 200_000 ||
+        page.text.length > PAGE_TEXT_CHAR_LIMIT ||
         page.untrusted !== true ||
         typeof page.truncated !== 'boolean' ||
+        !validPageCollection(page.collection) ||
         ![page.url, page.originalUrl, page.fetchedUrl].every(
             (url) => typeof url === 'string' && /^https?:\/\//.test(url),
         ) ||
@@ -245,6 +252,20 @@ export function createAgentSession({
                 (signal) =>
                     invoke({
                         signal,
+                        ...(tool === 'read' && process.env.SCOVA_READER_DIAGNOSTICS === '1'
+                            ? {
+                                  onReadDiagnostic: (diagnostic) => {
+                                      console.info(
+                                          JSON.stringify({
+                                              type: 'reader.diagnostic',
+                                              operationKey: key,
+                                              toolCallId: held.toolCallId,
+                                              ...diagnostic,
+                                          }),
+                                      );
+                                  },
+                              }
+                            : {}),
                         timeoutMs: Math.max(1, Math.ceil(remaining)),
                         beforeDispatch: async () => {
                             await guard();
@@ -309,48 +330,87 @@ export function createAgentSession({
     }
     const tools: AgentTools = {
         search: (operationKey, query) =>
-            call<SearchResponse>(
-                operationKey,
-                'search',
-                query,
-                { ...emptyUsage(), ...bundle.search.tokenReservation, searches: 1 },
-                (options) => bundle.search.search(query, options),
-                (response) => {
-                    if (
-                        response.kind !== 'search_results' ||
-                        response.mode !== context.mode ||
-                        response.query !== query ||
-                        !Array.isArray(response.results) ||
-                        !response.coverage
-                    )
-                        throw new AgentPersistenceError('INVALID_TOOL_RESULT');
-                    if (bundle.search.tokenReservation) {
-                        const usage = response.usage;
-                        const limits = bundle.search.tokenReservation;
-                        if (
-                            !usage ||
-                            !Number.isSafeInteger(usage.inputTokens) ||
-                            !Number.isSafeInteger(usage.outputTokens) ||
-                            usage.inputTokens < 0 ||
-                            usage.outputTokens < 0 ||
-                            usage.inputTokens > limits.inputTokens ||
-                            usage.outputTokens > limits.outputTokens ||
-                            usage.estimated !== false
-                        )
-                            throw new ConnectorError(
-                                'budget_exceeded',
-                                '内置搜索用量缺失或超出预留',
-                            );
-                    }
-                },
-            ),
+            context.conversation?.operation === 'revise'
+                ? Promise.reject(new ConnectorError('configuration', '报告修订禁止联网搜索'))
+                : call<SearchResponse>(
+                      operationKey,
+                      'search',
+                      query,
+                      { ...emptyUsage(), ...bundle.search.tokenReservation, searches: 1 },
+                      (options) => bundle.search.search(query, options),
+                      (response) => {
+                          if (
+                              response.kind !== 'search_results' ||
+                              response.mode !== context.mode ||
+                              response.query !== query ||
+                              !Array.isArray(response.results) ||
+                              !response.coverage
+                          )
+                              throw new AgentPersistenceError('INVALID_TOOL_RESULT');
+                          if (bundle.search.tokenReservation) {
+                              const usage = response.usage;
+                              const limits = bundle.search.tokenReservation;
+                              if (
+                                  !usage ||
+                                  !Number.isSafeInteger(usage.inputTokens) ||
+                                  !Number.isSafeInteger(usage.outputTokens) ||
+                                  usage.inputTokens < 0 ||
+                                  usage.outputTokens < 0 ||
+                                  usage.inputTokens > limits.inputTokens ||
+                                  usage.outputTokens > limits.outputTokens ||
+                                  usage.estimated !== false
+                              )
+                                  throw new ConnectorError(
+                                      'budget_exceeded',
+                                      '内置搜索用量缺失或超出预留',
+                                  );
+                          }
+                      },
+                  ),
         read: (operationKey, url) =>
             call<ReadPage>(
                 operationKey,
                 'read',
                 url,
                 { ...emptyUsage(), pages: 1 },
-                (options) => bundle.reader.read(url, options),
+                async (options) => {
+                    if (context.conversation?.operation === 'revise') {
+                        const sources = context.conversation.sources.filter((s) => s.url === url);
+                        if (!sources.length)
+                            throw new ConnectorError('configuration', '修订来源不在冻结报告内');
+                        await options.beforeAttempt?.('read');
+                        const text = [...new Set(sources.map((s) => s.text))].join('\n\n');
+                        return {
+                            kind: 'read_page',
+                            mode: context.mode,
+                            originalUrl: url,
+                            fetchedUrl: url,
+                            url,
+                            title: sources[0].title,
+                            text,
+                            contentHash: digest(text),
+                            extractionVersion: 'scova-report-evidence-v1',
+                            collectedAt: sources[0].observedAt,
+                            truncated: true,
+                            untrusted: true,
+                        };
+                    }
+                    const saved = await repository.searchPage?.(url);
+                    let page: ReadPage | undefined;
+                    if (saved) {
+                        try {
+                            const checked = readPage(saved, context.mode);
+                            if (
+                                normalizeUrl(checked.originalUrl) === normalizeUrl(url) &&
+                                normalizeUrl(checked.url) === normalizeUrl(url)
+                            )
+                                page = checked;
+                        } catch {
+                            /* Invalid or unusable provider bodies are read by Reader. */
+                        }
+                    }
+                    return readSource(url, page, bundle.reader, options);
+                },
                 (page) => {
                     readPage(page, context.mode);
                 },
@@ -367,7 +427,8 @@ export function createAgentSession({
                     ),
                 ),
             };
-            return call<ModelResponse>(
+            const comparison = operationKey.startsWith('compare-facts');
+            return call<AgentModelResponse>(
                 operationKey,
                 'model',
                 input,
@@ -376,7 +437,12 @@ export function createAgentSession({
                     inputTokens: effective.maxInputTokens,
                     outputTokens: effective.maxOutputTokens,
                 },
-                (options) => bundle.model.generateStructured(effective, options),
+                async (options) => {
+                    const response = await bundle.model.generateStructured(effective, options);
+                    return comparison
+                        ? { ...response, sourceCoverage: comparisonSourceCoverage(input) }
+                        : response;
+                },
                 (result, reused) => {
                     const limits = reused ? context.budget : effective;
                     if (
@@ -392,12 +458,18 @@ export function createAgentSession({
                     )
                         throw new ConnectorError('budget_exceeded', '模型用量不合法或超出预留');
                 },
+            ).then((response) =>
+                comparison && response.sourceCoverage === undefined
+                    ? { ...response, sourceCoverage: null }
+                    : response,
             );
         },
     };
     const agentContext: AgentContext = {
+        conversation: context.conversation,
         answerSupplementEnabled,
-        adaptiveSearchDisabled: optionsAdaptiveSearchDisabled,
+        adaptiveSearchDisabled:
+            optionsAdaptiveSearchDisabled || context.conversation?.operation === 'revise',
         runId: context.runId,
         userId: context.userId,
         taskVersionId: context.taskVersionId,
@@ -544,22 +616,30 @@ export function createAgentRuntime(options: AgentRuntimeOptions) {
             if (context.config.agentProviderId && !own)
                 throw new RunExecutionError('AGENT_CONFIGURATION_INVALID');
             let modelApiKey = env.MODEL_API_KEY;
+            let accountSearch: ProviderCredentials['searchApi'];
             if (own) {
                 try {
-                    modelApiKey = openCredential(
+                    const credentials = openProviderCredentials(
                         own.encryptedApiKey,
                         userId,
                         own.id,
                         env.AGENT_CREDENTIAL_KEY,
                     );
+                    modelApiKey = credentials.modelApiKey;
+                    accountSearch = credentials.searchApi;
                 } catch {
                     throw new RunExecutionError('AGENT_CONFIGURATION_INVALID');
                 }
             }
             let liveBundle: ConnectorBundle;
+            let usesSearxng = false;
             try {
-                const searchConfig =
-                    own?.webSearch && own.webSearch !== 'disabled' ? {} : readSearchConfig(env);
+                const searchConfig = effectiveSearchConfig(env, {
+                    webSearch: own?.webSearch,
+                    searchApi: accountSearch,
+                });
+                usesSearxng =
+                    'searchProvider' in searchConfig && searchConfig.searchProvider === 'searxng';
                 liveBundle = createConnectorBundle({
                     ...searchConfig,
                     managedSearch: true,
@@ -574,10 +654,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions) {
             }
             if (liveBundle.mode !== 'live')
                 throw new RunExecutionError('AGENT_CONFIGURATION_INVALID');
-            if (
-                !liveBundle.search.tokenReservation &&
-                (env.SEARCH_PROVIDER ?? 'searxng') === 'searxng'
-            ) {
+            if (!liveBundle.search.tokenReservation && usesSearxng) {
                 if (!searchRedis) throw new RunExecutionError('AGENT_CONFIGURATION_INVALID');
                 const namespace = `scova:search:v1:${digest(
                     JSON.stringify([

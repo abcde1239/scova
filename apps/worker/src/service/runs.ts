@@ -1,5 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import type { Budget, TaskConfig, Usage } from '@scova/models';
+import {
+    ReportConversationContextSchema,
+    parseContract,
+    type ReportConversationContext,
+    type Budget,
+    type TaskConfig,
+    type Usage,
+} from '@scova/models';
 import type { RunRepository } from '@/repo/runs.ts';
 import {
     RunExecutionError,
@@ -10,6 +17,7 @@ import {
 import { waitForPoll } from '@/utils/wait.ts';
 
 export interface RunExecutionContext {
+    readonly conversation?: ReportConversationContext;
     readonly runId: string;
     readonly userId: string;
     readonly taskId: string;
@@ -175,6 +183,14 @@ export class RunService {
                 return 'processed';
             }
             context = {
+                ...(run.conversationContextJson
+                    ? {
+                          conversation: parseContract(
+                              ReportConversationContextSchema,
+                              run.conversationContextJson,
+                          ),
+                      }
+                    : {}),
                 runId: run.id,
                 userId: run.userId,
                 taskId: run.taskId,

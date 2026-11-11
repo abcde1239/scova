@@ -17,6 +17,7 @@ import {
     createConnectorBundle,
     createModelProvider,
     createModelSearch,
+    createSearchApi,
     createSafeHttpClient,
     MODEL_SEARCH_RESERVATION,
     estimateModelInputTokens,
@@ -129,6 +130,166 @@ beforeAll(async () => {
 afterAll(() => fixture.cleanup());
 
 describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）', () => {
+    it('API正文从持久搜索账本跨epoch恢复，原站读取失败保留片段且只计一次读取', async () => {
+        const seed = await setup({ mode: 'live' });
+        const url = 'https://source.example/pricing';
+        let searches = 0,
+            reads = 0;
+        const bundle = scenarioConnectors('research', 'A');
+        bundle.search = createSearchApi({
+            protocol: 'deepseek',
+            apiKey: 'search-key',
+            contentMode: 'prefer_api',
+            http: createSafeHttpClient({
+                resolve: async () => [{ address: '93.184.216.34', family: 4 }],
+                transport: async () => {
+                    searches++;
+                    return {
+                        status: 200,
+                        headers: {},
+                        body: JSON.stringify({
+                            results: [
+                                {
+                                    url,
+                                    title: 'Pricing',
+                                    snippet: 'Pricing snippet',
+                                    content: 'The plan costs $20 per month when billed annually.',
+                                },
+                            ],
+                        }),
+                    };
+                },
+            }),
+        });
+        bundle.reader = {
+            async read(_url, options) {
+                reads++;
+                await options?.beforeAttempt?.('read');
+                throw new ConnectorError('network', 'Origin temporarily unavailable');
+            },
+        };
+        const first = sessionFixture(seed, bundle);
+        try {
+            await first.session.tools.search('body-search', 'pricing');
+            const next = await takeover(seed.run.id);
+            const resumed = sessionFixture({ ...seed, ...next }, bundle);
+            try {
+                const page = await resumed.session.tools.read('body-read', url);
+                expect(page.text).toBe('The plan costs $20 per month when billed annually.');
+                expect(page.extractionVersion).toBe('search-api/deepseek/v1');
+                expect(await resumed.session.tools.read('body-read', url)).toEqual(page);
+                expect(await next.repo.usage()).toMatchObject({ searches: 1, pages: 1 });
+                expect(searches).toBe(1);
+                expect(reads).toBe(1);
+                expect(await next.repo.readPages()).toHaveLength(1);
+                const isolated = await setup({ mode: 'live' });
+                expect(await isolated.repo.searchPage!(url)).toBeNull();
+            } finally {
+                await resumed.close();
+            }
+        } finally {
+            await first.close();
+        }
+    });
+    it('非空API前段仍从原站补齐正文，读取结果跨epoch复用而不重复联网', async () => {
+        const seed = await setup({ mode: 'live' });
+        const bundle = scenarioConnectors('research', 'A');
+        const sample = await bundle.search.search('fixture');
+        const url = sample.results[0].url;
+        bundle.search = createSearchApi({
+            protocol: 'deepseek',
+            apiKey: 'fixture-only',
+            contentMode: 'prefer_api',
+            http: createSafeHttpClient({
+                resolve: async () => [{ address: '93.184.216.34', family: 4 }],
+                transport: async () => ({
+                    status: 200,
+                    headers: {},
+                    body: JSON.stringify({
+                        results: [
+                            {
+                                url,
+                                title: 'Source',
+                                snippet: 'Summary',
+                                content: 'Introduction. date._',
+                            },
+                        ],
+                    }),
+                }),
+            }),
+        });
+        const origin = bundle.reader.read.bind(bundle.reader);
+        let reads = 0;
+        bundle.reader.read = async (target, options) => {
+            reads++;
+            return origin(target, options);
+        };
+        const first = sessionFixture(seed, bundle);
+        try {
+            await first.session.tools.search('body-search', 'fixture');
+            const full = await first.session.tools.read('body-full', url);
+            expect(full.extractionVersion).not.toContain('search-api/');
+            expect(full.text).not.toBe('Introduction. date._');
+            const next = await takeover(seed.run.id);
+            const resumed = sessionFixture({ ...seed, ...next }, bundle);
+            try {
+                expect(await resumed.session.tools.read('body-full', url)).toEqual(full);
+                expect(reads).toBe(1);
+                expect(await next.repo.usage()).toMatchObject({ searches: 1, pages: 1 });
+                expect(await next.repo.readPages()).toHaveLength(1);
+            } finally {
+                await resumed.close();
+            }
+        } finally {
+            await first.close();
+        }
+    });
+    it.each(['', '   '])('API仅有摘要时Reader补读（正文=%j）并保留页面预算', async (content) => {
+        const seed = await setup({ mode: 'live' });
+        const bundle = scenarioConnectors('research', 'A');
+        const candidate = await bundle.search.search('fixture');
+        const url = candidate.results[0].url;
+        bundle.search = createSearchApi({
+            protocol: 'deepseek',
+            apiKey: 'search-key',
+            contentMode: 'prefer_api',
+            http: createSafeHttpClient({
+                resolve: async () => [{ address: '93.184.216.34', family: 4 }],
+                transport: async () => ({
+                    status: 200,
+                    headers: {},
+                    body: JSON.stringify({
+                        results: [
+                            {
+                                url,
+                                title: 'Source',
+                                snippet: 'Summary only',
+                                content,
+                                summary: 'Generated summary is not evidence',
+                            },
+                        ],
+                    }),
+                }),
+            }),
+        });
+        let reads = 0;
+        const read = bundle.reader.read.bind(bundle.reader);
+        bundle.reader.read = async (target, options) => {
+            reads++;
+            return read(target, options);
+        };
+        const active = sessionFixture(seed, bundle);
+        try {
+            await active.session.tools.search('snippet-search', 'fixture');
+            const page = await active.session.tools.read('fallback-read', url);
+            expect(reads).toBe(1);
+            expect(page.extractionVersion).not.toContain('search-api');
+            expect(page.text).not.toContain('Generated summary');
+            expect(await seed.repo.usage()).toMatchObject({ searches: 1, pages: 1 });
+        } finally {
+            await active.close();
+        }
+    });
     it('内置搜索供应商额度不足持久阻止后续模型和内置搜索，跨epoch保留', async () => {
         const seed = await setup({ mode: 'live' });
         let dispatches = 0;
@@ -363,15 +524,17 @@ describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）',
             } as never),
         ).rejects.toThrow();
     });
-    it('retains mixed claims with explicit uncertainty without requiring a second synthesis', async () => {
+    it('retains downgraded mixed claims outside answers after one bounded synthesis repair fails', async () => {
         const seed = await setup({ mode: 'live' });
         const bundle = scenarioConnectors('research', 'A');
         const model = bundle.model;
         let syntheses = 0;
+        const synthesisBudgets: number[] = [];
         bundle.model = {
             async generateStructured<T>(input: StructuredInput, context: CallContext = {}) {
                 if ('claims' in (input.schema.properties as Record<string, unknown>)) {
                     syntheses++;
+                    synthesisBudgets.push(input.maxOutputTokens);
                     if (syntheses === 2) {
                         await context.beforeAttempt?.('model');
                         throw new ConnectorError('network', 'repair unavailable');
@@ -383,6 +546,7 @@ describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）',
                     return {
                         ...result,
                         data: {
+                            ...result.data,
                             claims: [
                                 ...result.data.claims,
                                 {
@@ -409,8 +573,43 @@ describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）',
                 uncertainty: ['missing_citation'],
             });
             expect(candidate.coverage.completeness).toBe('partial');
-            expect(syntheses).toBe(1);
+            expect(syntheses).toBe(2);
+            expect(synthesisBudgets.reduce((sum, value) => sum + value, 0)).toBeLessThanOrEqual(
+                seed.config.budget.maxOutputTokens,
+            );
             expect(candidate.coverage.research?.uncertainClaims).toBe(1);
+            const fabricatedIndex = candidate.claims.findIndex(
+                (claim) => claim.text === 'fabricated',
+            );
+            expect(
+                candidate.coverage.reportValue?.selections.find(
+                    (selection) => selection.claimIndex === fabricatedIndex,
+                ),
+            ).toMatchObject({ placement: 'reference' });
+            expect(candidate.coverage.artifacts).toHaveLength(1);
+            expect(candidate.coverage.artifacts![0]!.summary).not.toContain('fabricated');
+            const calls = await fixture.db.query.toolCalls.findMany({
+                where: eq(dbToolCalls.runId, seed.run.id),
+            });
+            const synthesisCalls = calls.filter(
+                (call) => call.tool === 'model' && call.operationKey.startsWith('synthesize-'),
+            );
+            expect(synthesisCalls).toHaveLength(2);
+            expect(
+                synthesisCalls.find((call) => call.operationKey.startsWith('synthesize-0:'))
+                    ?.status,
+            ).toBe('succeeded');
+            const failedRepair = synthesisCalls.find((call) =>
+                call.operationKey.startsWith('synthesize-1:'),
+            )!;
+            expect(failedRepair.status).toBe('unknown');
+            expect(failedRepair.usage).toBeNull();
+            const reserved = (failedRepair.reservedBudget as { reserved: Usage }).reserved
+                .outputTokens;
+            const successfulTokens = calls
+                .filter((call) => call.status === 'succeeded' && call.tool === 'model')
+                .reduce((sum, call) => sum + (call.usage as Usage).outputTokens, 0);
+            expect((await seed.repo.usage()).outputTokens).toBe(reserved + successfulTokens);
             const events = await fixture.db.query.runEvents.findMany({
                 where: eq(dbRunEvents.runId, seed.run.id),
             });
@@ -420,7 +619,7 @@ describe('Agent 工具账本与恢复授权（真实 PostgreSQL，无 Redis）',
                         event.type === 'research.updated' &&
                         (event.payload as { state?: string }).state === 'claims_repair',
                 ),
-            ).toBe(false);
+            ).toBe(true);
         } finally {
             await close();
         }

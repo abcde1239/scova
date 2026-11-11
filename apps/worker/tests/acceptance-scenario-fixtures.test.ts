@@ -60,7 +60,9 @@ describe('controlled acceptance suppliers', () => {
                         ),
                     ).toBe(true);
                 }
-            });
+                // Same-origin reads serialize and each now owns an isolated extraction process.
+                // Keep production per-page limits; allow the complete multi-page fixture to finish.
+            }, 30_000);
         }
     }
 });
