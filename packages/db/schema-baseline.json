@@ -24,6 +24,10 @@
         {
             "name": "0005_fresh_iron_patriot",
             "hash": "be7837bb3a60e664cea4595ad0ced0beb1670ed15a08898252ee88193d90bc75"
+        },
+        {
+            "name": "0006_harsh_forge",
+            "hash": "e00169d1d8d7e18debb0b8f1ce1b02847cc92a5983dd9e715c267cd841bfac0b"
         }
     ],
     "signature": {
@@ -1547,6 +1551,28 @@
                 "collation": null
             },
             {
+                "table_name": "report_questions",
+                "name": "revision_run_id",
+                "position": 8,
+                "type": "uuid",
+                "not_null": false,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "report_questions",
+                "name": "context_json",
+                "position": 9,
+                "type": "jsonb",
+                "not_null": false,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
                 "table_name": "reports",
                 "name": "id",
                 "position": 1,
@@ -2232,6 +2258,17 @@
                 "table_name": "runs",
                 "name": "followup_config_json",
                 "position": 28,
+                "type": "jsonb",
+                "not_null": false,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "runs",
+                "name": "conversation_context_json",
+                "position": 29,
                 "type": "jsonb",
                 "not_null": false,
                 "default_value": null,
@@ -3825,6 +3862,13 @@
                 "validated": true
             },
             {
+                "table_name": "report_questions",
+                "name": "report_questions_user_id_revision_run_id_fkey",
+                "type": "f",
+                "definition": "FOREIGN KEY (user_id, revision_run_id) REFERENCES runs(user_id, id)",
+                "validated": true
+            },
+            {
                 "table_name": "reports",
                 "name": "report_feedback_effects_valid",
                 "type": "c",
@@ -4593,6 +4637,13 @@
                 "table_name": "question_evidence",
                 "name": "question_evidence_user_id_id_key",
                 "definition": "CREATE UNIQUE INDEX question_evidence_user_id_id_key ON question_evidence USING btree (user_id, id)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "report_questions",
+                "name": "report_questions_conversation_idx",
+                "definition": "CREATE INDEX report_questions_conversation_idx ON report_questions USING btree (user_id, report_id, created_at, id)",
                 "valid": true,
                 "ready": true
             },
@@ -5601,6 +5652,18 @@
                 "enabled": "O"
             },
             {
+                "table_name": "report_questions",
+                "constraint_name": "report_questions_user_id_revision_run_id_fkey",
+                "event": 5,
+                "enabled": "O"
+            },
+            {
+                "table_name": "report_questions",
+                "constraint_name": "report_questions_user_id_revision_run_id_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
                 "table_name": "reports",
                 "constraint_name": "change_records_user_id_report_id_fkey",
                 "event": 9,
@@ -5837,6 +5900,18 @@
             {
                 "table_name": "runs",
                 "constraint_name": "report_questions_user_id_followup_run_id_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "runs",
+                "constraint_name": "report_questions_user_id_revision_run_id_fkey",
+                "event": 9,
+                "enabled": "O"
+            },
+            {
+                "table_name": "runs",
+                "constraint_name": "report_questions_user_id_revision_run_id_fkey",
                 "event": 17,
                 "enabled": "O"
             },
