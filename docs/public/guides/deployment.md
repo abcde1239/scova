@@ -47,7 +47,7 @@ SearxNG 是固定镜像、非 root 的可选服务。设置随机 `SEARXNG_SECRE
 docker compose --profile live-search up -d
 ```
 
-设置 `MODEL_API_KEY`、`MODEL_NAME` 和必要的 `MODEL_BASE_URL` 作为部署默认模型，或配置 `AGENT_CREDENTIAL_KEY` 后让各账号在界面添加个人供应商，详见[Agent 配置](agent-configuration.md)。加密主密钥在 Server/Worker 中必须一致，并独立备份。容器使用 `http://searxng:8080`，不使用宿主机的 localhost。默认搜索渠道为 SearxNG；可显式配置 Tavily、DeepSeek/Perplexity 独立搜索 API，或在账号供应商设置中允许 OpenAI/Anthropic 内置搜索，见[搜索说明](search.md)。手动、重试和调度统一创建 live 执行，旧 `WORKER_SCHEDULED_RUN_MODE` 已移除，设置该变量不再改变调度行为。缺凭据或调用失败不会从 live 静默切成演示、付费渠道或其他供应商。真实烟测单独 opt-in，未执行时应记录“未执行”，不能用 fixture 通过冒充真实服务成功。
+设置 `MODEL_API_KEY`、`MODEL_NAME` 和必要的 `MODEL_BASE_URL` 作为部署默认模型，或配置 `AGENT_CREDENTIAL_KEY` 后让各账号在界面添加个人供应商，详见[Agent 配置](agent-configuration.md)。加密主密钥在 Server/Worker 中必须一致，并独立备份。容器使用 `http://searxng:8080`，不使用宿主机的 localhost。默认搜索渠道为 SearxNG；可显式配置 Tavily、DeepSeek/Perplexity/Tavily 独立搜索 API，或在账号供应商设置中配置独立搜索 API、允许 OpenAI/Anthropic 内置搜索，见[搜索说明](search.md)。手动、重试和调度统一创建 live 执行，旧 `WORKER_SCHEDULED_RUN_MODE` 已移除，设置该变量不再改变调度行为。缺凭据或调用失败不会从 live 静默切成演示、付费渠道或其他供应商。真实烟测单独 opt-in，未执行时应记录“未执行”，不能用 fixture 通过冒充真实服务成功。
 
 ## 维护窗口
 
