@@ -1,9 +1,9 @@
 import { createApp } from 'vue';
 import { VueQueryPlugin } from '@tanstack/vue-query';
+import '@/main.css';
 import 'virtual:uno.css';
 import App from '@/App.vue';
 import { createSessionLifecycle, sessionLifecycleKey } from '@/api/session';
-import '@/style.css';
 import { createWorkbenchRouter } from '@/router';
 import {
     createSessionController,

@@ -1,6 +1,6 @@
 # 局部透明层
 
-共享样式位于 `@/theme/glass.css`，仅供需要局部透明层的导航、工具条和菜单使用；具体页面按当前视觉设计选择，不增加重复背景。例如：
+共享样式集中在由 `main.ts` 引入的 `@/main.css`，供需要局部透明层的导航、工具条和菜单使用；具体页面按当前视觉设计选择，不增加重复背景。例如：
 
 ```html
 <header class="scova-glass scova-glass--navigation">…</header>

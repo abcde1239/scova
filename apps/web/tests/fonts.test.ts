@@ -52,10 +52,12 @@ describe('自托管字体交付契约', () => {
         },
     );
 
-    it('加载声明无外部 URL、无根字号覆盖，阅读字体独立消费', () => {
-        const css = read(path.join(web, 'src/styles/fonts.css'));
+    it('全局入口无外部 URL、无根字号覆盖，阅读字体独立消费', () => {
+        const css = read(path.join(web, 'src/main.css'));
         const reading = read(path.join(web, 'src/styles/reading-fonts.css'));
-        expect(css + reading).not.toMatch(/https?:|font-size|font-size-adjust/);
+        expect(css + reading).not.toMatch(/https?:|font-size-adjust/);
+        for (const root of css.matchAll(/:root\s*\{([^}]+)\}/g))
+            expect(root[1]).not.toMatch(/font-size\s*:/);
         expect(css).toContain('font-display: swap');
         expect(css).not.toContain("@import '@fontsource-variable/noto-serif-sc");
         expect(reading).toContain('@fontsource-variable/noto-serif-sc/wght.css');

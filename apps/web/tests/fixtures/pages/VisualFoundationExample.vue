@@ -57,7 +57,6 @@ import StatePanel from '@/components/common/StatePanel.vue';
 import { useAppearanceStore } from '@/store/appearance';
 import { accentOptions } from '@/theme/tokens';
 import '@/styles/reading-fonts.css';
-import '@/theme/glass.css';
 
 const query = useRoute().query;
 const appearance = useAppearanceStore();

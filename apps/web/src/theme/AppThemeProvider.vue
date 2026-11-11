@@ -23,9 +23,6 @@ import { darkTheme, NConfigProvider, NNotificationProvider } from 'naive-ui';
 import { useAppearanceStore } from '@/store/appearance';
 import { useReadingStore } from '@/store/reading';
 import { themeOverrides, themeVariables } from '@/theme/tokens';
-import '@/theme/theme.css';
-import '@/styles/fonts.css';
-import '@/styles/typography.css';
 
 const appearance = useAppearanceStore();
 const reading = useReadingStore();
