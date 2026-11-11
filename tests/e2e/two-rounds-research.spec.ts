@@ -83,8 +83,10 @@ test('研究A/B/C：原文、次级来源、不同观点、作者修订与正文
     const conflict = second.report.claims.find((entry) => entry.kind === 'conflict')!;
     expect(conflict.evidenceIds.length).toBeGreaterThanOrEqual(2);
     const conflictRow = owner.page.locator(`#claim-${conflict.id}`);
-    for (const citation of await conflictRow.locator('details.evidence').all()) {
-        await citation.locator('summary').press('Enter');
+    await expect(conflictRow.locator('.citation')).toHaveCount(conflict.evidenceIds.length);
+    for (const reference of await conflictRow.locator('.citation').all()) {
+        await reference.press('Enter');
+        const citation = owner.page.locator((await reference.getAttribute('href'))!);
         await expect(citation.locator('blockquote')).toBeVisible();
     }
     await expect(owner.page.locator('.report-changes')).toContainText('不增加独立新研究');

@@ -16,7 +16,7 @@ async function layout(page: import('@playwright/test').Page, scale: number) {
     );
 }
 
-test('补充入口六宽/文字放大、四主题浅暗与四报告形式（真实隔离服务）', async ({
+test('补充入口六宽/文字放大、四主题浅暗与已保存报告形式（真实隔离服务）', async ({
     environment,
     browser,
 }, info) => {
@@ -86,15 +86,28 @@ test('补充入口六宽/文字放大、四主题浅暗与四报告形式（真�
                         await page.goto(
                             `/reports/${saved.id}${saved.id === report.id ? `?questionId=${questionId}` : ''}`,
                         );
-                        const selector = page.getByLabel('报告形式', { exact: true });
-                        await expect(selector).toBeVisible();
+                        await expect(page.getByLabel('报告形式', { exact: true })).toHaveCount(0);
                         await expect(page.locator('.scova-theme')).toHaveClass(
                             scheme === 'dark' ? /scova-theme--dark/ : /^scova-theme$/,
                         );
                         await layout(page, scale);
-                        for (const format of ['brief', 'list', 'comparison', 'research_report']) {
+                        for (const format of saved.coverage.artifacts?.map(
+                            (artifact) => artifact.format,
+                        ) ?? [saved.format]) {
                             const before = writes.length;
-                            await selector.selectOption(format);
+                            if ((saved.coverage.artifacts?.length ?? 0) > 1)
+                                await page
+                                    .getByRole('navigation', { name: '已生成成果', exact: true })
+                                    .getByRole('button', {
+                                        name: {
+                                            brief: '简报',
+                                            list: '主题清单',
+                                            comparison: '对比表',
+                                            research_report: '研究报告',
+                                        }[format],
+                                        exact: true,
+                                    })
+                                    .click();
                             const frame = page.locator('.report-frame');
                             await expect(frame).toBeVisible();
                             expect(
@@ -110,49 +123,14 @@ test('补充入口六宽/文字放大、四主题浅暗与四报告形式（真�
                                 ).toBeVisible();
                             await layout(page, scale);
                             const evidence = frame.locator('.evidence-entry').first();
-                            const quote = evidence.locator('details.evidence summary');
+                            const quote = evidence
+                                .locator(
+                                    'xpath=ancestor::details[contains(@class, "evidence-source-group")]',
+                                )
+                                .locator(':scope > summary');
                             await quote.press('Enter');
                             await expect(evidence.locator('blockquote')).toBeVisible();
                             await quote.press('Enter');
-                            if (format === 'comparison') {
-                                for (const change of saved.changes) {
-                                    const row = page.locator(`#comparison-change-${change.id}`);
-                                    for (const side of ['old', 'new'] as const) {
-                                        const ids = change[`${side}EvidenceIds`];
-                                        await expect(
-                                            row.locator(`.${side}-side details.evidence`),
-                                        ).toHaveCount(ids.length);
-                                        for (const id of ids) {
-                                            const citation = row.locator(
-                                                `#comparison-${change.id}-${side}-${id}`,
-                                            );
-                                            await citation.locator('summary').press('Enter');
-                                            await expect(citation.locator('blockquote')).toHaveText(
-                                                saved.evidence.find((item) => item.id === id)!
-                                                    .quote,
-                                            );
-                                        }
-                                    }
-                                }
-                                if (saved.changes.length && width === 320 && scale === 200) {
-                                    const scroll = frame.locator('.comparison-scroll');
-                                    await expect(scroll).toHaveAttribute('tabindex', '0');
-                                    await scroll.evaluate((element) => {
-                                        element.scrollLeft = 0;
-                                    });
-                                    await scroll.focus();
-                                    await page.keyboard.press('ArrowRight');
-                                    await expect
-                                        .poll(() =>
-                                            scroll.evaluate((element) => element.scrollLeft),
-                                        )
-                                        .toBeGreaterThan(0);
-                                    await scroll.evaluate((element) => {
-                                        element.scrollLeft = 0;
-                                    });
-                                    await layout(page, scale);
-                                }
-                            }
                             if (
                                 accent === 'blue' &&
                                 ((width === 1440 && scale === 100) ||
@@ -165,8 +143,7 @@ test('补充入口六宽/文字放大、四主题浅暗与四报告形式（真�
                                         contentType: 'image/png',
                                     },
                                 );
-                            await selector.focus();
-                            await page.keyboard.press('Tab');
+                            await page.getByRole('link', { name: '正文', exact: true }).focus();
                             await expect(
                                 page.getByRole('link', { name: '正文', exact: true }),
                             ).toBeFocused();

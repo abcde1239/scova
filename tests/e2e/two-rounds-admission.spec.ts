@@ -87,7 +87,7 @@ test('招生A/B/C：两组变化双方引用、每周时区计划、partial不�
     expect(baseline).toBe(second.run.id);
     await openReport(owner.page, third.report);
     await expect(owner.page.getByRole('note', { name: '查阅范围说明' })).toContainText(
-        '未覆盖项目和来源详情见下方',
+        '查看来源覆盖说明',
     );
     await expect(owner.page.locator('.comparison-summary')).toContainText('变化结论仍不确定');
     await expect(owner.page.locator('.comparison-summary')).toContainText('本次查阅不完整');

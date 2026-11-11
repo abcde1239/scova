@@ -135,6 +135,13 @@ async function samples(context: BrowserContext) {
             return route.fulfill({ json: { items: [] } });
         if (url.pathname === '/api/v1/notes' && request.method() === 'GET')
             return route.fulfill({ json: { items: [], nextCursor: null } });
+        if (
+            url.pathname === `/api/v1/reports/${state.report.id}/conversation` &&
+            request.method() === 'GET'
+        )
+            return route.fulfill({
+                json: { reportId: state.report.id, turns: [], hasEarlier: false },
+            });
         if (state.failure === 'protocol')
             return route.fulfill({ contentType: 'application/json', body: '{"broken"' });
         if (typeof state.failure === 'number')
@@ -208,21 +215,22 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
             await expect(record(page, n)).toContainText('重要性标记：重要');
             for (const side of ['old', 'new']) {
                 const section = record(page, n).locator(`.${side}-side`);
-                const summary = section.locator('summary');
-                await summary.focus();
-                await summary.press('Enter');
-                await expect(section.locator('details')).toHaveAttribute('open', '');
-                await expect(section.locator('blockquote')).toHaveText(
+                const reference = section.locator('.evidence-link');
+                await reference.focus();
+                await reference.press('Enter');
+                const citation = page.locator((await reference.getAttribute('href'))!);
+                await expect(citation).toBeFocused();
+                await expect(citation.locator('blockquote')).toHaveText(
                     side === 'old'
                         ? '截止日期为11月1日，申请费为100元。'
                         : '截止日期为12月1日，申请费为150元。',
                 );
-                await expect(section.getByRole('link')).toHaveAttribute(
+                await expect(citation.getByRole('link')).toHaveAttribute(
                     'href',
                     `https://example.test/${side}`,
                 );
-                await expect(section.getByRole('link')).toHaveAttribute('target', '_blank');
-                await expect(section.getByRole('link')).toHaveAttribute(
+                await expect(citation.getByRole('link')).toHaveAttribute('target', '_blank');
+                await expect(citation.getByRole('link')).toHaveAttribute(
                     'rel',
                     'noopener noreferrer',
                 );
@@ -236,7 +244,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         ).toContain('Noto Serif SC');
         expect(
             await record(page)
-                .locator('summary')
+                .locator('.evidence-link')
                 .first()
                 .evaluate((element) => getComputedStyle(element).fontFamily),
         ).toContain('Inter');
@@ -268,6 +276,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
             { method: 'GET', path: `/api/v1/reports/${id(1)}` },
             { method: 'GET', path: `/api/v1/tasks/${id(3)}/feedback` },
             { method: 'GET', path: '/api/v1/notes' },
+            { method: 'GET', path: `/api/v1/reports/${id(1)}/conversation` },
         ]);
         expect(external).toEqual([]);
         expect(errors).toEqual([]);
@@ -387,8 +396,8 @@ test('null新值不产生删除撤回断言，长值与普通文本quote安全�
     await expect(record(page).locator('.new-side .change-value')).toHaveText('未提供新值');
     await expect(record(page).locator('.new-side')).toContainText('未提供本次观测引用');
     await expect(panel(page)).not.toContainText('资料已撤回。');
-    await record(page).locator('.old-side summary').press('Enter');
-    await expect(record(page).locator('.old-side blockquote')).toHaveText(
+    await record(page).locator('.old-side .evidence-link').press('Enter');
+    await expect(page.locator(`#evidence-${state.report.evidence[0]!.id} blockquote`)).toHaveText(
         state.report.evidence[0]!.quote,
     );
     expect(await page.evaluate(() => 'changeExecuted' in window)).toBe(false);
@@ -403,7 +412,7 @@ for (const side of ['old', 'new']) {
         await page.setViewportSize({ width: 390, height: 1000 });
         await page.goto(path);
         await expect(panel(page)).toBeVisible();
-        await record(page).locator(`.${side}-side summary`).click();
+        await record(page).locator(`.${side}-side .evidence-link`).click();
         await page.getByRole('link', { name: '阅读外观', exact: true }).click();
         await expect(page).toHaveURL(/\/account\/appearance$/);
         state.failure = 409;
@@ -411,7 +420,7 @@ for (const side of ['old', 'new']) {
         await page.goBack();
         await expect(page).toHaveURL(new RegExp(`${path}$`));
         await expect(
-            page.locator('.report-content > .state-panel').getByRole('status'),
+            page.locator('.report-content .state-panel').getByRole('status'),
         ).toContainText('报告证据校验未通过');
         await expect(page.locator('article.report-brief, .report-changes, blockquote')).toHaveCount(
             0,
@@ -451,5 +460,6 @@ test('live模式与配置、基线标识仍按真实报告展示', async ({ page
         { method: 'GET', path: `/api/v1/reports/${id(1)}` },
         { method: 'GET', path: `/api/v1/tasks/${id(3)}/feedback` },
         { method: 'GET', path: '/api/v1/notes' },
+        { method: 'GET', path: `/api/v1/reports/${id(1)}/conversation` },
     ]);
 });

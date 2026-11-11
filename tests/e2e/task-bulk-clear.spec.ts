@@ -175,7 +175,8 @@ for (const width of [320, 1440]) {
         );
         await page.screenshot({ path: info.outputPath(`bulk-confirm-${width}.png`) });
         await confirm(page, 2);
-        await expect(page.locator('.bulk-feedback')).toContainText('已清除 2 个');
+        await expect(dialog(page, 2)).not.toBeVisible();
+        await expect(page.locator('.bulk-feedback')).toHaveCount(0);
         await expect(page.locator('.task-card')).toHaveCount(0);
         await expect(page.getByRole('button', { name: '清除所选任务' })).toBeDisabled();
         expect(state.writes.map((item) => item.n)).toEqual([10, 11]);
@@ -211,7 +212,8 @@ test('加载更多不自动选中，切换筛选清空选择，隐藏任务不�
     await selectAll(page);
     await open(page, 1);
     await confirm(page, 1);
-    await expect(page.locator('.bulk-feedback')).toContainText('已清除 1 个');
+    await expect(dialog(page, 1)).not.toBeVisible();
+    await expect(page.locator('.bulk-feedback')).toHaveCount(0);
     expect(state.writes.map((item) => item.n)).toEqual([13]);
     expect(state.unexpected).toEqual([]);
 });
@@ -221,9 +223,9 @@ test('有活动执行的任务保留，其他任务成功并逐项反馈', async
     await selectAll(page);
     await open(page, 2);
     await confirm(page, 2);
-    await expect(page.locator('.bulk-feedback')).toContainText('已清除 1 个，其他 1 个');
+    await expect(page.locator('.bulk-feedback')).not.toContainText('批量清除结束');
     await expect(page.locator('.bulk-feedback')).toContainText('批量任务10：仍有活动执行');
-    await expect(page.locator('.bulk-feedback')).toContainText('批量任务11：已清除');
+    await expect(page.locator('.bulk-feedback')).not.toContainText('批量任务11：已清除');
     await expect(page.getByRole('article', { name: '批量任务10', exact: true })).toBeVisible();
     await expect(page.getByRole('article', { name: '批量任务11', exact: true })).toHaveCount(0);
     expect(state.writes.map((item) => item.n)).toEqual([10, 11]);
@@ -237,7 +239,7 @@ test('响应丢失/503不自动重发，保留已完成结果并停止后续任�
     await selectAll(page);
     await open(page, 3);
     await confirm(page, 3);
-    await expect(page.locator('.bulk-feedback')).toContainText('批量任务10：已清除');
+    await expect(page.locator('.bulk-feedback')).not.toContainText('批量任务10：已清除');
     await expect(page.locator('.bulk-feedback')).toContainText('批量任务11：结果待核对');
     await expect(page.locator('.bulk-feedback')).toContainText('批量任务12：未发送清除请求');
     expect(state.writes.map((item) => item.n)).toEqual([10, 11]);
@@ -277,7 +279,8 @@ test('执行中显示进度并阻止双击与Escape关闭', async ({ page }) => 
     } finally {
         release();
     }
-    await expect(page.locator('.bulk-feedback')).toContainText('已清除 2 个');
+    await expect(dialog(page, 2)).not.toBeVisible();
+    await expect(page.locator('.bulk-feedback')).toHaveCount(0);
     expect(state.writes).toHaveLength(2);
     expect(state.pageErrors).toEqual([]);
 });

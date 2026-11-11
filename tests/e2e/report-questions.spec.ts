@@ -178,6 +178,16 @@ async function samples(context: BrowserContext) {
             }
             return route.fulfill({ json: state.report });
         }
+        if (pathname === `${path}/conversation`) {
+            if (state.switched) return route.fulfill({ status: 404, json: errorBody() });
+            return route.fulfill({
+                json: {
+                    reportId: state.report.id,
+                    turns: [...state.saved.values()],
+                    hasEarlier: false,
+                },
+            });
+        }
         if (pathname === `${path}/questions` && method === 'POST') {
             const key = headers['idempotency-key']!;
             const text = (request.postDataJSON() as { question: string }).question;
@@ -226,6 +236,33 @@ async function samples(context: BrowserContext) {
     return state;
 }
 const panel = (page: Page) => page.locator('.questions');
+test('连续发送两轮后刷新恢复历史，收起成果保留草稿', async ({ page, context }) => {
+    const state = await samples(context);
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    await open(page);
+    await ask(page, '请解释报告第一点');
+    await expect(result(page)).toContainText('请解释报告第一点');
+    await expect(input(page)).toHaveValue('');
+    await ask(page, '刚才的条件具体是什么？');
+    await expect(result(page)).toContainText('刚才的条件具体是什么？');
+    await expect(panel(page).locator('.conversation-history')).toContainText('请解释报告第一点');
+    expect(requests(state, 'POST')).toHaveLength(2);
+    expect(JSON.parse(requests(state, 'POST')[1]!.body!).afterQuestionId).toBe(
+        [...state.saved.keys()][0],
+    );
+    await page.reload();
+    await expect(result(page)).toContainText('刚才的条件具体是什么？');
+    await expect(panel(page).locator('.conversation-history')).toContainText('请解释报告第一点');
+    expect(requests(state, 'POST')).toHaveLength(2);
+    await input(page).fill('下一轮尚未提交');
+    await page.getByRole('button', { name: '关闭成果预览', exact: true }).click();
+    await expect(input(page)).toHaveValue('下一轮尚未提交');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({ path: 'artifacts/report-conversation/mobile.png', fullPage: true });
+    expect(errors).toEqual([]);
+    expect(state.unexpected).toEqual([]);
+});
 const result = (page: Page) => panel(page).locator('.question-result');
 const input = (page: Page) => panel(page).getByRole('textbox', { name: '问题', exact: true });
 const button = (page: Page, name: string) => panel(page).getByRole('button', { name, exact: true });
@@ -289,7 +326,9 @@ test('HTTP sample: answered sends raw body once, updates ID URL without dirty di
     expect(dialogs).toBe(0);
     expect(requests(state, 'POST')).toHaveLength(1);
     const posted = requests(state, 'POST')[0]!;
-    expect(posted.body).toBe(JSON.stringify({ question: '  原始问题\n保留空格  ' }));
+    expect(posted.body).toBe(
+        JSON.stringify({ question: '  原始问题\n保留空格  ', afterQuestionId: null }),
+    );
     expect(posted.key).toMatch(/^[\w-]{16,128}$/);
     expect(posted.csrf).toBe('questions-test-only');
     const url = new URL(page.url());
@@ -582,6 +621,7 @@ test('HTTP sample: unavailable Report hides saved answer and citations, keeps co
     await staleReturn(page, state);
     await ask(page, '结果后的本地问题');
     await expect(result(page)).toBeVisible();
+    await input(page).fill('结果后的本地问题');
     state.releaseReport!(503);
     await notice(page, '本地问题仍可复制');
     await expect(result(page)).toHaveCount(0);
@@ -787,6 +827,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
                                     right: rect.right,
                                     height: rect.height,
                                     cursor: getComputedStyle(element).cursor,
+                                    disabled: element.matches(':disabled'),
                                 };
                             }),
                     );
@@ -796,8 +837,9 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
                             control.left >= -1 &&
                             control.right <= width + 1 &&
                             control.height >= (enlarged ? 88 : 44) - 1 &&
-                            control.cursor === 'pointer',
+                            control.cursor === (control.disabled ? 'not-allowed' : 'pointer'),
                     ),
+                    JSON.stringify(controls),
                 ).toBe(true);
                 await summary.focus();
                 expect(

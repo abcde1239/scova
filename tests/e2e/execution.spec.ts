@@ -1,5 +1,5 @@
 import { logoutFromAccount, expectAccountReady } from './support/account-menu.ts';
-import { chooseOption } from './support/select.ts';
+import { chooseOutputFormats } from './support/select.ts';
 import { expect, test, type Page } from '@playwright/test';
 type Status =
     | 'queued'
@@ -160,11 +160,15 @@ for (const width of [390, 1440]) {
                 },
             });
         });
-        for (const [value, label] of [
-            ['brief', '简报'],
-            ['list', '主题清单'],
-            ['comparison', '对比表'],
-            ['research_report', '研究报告'],
+        for (const [values, labels] of [
+            [['brief'], ['简报']],
+            [['list'], ['主题清单']],
+            [['comparison'], ['对比表']],
+            [['research_report'], ['研究报告']],
+            [
+                ['brief', 'comparison'],
+                ['简报', '对比表'],
+            ],
         ]) {
             await page.goto(`/runs/${runId}`);
             const logs = page.getByRole('region', { name: '执行日志内容' });
@@ -172,10 +176,10 @@ for (const width of [390, 1440]) {
             await expect(logs.locator('li.warning')).toContainText('检查链接');
             await expect(logs.locator('li.error')).toContainText('error');
             await expect(logs).not.toContainText('DO_NOT_RENDER');
-            await chooseOption(page, '本次输出形式', label!);
+            await chooseOutputFormats(page, '本次输出形式', labels!);
             await page.getByRole('button', { name: '重试并创建新执行', exact: true }).click();
             await expect(page.getByRole('link', { name: '打开执行', exact: true })).toBeVisible();
-            expect(bodies.at(-1)).toMatchObject({ mode: 'live', outputFormat: value });
+            expect(bodies.at(-1)).toMatchObject({ mode: 'live', outputFormats: values });
             await noOverflow(page);
         }
     });

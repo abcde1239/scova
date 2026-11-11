@@ -196,15 +196,14 @@ for (const width of [1280, 390]) {
             window.scovaResearchFixture.setReport(value);
         });
         const answer = page.locator('#question-q0');
-        await expect(answer.locator('.answer-source')).toHaveCount(3);
+        await expect(answer.locator('.answer-source')).toHaveCount(4);
         const first = answer.locator('.answer-source').first();
-        await expect(first.locator('.claim')).toHaveCount(2);
-        await expect(first.locator('.source-evidence .evidence')).toHaveCount(1);
-        await expect(first).toContainText('只适用于后续批次。');
-        const link = first.locator('.claim-sources a').last();
+        await expect(first.locator('.claim')).toHaveCount(1);
+        await expect(answer.locator('blockquote')).toHaveCount(0);
+        await expect(answer).toContainText('只适用于后续批次。');
+        const link = first.locator('.citation').last();
         const target = await link.getAttribute('href');
         await link.click();
-        await page.locator(`${target} summary`).click();
         await expect(page.locator(`${target} blockquote`)).toBeVisible();
         await expect(first.locator('.assessment').first()).not.toHaveAttribute('open');
         await first.locator('.assessment > summary').first().click();
@@ -240,13 +239,13 @@ test('soft evidence keeps uncertain content visible without creating citations a
         window.scovaResearchFixture.setReport(value);
     });
     const claim = page.locator('.claim').filter({ hasText: '保留待核实的模型判断' });
-    await expect(claim.getByText('需要补充材料', { exact: true })).toBeVisible();
+    await expect(claim.getByText('待核实，尚不能作为已确认结论', { exact: true })).toBeVisible();
     await expect(claim.locator('.claim-text')).toHaveText(
         '保留待核实的模型判断 <script>doNotRun()</script>',
     );
     await expect(claim.locator('.citation')).toHaveCount(0);
     await expect(claim.locator('script')).toHaveCount(0);
-    await page.getByText('查看查询摘要与覆盖缺口', { exact: true }).click();
+    await page.locator('.coverage > details > summary').click();
     await expect(page.getByText('候选按上限筛选，不代表引擎故障。', { exact: true })).toBeVisible();
     expect(state.requests).toEqual([]);
 });
@@ -259,7 +258,7 @@ test('ResearchReport 目录、四类结论、changes 与孤立 evidence 按真�
     await expect(page.getByRole('navigation', { name: '报告目录' })).toBeVisible();
     for (const name of [
         '报告概述',
-        '查阅范围与限制',
+        '查阅与核验详情',
         '变化与基线',
         '来源事实',
         'Agent 推断',
@@ -269,14 +268,16 @@ test('ResearchReport 目录、四类结论、changes 与孤立 evidence 按真�
     ])
         await expect(page.getByRole('link', { name, exact: true })).toBeVisible();
     await expect(page.getByRole('note', { name: '查阅范围说明' })).toContainText(
-        '未覆盖项目和来源详情见下方',
+        '查看来源覆盖说明',
     );
     await expect(page.getByText('研究范围', { exact: true })).toBeVisible();
     await expect(
-        page.getByText('孤立来源：未归入结论 · 查看原文引用', { exact: true }),
+        page
+            .locator('.evidence-appendix .evidence-source-group > summary')
+            .filter({ hasText: '孤立来源：未归入结论' }),
     ).toBeVisible();
     await expect(
-        page.getByText('以下按报告保存顺序列出可访问证据；孤立来源不会被猜测归入某条结论。'),
+        page.getByText('每份来源集中保存引用，展开即可核对原文；不同保存版本分别列出。'),
     ).toBeVisible();
     expect(state.requests).toEqual([]);
 });
@@ -325,8 +326,12 @@ test('Brief 与 Research 切换共享同一 DTO、claim 文本与保存引用，
                 id: node.id,
                 text: node.querySelector('.claim-text')?.textContent,
                 confidence: node.querySelector('.confidence')?.textContent,
-                citations: Array.from(node.querySelectorAll('blockquote')).map(
-                    (quote) => quote.textContent,
+                citations: Array.from(node.querySelectorAll('.citation')).map(
+                    (link) =>
+                        document
+                            .getElementById(link.getAttribute('href')!.slice(1))!
+                            .closest('.source-quote')!
+                            .querySelector('blockquote')!.textContent,
                 ),
             })),
         );
@@ -352,8 +357,11 @@ test('无 changes 且无 baseline 仍可达变化结论；保存引用全文字�
     report.evidence[2]!.quote = longQuote;
     await page.evaluate((value) => window.scovaResearchFixture.setReport(value), report);
     await expect(page.getByRole('link', { name: '变化与基线', exact: true })).toBeVisible();
-    const orphan = page.locator(`#evidence-${report.evidence[2]!.id} details`);
-    await orphan.locator('summary').press('Enter');
+    const orphan = page.locator(`#evidence-${report.evidence[2]!.id}`);
+    await orphan
+        .locator('xpath=ancestor::details[contains(@class, "evidence-source-group")]')
+        .locator(':scope > summary')
+        .press('Enter');
     await expect(orphan.locator('blockquote')).toHaveText(longQuote);
     expect(await page.evaluate(() => 'researchExecuted' in window)).toBe(false);
     expect(state.requests).toEqual([]);
@@ -413,8 +421,8 @@ test('页面不自动请求外站，证据链接安全且不产生写请求', as
         if (request.url().includes('example.test')) external.push(request.url());
     });
     await openReport(page, state);
-    const details = page.locator('details.evidence').first();
-    await details.locator('summary').click();
+    const details = page.locator('.evidence-source-group').first();
+    await details.locator(':scope > summary').click();
     const link = details.getByRole('link', { name: '打开原始来源（新窗口）' });
     await expect(link).toHaveAttribute('target', '_blank');
     await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
@@ -430,7 +438,7 @@ test('来源附录在 320px 与 200% 文字下保留完整引用和连续中文�
     report.evidence[0]!.quote = raw;
     await page.evaluate((value) => window.scovaResearchFixture.setReport(value), report);
     const citation = page.locator('.evidence-appendix .evidence-entry').first();
-    await citation.locator('summary').click();
+    await page.locator('.evidence-appendix .evidence-source-group > summary').first().click();
     const quote = citation.locator('blockquote');
     for (const width of [320, 360, 390, 768, 1024, 1440]) {
         await page.setViewportSize({ width, height: 900 });

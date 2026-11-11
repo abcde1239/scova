@@ -152,11 +152,13 @@ export async function assertChangeCitations(
                 entry[`${side}Value`] ?? `未提供${side === 'old' ? '旧' : '新'}值`,
             );
             const evidenceIds = entry[`${side}EvidenceIds`];
-            await expect(section.locator('details.evidence')).toHaveCount(evidenceIds.length);
+            await expect(section.locator('.evidence-link')).toHaveCount(evidenceIds.length);
             for (const [index, evidenceId] of evidenceIds.entries()) {
-                const citation = section.locator('details.evidence').nth(index);
-                await citation.locator('summary').focus();
-                await citation.locator('summary').press('Enter');
+                const reference = section.locator('.evidence-link').nth(index);
+                await expect(reference).toHaveAttribute('href', `#evidence-${evidenceId}`);
+                await reference.focus();
+                await reference.press('Enter');
+                const citation = page.locator(`#evidence-${evidenceId}`);
                 await expect(citation.locator('blockquote')).toHaveText(
                     report.evidence.find((item) => item.id === evidenceId)!.quote,
                 );
