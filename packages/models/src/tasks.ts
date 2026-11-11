@@ -1,4 +1,5 @@
 import { Type, type Static } from '@sinclair/typebox';
+import { OutputFormatsSchema } from './output-formats.ts';
 import {
     HttpUrlSchema,
     InstantSchema,
@@ -137,7 +138,7 @@ export const SourcePreferencesSchema = Type.Object(
     },
     { additionalProperties: false, description: '来源偏好，不授予任意网络地址访问权限' },
 );
-export const TaskConfigSchema = Type.Object(
+const TaskConfigObject = Type.Object(
     {
         title: Type.String({
             minLength: 1,
@@ -154,6 +155,7 @@ export const TaskConfigSchema = Type.Object(
         timezone: TimezoneSchema,
         schedule: ScheduleSchema,
         outputFormat: OutputFormatSchema,
+        outputFormats: Type.Optional(OutputFormatsSchema),
         researchMode: Type.Optional(
             Type.Union([Type.Literal('collection'), Type.Literal('analysis')], {
                 description:
@@ -170,6 +172,11 @@ export const TaskConfigSchema = Type.Object(
         notificationPreference: NotificationPreferenceSchema,
     },
     { additionalProperties: false, description: '可编辑查阅任务配置；持久化后以不可变版本保存' },
+);
+export const TaskConfigSchema = refineSchema(
+    TaskConfigObject,
+    'ScovaTaskConfig',
+    (value) => !value.outputFormats || value.outputFormats[0] === value.outputFormat,
 );
 export const CreateTaskInputSchema = Type.Object(
     {

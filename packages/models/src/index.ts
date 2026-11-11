@@ -4,6 +4,7 @@ export * from './avatar.ts';
 export * from './agent-providers.ts';
 export * from './tasks.ts';
 export * from './task-token-budget.ts';
+export * from './output-formats.ts';
 export * from './task-drafts.ts';
 export * from './library.ts';
 export * from './runs.ts';
@@ -21,3 +22,7 @@ export * from './validation.ts';
 export const contractsVersion = '1.0.0';
 
 export * from './report-questions.ts';
+export * from './report-conversation.ts';
+export * from './report-artifacts.ts';
+export * from './report-summary.ts';
+export * from './report-artifact-validation.ts';

@@ -51,15 +51,16 @@ export function toolIssueGuidance(tool: 'read' | 'search' | 'model', code: strin
         case 'TOOL_RATE_LIMITED':
             return '站点限流，本次跳过；稍后再执行或选用其他来源。';
         case 'TOOL_NETWORK':
-        case 'TOOL_TIMEOUT':
         case 'TOOL_HTTP_ERROR':
             return '暂时性连接或服务故障会在剩余预算内有限重试，仍失败则继续其他来源。';
+        case 'TOOL_TIMEOUT':
+            return '网页连接、渲染或正文提取未在本次时限内完成；会在剩余预算内有限重试，仍失败则继续其他公开来源。';
         case 'TOOL_EXTRACTION_FAILED':
-            return '页面可能只有动态内容；请提供可直接读取的正文页或其他公开来源。';
+            return '页面可能是验证码、登录门或未完成加载的动态内容；请选用可直接读取的公开正文或替代来源。';
         case 'TOOL_INVALID_RESPONSE':
-            return '当前读取器支持 UTF-8 HTML；请使用正文网页链接，避免文件下载或不支持的编码。';
+            return '当前读取器支持可解码的 HTML 网页；文件下载、PDF、纯文本附件或损坏的响应可能无法读取，请选用公开正文网页。';
         case 'TOOL_RESPONSE_TOO_LARGE':
-            return '请改用较短的正文子页面。';
+            return '主文档大小、DOM 复杂度或页面资源数量/大小可能超过读取限制；可选用公开的正文版、打印版或其他来源，不一定是文章过长。';
         case 'TOOL_UNSAFE_URL':
             return '仅支持安全的公网地址，请检查链接及域名解析。';
         default:

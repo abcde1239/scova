@@ -4,6 +4,7 @@ import {
     parseContract,
     ReportDeliverySchema,
     type ReportValue,
+    type ReportArtifact,
 } from '../src/index.ts';
 
 function value(status = 'provisional', priority = 'core'): ReportValue {
@@ -91,5 +92,90 @@ describe('content delivery independent from complete monitoring', () => {
         expect(() =>
             parseContract(ReportDeliverySchema, { ...data, answeredCoreQuestions: 0 }),
         ).toThrow();
+    });
+    it('does not count a partially covered object collection as a fully answered core question', () => {
+        const artifact: ReportArtifact = {
+            format: 'list',
+            claimIndexes: [0, 1],
+            coverage: {
+                version: 1,
+                requirements: [
+                    {
+                        id: 'pathlib',
+                        object: 'pathlib',
+                        field: '用途',
+                        questionIds: ['q0'],
+                        required: true,
+                        status: 'supported',
+                        claimIndexes: [0],
+                        gap: '',
+                    },
+                    {
+                        id: 'datetime',
+                        object: 'datetime',
+                        field: '用途',
+                        questionIds: ['q0'],
+                        required: true,
+                        status: 'unknown',
+                        claimIndexes: [],
+                        gap: '正文未取得，不能核实用途',
+                    },
+                ],
+            },
+        };
+        const result = classifyReportDelivery(
+            value(),
+            [{ kind: 'inference' }, { kind: 'insufficient' }],
+            [artifact],
+        );
+        expect(parseContract(ReportDeliverySchema, result)).toMatchObject({
+            status: 'partial',
+            answeredCoreQuestions: 0,
+            answeredQuestions: 0,
+        });
+        artifact.coverage!.requirements[1] = {
+            ...artifact.coverage!.requirements[1]!,
+            status: 'supported',
+            claimIndexes: [1],
+            gap: '',
+        };
+        expect(
+            classifyReportDelivery(
+                value(),
+                [{ kind: 'inference' }, { kind: 'inference' }],
+                [artifact],
+            ).status,
+        ).toBe('answered');
+    });
+    it('checks every selected artifact and rejects insufficient requirements promoted to supported', () => {
+        const requirement = {
+            id: 'r',
+            object: '对象',
+            field: '请求字段',
+            questionIds: ['q0'],
+            required: true,
+            status: 'supported' as const,
+            claimIndexes: [0],
+            gap: '',
+        };
+        const artifacts: ReportArtifact[] = [
+            {
+                format: 'brief',
+                claimIndexes: [0],
+                coverage: { version: 1, requirements: [requirement] },
+            },
+            {
+                format: 'comparison',
+                claimIndexes: [1],
+                coverage: { version: 1, requirements: [{ ...requirement, claimIndexes: [1] }] },
+            },
+        ];
+        expect(
+            classifyReportDelivery(
+                value(),
+                [{ kind: 'inference' }, { kind: 'insufficient' }],
+                artifacts,
+            ).status,
+        ).toBe('partial');
     });
 });

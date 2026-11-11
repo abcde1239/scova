@@ -45,13 +45,48 @@ const Secret = Type.String({
     pattern: '^\\S+$',
     description: 'API密钥，仅写入且不回显',
 });
+const SearchApiFields = {
+    protocol: Type.Union(
+        [Type.Literal('deepseek'), Type.Literal('perplexity'), Type.Literal('tavily')],
+        { description: '独立搜索 API 协议' },
+    ),
+    baseUrl: ProviderFields.baseUrl,
+    contentMode: Type.Union([Type.Literal('prefer_api'), Type.Literal('reader')], {
+        description: '优先采用 API 正文，缺失时 Reader 补读；或始终使用 Reader',
+    }),
+};
+const SearchApiInput = Type.Object(
+    { ...SearchApiFields, apiKey: Secret },
+    { additionalProperties: false, description: '独立搜索配置；密钥与模型密钥分开保存' },
+);
+const SearchApiUpdate = Type.Object(
+    { ...SearchApiFields, apiKey: Type.Optional(Secret) },
+    { additionalProperties: false, description: '编辑搜索配置；地址与协议未改变时可保留密钥' },
+);
+const SearchApiPublic = Type.Object(
+    { ...SearchApiFields, hasApiKey: Type.Boolean({ description: '已保存独立搜索密钥' }) },
+    { additionalProperties: false, description: '脱敏搜索配置' },
+);
 export const AgentProviderInputSchema = Type.Object(
-    { ...ProviderFields, apiKey: Secret },
+    {
+        ...ProviderFields,
+        apiKey: Secret,
+        searchApi: Type.Optional(
+            Type.Union([SearchApiInput, Type.Null()], {
+                description: '账号独立搜索配置，省略或空值使用部署默认搜索',
+            }),
+        ),
+    },
     { additionalProperties: false, description: '当前账号的供应商配置' },
 );
 export const AgentProviderUpdateSchema = Type.Object(
     {
         ...ProviderFields,
+        searchApi: Type.Optional(
+            Type.Union([SearchApiUpdate, Type.Null()], {
+                description: '独立搜索配置；省略保留，空值移除',
+            }),
+        ),
         apiKey: Type.Optional(Secret),
         revision: Type.Integer({ minimum: 1, description: '编辑时读取的修订号' }),
     },
@@ -61,6 +96,11 @@ export const AgentProviderSchema = Type.Object(
     {
         id: UuidSchema,
         ...ProviderFields,
+        searchApi: Type.Optional(
+            Type.Union([SearchApiPublic, Type.Null()], {
+                description: '脱敏的独立搜索配置；空值表示未配置，无法解密时省略',
+            }),
+        ),
         hasApiKey: Type.Boolean({ description: '是否保存密钥，不返回密钥内容或片段' }),
         active: Type.Boolean({ description: '是否用于研究执行与报告问答' }),
         draftActive: Type.Boolean({ description: '是否用于任务需求整理' }),

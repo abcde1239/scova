@@ -1,4 +1,5 @@
 import { Type, type Static } from '@sinclair/typebox';
+import { OutputFormatsSchema } from './output-formats.ts';
 import {
     InstantSchema,
     ModeSchema,
@@ -13,6 +14,7 @@ import {
 import { BudgetSchema } from './tasks.ts';
 import { ReportValueSchema } from './report-value.ts';
 import { ReportDeliverySchema } from './report-delivery.ts';
+import { ReportArtifactSchema } from './report-artifacts.ts';
 
 const CountSchema = Type.Integer({
     minimum: 0,
@@ -31,6 +33,13 @@ export const UsageSchema = Type.Object(
 );
 export const CoverageSchema = Type.Object(
     {
+        artifacts: Type.Optional(
+            Type.Array(ReportArtifactSchema, {
+                minItems: 1,
+                maxItems: 4,
+                description: '本次实际生成的独立成果与结论索引，缺失表示历史单形式报告',
+            }),
+        ),
         reportValue: Type.Optional(ReportValueSchema),
         delivery: Type.Optional(ReportDeliverySchema),
         notes: Type.Optional(
@@ -131,10 +140,11 @@ export const RunCommandResponseSchema = Type.Object(
     { run: RunSchema, reused: Type.Boolean({ description: '是否返回已经存在的活动执行' }) },
     { additionalProperties: false, description: '执行命令的普通 JSON 响应；首次入队使用 HTTP 202' },
 );
-export const RunCommandInputSchema = Type.Object(
+const RunCommandInputObject = Type.Object(
     {
         mode: Type.Optional(Type.Literal('live')),
         outputFormat: Type.Optional(OutputFormatSchema),
+        outputFormats: Type.Optional(OutputFormatsSchema),
         agentProviderId: Type.Optional(
             Type.Union([UuidSchema, Type.Null()], {
                 description: '本次执行使用的本人Agent配置；省略沿用任务配置，null使用账号默认',
@@ -145,6 +155,14 @@ export const RunCommandInputSchema = Type.Object(
         additionalProperties: false,
         description: '启动真实研究；可省略 mode，缺少必要服务配置时明确失败',
     },
+);
+export const RunCommandInputSchema = refineSchema(
+    RunCommandInputObject,
+    'ScovaRunCommandInput',
+    (value) =>
+        !value.outputFormat ||
+        !value.outputFormats ||
+        value.outputFormats[0] === value.outputFormat,
 );
 for (const schema of [
     UsageSchema,

@@ -45,6 +45,11 @@ export type ClaimAssessment = Static<typeof ClaimAssessmentSchema>;
 
 const ReportValueObject = Type.Object(
     {
+        timeless: Type.Optional(
+            Type.Literal(true, {
+                description: '该任务未要求来源在时间窗口内新发布；时间元数据仍保留真实未知',
+            }),
+        ),
         researchMode: Type.Optional(
             Type.Literal('collection', {
                 description: '以读取到的来源信息回答，不认证发布时间；timeScope保留真实判定',
@@ -129,9 +134,9 @@ export const ReportValueSchema = refineSchema(ReportValueObject, 'ScovaReportVal
                             return (
                                 !!selection &&
                                 (selection.timeScope === 'within' ||
+                                    value.timeless === true ||
                                     value.researchMode === 'collection') &&
                                 selection.assessment?.support === 'direct' &&
-                                !selection.assessment.conditions &&
                                 !selection.assessment.gap
                             );
                         }))) &&

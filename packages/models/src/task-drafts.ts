@@ -1,5 +1,5 @@
 import { Type, type Static } from '@sinclair/typebox';
-import { describeProperties, FieldErrorSchema, TimezoneSchema } from './common.ts';
+import { describeProperties, FieldErrorSchema, TimezoneSchema, refineSchema } from './common.ts';
 import { TaskConfigSchema, type TaskConfig } from './tasks.ts';
 
 const InputTextSchema = Type.String({
@@ -8,7 +8,7 @@ const InputTextSchema = Type.String({
     pattern: '\\S',
     description: '原始需求描述，最多2000个字符且不超过8000 UTF-8字节；服务端原样返回',
 });
-export const TaskDraftScopeSchema = Type.Object(
+const TaskDraftScopeObject = Type.Object(
     {
         goal: Type.String({
             minLength: 1,
@@ -38,12 +38,18 @@ export const TaskDraftScopeSchema = Type.Object(
         ),
         timeRange: TaskConfigSchema.properties.timeRange,
         outputFormat: TaskConfigSchema.properties.outputFormat,
+        outputFormats: TaskConfigSchema.properties.outputFormats,
         researchMode: Type.Union([Type.Literal('collection'), Type.Literal('analysis')]),
     },
     {
         additionalProperties: false,
         description: '生成草稿前经用户确认的搜索范围，模型不得扩大；不创建或执行任务',
     },
+);
+export const TaskDraftScopeSchema = refineSchema(
+    TaskDraftScopeObject,
+    'ScovaTaskDraftScope',
+    (value) => !value.outputFormats || value.outputFormats[0] === value.outputFormat,
 );
 export type TaskDraftScope = Static<typeof TaskDraftScopeSchema>;
 export const TaskClarificationsSchema = Type.Array(
@@ -77,6 +83,10 @@ export function taskDraftScopeMatches(scope: TaskDraftScope, config: TaskConfig)
               scope.timeRange.start === config.timeRange.start &&
               scope.timeRange.end === config.timeRange.end) &&
         scope.outputFormat === config.outputFormat &&
+        sameItems(
+            scope.outputFormats ?? [scope.outputFormat],
+            config.outputFormats ?? [config.outputFormat],
+        ) &&
         scope.researchMode === config.researchMode
     );
 }
