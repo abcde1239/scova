@@ -1,13 +1,27 @@
 <template>
-    <section class="list-input" :aria-labelledby="`${id}-label`">
-        <div class="list-heading">
-            <span :id="`${id}-label`" class="list-label">{{ label }}</span>
-            <span class="list-count">{{ items.filter((item) => item.trim()).length }} 项</span>
+    <section class="list-input layout-grid gap-[0.65rem]" :aria-labelledby="`${id}-label`">
+        <div class="list-heading flex items-baseline gap-3">
+            <span :id="`${id}-label`" class="list-label [font-weight:550]">{{ label }}</span>
+            <span class="list-count text-[0.875rem] text-muted"
+                >{{ items.filter((item) => item.trim()).length }} 项</span
+            >
         </div>
-        <p v-if="hint" :id="`${id}-hint`" class="list-hint">{{ hint }}</p>
-        <ol v-if="items.length" class="list-rows">
-            <li v-for="(item, index) in items" :key="keys[index]" class="list-row">
-                <span class="row-number" aria-hidden="true">{{ index + 1 }}</span>
+        <p
+            v-if="hint"
+            :id="`${id}-hint`"
+            class="list-hint text-[0.875rem] text-muted leading-[1.6] break-anywhere m-0"
+        >
+            {{ hint }}
+        </p>
+        <ol v-if="items.length" class="list-rows grid gap-[0.6rem] list-none m-0 p-0">
+            <li
+                v-for="(item, index) in items"
+                :key="keys[index]"
+                class="list-row layout-grid grid-cols-[1.25rem_minmax(0,_1fr)_2.75rem] items-start gap-2 [&.list-row_.n-input]:(min-w-0 rounded-2 ![--n-font-size:1rem])"
+            >
+                <span class="row-number pt-3 text-muted text-[0.875rem]" aria-hidden="true">{{
+                    index + 1
+                }}</span>
                 <n-input
                     :value="item"
                     :type="url ? 'text' : 'textarea'"
@@ -26,7 +40,7 @@
                 />
                 <button
                     type="button"
-                    class="remove-row"
+                    class="remove-row inline-flex items-center justify-center gap-[0.4rem] min-h-11 [border:0] bg-transparent text-muted font-inherit cursor-pointer rounded-[0.4rem] hover:(text-danger [background:color-mix(in_srgb,_var(--scova-danger)_8%,_transparent)]) focus-visible:([outline:0.0625rem_solid_var(--scova-primary)] [outline-offset:0.125rem]) disabled:(cursor-not-allowed opacity-55)"
                     :disabled="disabled"
                     :aria-label="`删除${label} ${index + 1}`"
                     @click="remove(index)"
@@ -35,8 +49,20 @@
                 </button>
             </li>
         </ol>
-        <p v-if="error" :id="`${id}-error`" class="list-error">{{ error }}</p>
-        <button ref="addButton" type="button" class="add-row" :disabled="disabled" @click="add()">
+        <p
+            v-if="error"
+            :id="`${id}-error`"
+            class="list-error leading-[1.6] break-anywhere text-danger text-[0.875rem] m-0"
+        >
+            {{ error }}
+        </p>
+        <button
+            ref="addButton"
+            type="button"
+            class="add-row inline-flex items-center justify-center gap-[0.4rem] min-h-11 [border:0] bg-transparent text-primary font-inherit cursor-pointer rounded-[0.4rem] justify-self-start pl-[0.4rem] pr-[0.4rem] focus-visible:([outline:0.0625rem_solid_var(--scova-primary)] [outline-offset:0.125rem]) disabled:(cursor-not-allowed opacity-55)"
+            :disabled="disabled"
+            @click="add()"
+        >
             <app-icon name="create" />{{ addLabel || '添加一项' }}
         </button>
     </section>
@@ -102,89 +128,3 @@ function enter(event: KeyboardEvent, index: number) {
     add(index);
 }
 </script>
-
-<style scoped>
-.list-input {
-    display: grid;
-    gap: 0.65rem;
-    min-inline-size: 0;
-}
-.list-heading {
-    display: flex;
-    align-items: baseline;
-    gap: 0.75rem;
-}
-.list-label {
-    font-weight: 550;
-}
-.list-count,
-.list-hint {
-    font-size: 0.875rem;
-    color: var(--scova-muted);
-}
-.list-hint,
-.list-error {
-    margin: 0;
-    line-height: 1.6;
-    overflow-wrap: anywhere;
-}
-.list-rows {
-    display: grid;
-    gap: 0.6rem;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-}
-.list-row {
-    display: grid;
-    grid-template-columns: 1.25rem minmax(0, 1fr) 2.75rem;
-    align-items: start;
-    gap: 0.5rem;
-    min-inline-size: 0;
-}
-.row-number {
-    padding-block-start: 0.75rem;
-    color: var(--scova-muted);
-    font-size: 0.875rem;
-}
-.list-row :deep(.n-input) {
-    min-inline-size: 0;
-    border-radius: 0.5rem;
-    --n-font-size: 1rem !important;
-}
-.remove-row,
-.add-row {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.4rem;
-    min-block-size: 2.75rem;
-    border: 0;
-    background: transparent;
-    color: var(--scova-muted);
-    font: inherit;
-    cursor: pointer;
-    border-radius: 0.4rem;
-}
-.add-row {
-    justify-self: start;
-    color: var(--scova-primary);
-    padding-inline: 0.4rem;
-}
-.remove-row:hover {
-    color: var(--scova-danger);
-    background: color-mix(in srgb, var(--scova-danger) 8%, transparent);
-}
-button:focus-visible {
-    outline: 0.0625rem solid var(--scova-primary);
-    outline-offset: 0.125rem;
-}
-button:disabled {
-    cursor: not-allowed;
-    opacity: 0.55;
-}
-.list-error {
-    color: var(--scova-danger);
-    font-size: 0.875rem;
-}
-</style>

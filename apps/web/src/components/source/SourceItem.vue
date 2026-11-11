@@ -1,11 +1,19 @@
 <template>
-    <article class="source-item" :aria-labelledby="headingId">
-        <div class="source-item-content">
+    <article
+        class="source-item [container:source-item_/_inline-size] min-w-0"
+        :aria-labelledby="headingId"
+    >
+        <div class="source-item-content flex flex-wrap items-start gap-6">
             <source-image :image="image" />
-            <div class="source-item-text">
-                <h2 :id="headingId">{{ title }}</h2>
+            <div class="source-item-text [flex:1_1_12rem] min-w-0 break-anywhere">
+                <h2
+                    class="mt-0 mb-3 [font-family:inherit] text-[1.25rem] font-semibold [font-style:inherit] leading-[1.5] [font-variant:inherit] mx-0"
+                    :id="headingId"
+                >
+                    {{ title }}
+                </h2>
                 <p>{{ summary }}</p>
-                <div class="source-item-actions"><slot name="actions" /></div>
+                <div class="source-item-actions action-group mt-4"><slot name="actions" /></div>
             </div>
         </div>
     </article>
@@ -20,34 +28,3 @@ defineProps<{ title: string; summary: string; image?: SourceImageInput }>();
 defineSlots<{ actions(): unknown }>();
 const headingId = useId();
 </script>
-
-<style scoped>
-.source-item {
-    container: source-item / inline-size;
-    min-inline-size: 0;
-}
-.source-item-content {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: start;
-    gap: 1.5rem;
-}
-.source-item-text {
-    flex: 1 1 12rem;
-    min-inline-size: 0;
-    overflow-wrap: anywhere;
-}
-h2 {
-    margin: 0 0 0.75rem;
-    font: inherit;
-    font-size: 1.25rem;
-    font-weight: 600;
-    line-height: 1.5;
-}
-.source-item-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-    margin-block-start: 1rem;
-}
-</style>

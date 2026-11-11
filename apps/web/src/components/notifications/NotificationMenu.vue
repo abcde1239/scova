@@ -11,7 +11,7 @@
         <template #trigger>
             <button
                 ref="trigger"
-                class="notification-trigger"
+                class="notification-trigger notification-control"
                 :class="{ selected: selected }"
                 type="button"
                 :aria-expanded="show"
@@ -66,33 +66,3 @@ watch(
     },
 );
 </script>
-
-<style scoped>
-.notification-trigger {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5em;
-    min-block-size: 2.75rem;
-    padding: 0.5rem 0.875rem;
-    border: 0;
-    border-radius: 0.5rem;
-    background: transparent;
-    color: inherit;
-    font: inherit;
-    cursor: pointer;
-}
-.notification-trigger:hover,
-.selected {
-    background: var(--scova-selected);
-    color: var(--scova-primary);
-}
-.selected {
-    font-weight: 600;
-    text-decoration: underline;
-    text-underline-offset: 0.35em;
-}
-.notification-trigger:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
-}
-</style>

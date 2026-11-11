@@ -1,19 +1,21 @@
 <template>
     <form
-        class="preferences-form"
+        class="preferences-form layout-grid gap-6 w-full"
         novalidate
         :aria-busy="pending || query.isFetching.value ? 'true' : undefined"
         @submit.prevent="submit"
     >
-        <p v-if="query.isPending.value" role="status">正在读取默认偏好…</p>
-        <div v-if="query.isError.value" class="load-error">
-            <p role="alert">默认偏好暂时无法读取，请检查连接后重试。</p>
+        <p class="break-anywhere m-0" v-if="query.isPending.value" role="status">
+            正在读取默认偏好…
+        </p>
+        <div v-if="query.isError.value" class="load-error layout-stack [justify-items:start]">
+            <p class="break-anywhere m-0" role="alert">默认偏好暂时无法读取，请检查连接后重试。</p>
             <action-button :busy="query.isFetching.value" @click="query.refetch()"
                 >重新读取</action-button
             >
         </div>
-        <div class="field">
-            <label :for="`${id}-timezone`">默认时区</label>
+        <div class="field layout-grid gap-2">
+            <label class="font-medium cursor-default" :for="`${id}-timezone`">默认时区</label>
             <app-select
                 ref="timezoneInput"
                 v-model="draft.defaultTimezone"
@@ -29,15 +31,21 @@
                     fields.defaultTimezone ? `${id}-timezone-error` : `${id}-timezone-help`
                 "
             />
-            <p :id="`${id}-timezone-help`" class="help">搜索城市或时区，选择你所在的地区。</p>
-            <p v-if="fields.defaultTimezone" :id="`${id}-timezone-error`" class="field-error">
+            <p :id="`${id}-timezone-help`" class="help break-anywhere text-muted m-0">
+                搜索城市或时区，选择你所在的地区。
+            </p>
+            <p
+                v-if="fields.defaultTimezone"
+                :id="`${id}-timezone-error`"
+                class="field-error break-anywhere text-danger bg-surface m-0 keyboard-focus-wide"
+            >
                 {{ fields.defaultTimezone }}
             </p>
         </div>
-        <fieldset class="notification-fields">
-            <legend>默认提醒</legend>
-            <div class="field">
-                <label :for="`${id}-mode`">结果提醒</label>
+        <fieldset class="notification-fields layout-stack [border:0] m-0 p-0">
+            <legend class="mb-4 font-semibold p-0">默认提醒</legend>
+            <div class="field layout-grid gap-2">
+                <label class="font-medium cursor-default" :for="`${id}-mode`">结果提醒</label>
                 <app-select
                     ref="modeInput"
                     :id="`${id}-mode`"
@@ -48,12 +56,20 @@
                     :invalid="!!fields.mode"
                     :describedby="fields.mode ? `${id}-mode-error` : undefined"
                 />
-                <p v-if="fields.mode" :id="`${id}-mode-error`" class="field-error">
+                <p
+                    v-if="fields.mode"
+                    :id="`${id}-mode-error`"
+                    class="field-error break-anywhere text-danger bg-surface m-0 keyboard-focus-wide"
+                >
                     {{ fields.mode }}
                 </p>
             </div>
-            <label class="checkbox-field" :for="`${id}-issues`">
+            <label
+                class="checkbox-field font-medium cursor-pointer flex items-center gap-3 min-h-11 [&.checkbox-field:has(:disabled)]:cursor-not-allowed"
+                :for="`${id}-issues`"
+            >
                 <input
+                    class="[.checkbox-field_&:is(input)]:([flex:0_0_auto] w-[1.125em] h-[1.125em] [accent-color:var(--scova-primary)] cursor-pointer m-0) [.checkbox-field_&:is(input):disabled]:cursor-not-allowed [.checkbox-field_&:is(input):focus-visible]:([outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.25rem])"
                     ref="issuesInput"
                     :id="`${id}-issues`"
                     v-model="draft.notificationPreference.runIssues"
@@ -64,15 +80,25 @@
                 />
                 提醒失败或不完整的执行
             </label>
-            <p v-if="fields.runIssues" :id="`${id}-issues-error`" class="field-error">
+            <p
+                v-if="fields.runIssues"
+                :id="`${id}-issues-error`"
+                class="field-error break-anywhere text-danger bg-surface m-0 keyboard-focus-wide"
+            >
                 {{ fields.runIssues }}
             </p>
         </fieldset>
-        <p v-if="message" ref="errorMessage" role="alert" tabindex="-1" class="field-error">
+        <p
+            v-if="message"
+            ref="errorMessage"
+            role="alert"
+            tabindex="-1"
+            class="field-error break-anywhere text-danger bg-surface m-0 keyboard-focus-wide"
+        >
             {{ message }}
         </p>
-        <p v-if="saved" role="status">默认偏好已保存。</p>
-        <div class="form-actions">
+        <p class="break-anywhere m-0" v-if="saved" role="status">默认偏好已保存。</p>
+        <div class="form-actions flex flex-wrap gap-4">
             <action-button
                 attr-type="submit"
                 :disabled="!dirty || !query.isSuccess.value"
@@ -131,79 +157,3 @@ async function submit() {
     }
 }
 </script>
-
-<style scoped>
-.preferences-form,
-.field,
-.notification-fields,
-.load-error {
-    display: grid;
-    min-inline-size: 0;
-}
-.preferences-form {
-    gap: 1.5rem;
-    inline-size: 100%;
-}
-.field {
-    gap: 0.5rem;
-}
-p {
-    margin: 0;
-    overflow-wrap: anywhere;
-}
-label {
-    font-weight: 500;
-    cursor: default;
-}
-.help {
-    color: var(--scova-muted);
-}
-.notification-fields {
-    gap: 1rem;
-    margin: 0;
-    padding: 0;
-    border: 0;
-}
-legend {
-    margin-block-end: 1rem;
-    padding: 0;
-    font-weight: 600;
-}
-.checkbox-field {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    min-block-size: 2.75rem;
-    cursor: pointer;
-}
-.checkbox-field input {
-    flex: 0 0 auto;
-    inline-size: 1.125em;
-    block-size: 1.125em;
-    margin: 0;
-    accent-color: var(--scova-primary);
-    cursor: pointer;
-}
-.checkbox-field:has(:disabled),
-.checkbox-field input:disabled {
-    cursor: not-allowed;
-}
-.checkbox-field input:focus-visible,
-.field-error:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
-}
-.field-error {
-    color: var(--scova-danger);
-    background: var(--scova-surface);
-}
-.form-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1rem;
-}
-.load-error {
-    gap: 1rem;
-    justify-items: start;
-}
-</style>

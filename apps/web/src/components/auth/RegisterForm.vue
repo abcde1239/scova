@@ -1,12 +1,14 @@
 <template>
     <form
-        class="register-form"
+        class="register-form layout-grid gap-6 w-full [&.register-form_.n-input]:(![--n-font-size:1rem] min-h-11 rounded-3) [&.register-form_input]:(min-w-0 text-[1rem] [cursor:text])"
         novalidate
         :aria-busy="registration.pending.value ? 'true' : undefined"
         @submit.prevent="submit"
     >
-        <div v-for="field in fieldList" :key="field.key" class="field">
-            <label :for="`${id}-${field.key}`">{{ field.label }}</label>
+        <div v-for="field in fieldList" :key="field.key" class="field layout-grid gap-2">
+            <label class="font-medium cursor-default" :for="`${id}-${field.key}`">{{
+                field.label
+            }}</label>
             <n-input
                 v-model:value="input[field.key]"
                 :status="registration.fields.value[field.key] ? 'error' : undefined"
@@ -29,6 +31,7 @@
                 }"
             />
             <p
+                class="break-anywhere m-0 [.field_>_&:is(p):not(.field-error)]:(text-muted text-[0.875rem])"
                 v-if="field.key === 'password' && !registration.fields.value.password"
                 :id="`${id}-password-help`"
             >
@@ -37,14 +40,16 @@
             <p
                 v-if="registration.fields.value[field.key]"
                 :id="`${id}-${field.key}-error`"
-                class="field-error"
+                class="field-error break-anywhere flex items-start gap-1.5 text-danger text-[0.8125rem] leading-[1.5] m-0 [.field_>_&:is(p):not(.field-error)]:(text-muted text-[0.875rem]) [&.field-error_.app-icon]:mt-[0.1875rem]"
             >
                 <app-icon name="warning" />
                 {{ registration.fields.value[field.key] }}
             </p>
         </div>
-        <div class="field">
-            <label :for="`${id}-defaultTimezone`">默认时区</label>
+        <div class="field layout-grid gap-2">
+            <label class="font-medium cursor-default" :for="`${id}-defaultTimezone`"
+                >默认时区</label
+            >
             <app-select
                 :id="`${id}-defaultTimezone`"
                 v-model="input.defaultTimezone"
@@ -64,7 +69,7 @@
             <p
                 v-if="registration.fields.value.defaultTimezone"
                 :id="`${id}-defaultTimezone-error`"
-                class="field-error"
+                class="field-error break-anywhere flex items-start gap-1.5 text-danger text-[0.8125rem] leading-[1.5] m-0 [.field_>_&:is(p):not(.field-error)]:(text-muted text-[0.875rem]) [&.field-error_.app-icon]:mt-[0.1875rem]"
             >
                 <app-icon name="warning" />{{ registration.fields.value.defaultTimezone }}
             </p>
@@ -74,7 +79,7 @@
             ref="alert"
             role="alert"
             tabindex="-1"
-            class="form-error"
+            class="form-error break-anywhere rounded-3 text-danger [background:color-mix(in_srgb,_var(--scova-danger)_7%,_var(--scova-surface))] text-[0.875rem] m-0 py-3 px-3.5 keyboard-focus-wide"
         >
             {{ registration.message.value }}
         </p>
@@ -131,61 +136,3 @@ onUnmounted(() => {
     registration.dispose();
 });
 </script>
-
-<style scoped>
-.register-form {
-    display: grid;
-    gap: 1.5rem;
-    inline-size: 100%;
-    min-inline-size: 0;
-}
-.field {
-    display: grid;
-    gap: 0.5rem;
-    min-inline-size: 0;
-}
-label {
-    font-weight: 500;
-    cursor: default;
-}
-.register-form :deep(.n-input) {
-    --n-font-size: 1rem !important;
-    min-block-size: 2.75rem;
-    border-radius: 0.75rem;
-}
-.register-form :deep(input) {
-    min-inline-size: 0;
-    font-size: 1rem;
-    cursor: text;
-}
-p {
-    margin: 0;
-    overflow-wrap: anywhere;
-}
-.field > p:not(.field-error) {
-    color: var(--scova-muted);
-    font-size: 0.875rem;
-}
-.field-error {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.375rem;
-    color: var(--scova-danger);
-    font-size: 0.8125rem;
-    line-height: 1.5;
-}
-.field-error :deep(.app-icon) {
-    margin-block-start: 0.1875rem;
-}
-.form-error {
-    padding: 0.75rem 0.875rem;
-    border-radius: 0.75rem;
-    color: var(--scova-danger);
-    background: color-mix(in srgb, var(--scova-danger) 7%, var(--scova-surface));
-    font-size: 0.875rem;
-}
-.form-error:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
-}
-</style>

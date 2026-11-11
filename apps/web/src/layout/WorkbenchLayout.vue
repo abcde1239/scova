@@ -1,36 +1,60 @@
 <template>
-    <div class="workbench">
-        <a class="skip-link" href="#main-content">跳到主内容</a>
-        <header class="workbench-header">
+    <div class="workbench min-h-[100dvh]">
+        <a
+            class="skip-link inline-flex items-center gap-[0.5em] min-h-11 text-default no-underline cursor-pointer fixed [top:0.5rem] [left:0.5rem] z-[10] bg-surface [transform:translateY(-200%)] py-2 px-4 keyboard-focus-wide [nav_&:is(a)]:(rounded-2 py-2 px-3.5) [nav_&:is(a):hover]:([background:var(--scova-selected)] text-primary) focus:[transform:translateY(0)]"
+            href="#main-content"
+            >跳到主内容</a
+        >
+        <header
+            class="workbench-header w-[min(100%,_88rem)] ml-auto mr-auto min-w-0 flex flex-wrap items-center gap-[0.5rem_1.5rem] min-h-[4.5rem] [border-bottom:0.0625rem_solid_color-mix(in_srgb,_var(--scova-border)_30%,_transparent)] py-2 px-[clamp(1rem,_2.5vw,_2rem)] [@media(max-width:_53.999rem)]:(gap-[0.5rem_1rem] min-h-[3.75rem] pt-1.5 pb-1.5)"
+        >
             <mobile-navigation :items="mobileItems" />
-            <router-link class="brand" to="/tasks" aria-label="Scova，任务首页">
+            <router-link
+                class="brand inline-flex items-center gap-[0.5em] min-h-11 text-inherit no-underline cursor-pointer keyboard-focus-wide [&&]:(text-[1.25rem] [font-weight:650] whitespace-nowrap) [nav_&:is(a)]:(rounded-2 py-2 px-3.5) [nav_&:is(a):hover]:([background:var(--scova-selected)] text-primary)"
+                to="/tasks"
+                aria-label="Scova，任务首页"
+            >
                 <span lang="en">Scova</span>
             </router-link>
-            <nav class="primary-navigation" aria-label="主导航">
+            <nav
+                class="primary-navigation flex flex-wrap gap-2 [@media(max-width:_53.999rem)]:hidden"
+                aria-label="主导航"
+            >
                 <router-link
+                    class="inline-flex items-center gap-[0.5em] min-h-11 text-inherit no-underline cursor-pointer keyboard-focus-wide [nav_&:is(a)]:(rounded-2 py-2 px-3.5) [nav_&:is(a):hover]:([background:var(--scova-selected)] text-primary) [&.selected]:([background:var(--scova-selected)] text-primary font-semibold underline underline-offset-[0.35em])"
                     v-for="item in primary"
                     :key="String(item.name)"
                     :to="item.path"
                     :class="{ selected: isSelected(item) }"
                     :aria-current="route.path === item.path ? 'page' : undefined"
                 >
-                    <app-icon :name="navigationIcon(item.meta.section)" />
+                    <app-icon
+                        class="[.page-heading_>_&]:(min-w-0 max-w-full break-anywhere)"
+                        :name="navigationIcon(item.meta.section)"
+                    />
                     {{ item.meta.title }}
                 </router-link>
             </nav>
-            <nav class="tool-navigation" aria-label="全局工具">
+            <nav
+                class="tool-navigation flex flex-wrap gap-2 ml-auto [@media(max-width:_53.999rem)]:hidden"
+                aria-label="全局工具"
+            >
                 <template v-for="item in tools" :key="String(item.name)">
                     <notification-menu
                         v-if="item.meta.section === 'notifications'"
                         :selected="isSelected(item)"
                     />
                     <router-link
+                        class="inline-flex items-center gap-[0.5em] min-h-11 text-inherit no-underline cursor-pointer keyboard-focus-wide [nav_&:is(a)]:(rounded-2 py-2 px-3.5) [nav_&:is(a):hover]:([background:var(--scova-selected)] text-primary) [&.selected]:([background:var(--scova-selected)] text-primary font-semibold underline underline-offset-[0.35em])"
                         v-else
                         :to="item.path"
                         :class="{ selected: isSelected(item) }"
                         :aria-current="route.path === item.path ? 'page' : undefined"
                     >
-                        <app-icon :name="navigationIcon(item.meta.section)" />
+                        <app-icon
+                            class="[.page-heading_>_&]:(min-w-0 max-w-full break-anywhere)"
+                            :name="navigationIcon(item.meta.section)"
+                        />
                         {{ item.meta.title }}
                     </router-link>
                 </template>
@@ -39,22 +63,41 @@
         </header>
         <main
             id="main-content"
-            class="workbench-main"
+            class="workbench-main w-[min(100%,_88rem)] ml-auto mr-auto min-w-0 pt-3 pb-8 px-[clamp(1rem,_2.5vw,_2rem)] [&.workbench]:min-h-[100dvh] focus:[outline:none] [&.workbench-main--form]:w-[min(100%,_calc(44rem_+_clamp(2rem,_5vw,_4rem)))]"
             :class="{ 'workbench-main--form': route.meta.contentWidth === 'form' }"
             tabindex="-1"
             aria-labelledby="page-title"
         >
-            <page-breadcrumbs />
+            <page-breadcrumbs
+                class="flex flex-wrap gap-2 [.page-heading_>_&]:(min-w-0 max-w-full break-anywhere)"
+            />
             <div
-                class="page-heading"
+                class="page-heading flex flex-wrap items-center justify-between gap-4 mb-4 [&.page-heading.page-heading--report]:(min-h-0 m-0) [.page-heading_>_&]:(min-w-0 max-w-full break-anywhere)"
                 :class="{ 'page-heading--report': route.name === 'report-detail' }"
             >
-                <h1 id="page-title">{{ title }}</h1>
-                <div class="page-tools"><slot name="tools" /></div>
+                <h1
+                    class="[.page-heading--report_&:is(h1)]:(absolute w-[1px] h-[1px] overflow-hidden [clip-path:inset(50%)] whitespace-nowrap) [.page-heading_>_&]:(min-w-0 max-w-full break-anywhere) m-0"
+                    id="page-title"
+                >
+                    {{ title }}
+                </h1>
+                <div
+                    class="page-tools min-w-0 max-w-full break-anywhere [.page-heading_>_&]:(min-w-0 max-w-full break-anywhere)"
+                >
+                    <slot name="tools" />
+                </div>
             </div>
-            <div class="page-context"><slot name="context" /></div>
+            <div
+                class="page-context min-w-0 max-w-full break-anywhere [.page-heading_>_&]:(min-w-0 max-w-full break-anywhere) [&.page-context:not(:empty)]:(mt-4 mb-4)"
+            >
+                <slot name="context" />
+            </div>
             <slot />
-            <div class="reading-tools"><slot name="reading" /></div>
+            <div
+                class="reading-tools min-w-0 max-w-full break-anywhere [.page-heading_>_&]:(min-w-0 max-w-full break-anywhere) [&.reading-tools:not(:empty)]:(mt-4 mb-4)"
+            >
+                <slot name="reading" />
+            </div>
         </main>
     </div>
 </template>
@@ -109,154 +152,3 @@ const mobileItems = computed(() => [
     { path: '/account/appearance', label: '外观', icon: 'appearance' as const },
 ]);
 </script>
-
-<style scoped>
-.page-heading.page-heading--report {
-    margin: 0;
-    min-block-size: 0;
-}
-.page-heading--report h1 {
-    position: absolute;
-    inline-size: 1px;
-    block-size: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-}
-.workbench {
-    min-block-size: 100dvh;
-}
-
-.workbench-header,
-.workbench-main {
-    width: min(100%, 88rem);
-    margin-inline: auto;
-    padding-inline: clamp(1rem, 2.5vw, 2rem);
-    min-inline-size: 0;
-}
-
-.workbench-header {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.5rem 1.5rem;
-    min-block-size: 4.5rem;
-    padding-block: 0.5rem;
-    border-block-end: 0.0625rem solid color-mix(in srgb, var(--scova-border) 30%, transparent);
-}
-
-.brand {
-    font-size: 1.25rem;
-    font-weight: 650;
-    white-space: nowrap;
-}
-
-nav {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-}
-
-.tool-navigation {
-    margin-inline-start: auto;
-}
-
-a {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5em;
-    min-block-size: 2.75rem;
-    color: inherit;
-    text-decoration: none;
-    cursor: pointer;
-}
-
-nav a {
-    padding: 0.5rem 0.875rem;
-    border-radius: 0.5rem;
-}
-
-nav a:hover,
-.selected {
-    background: var(--scova-selected);
-    color: var(--scova-primary);
-}
-
-.selected {
-    font-weight: 600;
-    text-decoration: underline;
-    text-underline-offset: 0.35em;
-}
-
-a:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
-}
-
-.workbench-main:focus {
-    outline: none;
-}
-
-.workbench-main {
-    padding-block: 0.75rem 2rem;
-}
-
-.workbench-main--form {
-    width: min(100%, calc(44rem + clamp(2rem, 5vw, 4rem)));
-}
-
-.page-heading {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    margin-block-end: 1rem;
-}
-
-.page-heading > *,
-.page-tools,
-.page-context,
-.reading-tools {
-    min-inline-size: 0;
-    max-inline-size: 100%;
-    overflow-wrap: anywhere;
-}
-
-@media (max-width: 53.999rem) {
-    .primary-navigation,
-    .tool-navigation {
-        display: none;
-    }
-
-    .workbench-header {
-        gap: 0.5rem 1rem;
-        min-block-size: 3.75rem;
-        padding-block: 0.375rem;
-    }
-}
-
-h1 {
-    margin: 0;
-}
-
-.page-context:not(:empty),
-.reading-tools:not(:empty) {
-    margin-block: 1rem;
-}
-
-.skip-link {
-    position: fixed;
-    inset-block-start: 0.5rem;
-    inset-inline-start: 0.5rem;
-    z-index: 10;
-    padding: 0.5rem 1rem;
-    background: var(--scova-surface);
-    color: var(--scova-text);
-    transform: translateY(-200%);
-}
-
-.skip-link:focus {
-    transform: translateY(0);
-}
-</style>

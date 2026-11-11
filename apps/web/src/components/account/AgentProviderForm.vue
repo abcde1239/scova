@@ -1,10 +1,15 @@
 <template>
-    <form ref="form" class="provider-form" novalidate @submit.prevent="save">
-        <div class="form-heading">
-            <h2>{{ provider ? '编辑供应商' : '添加供应商' }}</h2>
+    <form
+        ref="form"
+        class="provider-form layout-grid gap-[0.8rem] [border:0.0625rem_solid_color-mix(in_srgb,_var(--scova-border)_40%,_transparent)] rounded-[0.9rem] bg-surface p-[clamp(1rem,_4vw,_1.75rem)]"
+        novalidate
+        @submit.prevent="save"
+    >
+        <div class="form-heading action-row justify-between">
+            <h2 class="text-[1.125rem] m-0">{{ provider ? '编辑供应商' : '添加供应商' }}</h2>
             <button
                 type="button"
-                class="close-form"
+                class="close-form inline-grid place-items-center w-11 h-11 [border:0] bg-transparent text-inherit cursor-pointer focus-visible:([outline:0.0625rem_solid_var(--scova-primary)] rounded-[0.4rem])"
                 aria-label="关闭供应商编辑"
                 :disabled="pending"
                 @click="requestClose"
@@ -12,7 +17,7 @@
                 <app-icon name="close" />
             </button>
         </div>
-        <label :for="`${id}-preset`">快速填写</label>
+        <label class="font-medium" :for="`${id}-preset`">快速填写</label>
         <app-select
             :id="`${id}-preset`"
             v-model="preset"
@@ -20,7 +25,9 @@
             :options="presets"
             :disabled="pending"
         />
-        <p class="field-hint">选择预设会填写地址与协议，并清空模型和未保存的密钥。</p>
+        <p class="field-hint text-[0.875rem] leading-[1.65] break-anywhere text-muted m-0">
+            选择预设会填写地址与协议，并清空模型和未保存的密钥。
+        </p>
         <task-config-field
             v-model="draft.name"
             label="配置名称"
@@ -41,9 +48,13 @@
             :error="errors.baseUrl"
             :disabled="pending"
         />
-        <p class="field-hint">填写 HTTPS API 根地址（包含版本路径），无需填写具体请求接口。</p>
-        <div class="secret-field">
-            <label :for="`${id}-key`">API Key{{ provider ? '（留空保留）' : '' }}</label>
+        <p class="field-hint text-[0.875rem] leading-[1.65] break-anywhere text-muted m-0">
+            填写 HTTPS API 根地址（包含版本路径），无需填写具体请求接口。
+        </p>
+        <div class="secret-field grid gap-2">
+            <label class="font-medium" :for="`${id}-key`"
+                >API Key{{ provider ? '（留空保留）' : '' }}</label
+            >
             <n-input
                 v-model:value="draft.apiKey"
                 type="password"
@@ -56,10 +67,19 @@
                     'aria-describedby': errors.apiKey ? `${id}-key-error` : `${id}-secret-hint`,
                 }"
             />
-            <p v-if="errors.apiKey" :id="`${id}-key-error`" class="field-error">
+            <p
+                v-if="errors.apiKey"
+                :id="`${id}-key-error`"
+                class="field-error text-[0.875rem] leading-[1.65] break-anywhere text-danger m-0"
+            >
                 {{ errors.apiKey }}
             </p>
-            <p :id="`${id}-secret-hint`" class="field-hint">密钥加密保存在服务端，保存后不回显。</p>
+            <p
+                :id="`${id}-secret-hint`"
+                class="field-hint text-[0.875rem] leading-[1.65] break-anywhere text-muted m-0"
+            >
+                密钥加密保存在服务端，保存后不回显。
+            </p>
         </div>
         <provider-model-select
             v-model="draft.model"
@@ -70,7 +90,14 @@
             :error="errors.model"
             :disabled="pending"
         />
-        <p v-if="message" class="field-error" role="alert" tabindex="-1">{{ message }}</p>
+        <p
+            v-if="message"
+            class="field-error text-[0.875rem] leading-[1.65] break-anywhere text-danger m-0"
+            role="alert"
+            tabindex="-1"
+        >
+            {{ message }}
+        </p>
         <task-config-field
             v-model="draft.webSearch"
             label="研究搜索方式"
@@ -79,7 +106,7 @@
             :error="errors.webSearch"
             :disabled="pending"
         />
-        <p class="field-hint">
+        <p class="field-hint text-[0.875rem] leading-[1.65] break-anywhere text-muted m-0">
             选择部署默认、模型内置搜索或独立搜索 API。内置搜索需要模型与地址支持，可能产生额外费用。
         </p>
         <template v-if="draft.webSearch === 'api'">
@@ -97,12 +124,12 @@
                 :error="errors.searchBaseUrl"
                 :disabled="pending"
             />
-            <p class="field-hint">
+            <p class="field-hint text-[0.875rem] leading-[1.65] break-anywhere text-muted m-0">
                 填写 API 根地址。DeepSeek 使用 https://api.deepseek.com/v1；Perplexity 使用
                 https://api.perplexity.ai；Tavily 使用 https://api.tavily.com。
             </p>
-            <div class="secret-field">
-                <label :for="`${id}-search-key`"
+            <div class="secret-field grid gap-2">
+                <label class="font-medium" :for="`${id}-search-key`"
                     >搜索 API Key{{
                         provider?.searchApi ? '（地址与协议不变时留空保留）' : ''
                     }}</label
@@ -120,6 +147,7 @@
                     }"
                 />
                 <p
+                    class="[&.field-hint]:(text-[0.875rem] leading-[1.65] break-anywhere text-muted m-0) [&.field-error]:(text-[0.875rem] leading-[1.65] break-anywhere text-danger m-0)"
                     :id="`${id}-search-key-hint`"
                     :class="errors.searchApiKey ? 'field-error' : 'field-hint'"
                 >
@@ -137,20 +165,20 @@
                 :disabled="pending"
                 :error="errors.contentMode"
             />
-            <p class="field-hint">
+            <p class="field-hint text-[0.875rem] leading-[1.65] break-anywhere text-muted m-0">
                 API 可提供正文片段，HTML 来源会由 Reader
                 核实原站全文。正常读取失败可保留片段并说明覆盖未知。
                 摘要和模型生成答案不算正文；Perplexity 当前仅提供摘要，因此仍需
                 Reader。读取均计入页面预算。
             </p>
         </template>
-        <div class="form-actions">
+        <div class="form-actions action-row">
             <action-button attr-type="submit" :busy="pending" :disabled="uncertain"
                 >保存配置</action-button
             >
             <action-button :disabled="pending" quaternary @click="requestClose">取消</action-button>
         </div>
-        <p class="field-hint">
+        <p class="field-hint text-[0.875rem] leading-[1.65] break-anywhere text-muted m-0">
             保存不会发起模型调用；{{
                 provider?.active ? '修改对后续调用生效。' : '保存后可在列表中设为当前使用。'
             }}
@@ -371,63 +399,3 @@ onBeforeUnmount(() => {
     unregister();
 });
 </script>
-
-<style scoped>
-.provider-form {
-    display: grid;
-    gap: 0.8rem;
-    padding: clamp(1rem, 4vw, 1.75rem);
-    border: 0.0625rem solid color-mix(in srgb, var(--scova-border) 40%, transparent);
-    border-radius: 0.9rem;
-    background: var(--scova-surface);
-    min-inline-size: 0;
-}
-.form-heading,
-.form-actions {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    flex-wrap: wrap;
-}
-.form-heading {
-    justify-content: space-between;
-}
-h2 {
-    margin: 0;
-    font-size: 1.125rem;
-}
-label {
-    font-weight: 500;
-}
-.secret-field {
-    display: grid;
-    gap: 0.5rem;
-}
-.field-hint,
-.field-error {
-    margin: 0;
-    font-size: 0.875rem;
-    line-height: 1.65;
-    overflow-wrap: anywhere;
-}
-.field-hint {
-    color: var(--scova-muted);
-}
-.field-error {
-    color: var(--scova-danger);
-}
-.close-form {
-    display: inline-grid;
-    place-items: center;
-    inline-size: 2.75rem;
-    block-size: 2.75rem;
-    border: 0;
-    background: transparent;
-    color: inherit;
-    cursor: pointer;
-}
-.close-form:focus-visible {
-    outline: 0.0625rem solid var(--scova-primary);
-    border-radius: 0.4rem;
-}
-</style>

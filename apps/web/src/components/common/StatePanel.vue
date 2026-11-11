@@ -1,7 +1,7 @@
 <template>
     <section
         ref="panel"
-        class="state-panel"
+        class="state-panel layout-stack [justify-items:start] max-w-full pt-6 pb-6 break-anywhere cursor-default [&.state-panel--empty]:(text-muted text-[0.9375rem]) [&.state-panel--loading]:(grid-cols-[auto_minmax(0,_1fr)] items-center [justify-items:start] text-start) [&.state-panel--centered]:(grid-cols-[minmax(0,_1fr)] [justify-items:center] text-center) [&.state-panel--loading_>_.scova-action-button]:col-span-full"
         :class="{
             'state-panel--empty': state === 'empty',
             'state-panel--loading': state === 'loading',
@@ -12,13 +12,20 @@
         <img
             v-if="state === 'loading' && !imageFailed"
             :src="loadingImage"
-            class="loading-animation"
+            class="loading-animation block w-12 h-auto [object-fit:contain] [@media(prefers-reduced-motion:_reduce)]:hidden"
             alt=""
             aria-hidden="true"
             decoding="async"
             @error="imageFailed = true"
         />
-        <p ref="announcement" tabindex="-1" role="status" aria-live="polite" aria-atomic="true">
+        <p
+            class="max-w-full m-0 keyboard-focus-wide"
+            ref="announcement"
+            tabindex="-1"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+        >
             <template v-if="state === 'loading'">{{ message || labels.loading }}</template>
             <template v-else-if="state === 'empty'">{{ message || labels.empty }}</template>
             <template v-else
@@ -69,53 +76,3 @@ watch(
     },
 );
 </script>
-
-<style scoped>
-.state-panel {
-    display: grid;
-    justify-items: start;
-    gap: 1rem;
-    min-inline-size: 0;
-    max-inline-size: 100%;
-    padding-block: 1.5rem;
-    overflow-wrap: anywhere;
-    cursor: default;
-}
-p {
-    margin: 0;
-    max-inline-size: 100%;
-}
-.state-panel--empty {
-    color: var(--scova-muted);
-    font-size: 0.9375rem;
-}
-.state-panel--loading {
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: center;
-    justify-items: start;
-    text-align: start;
-}
-.loading-animation {
-    display: block;
-    inline-size: 3rem;
-    block-size: auto;
-    object-fit: contain;
-}
-.state-panel--centered {
-    grid-template-columns: minmax(0, 1fr);
-    justify-items: center;
-    text-align: center;
-}
-.state-panel--loading > :deep(.scova-action-button) {
-    grid-column: 1 / -1;
-}
-@media (prefers-reduced-motion: reduce) {
-    .loading-animation {
-        display: none;
-    }
-}
-p:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
-}
-</style>

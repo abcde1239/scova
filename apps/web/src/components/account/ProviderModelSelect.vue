@@ -1,6 +1,6 @@
 <template>
-    <div class="provider-models">
-        <label :for="`${id}-model`">模型</label>
+    <div class="provider-models layout-grid gap-2">
+        <label class="font-medium" :for="`${id}-model`">模型</label>
         <app-select
             :id="`${id}-model`"
             v-model="model"
@@ -13,12 +13,18 @@
             :invalid="!!error"
             :describedby="error ? `${id}-error` : `${id}-status`"
         />
-        <p v-if="error" :id="`${id}-error`" class="field-error">{{ error }}</p>
-        <div class="model-actions">
+        <p
+            v-if="error"
+            :id="`${id}-error`"
+            class="field-error text-[0.875rem] leading-[1.65] break-anywhere text-danger m-0"
+        >
+            {{ error }}
+        </p>
+        <div class="model-actions flex items-center gap-2 flex-wrap">
             <action-button
                 quaternary
                 type="primary"
-                class="model-action model-action--load"
+                class="model-action model-action--load [&&]:(min-h-11 rounded-2.5 text-[0.875rem] leading-[1.5] [background:color-mix(in_srgb,_var(--scova-primary)_8%,_transparent)] py-2 px-3) [&.model-action--load:hover:not([aria-disabled='true'])]:[background:color-mix(in_srgb,_var(--scova-primary)_14%,_transparent)]"
                 :busy="loading"
                 :disabled="disabled || !canLoad"
                 @click="load"
@@ -36,7 +42,7 @@
             </action-button>
             <action-button
                 quaternary
-                class="model-action model-action--manual"
+                class="model-action model-action--manual [&&]:(min-h-11 rounded-2.5 text-[0.875rem] leading-[1.5] text-muted [background:color-mix(in_srgb,_var(--scova-muted)_6%,_transparent)] py-2 px-3) [&.model-action--manual:hover:not([aria-disabled='true'])]:(text-default [background:color-mix(in_srgb,_var(--scova-muted)_12%,_transparent)])"
                 :disabled="disabled || loading"
                 v-bind="{ 'aria-expanded': manual }"
                 @click="manual = !manual"
@@ -47,6 +53,7 @@
         </div>
         <state-panel v-if="loading" state="loading" message="正在读取供应商模型列表" />
         <p
+            class="[&.field-hint]:(text-[0.875rem] leading-[1.65] break-anywhere text-muted m-0) [&.field-error]:(text-[0.875rem] leading-[1.65] break-anywhere text-danger m-0)"
             v-else
             :id="`${id}-status`"
             :role="state === 'error' ? 'alert' : 'status'"
@@ -61,7 +68,9 @@
             :disabled="disabled"
             :error="error"
         />
-        <p class="field-hint">列表由供应商返回，不代表所有模型都支持研究所需的结构化输出。</p>
+        <p class="field-hint text-[0.875rem] leading-[1.65] break-anywhere text-muted m-0">
+            列表由供应商返回，不代表所有模型都支持研究所需的结构化输出。
+        </p>
     </div>
 </template>
 
@@ -131,54 +140,3 @@ onMounted(() => {
     if (savedKeyAllowed.value) void load();
 });
 </script>
-
-<style scoped>
-.provider-models {
-    display: grid;
-    gap: 0.5rem;
-    min-inline-size: 0;
-}
-label {
-    font-weight: 500;
-}
-.model-actions {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-}
-.model-action {
-    min-block-size: 2.75rem;
-    padding: 0.5rem 0.75rem;
-    border-radius: 0.625rem;
-    font-size: 0.875rem;
-    line-height: 1.5;
-}
-.model-action--load {
-    background: color-mix(in srgb, var(--scova-primary) 8%, transparent);
-}
-.model-action--manual {
-    color: var(--scova-muted);
-    background: color-mix(in srgb, var(--scova-muted) 6%, transparent);
-}
-.model-action--load:hover:not([aria-disabled='true']) {
-    background: color-mix(in srgb, var(--scova-primary) 14%, transparent);
-}
-.model-action--manual:hover:not([aria-disabled='true']) {
-    color: var(--scova-text);
-    background: color-mix(in srgb, var(--scova-muted) 12%, transparent);
-}
-.field-hint,
-.field-error {
-    margin: 0;
-    font-size: 0.875rem;
-    line-height: 1.65;
-    overflow-wrap: anywhere;
-}
-.field-hint {
-    color: var(--scova-muted);
-}
-.field-error {
-    color: var(--scova-danger);
-}
-</style>
