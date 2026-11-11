@@ -102,6 +102,7 @@ describe('批量清除安全边界', () => {
         expect(calls.at(-1)!.headers.get('if-match')).toBe('"1"');
         expect(calls.at(-1)!.headers.get('x-csrf-token')).toBe('bulk-csrf');
         expect(actions.results.value[0].status).toBe('removed');
+        expect(actions.message.value).toBe('');
         expect(actions.selected.value).toEqual([]);
     });
     it('预检一项失败不删除任何任务', async () => {

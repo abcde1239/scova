@@ -35,7 +35,7 @@
                                 type="primary"
                                 v-bind="{ href: '#coverage-title' }"
                                 @click="jump($event, 'coverage-title')"
-                                >查阅范围与限制</n-button
+                                >查阅与核验详情</n-button
                             >
                         </li>
                         <li v-if="showChanges">

@@ -17,6 +17,11 @@ body {
     margin: 0;
 }
 
+/* Inputs grow through their component's autosize policy, never a drag handle. */
+textarea {
+    resize: none !important;
+}
+
 html,
 body,
 #app,

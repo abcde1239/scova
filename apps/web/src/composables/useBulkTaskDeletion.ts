@@ -199,8 +199,6 @@ export function useBulkTaskDeletion(
                 if (current !== generation || !scope.isCurrent() || signal.aborted) return;
                 results.value = [...results.value, result];
             }
-            const removed = results.value.filter((item) => item.status === 'removed').length;
-            message.value = `批量清除结束：已清除 ${removed} 个，其他 ${snapshots.length - removed} 个。请查看逐项结果。`;
             selected.value = [];
             await lifecycle.queryClient.cancelQueries({ queryKey: scope.queryKey([]) });
             if (current !== generation || !scope.isCurrent() || signal.aborted) return;

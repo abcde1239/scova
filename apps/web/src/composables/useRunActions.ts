@@ -150,6 +150,9 @@ export function useRunActions(
             ...(action !== 'cancel' && value.outputFormat !== undefined
                 ? { outputFormat: value.outputFormat }
                 : {}),
+            ...(action !== 'cancel' && value.outputFormats !== undefined
+                ? { outputFormats: [...value.outputFormats] }
+                : {}),
             ...(action !== 'cancel' && value.agentProviderId !== undefined
                 ? { agentProviderId: value.agentProviderId }
                 : {}),

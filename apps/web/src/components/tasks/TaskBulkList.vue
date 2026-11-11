@@ -28,7 +28,11 @@
                     </div>
                 </div>
                 <div class="bulk-actions">
-                    <action-button quaternary :disabled="actions.busy.value" @click="finishManaging"
+                    <action-button
+                        ref="finishTrigger"
+                        quaternary
+                        :disabled="actions.busy.value"
+                        @click="finishManaging"
                         >退出批量管理</action-button
                     >
                     <action-button
@@ -50,15 +54,15 @@
             个；加载更多不会自动选中。启用状态不代表正在执行，清除时会检查活动执行。
         </p>
         <div
-            v-if="actions.message.value || actions.results.value.length"
+            v-if="actions.message.value || failedResults.length"
             ref="feedback"
             class="bulk-feedback"
             role="status"
             tabindex="-1"
         >
-            <p>{{ actions.message.value }}</p>
-            <ul v-if="actions.results.value.length">
-                <li v-for="result in actions.results.value" :key="result.id">
+            <p v-if="actions.message.value">{{ actions.message.value }}</p>
+            <ul v-if="failedResults.length">
+                <li v-for="result in failedResults" :key="result.id">
                     {{ result.title }}：{{ result.message }}
                 </li>
             </ul>
@@ -157,12 +161,16 @@ const props = defineProps<{
     unavailable: boolean;
 }>();
 const actions = useBulkTaskDeletion(() => props.tasks);
+const failedResults = computed(() =>
+    actions.results.value.filter((result) => result.status !== 'removed'),
+);
 const managing = ref(false);
 const confirmationText = ref('');
 const dialog = ref<HTMLDialogElement>();
 const cancelTrigger = ref<{ $el: HTMLButtonElement }>();
 const clearTrigger = ref<{ $el: HTMLButtonElement }>();
 const manageTrigger = ref<{ $el: HTMLButtonElement }>();
+const finishTrigger = ref<{ $el: HTMLButtonElement }>();
 const feedback = ref<HTMLElement>();
 const locked = computed(
     () => props.unavailable || actions.busy.value || !!actions.confirmation.value.length,
@@ -194,11 +202,12 @@ watch(actions.confirmation, async (items) => {
         dialog.value?.close();
         confirmationText.value = '';
         await nextTick();
-        if (actions.message.value) feedback.value?.focus();
+        if (actions.message.value || failedResults.value.length) feedback.value?.focus();
+        else if (actions.results.value.length) finishTrigger.value?.$el.focus();
     }
 });
-watch([actions.message, actions.busy], async ([value, busy]) => {
-    if (value && !busy) {
+watch([actions.message, actions.busy, failedResults], async ([value, busy, failures]) => {
+    if ((value || failures.length) && !busy) {
         await nextTick();
         feedback.value?.focus();
     }

@@ -4,6 +4,9 @@ import {
     UuidSchema,
     parseContract,
     type ReportQuestion,
+    ReportConversationSchema,
+    ReportConversationQuerySchema,
+    type ReportConversation,
 } from '@scova/models';
 import { defineApiEndpoint } from '@/api/endpoints';
 import { modelValidator } from '@/api/validator';
@@ -16,7 +19,7 @@ const reportParams = {
 };
 export const createReportQuestionEndpoint = defineApiEndpoint<{
     params: { reportId: string };
-    body: { question: string };
+    body: { question: string; afterQuestionId?: string | null };
     data: ReportQuestion;
 }>({
     method: 'POST',
@@ -42,4 +45,15 @@ export const reportQuestionEndpoint = defineApiEndpoint<{
         },
     },
     validator: modelValidator(ReportQuestionSchema),
+});
+
+export const reportConversationEndpoint = defineApiEndpoint<{
+    params: { reportId: string };
+    query: { beforeQuestionId?: string };
+    data: ReportConversation;
+}>({
+    method: 'GET',
+    path: '/reports/:reportId/conversation',
+    inputValidators: { params: reportParams, query: modelValidator(ReportConversationQuerySchema) },
+    validator: modelValidator(ReportConversationSchema),
 });

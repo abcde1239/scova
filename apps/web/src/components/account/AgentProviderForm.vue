@@ -73,16 +73,77 @@
         <p v-if="message" class="field-error" role="alert" tabindex="-1">{{ message }}</p>
         <task-config-field
             v-model="draft.webSearch"
-            label="研究内置搜索"
+            label="研究搜索方式"
             kind="select"
             :options="searchOptions"
             :error="errors.webSearch"
             :disabled="pending"
         />
         <p class="field-hint">
-            仅为研究搜索授权。请确认所选模型和地址支持该搜索接口；调用计入搜索与 Token
-            额度，并可能产生额外费用。关闭时使用部署的搜索服务。
+            选择部署默认、模型内置搜索或独立搜索 API。内置搜索需要模型与地址支持，可能产生额外费用。
         </p>
+        <template v-if="draft.webSearch === 'api'">
+            <task-config-field
+                v-model="draft.searchProtocol"
+                label="搜索 API 协议"
+                kind="select"
+                :options="searchProtocols"
+                :error="errors.searchProtocol"
+                :disabled="pending"
+            />
+            <task-config-field
+                v-model="draft.searchBaseUrl"
+                label="搜索 API 地址"
+                :error="errors.searchBaseUrl"
+                :disabled="pending"
+            />
+            <p class="field-hint">
+                填写 API 根地址。DeepSeek 使用 https://api.deepseek.com/v1；Perplexity 使用
+                https://api.perplexity.ai；Tavily 使用 https://api.tavily.com。
+            </p>
+            <div class="secret-field">
+                <label :for="`${id}-search-key`"
+                    >搜索 API Key{{
+                        provider?.searchApi ? '（地址与协议不变时留空保留）' : ''
+                    }}</label
+                >
+                <n-input
+                    v-model:value="draft.searchApiKey"
+                    type="password"
+                    show-password-on="click"
+                    :disabled="pending"
+                    :input-props="{
+                        id: `${id}-search-key`,
+                        autocomplete: 'new-password',
+                        'aria-invalid': errors.searchApiKey ? 'true' : undefined,
+                        'aria-describedby': `${id}-search-key-hint`,
+                    }"
+                />
+                <p
+                    :id="`${id}-search-key-hint`"
+                    :class="errors.searchApiKey ? 'field-error' : 'field-hint'"
+                >
+                    {{
+                        errors.searchApiKey ||
+                        '单独加密保存，不复用模型密钥；更改地址或协议须重新填写。'
+                    }}
+                </p>
+            </div>
+            <task-config-field
+                v-model="draft.contentMode"
+                label="网页正文读取"
+                kind="select"
+                :options="contentOptions"
+                :disabled="pending"
+                :error="errors.contentMode"
+            />
+            <p class="field-hint">
+                API 可提供正文片段，HTML 来源会由 Reader
+                核实原站全文。正常读取失败可保留片段并说明覆盖未知。
+                摘要和模型生成答案不算正文；Perplexity 当前仅提供摘要，因此仍需
+                Reader。读取均计入页面预算。
+            </p>
+        </template>
         <div class="form-actions">
             <action-button attr-type="submit" :busy="pending" :disabled="uncertain"
                 >保存配置</action-button
@@ -130,8 +191,12 @@ const draft = reactive({
     baseUrl: props.provider?.baseUrl ?? 'https://api.openai.com/v1',
     model: props.provider?.model ?? '',
     protocol: String(props.provider?.protocol ?? 'openai_chat_completions'),
-    webSearch: String(props.provider?.webSearch ?? 'disabled'),
+    webSearch: props.provider?.searchApi ? 'api' : String(props.provider?.webSearch ?? 'disabled'),
     apiKey: '',
+    searchProtocol: String(props.provider?.searchApi?.protocol ?? 'deepseek'),
+    searchBaseUrl: props.provider?.searchApi?.baseUrl ?? 'https://api.deepseek.com/v1',
+    searchApiKey: '',
+    contentMode: String(props.provider?.searchApi?.contentMode ?? 'prefer_api'),
 });
 const initial = JSON.stringify(draft);
 const dirty = computed(() => JSON.stringify(draft) !== initial);
@@ -163,8 +228,18 @@ const protocols = [
     { value: 'gemini', label: 'Gemini generateContent' },
 ];
 const preset = ref('custom');
+const searchProtocols = [
+    { value: 'deepseek', label: 'DeepSeek Search' },
+    { value: 'perplexity', label: 'Perplexity Search' },
+    { value: 'tavily', label: 'Tavily Search' },
+];
+const contentOptions = [
+    { value: 'prefer_api', label: 'API 正文优先，Reader 补读' },
+    { value: 'reader', label: '始终使用 Reader 读取网页' },
+];
 const searchOptions = computed(() => [
-    { value: 'disabled', label: '关闭内置搜索' },
+    { value: 'disabled', label: '部署默认搜索' },
+    { value: 'api', label: '独立搜索 API' },
     ...(['openai_chat_completions', 'openai_json'].includes(draft.protocol)
         ? [{ value: 'openai_responses', label: '允许 OpenAI Responses Web Search' }]
         : draft.protocol === 'anthropic_messages'
@@ -174,7 +249,19 @@ const searchOptions = computed(() => [
 watch(
     () => draft.protocol,
     () => {
-        draft.webSearch = 'disabled';
+        if (draft.webSearch !== 'api') draft.webSearch = 'disabled';
+    },
+);
+watch(
+    () => draft.searchProtocol,
+    (value) => {
+        draft.searchBaseUrl =
+            value === 'deepseek'
+                ? 'https://api.deepseek.com/v1'
+                : value === 'tavily'
+                  ? 'https://api.tavily.com'
+                  : 'https://api.perplexity.ai';
+        draft.searchApiKey = '';
     },
 );
 watch(preset, (value) => {
@@ -191,6 +278,7 @@ watch(preset, (value) => {
         draft.protocol = config[2] as AgentProvider['protocol'];
         draft.model = '';
         draft.apiKey = '';
+        draft.searchApiKey = '';
         draft.webSearch = 'disabled';
     }
 });
@@ -201,13 +289,24 @@ async function save() {
     pending.value = true;
     let dispatched = false;
     try {
+        const searchApi =
+            draft.webSearch === 'api'
+                ? {
+                      protocol: draft.searchProtocol,
+                      baseUrl: draft.searchBaseUrl.trim(),
+                      contentMode: draft.contentMode,
+                      ...(draft.searchApiKey.trim() ? { apiKey: draft.searchApiKey.trim() } : {}),
+                  }
+                : null;
+        const webSearch = draft.webSearch === 'api' ? 'disabled' : draft.webSearch;
         if (props.provider) {
             const body = parseContract(AgentProviderUpdateSchema, {
                 name: draft.name.trim(),
                 model: draft.model.trim(),
                 baseUrl: draft.baseUrl.trim(),
                 protocol: draft.protocol,
-                webSearch: draft.webSearch,
+                webSearch,
+                searchApi,
                 ...(draft.apiKey.trim() ? { apiKey: draft.apiKey.trim() } : {}),
                 revision: props.provider.revision,
             });
@@ -218,7 +317,9 @@ async function save() {
             });
         } else {
             const body = parseContract(AgentProviderInputSchema, {
-                ...draft,
+                protocol: draft.protocol,
+                webSearch,
+                searchApi,
                 name: draft.name.trim(),
                 model: draft.model.trim(),
                 baseUrl: draft.baseUrl.trim(),
@@ -228,13 +329,23 @@ async function save() {
             await scope.request(createProviderEndpoint, { body });
         }
         draft.apiKey = '';
+        draft.searchApiKey = '';
         if (!scope.isCurrent()) return;
         emit('saved');
     } catch (cause) {
         const error = toApiError(cause);
         if (error.kind === 'cancelled' || !scope.isCurrent()) return;
         for (const field of error.fieldErrors ?? [])
-            errors.value[field.path.split('/').filter(Boolean).at(-1) ?? ''] = field.message;
+            errors.value[
+                field.path.startsWith('/searchApi/')
+                    ? ({
+                          apiKey: 'searchApiKey',
+                          baseUrl: 'searchBaseUrl',
+                          protocol: 'searchProtocol',
+                          contentMode: 'contentMode',
+                      }[field.path.split('/').at(-1)!] ?? 'webSearch')
+                    : (field.path.split('/').filter(Boolean).at(-1) ?? '')
+            ] = field.message;
         uncertain.value = dispatched && (!error.status || error.status >= 500);
         message.value = uncertain.value
             ? '保存结果尚未确认。请关闭并重新读取列表，确认后再编辑。'
@@ -251,10 +362,12 @@ async function save() {
 }
 const unregister = scope.registerCleanup(() => {
     draft.apiKey = '';
+    draft.searchApiKey = '';
 });
 onBeforeUnmount(() => {
     window.removeEventListener('beforeunload', beforeUnload);
     draft.apiKey = '';
+    draft.searchApiKey = '';
     unregister();
 });
 </script>

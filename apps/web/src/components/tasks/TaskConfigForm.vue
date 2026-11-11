@@ -120,12 +120,10 @@
                     :disabled="locked"
                 />
             </template>
-            <task-config-field
-                v-model="task.draft.outputFormat"
+            <output-format-select
+                v-model="selectedFormats"
                 label="输出形式"
-                kind="select"
-                :options="outputs"
-                :error="task.fields.value.outputFormat"
+                :error="task.fields.value.outputFormats ?? task.fields.value.outputFormat"
                 :disabled="locked"
             />
             <output-examples />
@@ -270,6 +268,7 @@ import {
 } from '@/composables/useCreateTask';
 import { useSessionLifecycle } from '@/composables/useSessionQuery';
 import TaskConfigField from '@/components/tasks/TaskConfigField.vue';
+import OutputFormatSelect from '@/components/tasks/OutputFormatSelect.vue';
 import TaskTokenBudget from '@/components/tasks/TaskTokenBudget.vue';
 import ListInput from '@/components/common/ListInput.vue';
 import ActionButton from '@/components/common/ActionButton.vue';
@@ -288,6 +287,16 @@ const editor = props.initialResponse
     : undefined;
 const creator = editor ? undefined : createTaskController(lifecycle);
 const task = editor ?? creator!;
+const selectedFormats = computed({
+    get: () =>
+        task.draft.outputFormats.length
+            ? task.draft.outputFormats
+            : [task.draft.outputFormat as import('@scova/models').OutputFormat],
+    set: (formats: import('@scova/models').OutputFormat[]) => {
+        task.draft.outputFormats = formats;
+        task.draft.outputFormat = formats[0] ?? 'brief';
+    },
+});
 const legacyBudget = computed(
     () =>
         Boolean(editor) &&
@@ -370,12 +379,6 @@ const ranges = [
 const researchModes = [
     { value: 'collection', label: '资料收集：整理来源信息' },
     { value: 'analysis', label: '分析研究：核对依据与时间' },
-];
-const outputs = [
-    { value: 'brief', label: '简报' },
-    { value: 'list', label: '主题清单' },
-    { value: 'comparison', label: '对比表' },
-    { value: 'research_report', label: '研究报告' },
 ];
 const notifications = [
     { value: 'summary', label: '每次汇总' },

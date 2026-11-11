@@ -80,7 +80,7 @@
                                             :key="evidence.id"
                                             class="table-citation"
                                         >
-                                            <evidence-citation :evidence="evidence" />
+                                            <evidence-link :evidence="evidence" />
                                         </div>
                                         <p v-if="!entry.oldEvidence.length">未提供旧侧引用。</p>
                                     </div>
@@ -96,7 +96,7 @@
                                             :key="evidence.id"
                                             class="table-citation"
                                         >
-                                            <evidence-citation :evidence="evidence" />
+                                            <evidence-link :evidence="evidence" />
                                         </div>
                                         <p v-if="!entry.newEvidence.length">未提供本次观测引用。</p>
                                     </div>
@@ -117,7 +117,7 @@ import type { Report } from '@scova/models';
 import ReportFrame from '@/components/reports/ReportFrame.vue';
 import ReportFindingsTable from '@/components/reports/ReportFindingsTable.vue';
 import ReportFormatBanner from '@/components/reports/ReportFormatBanner.vue';
-import EvidenceCitation from '@/components/reports/EvidenceCitation.vue';
+import EvidenceLink from '@/components/reports/EvidenceLink.vue';
 import { reportComparison } from '@/utils/report-comparison';
 const props = withDefaults(defineProps<{ report: Report; showChanges?: boolean }>(), {
     showChanges: true,

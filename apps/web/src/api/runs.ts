@@ -61,6 +61,7 @@ export type RunActionTarget = {
     taskStatus?: Task['status'];
     agentProviderId?: string | null;
     outputFormat?: RunCommandInput['outputFormat'];
+    outputFormats?: RunCommandInput['outputFormats'];
 };
 export type RunAction = 'start' | 'retry' | 'cancel';
 export interface RunAttempt {
@@ -73,6 +74,7 @@ export interface RunAttempt {
     key: string;
     agentProviderId?: string | null;
     outputFormat?: RunCommandInput['outputFormat'];
+    outputFormats?: RunCommandInput['outputFormats'];
 }
 /** 输入由动作控制器冻结；不在此创建 key，也不安装命令快照。 */
 export async function requestRunAction(
@@ -87,6 +89,9 @@ export async function requestRunAction(
     const body: RunCommandInput = {
         mode: attempt.mode,
         ...(attempt.outputFormat !== undefined ? { outputFormat: attempt.outputFormat } : {}),
+        ...(attempt.outputFormats !== undefined
+            ? { outputFormats: [...attempt.outputFormats] }
+            : {}),
         ...(attempt.agentProviderId !== undefined
             ? { agentProviderId: attempt.agentProviderId }
             : {}),

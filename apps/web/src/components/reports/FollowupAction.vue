@@ -2,16 +2,16 @@
     <section
         ref="root"
         class="followup scova-question-tools"
-        aria-label="问题的后续研究"
+        :aria-label="revision ? '基于现有资料生成新版报告' : '问题的后续研究'"
         tabindex="-1"
     >
-        <h3>后续研究</h3>
+        <h3>{{ revision ? '生成新版报告' : '后续研究' }}</h3>
         <p v-if="!state.available.value">
             报告或回答当前不可读取。已有未知请求会保留，恢复后才能确认或读取关联。
         </p>
-        <action-button v-if="state.canOpen.value" @click="open"
-            >确认后建立独立后续执行</action-button
-        >
+        <action-button v-if="state.canOpen.value" @click="open">{{
+            revision ? '基于现有资料生成新版报告' : '确认后建立独立后续执行'
+        }}</action-button>
         <p v-if="state.available.value && report?.mode === 'demo' && !state.candidateId.value">
             历史演示报告仅供查阅，请从任务页启动真实研究。
         </p>
@@ -64,21 +64,42 @@
         <dialog
             ref="dialog"
             class="followup-dialog"
-            aria-labelledby="followup-dialog-title"
-            aria-describedby="followup-dialog-consequences"
+            :aria-labelledby="`${dialogId}-title`"
+            :aria-describedby="`${dialogId}-consequences`"
             @cancel.prevent="cancel"
         >
-            <header><h3 id="followup-dialog-title">确认建立独立后续执行</h3></header>
+            <header>
+                <h3 :id="`${dialogId}-title`">
+                    {{ revision ? '确认生成新版报告' : '确认建立独立后续执行' }}
+                </h3>
+            </header>
             <div class="dialog-body">
-                <p id="followup-dialog-consequences">
-                    将为这个已保存的问题建立独立后续执行。沿用原报告的配置版本与预算上限，以问题原文为目标，清空重点条目并改为手动执行。原报告与任务配置版本保留，原任务计划不改，普通监控基线不变。
+                <p :id="`${dialogId}-consequences`">
+                    {{
+                        revision
+                            ? '使用原报告已保存的证据及本轮对话生成新版报告，不搜索网页或重新抓取来源；会使用模型额度。'
+                            : '将为这个已保存的问题建立独立后续执行，携带报告与本轮对话上下文，可能调用搜索与模型并使用服务额度。'
+                    }}沿用原报告的配置版本与预算上限，以问题原文为目标，清空重点条目并改为手动执行。原报告与任务配置版本保留，原任务计划不改，普通监控基线不变。
                 </p>
                 <p class="question-text">{{ question?.question }}</p>
+                <output-format-select
+                    v-model="formats"
+                    label="本次成果形式"
+                    :allow-empty="true"
+                    :disabled="state.pending.value"
+                />
+                <p v-if="revision">修订只使用保存证据，所选形式缺少的材料会明确说明。</p>
                 <p v-if="state.parentQuery.isFetching.value" role="status">
                     正在读取原报告执行的模式与预算。
                 </p>
                 <template v-if="state.parent.value">
-                    <p>真实研究可能调用已配置的搜索与模型并使用服务额度。</p>
+                    <p>
+                        {{
+                            revision
+                                ? '仅使用现有证据，模型生成会计量；页面额度用于读取保存证据。'
+                                : '真实研究可能调用已配置的搜索与模型并使用服务额度。'
+                        }}
+                    </p>
                     <dl>
                         <div>
                             <dt>原配置版本</dt>
@@ -86,7 +107,7 @@
                         </div>
                         <div>
                             <dt>搜索上限</dt>
-                            <dd>{{ state.parent.value.budget.maxSearches }} 次</dd>
+                            <dd>{{ revision ? 0 : state.parent.value.budget.maxSearches }} 次</dd>
                         </div>
                         <div>
                             <dt>页面读取上限</dt>
@@ -123,7 +144,7 @@
             <footer class="followup-actions">
                 <button
                     type="button"
-                    id="followup-dialog-cancel"
+                    :id="`${dialogId}-cancel`"
                     :disabled="state.pending.value"
                     @click="cancel"
                 >
@@ -138,7 +159,7 @@
                     "
                     :busy="state.pending.value"
                     @click="state.confirm"
-                    >确认并建立后续执行</action-button
+                    >{{ revision ? '确认并生成新版报告' : '确认并建立后续执行' }}</action-button
                 >
             </footer>
         </dialog>
@@ -146,9 +167,10 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onUnmounted, ref, watch, useId } from 'vue';
 import { RouterLink } from 'vue-router';
-import type { Report, ReportQuestion } from '@scova/models';
+import type { Report, ReportQuestion, OutputFormat } from '@scova/models';
+import OutputFormatSelect from '@/components/tasks/OutputFormatSelect.vue';
 import ActionButton from '@/components/common/ActionButton.vue';
 import { useFollowup } from '@/composables/useFollowup';
 import { executionStates } from '@/composables/useExecution';
@@ -157,13 +179,20 @@ const props = defineProps<{
     questionId: string;
     report?: Report;
     question?: ReportQuestion;
+    operation?: 'research' | 'revise';
 }>();
 const emit = defineEmits<{ protectedChange: [value: boolean]; linkedChange: [value: boolean] }>();
+const revision = computed(() => props.operation === 'revise');
+const dialogId = `followup-${useId()}`;
+const formats = ref<OutputFormat[]>([]);
 const state = useFollowup(
     () => props.reportId,
     () => props.questionId,
     () => props.report,
     () => props.question,
+    undefined,
+    () => props.operation ?? 'research',
+    formats,
 );
 const root = ref<HTMLElement>();
 const dialog = ref<HTMLDialogElement>();
@@ -183,7 +212,7 @@ watch(state.opened, async (opened) => {
     await nextTick();
     if (opened && state.opened.value && dialog.value?.isConnected) {
         dialog.value.showModal();
-        dialog.value.querySelector<HTMLButtonElement>('#followup-dialog-cancel')?.focus();
+        dialog.value.querySelector<HTMLButtonElement>(`#${CSS.escape(dialogId)}-cancel`)?.focus();
     } else if (!state.opened.value && dialog.value?.open) {
         dialog.value.close();
         await nextTick();

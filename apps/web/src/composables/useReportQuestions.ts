@@ -8,9 +8,13 @@ import {
     watch,
     type MaybeRefOrGetter,
 } from 'vue';
-import { useQuery } from '@tanstack/vue-query';
-import type { Report } from '@scova/models';
-import { createReportQuestionEndpoint, reportQuestionEndpoint } from '@/api/report-questions';
+import { useQuery, useInfiniteQuery } from '@tanstack/vue-query';
+import type { Report, ReportConversation } from '@scova/models';
+import {
+    createReportQuestionEndpoint,
+    reportQuestionEndpoint,
+    reportConversationEndpoint,
+} from '@/api/report-questions';
 import { toApiError } from '@/api/errors';
 import type { SessionLifecycle } from '@/api/session';
 import { useSessionLifecycle } from '@/composables/useSessionQuery';
@@ -50,6 +54,85 @@ export function useReportQuestions(
         return !!current && current.id.toLowerCase() === toValue(reportId).toLowerCase();
     });
     const address = computed(() => questionSelection(toValue(selection)));
+    const conversationOptions = computed(() =>
+        lifecycle.queryOptions(
+            reportConversationEndpoint,
+            { params: { reportId: toValue(reportId) }, query: {} },
+            ['report-conversation', toValue(reportId)],
+        ),
+    );
+    const conversation = useInfiniteQuery(
+        computed(() => ({
+            ...conversationOptions.value,
+            enabled: conversationOptions.value.enabled && available.value,
+            initialPageParam: undefined as string | undefined,
+            getNextPageParam: (page: { data: ReportConversation }) =>
+                page.data.hasEarlier ? page.data.turns[0]?.id : undefined,
+            async queryFn(context: { signal: AbortSignal; pageParam: string | undefined }) {
+                const response = await lifecycle.capture().request(
+                    reportConversationEndpoint,
+                    {
+                        params: { reportId: toValue(reportId) },
+                        query: context.pageParam ? { beforeQuestionId: context.pageParam } : {},
+                    },
+                    { signal: context.signal },
+                );
+                const current = toValue(report);
+                if (!current || response.data.reportId !== current.id)
+                    invalidQuestion('会话不属于当前报告');
+                const ids = new Set<string>();
+                for (const turn of response.data.turns) {
+                    if (turn.reportId !== current.id || ids.has(turn.id))
+                        invalidQuestion('会话轮次身份重复或不匹配');
+                    ids.add(turn.id);
+                    if (turn.answer) validateQuestion({ ...turn, answer: turn.answer }, current);
+                }
+                if (response.data.artifacts?.some((artifact) => !ids.has(artifact.questionId)))
+                    invalidQuestion('成果不属于当前会话轮次');
+                return response;
+            },
+            refetchInterval: (query: {
+                state: { data?: { pages: { data: ReportConversation }[] } };
+            }) =>
+                query.state.data?.pages.some(
+                    (page) => page.data.activeRun || page.data.turns.some((turn) => !turn.answer),
+                )
+                    ? 3000
+                    : false,
+        })),
+        lifecycle.queryClient,
+    );
+    const conversationData = computed(() => {
+        const pages = conversation.data.value?.pages;
+        if (!pages?.length || !available.value || !conversation.isSuccess.value) return undefined;
+        const all = [...pages].reverse();
+        return {
+            ...pages[0]!.data,
+            turns: [
+                ...new Map(
+                    all.flatMap((page) => page.data.turns).map((turn) => [turn.id, turn]),
+                ).values(),
+            ],
+            artifacts: all.flatMap((page) => page.data.artifacts ?? []),
+        };
+    });
+    const turns = computed(() => {
+        if (
+            !available.value ||
+            !conversation.isSuccess.value ||
+            conversationData.value?.reportId !== toValue(reportId)
+        )
+            return [];
+        try {
+            return conversationData.value.turns.map((turn) =>
+                turn.answer
+                    ? validateQuestion({ ...turn, answer: turn.answer }, toValue(report)!)
+                    : turn,
+            );
+        } catch {
+            return [];
+        }
+    });
     const optionsFor = (id: string) =>
         lifecycle.queryOptions(
             reportQuestionEndpoint,
@@ -92,16 +175,16 @@ export function useReportQuestions(
         }
     });
     const waiting = computed(() => retryAt.value !== undefined && now.value < retryAt.value);
-    const protectedState = computed(
-        () => pending.value || !!attempt.value || (!selectedId.value && draft.value !== ''),
-    );
+    const protectedState = computed(() => pending.value || !!attempt.value || draft.value !== '');
     const canSubmit = computed(
         () =>
             !!lifecycle.session.user &&
             available.value &&
             !pending.value &&
             !attempt.value &&
-            !selectedId.value &&
+            conversation.isSuccess.value &&
+            !conversation.isFetching.value &&
+            !turns.value.some((turn) => !turn.answer) &&
             !address.value.error &&
             !questionTextError(draft.value),
     );
@@ -197,7 +280,15 @@ export function useReportQuestions(
         try {
             const response = await scope.request(
                 createReportQuestionEndpoint,
-                { params: { reportId: current.reportId }, body: { question: current.question } },
+                {
+                    params: { reportId: current.reportId },
+                    body: {
+                        question: current.question,
+                        ...(current.afterQuestionId !== undefined
+                            ? { afterQuestionId: current.afterQuestionId }
+                            : {}),
+                    },
+                },
                 { idempotencyKey: current.key, signal },
             );
             if (!isCurrent()) return;
@@ -210,10 +301,12 @@ export function useReportQuestions(
             if (!isCurrent()) return;
             lifecycle.queryClient.setQueryData(target.queryKey, { ...response, status: 200 });
             selectedId.value = id;
+            draft.value = '';
             attempt.value = undefined;
             terminal.value = false;
             clearWait();
             notice.value = '本次结果已保存。读取已保存回答不会再次调用模型。';
+            await conversation.refetch({ cancelRefetch: false });
             await nextTick();
             return id;
         } catch (cause) {
@@ -221,6 +314,15 @@ export function useReportQuestions(
             const error = toApiError(cause);
             waitUntil(questionRetryAt(cause));
             terminal.value = error.code === 'IDEMPOTENCY_PAYLOAD_MISMATCH';
+            if (['CONVERSATION_BUSY', 'CONVERSATION_CHANGED'].includes(error.code ?? '')) {
+                attempt.value = undefined;
+                const conflictingQuestion = current.question;
+                await conversation.refetch({ cancelRefetch: false });
+                if (!isCurrent()) return;
+                draft.value = conflictingQuestion;
+                notice.value = '会话已有新消息或上一轮仍在处理，请查阅历史后再发送。';
+                return;
+            }
             notice.value = terminal.value
                 ? '本次请求标识与服务端问题不一致。请保留原稿并明确结束本次请求后再提出新问题。'
                 : error.code === 'QUESTION_PENDING'
@@ -234,7 +336,12 @@ export function useReportQuestions(
     }
     function submit() {
         if (!canSubmit.value) return Promise.resolve(undefined);
-        const current = questionAttempt(toValue(reportId), draft.value);
+        const current = questionAttempt(
+            toValue(reportId),
+            draft.value,
+            crypto.randomUUID(),
+            turns.value.at(-1)?.id ?? null,
+        );
         attempt.value = current;
         return send(current);
     }
@@ -251,6 +358,11 @@ export function useReportQuestions(
     function newQuestion() {
         reset();
         selectedId.value = '';
+    }
+    function cancelPending() {
+        if (!pending.value) return;
+        stop();
+        notice.value = '已停止等待。原问题与请求标识已保留；请读取本次结果确认服务端状态。';
     }
     onScopeDispose(() => {
         disposed = true;
@@ -273,9 +385,13 @@ export function useReportQuestions(
         readError,
         protectedState,
         canSubmit,
+        conversation,
+        conversationData,
+        turns,
         canRecover,
         submit,
         recover,
         newQuestion,
+        cancelPending,
     };
 }

@@ -1,7 +1,55 @@
 <template>
     <section ref="panel" class="questions scova-question-tools" aria-labelledby="questions-title">
         <h2 id="questions-title"><app-icon name="question" />报告内问答</h2>
-        <p>仅查阅这份报告已保存的证据；提问不会搜索网页或启动新的研究。</p>
+        <p>
+            围绕这份报告连续讨论，历史会自动保存。提问仅查阅已有证据；生成新版与联网补充需单独确认。
+        </p>
+        <p v-if="state.conversation.isPending.value" role="status">正在读取对话历史</p>
+        <div v-if="state.available.value && state.conversation.isError.value" role="alert">
+            对话历史暂时无法读取，发送已暂停。
+            <button type="button" @click="state.conversation.refetch()">重新读取对话历史</button>
+        </div>
+        <div
+            v-if="report && state.available.value"
+            class="conversation-history"
+            aria-label="已保存的对话历史"
+        >
+            <button
+                v-if="state.conversation.hasNextPage.value"
+                type="button"
+                :disabled="state.conversation.isFetchingNextPage.value"
+                @click="state.conversation.fetchNextPage()"
+            >
+                {{ state.conversation.isFetchingNextPage.value ? '正在读取' : '查看更早的对话' }}
+            </button>
+            <report-conversation-turn
+                v-for="turn in state.turns.value.filter(
+                    (item) => item.id !== state.selectedId.value,
+                )"
+                :key="turn.id"
+                :turn="turn"
+                :report="report"
+                @select="selectTurn"
+            />
+        </div>
+        <div
+            v-if="state.available.value && state.conversationData.value?.artifacts?.length"
+            class="conversation-artifacts"
+            aria-label="对话生成的报告"
+        >
+            <router-link
+                v-for="artifact in state.conversationData.value.artifacts"
+                :key="artifact.reportId"
+                :to="`/reports/${artifact.reportId}`"
+                class="conversation-artifact"
+            >
+                <app-icon name="report" /><span
+                    >{{ artifact.operation === 'revise' ? '新版报告' : '补充研究成果' }}：{{
+                        artifact.title
+                    }}</span
+                ><span>打开成果</span>
+            </router-link>
+        </div>
         <p v-if="!state.available.value" role="status">
             报告当前无法读取。本地问题仍可复制；报告恢复后才能提问或读取回答。
         </p>
@@ -24,50 +72,7 @@
                 查看结论依据
             </button>
         </div>
-        <form
-            v-if="!state.selectedId.value || (!state.available.value && state.draft.value)"
-            class="question-form"
-            @submit.prevent="submit"
-        >
-            <label for="report-question">问题</label>
-            <textarea
-                id="report-question"
-                v-model="state.draft.value"
-                rows="5"
-                :readonly="
-                    !!state.selectedId.value ||
-                    !!state.attempt.value ||
-                    state.pending.value ||
-                    !state.available.value
-                "
-                :aria-invalid="state.draft.value !== '' && !!textError ? 'true' : undefined"
-                aria-describedby="question-input-help"
-            />
-            <p id="question-input-help">最多 2000 个 UTF-16 码元；问题按原文提交。</p>
-            <p v-if="state.draft.value !== '' && textError" role="alert">{{ textError }}</p>
-            <div v-if="!state.selectedId.value" class="question-actions">
-                <action-button
-                    v-if="!state.attempt.value"
-                    attr-type="submit"
-                    :disabled="!state.canSubmit.value"
-                    :busy="state.pending.value"
-                    >提问</action-button
-                >
-                <action-button
-                    v-if="state.attempt.value"
-                    :disabled="!state.canRecover.value"
-                    :busy="state.pending.value"
-                    @click="recover"
-                    >读取本次结果</action-button
-                >
-                <action-button
-                    v-if="state.attempt.value || state.draft.value"
-                    :disabled="state.pending.value"
-                    @click="startNew"
-                    >{{ state.attempt.value ? '结束本次请求' : '清空问题' }}</action-button
-                >
-            </div>
-        </form>
+
         <p v-if="state.notice.value" role="status">{{ state.notice.value }}</p>
         <p v-if="state.retryAt.value !== undefined">
             服务提供的再次读取时间：<time :datetime="new Date(state.retryAt.value).toISOString()">{{
@@ -110,6 +115,7 @@
                         class="statement"
                     >
                         <p class="question-text">{{ statement.text }}</p>
+                        <small v-if="statement.kind === 'inference'">基于证据的解释与归纳</small>
                         <div
                             v-for="(citation, citationIndex) in statement.citations"
                             :key="`${citation.evidenceId}-${citationIndex}`"
@@ -166,12 +172,61 @@
             @protected-change="followupProtected = $event"
             @linked-change="followupLinked = $event"
         />
+        <followup-action
+            v-if="state.answer.value && state.available.value"
+            :key="`revision-${state.selectedId.value}`"
+            operation="revise"
+            :report-id="reportId"
+            :question-id="state.selectedId.value"
+            :report="report"
+            :question="state.answer.value"
+            @protected-change="revisionProtected = $event"
+        />
         <action-button
             v-if="state.selectedId.value || state.address.value.error"
             :disabled="state.pending.value"
             @click="startNew"
             >提出新问题</action-button
         >
+        <form class="question-form" @submit.prevent="submit">
+            <label for="report-question">问题</label>
+            <textarea
+                id="report-question"
+                v-model="state.draft.value"
+                rows="5"
+                :readonly="!!state.attempt.value || state.pending.value || !state.available.value"
+                :aria-invalid="state.draft.value !== '' && !!textError ? 'true' : undefined"
+                aria-describedby="question-input-help"
+            />
+            <p id="question-input-help">最多 2000 个 UTF-16 码元；问题按原文提交。</p>
+            <p>回答会结合最近对话和更早的简要记录；久远或不明确的指代请写出具体内容。</p>
+            <p v-if="state.draft.value !== '' && textError" role="alert">{{ textError }}</p>
+            <div class="question-actions">
+                <action-button
+                    v-if="!state.attempt.value"
+                    attr-type="submit"
+                    :disabled="!state.canSubmit.value || followupProtected || revisionProtected"
+                    :busy="state.pending.value"
+                    >提问</action-button
+                >
+                <action-button
+                    v-if="state.attempt.value"
+                    :disabled="!state.canRecover.value"
+                    :busy="state.pending.value"
+                    @click="recover"
+                    >读取本次结果</action-button
+                >
+                <action-button
+                    v-if="state.attempt.value || state.draft.value"
+                    :disabled="state.pending.value"
+                    @click="startNew"
+                    >{{ state.attempt.value ? '结束本次请求' : '清空问题' }}</action-button
+                >
+                <button v-if="state.pending.value" type="button" @click="state.cancelPending">
+                    停止等待
+                </button>
+            </div>
+        </form>
     </section>
 </template>
 
@@ -183,6 +238,7 @@ import type { Report } from '@scova/models';
 import ActionButton from '@/components/common/ActionButton.vue';
 import EvidenceCitation from '@/components/reports/EvidenceCitation.vue';
 import FollowupAction from '@/components/reports/FollowupAction.vue';
+import ReportConversationTurn from '@/components/reports/ReportConversationTurn.vue';
 import { useReportQuestions } from '@/composables/useReportQuestions';
 import { useSessionLifecycle } from '@/composables/useSessionQuery';
 import { questionReasons, questionTextError } from '@/utils/report-questions';
@@ -199,12 +255,16 @@ const state = useReportQuestions(
 const panel = ref<HTMLElement>();
 const followupProtected = ref(false);
 const followupLinked = ref(false);
-const protectedState = computed(() => state.protectedState.value || followupProtected.value);
+const revisionProtected = ref(false);
+const protectedState = computed(
+    () => state.protectedState.value || followupProtected.value || revisionProtected.value,
+);
 watch(
     () => `${lifecycle.session.epoch}:${props.reportId}:${state.selectedId.value}`,
     () => {
         followupProtected.value = false;
         followupLinked.value = false;
+        revisionProtected.value = false;
     },
     { flush: 'sync' },
 );
@@ -231,6 +291,10 @@ async function selectSaved(id?: string) {
         internalDestination = '';
     }
 }
+async function selectTurn(id: string) {
+    if (state.pending.value || !confirmDiscard()) return;
+    await selectSaved(id);
+}
 async function perform(action: () => Promise<string | undefined>) {
     const scope = lifecycle.capture();
     const path = route.fullPath;
@@ -241,6 +305,7 @@ async function perform(action: () => Promise<string | undefined>) {
     panel.value?.querySelector<HTMLElement>('#question-result-title')?.focus();
 }
 function submit() {
+    if (followupProtected.value || revisionProtected.value) return;
     return perform(state.submit);
 }
 function recover() {
@@ -249,7 +314,7 @@ function recover() {
 function confirmDiscard() {
     if (!lifecycle.session.user || !protectedState.value) return true;
     return window.confirm(
-        followupProtected.value
+        followupProtected.value || revisionProtected.value
             ? '后续执行结果尚未确认，服务端可能已经创建执行。离开或提出新问题会清除此页面的原请求标识，无法在此使用同一请求恢复；取消客户端读取不代表回滚。仍要继续吗？'
             : state.attempt.value
               ? '本次结果尚未确认，服务端可能仍在处理或已经保存回答。请先复制问题。结束或离开后无法凭此页面恢复未知请求；再次提问可能另计用量。仍要继续吗？'
@@ -301,6 +366,28 @@ h2 {
     padding-block-start: 2rem;
     border-block-start: 0.0625rem solid var(--scova-border);
 }
+.conversation-history,
+.conversation-artifacts {
+    display: grid;
+    gap: 1rem;
+    min-inline-size: 0;
+}
+.conversation-artifact {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+    min-block-size: 2.75rem;
+    padding: 1rem;
+    border: 0.0625rem solid var(--scova-border);
+    border-radius: 0.75rem;
+    color: var(--scova-primary);
+    overflow-wrap: anywhere;
+}
+.conversation-artifact:focus-visible {
+    outline: 0.125rem solid var(--scova-primary);
+    outline-offset: 0.25rem;
+}
 h2,
 h3,
 p {
@@ -326,7 +413,7 @@ textarea {
     background: var(--scova-surface);
     font: inherit;
     line-height: 1.75;
-    resize: vertical;
+    resize: none;
     cursor: text;
 }
 textarea:focus-visible,
@@ -339,6 +426,23 @@ h3:focus-visible {
     flex-wrap: wrap;
     gap: 0.75rem;
     align-items: start;
+}
+.questions button {
+    min-block-size: 2.75rem;
+    min-inline-size: 2.75rem;
+    max-inline-size: 100%;
+    padding: 0.625rem 1rem;
+    border: 0.0625rem solid var(--scova-border);
+    border-radius: 0.5rem;
+    background: var(--scova-surface);
+    color: var(--scova-primary);
+    font: inherit;
+    cursor: pointer;
+    overflow-wrap: anywhere;
+}
+.questions button:focus-visible {
+    outline: 0.125rem solid var(--scova-primary);
+    outline-offset: 0.25rem;
 }
 .question-starters {
     display: flex;

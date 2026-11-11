@@ -102,16 +102,9 @@
                 :disabled="disabled"
             />
             <p>资料收集整理当前可读信息；分析研究还会核对时间适用性、依据与推论。</p>
-            <task-config-field
-                v-model="outputFormat"
+            <output-format-select
+                v-model="outputFormats"
                 label="希望得到的形式"
-                kind="select"
-                :options="[
-                    { value: 'brief', label: '简报' },
-                    { value: 'list', label: '主题清单' },
-                    { value: 'comparison', label: '对比表' },
-                    { value: 'research_report', label: '研究报告' },
-                ]"
                 :disabled="disabled"
             />
             <dl>
@@ -149,6 +142,7 @@ import {
     type TaskClarifications,
 } from '@scova/models';
 import TaskConfigField from '@/components/tasks/TaskConfigField.vue';
+import OutputFormatSelect from '@/components/tasks/OutputFormatSelect.vue';
 import ListInput from '@/components/common/ListInput.vue';
 import ActionButton from '@/components/common/ActionButton.vue';
 const props = defineProps<{
@@ -185,7 +179,14 @@ const end = ref(
     props.initial?.timeRange.kind === 'fixed' ? localTime(props.initial.timeRange.end) : '',
 );
 const researchMode = ref(props.initial?.researchMode ?? props.mode);
-const outputFormat = ref(props.initial?.outputFormat ?? props.format);
+const outputFormats = ref<import('@scova/models').OutputFormat[]>(
+    props.initial?.outputFormats ?? [
+        parseContract(
+            TaskDraftScopeSchema.properties.outputFormat,
+            props.initial?.outputFormat ?? props.format,
+        ),
+    ],
+);
 const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 function fixedInstant(value: string, key: 'start' | 'end') {
     const initial = props.initial?.timeRange;
@@ -218,7 +219,8 @@ function scope(validateStep = 3) {
                         end: fixedInstant(end.value, 'end'),
                     },
         researchMode: researchMode.value,
-        outputFormat: outputFormat.value,
+        outputFormat: outputFormats.value[0],
+        ...(outputFormats.value.length > 1 ? { outputFormats: outputFormats.value } : {}),
     });
 }
 async function move(delta: number) {

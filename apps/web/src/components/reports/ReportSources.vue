@@ -2,23 +2,23 @@
     <section id="saved-evidence" class="evidence-appendix" aria-labelledby="saved-evidence-title">
         <h3 id="saved-evidence-title" class="scova-content-title">来源与保存引用</h3>
         <p class="scova-interface">
-            以下按报告保存顺序列出可访问证据；孤立来源不会被猜测归入某条结论。
+            每份来源集中保存引用，展开即可核对原文；不同保存版本分别列出。
         </p>
-        <div
-            v-for="evidence in report.evidence"
-            :id="`evidence-${evidence.id}`"
-            :key="evidence.id"
-            class="evidence-entry"
-        >
-            <evidence-citation :evidence="evidence" />
-        </div>
+        <evidence-source-group
+            v-for="group in groups"
+            :key="group.key"
+            :evidence="group.evidence"
+        />
     </section>
 </template>
 
 <script setup lang="ts">
 import type { Report } from '@scova/models';
-import EvidenceCitation from '@/components/reports/EvidenceCitation.vue';
-defineProps<{ report: Report }>();
+import { computed } from 'vue';
+import EvidenceSourceGroup from '@/components/reports/EvidenceSourceGroup.vue';
+import { groupEvidence } from '@/utils/evidence-groups';
+const props = defineProps<{ report: Report }>();
+const groups = computed(() => groupEvidence(props.report.evidence));
 </script>
 
 <style scoped>
@@ -49,12 +49,5 @@ h3 {
 h3:focus-visible {
     outline: 0.125rem solid var(--scova-primary);
     outline-offset: 0.25rem;
-}
-@media (max-width: 40rem) {
-    .evidence-entry :deep(summary),
-    .evidence-entry :deep(.evidence-body),
-    .evidence-entry :deep(blockquote) {
-        padding-inline: 0.5rem;
-    }
 }
 </style>

@@ -58,7 +58,7 @@
                         <p class="change-value scova-reading">
                             {{ entry.record.oldValue ?? '未提供旧值' }}
                         </p>
-                        <evidence-citation
+                        <evidence-link
                             v-for="evidence in entry.oldEvidence"
                             :key="evidence.id"
                             :evidence="evidence"
@@ -77,7 +77,7 @@
                         <p class="change-value scova-reading">
                             {{ entry.record.newValue ?? '未提供新值' }}
                         </p>
-                        <evidence-citation
+                        <evidence-link
                             v-for="evidence in entry.newEvidence"
                             :key="evidence.id"
                             :evidence="evidence"
@@ -98,7 +98,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { Report } from '@scova/models';
-import EvidenceCitation from '@/components/reports/EvidenceCitation.vue';
+import EvidenceLink from '@/components/reports/EvidenceLink.vue';
 import { changeSummary, mapReportChanges } from '@/utils/report-changes';
 import { useReadingTypography } from '@/composables/useReadingTypography';
 const { reading } = useReadingTypography();

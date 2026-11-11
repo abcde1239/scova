@@ -8,7 +8,7 @@ import {
     type MaybeRefOrGetter,
 } from 'vue';
 import { useQuery } from '@tanstack/vue-query';
-import type { Report, ReportQuestion, Run } from '@scova/models';
+import type { Report, ReportQuestion, Run, OutputFormat } from '@scova/models';
 import {
     followupAttempt,
     followupParent,
@@ -30,6 +30,8 @@ export function useFollowup(
     report: MaybeRefOrGetter<Report | undefined>,
     question: MaybeRefOrGetter<ReportQuestion | undefined>,
     lifecycle: SessionLifecycle = useSessionLifecycle(),
+    operation: MaybeRefOrGetter<'research' | 'revise'> = 'research',
+    outputFormats: MaybeRefOrGetter<OutputFormat[]> = [],
 ) {
     const opened = ref(false);
     const pending = ref(false);
@@ -72,7 +74,11 @@ export function useFollowup(
         }
     });
     const candidateId = computed(() =>
-        available.value ? (toValue(question)?.followupRunId ?? confirmedId.value) : '',
+        available.value
+            ? ((toValue(operation) === 'revise'
+                  ? toValue(question)?.revisionRunId
+                  : toValue(question)?.followupRunId) ?? confirmedId.value)
+            : '',
     );
     const parentOptions = computed(() => {
         const current = toValue(report);
@@ -219,7 +225,12 @@ export function useFollowup(
         if (!pending.value) opened.value = false;
     }
     function invalidate(id: string, scope: ReturnType<SessionLifecycle['capture']>) {
-        for (const key of [['run', id], ['runs'], ['tasks']])
+        for (const key of [
+            ['run', id],
+            ['runs'],
+            ['tasks'],
+            ['report-conversation', toValue(reportId)],
+        ])
             void lifecycle.queryClient.invalidateQueries({ queryKey: scope.queryKey(key) });
         const options = lifecycle.queryOptions(
             reportQuestionEndpoint,
@@ -247,7 +258,9 @@ export function useFollowup(
                 scope,
                 frozen,
                 signal,
-                toValue(question)?.followupRunId,
+                toValue(operation) === 'revise'
+                    ? toValue(question)?.revisionRunId
+                    : toValue(question)?.followupRunId,
             );
             if (!active()) return;
             confirmedId.value = response.data.run.id;
@@ -299,7 +312,14 @@ export function useFollowup(
             return;
         const current = toValue(report)!,
             saved = toValue(question)!;
-        attempt.value = followupAttempt(current, saved, parent.value);
+        attempt.value = followupAttempt(
+            current,
+            saved,
+            parent.value,
+            crypto.randomUUID(),
+            toValue(operation),
+            toValue(outputFormats),
+        );
         return send(attempt.value);
     }
     function replay() {
@@ -335,14 +355,18 @@ export function useFollowup(
                 id: frozen.questionId,
                 question: frozen.question,
             });
-            if (!response.data.followupRunId) {
+            const savedRunId =
+                toValue(operation) === 'revise'
+                    ? response.data.revisionRunId
+                    : response.data.followupRunId;
+            if (!savedRunId) {
                 message.value =
                     phase.value === 'blocked'
                         ? '已保存问题尚未返回关联执行。原请求仍保留且重发已停止，请稍后再次读取关联。'
                         : '已保存问题尚未返回关联执行，但这不能证明原命令未成功。原请求仍保留，可使用同一请求重发。';
                 return;
             }
-            const id = response.data.followupRunId;
+            const id = savedRunId;
             const options = runQueryOptions(lifecycle, id);
             const run = await lifecycle.queryClient.fetchQuery({
                 ...options,

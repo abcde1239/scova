@@ -155,7 +155,7 @@ textarea {
     max-inline-size: 100%;
     min-inline-size: 0;
     min-block-size: 12rem;
-    resize: vertical;
+    resize: none;
     padding: 0.875rem;
     border: 0.0625rem solid var(--scova-border);
     border-radius: 0.5rem;

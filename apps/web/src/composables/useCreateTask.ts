@@ -50,6 +50,7 @@ export function initialTaskDraft(preferences?: SessionResponse['user']['preferen
         scheduleLocalTime: '',
         scheduleWeekday: '',
         outputFormat: 'brief',
+        outputFormats: [] as TaskConfig['outputFormat'][],
         researchMode: 'analysis',
         agentProviderId: '',
         maxSearches: String(DEFAULT_TASK_BUDGET.maxSearches),
@@ -90,6 +91,7 @@ export function taskDraftFromConfig(config: TaskConfig): TaskDraft {
         scheduleWeekday:
             config.schedule.frequency === 'weekly' ? String(config.schedule.weekday) : '',
         outputFormat: config.outputFormat,
+        outputFormats: config.outputFormats ? [...config.outputFormats] : [],
         researchMode: config.researchMode ?? 'analysis',
         agentProviderId: config.agentProviderId ?? '',
         ...(Object.fromEntries(
@@ -211,6 +213,9 @@ export function taskInput(draft: TaskDraft, original?: TaskConfig, keepSchedule 
             timezone: preserve('timezone', original?.timezone ?? '', draft.timezone.trim()),
             schedule: keepSchedule ? schedule : { frequency: 'manual' },
             outputFormat: draft.outputFormat,
+            ...(draft.outputFormats.length > 1
+                ? { outputFormats: draft.outputFormats, outputFormat: draft.outputFormats[0] }
+                : {}),
             ...(draft.researchMode === 'collection' || original?.researchMode !== undefined
                 ? { researchMode: draft.researchMode }
                 : {}),
@@ -253,6 +258,7 @@ const fieldPaths: Partial<Record<string, TaskDraftField>> = {
     'schedule/localTime': 'scheduleLocalTime',
     'schedule/weekday': 'scheduleWeekday',
     outputFormat: 'outputFormat',
+    outputFormats: 'outputFormats',
     researchMode: 'researchMode',
     agentProviderId: 'agentProviderId',
     'notificationPreference/mode': 'notificationMode',

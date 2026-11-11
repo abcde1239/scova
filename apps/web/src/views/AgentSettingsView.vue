@@ -25,7 +25,7 @@
                 <div class="management-heading">
                     <div>
                         <h2 id="provider-management-heading">供应商管理</h2>
-                        <p>管理连接地址、密钥与模型配置。</p>
+                        <p>管理模型连接与独立搜索 API，分别保存密钥和正文读取方式。</p>
                     </div>
                     <action-button
                         v-if="!editing"
@@ -66,6 +66,14 @@
                                 ><span><app-icon name="confirm" />密钥已保存</span>
                                 <span v-if="provider.webSearch && provider.webSearch !== 'disabled'"
                                     >内置搜索已允许</span
+                                >
+                                <span v-if="provider.searchApi"
+                                    >{{ provider.searchApi.protocol }} 搜索 ·
+                                    {{
+                                        provider.searchApi.contentMode === 'prefer_api'
+                                            ? 'API 正文优先'
+                                            : 'Reader 读取'
+                                    }}</span
                                 >
                             </div>
                             <provider-balance

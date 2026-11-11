@@ -8,6 +8,7 @@ import {
     type Report,
     type ReportQuestion,
     type Run,
+    type OutputFormat,
 } from '@scova/models';
 import { defineApiEndpoint } from '@/api/endpoints';
 import { modelValidator } from '@/api/validator';
@@ -32,6 +33,8 @@ export function followupAttempt(
     question: ReportQuestion,
     parent: Run,
     key: string = crypto.randomUUID(),
+    operation: 'research' | 'revise' = 'research',
+    outputFormats?: OutputFormat[],
 ) {
     validateQuestion(question, report);
     followupParent(parent, report);
@@ -47,6 +50,8 @@ export function followupAttempt(
         mode: parent.mode,
         budget: Object.freeze({ ...parent.budget }),
         key,
+        ...(operation === 'revise' ? { operation } : {}),
+        ...(outputFormats?.length ? { outputFormats: Object.freeze([...outputFormats]) } : {}),
     });
 }
 export type FollowupAttempt = ReturnType<typeof followupAttempt>;
@@ -74,7 +79,7 @@ export function followupRun(
 }
 export const followupEndpoint = defineApiEndpoint<{
     params: { reportId: string; questionId: string };
-    body: { confirm: true };
+    body: { confirm: true; operation?: 'research' | 'revise'; outputFormats?: OutputFormat[] };
     data: ReturnType<typeof parseContract<typeof RunCommandResponseSchema>>;
 }>({
     method: 'POST',
@@ -103,7 +108,11 @@ export async function requestFollowup(
         followupEndpoint,
         {
             params: { reportId: attempt.reportId, questionId: attempt.questionId },
-            body: { confirm: true },
+            body: {
+                confirm: true,
+                ...('operation' in attempt ? { operation: attempt.operation } : {}),
+                ...(attempt.outputFormats ? { outputFormats: [...attempt.outputFormats] } : {}),
+            },
         },
         { signal, idempotencyKey: attempt.key },
     );

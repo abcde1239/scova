@@ -75,6 +75,25 @@ const failure = (status: number, code = 'LOCAL_FAILURE') =>
 afterEach(() => cleanups.splice(0).forEach((cleanup) => cleanup()));
 
 describe('显式 Run 命令与冻结重发', () => {
+    it('未知结果重发保留提交时的多选数组，页面修改不能改写原命令', async () => {
+        const bodies: string[] = [];
+        const { actions, target } = setup(
+            async (_url, init) => {
+                bodies.push(init?.body as string);
+                if (bodies.length === 1) throw new TypeError('network');
+                return success();
+            },
+            { taskId, outputFormats: ['brief', 'comparison'] },
+        );
+        await actions.submit('start');
+        target.value.outputFormats!.splice(0, 2, 'list');
+        await actions.replay();
+        expect(bodies[1]).toBe(bodies[0]);
+        expect(JSON.parse(bodies[1]!)).toEqual({
+            mode: 'live',
+            outputFormats: ['brief', 'comparison'],
+        });
+    });
     it('freezes the selected output format for replay and excludes it from cancellation', async () => {
         const bodies: string[] = [];
         const { actions, target } = setup(
