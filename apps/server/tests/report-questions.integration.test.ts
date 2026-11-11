@@ -383,6 +383,191 @@ async function liveFixture(auth: Auth, goal: string, complete = false) {
     return { ...f, run: liveRun, report: liveReport, config: original, scope };
 }
 describe('报告证据问答与明确确认后续研究', () => {
+    it('paginates all stored turns with an owner-scoped cursor and recovers expired pending rounds', async () => {
+        const a = await register(),
+            f = await fixture(a);
+        await db.insert(tables.reportQuestions).values(
+            Array.from({ length: 105 }, (_, index) => ({
+                userId: a.userId,
+                reportId: f.report.id,
+                question: `第${index}轮`,
+                answerJson: {
+                    status: 'answered',
+                    ...answer(f.evidence.id, f.quote),
+                    reason: 'evidence_answer',
+                    usage: { attempts: 1, inputTokens: 1, outputTokens: 1, estimated: false },
+                },
+                createdAt: new Date(now.getTime() + index),
+            })),
+        );
+        const latest = await json(
+            await request(`/reports/${f.report.id}/conversation`, { headers: headers(a) }),
+        );
+        expect(latest.turns).toHaveLength(100);
+        expect(latest.turns[0].question).toBe('第5轮');
+        expect(latest.hasEarlier).toBe(true);
+        const earlier = await json(
+            await request(
+                `/reports/${f.report.id}/conversation?beforeQuestionId=${latest.turns[0].id}`,
+                { headers: headers(a) },
+            ),
+        );
+        expect(earlier.turns.map((turn: { question: string }) => turn.question)).toEqual([
+            '第0轮',
+            '第1轮',
+            '第2轮',
+            '第3轮',
+            '第4轮',
+        ]);
+        expect(earlier.hasEarlier).toBe(false);
+        const other = await fixture(a);
+        expect(
+            (
+                await request(
+                    `/reports/${other.report.id}/conversation?beforeQuestionId=${latest.turns[0].id}`,
+                    { headers: headers(a) },
+                )
+            ).status,
+        ).toBe(404);
+        await db.insert(tables.reportQuestions).values({
+            userId: a.userId,
+            reportId: other.report.id,
+            question: '未完成的请求',
+            createdAt: now,
+        });
+        expect((await ask(a, other.report.id)).status).toBe(409);
+        expect(calls).toBe(0);
+        now = new Date(now.getTime() + services.reportQuestionPolicy.timeoutMs + 31_000);
+        const recovered = await json(
+            await request(`/reports/${other.report.id}/conversation`, { headers: headers(a) }),
+        );
+        expect(recovered.turns[0].answer).toMatchObject({
+            reason: 'aborted',
+            usage: { estimated: true },
+        });
+        expect((await ask(a, other.report.id)).status).toBe(201);
+    });
+    it('persists ordered turns, resolves context from the server and rejects stale tabs and other owners', async () => {
+        const a = await register(),
+            f = await fixture(a);
+        const observed: StructuredInput[] = [];
+        model = modelFixture((input: StructuredInput) => {
+            observed.push(input);
+            return {
+                statements: [
+                    {
+                        kind: 'inference',
+                        text: '申请时间仍须以公告条件为准。',
+                        citations: [{ evidenceId: f.evidence.id, quote: f.quote }],
+                    },
+                ],
+                needsResearch: false,
+            };
+        });
+        const first = await json(await ask(a, f.report.id, '请解释报告第一点'));
+        const secondResponse = await request(`/reports/${f.report.id}/questions`, {
+            method: 'POST',
+            headers: { ...headers(a), 'idempotency-key': randomUUID() },
+            body: JSON.stringify({
+                question: '刚才说的条件具体是什么？',
+                afterQuestionId: first.id,
+            }),
+        });
+        expect(secondResponse.status).toBe(201);
+        expect(observed[1]!.messages?.map((m) => m.role)).toEqual(['user', 'assistant']);
+        expect(observed[1]!.messages?.[0]?.content).toBe('请解释报告第一点');
+        expect(observed[1]!.messages?.[1]?.content).toContain('申请时间仍须');
+        expect(JSON.stringify(observed[1]!.untrustedSources)).toContain('已经采集来源');
+        const history = await json(
+            await request(`/reports/${f.report.id}/conversation`, { headers: headers(a) }),
+        );
+        expect(history.turns.map((turn: { question: string }) => turn.question)).toEqual([
+            '请解释报告第一点',
+            '刚才说的条件具体是什么？',
+        ]);
+        expect(calls).toBe(2);
+        const stale = await request(`/reports/${f.report.id}/questions`, {
+            method: 'POST',
+            headers: { ...headers(a), 'idempotency-key': randomUUID() },
+            body: JSON.stringify({ question: '继续', afterQuestionId: first.id }),
+        });
+        expect(stale.status).toBe(409);
+        expect(calls).toBe(2);
+        const b = await register();
+        expect(
+            (await request(`/reports/${f.report.id}/conversation`, { headers: headers(b) })).status,
+        ).toBe(404);
+    });
+    it('revision freezes context, never searches, creates a new report and keeps the original immutable', async () => {
+        const a = await register(),
+            f = await liveFixture(a, '解释申请日期');
+        model = modelFixture(answer(f.evidence.id, f.quote));
+        const q = await json(await ask(a, f.report.id, '按刚才的条件整理成新版报告'));
+        const key = randomUUID();
+        const revise = () =>
+            request(`/reports/${f.report.id}/questions/${q.id}/followup`, {
+                method: 'POST',
+                headers: { ...headers(a), 'idempotency-key': key },
+                body: JSON.stringify({
+                    confirm: true,
+                    operation: 'revise',
+                    outputFormats: ['research_report'],
+                }),
+            });
+        const command = await revise();
+        expect(command.status).toBe(202);
+        const created = await json(command);
+        expect((await json(await revise())).run.id).toBe(created.run.id);
+        const savedRun = await db.query.runs
+            .findFirst({ where: eq(tables.runs.id, created.run.id) })
+            .then(requireRow);
+        expect(savedRun.conversationContextJson).toMatchObject({
+            reportId: f.report.id,
+            questionId: q.id,
+            operation: 'revise',
+        });
+        expect((savedRun.conversationContextJson as { messages: unknown[] }).messages).toEqual([
+            { role: 'user', content: q.question },
+            {
+                role: 'assistant',
+                content: JSON.stringify({
+                    statements: q.answer.statements,
+                    needsResearch: q.answer.needsResearch,
+                    reason: q.answer.reason,
+                }),
+            },
+        ]);
+        const executed = executeQuestionRun(created.run.id);
+        expect(executed.queries).toEqual([]);
+        expect(executed.run.status).toBe('partial');
+        expect(executed.reportId).toBeTruthy();
+        expect(savedRun.followupConfigJson).toMatchObject({
+            outputFormat: 'research_report',
+            outputFormats: ['research_report'],
+        });
+        const history = await json(
+            await request(`/reports/${f.report.id}/conversation`, { headers: headers(a) }),
+        );
+        expect(history.artifacts).toEqual([
+            expect.objectContaining({
+                reportId: executed.reportId,
+                questionId: q.id,
+                operation: 'revise',
+            }),
+        ]);
+        const old = await db.query.reports
+            .findFirst({ where: eq(tables.reports.id, f.report.id) })
+            .then(requireRow);
+        expect(old).toEqual(f.report);
+        const saved = await json(
+            await request(`/reports/${f.report.id}/questions/${q.id}`, { headers: headers(a) }),
+        );
+        expect(saved.revisionRunId).toBe(created.run.id);
+        expect(saved.followupRunId).toBeNull();
+        const next = await follow(a, f.report.id, q.id);
+        expect(next.status).toBe(202);
+        expect((await json(next)).run.id).not.toBe(created.run.id);
+    }, 60_000);
     beforeAll(async () => {
         await admin.connect();
         await admin.query(`CREATE SCHEMA "${schema}"`);
@@ -867,6 +1052,7 @@ describe('报告证据问答与明确确认后续研究', () => {
         expect(execution.result).toBe('processed');
         expect(execution.observed.config).toMatchObject({ goal: f.config.goal, focusPoints: [] });
         expect(execution.queries).toEqual([f.config.goal]);
+        expect(execution.run.status, JSON.stringify(execution.run)).toBe('succeeded');
         expect(execution.run).toMatchObject({
             status: 'succeeded',
             baselineRunId: null,
@@ -945,6 +1131,7 @@ describe('报告证据问答与明确确认后续研究', () => {
             trigger: 'retry',
             comparisonScopeHash: frozen.comparisonScopeHash,
             followupConfigJson: frozen.followupConfigJson,
+            conversationContextJson: frozen.conversationContextJson,
             budgetJson: frozen.budgetJson,
         });
         const execution = executeQuestionRun(stored.id);

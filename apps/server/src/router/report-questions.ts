@@ -5,6 +5,8 @@ import {
     ReportQuestionSchema,
     QuestionFollowupInputSchema,
     RunCommandResponseSchema,
+    ReportConversationSchema,
+    ReportConversationQuerySchema,
 } from '@scova/models';
 import type { ApiServices } from '@/app/services';
 import { createReportQuestionHandlers } from '@/handler/report-questions.ts';
@@ -23,6 +25,17 @@ export function createReportQuestionPlugin(services: ApiServices) {
         503: ApiErrorSchema,
     };
     return new Elysia({ name: 'scova-report-questions', prefix: '/api/v1', normalize: false })
+        .get('/reports/:reportId/conversation', handlers.conversation, {
+            query: ReportConversationQuerySchema,
+            response: { 200: ReportConversationSchema, ...errors },
+            detail: {
+                operationId: 'getReportConversation',
+                tags: ['报告问答'],
+                summary: '读取报告连续对话',
+                description:
+                    '读取当前账号报告最近100轮问答、待完成轮次及关联成果，可通过beforeQuestionId向前分页；不调用模型。',
+            },
+        })
         .post('/reports/:reportId/questions', handlers.create, {
             body: ReportQuestionInputSchema,
             response: { 201: ReportQuestionSchema, ...errors },
@@ -31,7 +44,7 @@ export function createReportQuestionPlugin(services: ApiServices) {
                 tags: ['报告问答'],
                 summary: '围绕报告证据提问',
                 description:
-                    '仅使用当前用户报告内授权引用，独立限流与计量；没有模型或证据不足时明确标记不足。必须携带会话、CSRF与Idempotency-Key，不会搜索或创建执行。',
+                    '结合原报告与有界历史对话，仅使用当前用户报告内授权引用，独立限流与计量；afterQuestionId核对最新轮次。必须携带会话、CSRF与Idempotency-Key，不会搜索或创建执行。',
             },
         })
         .get('/reports/:reportId/questions/:questionId', handlers.get, {
@@ -49,9 +62,9 @@ export function createReportQuestionPlugin(services: ApiServices) {
             detail: {
                 operationId: 'confirmQuestionFollowup',
                 tags: ['报告问答'],
-                summary: '确认后续联网研究',
+                summary: '确认报告修订或后续研究',
                 description:
-                    'confirm=true后才创建关联Run，仅接受真实研究报告，固定原报告配置、问题及预算；历史演示报告返回409，使用任务互斥与幂等事务。不覆盖原报告或任务配置；任务有活动执行时返回409。',
+                    'confirm=true后创建关联Run；research联网补充，revise仅使用已保存证据生成新版。冻结原报告、历史对话、当前问题、交付形式及预算。仅接受真实报告，不覆盖原报告或任务计划；任务有活动执行时返回409。',
             },
         });
 }

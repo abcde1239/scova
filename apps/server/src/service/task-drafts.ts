@@ -22,6 +22,7 @@ import type { AuthenticatedSession } from '@/service/auth.ts';
 import { createTaskDraftRepo, type DraftReservation } from '@/repo/task-drafts.ts';
 import {
     draftModelSchema,
+    decodeDraftOutputFormats,
     draftQuestionModelSchema,
     draftQuestionPrompt,
     draftPrompt,
@@ -124,6 +125,7 @@ export function createTaskDraftService(services: ApiServices) {
                 sourcePreferences: fallback.sourcePreferences,
                 timeRange: fallback.timeRange,
                 outputFormat: fallback.outputFormat,
+                ...(fallback.outputFormats ? { outputFormats: fallback.outputFormats } : {}),
                 researchMode: fallback.researchMode ?? 'analysis',
             });
         const manual = (reason: Reason) =>
@@ -266,7 +268,7 @@ export function createTaskDraftService(services: ApiServices) {
                         if (kind === 'questions') {
                             const proposed = parseContract(
                                 TaskDraftQuestionsResultSchema,
-                                result.data,
+                                decodeDraftOutputFormats(result.data),
                             );
                             if (
                                 new Set(proposed.questions.map((q) => q.id)).size !==

@@ -12,7 +12,12 @@ import {
     type AgentProviderPurpose,
 } from '@scova/models';
 import { ConnectorError, createModelProvider, validatePublicUrl } from '@scova/connectors';
-import { credentialStorageReady, sealCredential, openCredential } from '@scova/shared/credentials';
+import {
+    credentialStorageReady,
+    sealProviderCredentials,
+    openProviderCredentials,
+    type ProviderCredentials,
+} from '@scova/shared/credentials';
 import type { ApiServices } from '@/app/services';
 import { createAgentProviderRepo } from '@/repo/agent-providers';
 import { ApiError } from '@/utils/errors';
@@ -34,6 +39,20 @@ export function providerWebSearch(
     ]);
 }
 export function providerDto(row: ProviderRow): AgentProvider {
+    let searchApi: AgentProvider['searchApi'];
+    try {
+        const saved = openProviderCredentials(row.encryptedApiKey, row.userId, row.id).searchApi;
+        searchApi = saved
+            ? {
+                  protocol: saved.protocol,
+                  baseUrl: saved.baseUrl,
+                  contentMode: saved.contentMode,
+                  hasApiKey: true,
+              }
+            : null;
+    } catch {
+        /* Listing stays available while credential storage is unavailable. */
+    }
     return {
         id: row.id,
         name: row.name,
@@ -45,8 +64,47 @@ export function providerDto(row: ProviderRow): AgentProvider {
         hasApiKey: true,
         protocol: row.protocol,
         webSearch: row.webSearch,
+        ...(searchApi !== undefined ? { searchApi } : {}),
         updatedAt: row.updatedAt.toISOString(),
     };
+}
+export function providerSearchApi(
+    input:
+        | {
+              protocol: 'deepseek' | 'perplexity' | 'tavily';
+              baseUrl: string;
+              contentMode: 'prefer_api' | 'reader';
+              apiKey?: string;
+          }
+        | null
+        | undefined,
+    previous: ProviderCredentials['searchApi'],
+    webSearch: NonNullable<AgentProvider['webSearch']>,
+): ProviderCredentials['searchApi'] {
+    const next = input === undefined ? previous : input;
+    if (!next) return undefined;
+    if (webSearch !== 'disabled')
+        throw new ApiError(422, 'VALIDATION_ERROR', '请选择一种研究搜索方式', [
+            { path: '/searchApi', message: '独立搜索 API 与内置搜索不能同时启用' },
+        ]);
+    let baseUrl: string;
+    try {
+        baseUrl = providerBaseUrl(next.baseUrl);
+    } catch {
+        throw new ApiError(422, 'VALIDATION_ERROR', '搜索 API 地址无效', [
+            { path: '/searchApi/baseUrl', message: '请填写公网 HTTPS API 根地址' },
+        ]);
+    }
+    const apiKey =
+        next.apiKey ||
+        (previous?.protocol === next.protocol && previous.baseUrl === baseUrl
+            ? previous.apiKey
+            : undefined);
+    if (!apiKey)
+        throw new ApiError(422, 'VALIDATION_ERROR', '请填写独立搜索密钥', [
+            { path: '/searchApi/apiKey', message: '新建或更改搜索地址、协议时必须重新填写密钥' },
+        ]);
+    return { protocol: next.protocol, baseUrl, contentMode: next.contentMode, apiKey };
 }
 export function providerBaseUrl(value: string) {
     try {
@@ -88,7 +146,7 @@ export function createAgentProviderService(services: ApiServices) {
             writable();
             let apiKey: string;
             try {
-                apiKey = openCredential(row.encryptedApiKey, userId, row.id);
+                apiKey = openProviderCredentials(row.encryptedApiKey, userId, row.id).modelApiKey;
             } catch {
                 throw new ApiError(
                     503,
@@ -184,7 +242,11 @@ export function createAgentProviderService(services: ApiServices) {
                         );
                     writable();
                     try {
-                        apiKey = openCredential(row.encryptedApiKey, userId, row.id);
+                        apiKey = openProviderCredentials(
+                            row.encryptedApiKey,
+                            userId,
+                            row.id,
+                        ).modelApiKey;
                     } catch {
                         throw new ApiError(
                             503,
@@ -286,7 +348,15 @@ export function createAgentProviderService(services: ApiServices) {
             writable();
             const id = randomUUID(),
                 baseUrl = providerBaseUrl(input.baseUrl);
-            const encryptedApiKey = sealCredential(input.apiKey, userId, id);
+            const webSearch = providerWebSearch(input.protocol, input.webSearch ?? 'disabled');
+            const encryptedApiKey = sealProviderCredentials(
+                {
+                    modelApiKey: input.apiKey,
+                    searchApi: providerSearchApi(input.searchApi, undefined, webSearch),
+                },
+                userId,
+                id,
+            );
             return repo.write(userId, async (tx) => {
                 return providerDto(
                     await repo.insert(tx, {
@@ -296,7 +366,7 @@ export function createAgentProviderService(services: ApiServices) {
                         baseUrl,
                         model: input.model,
                         protocol: input.protocol,
-                        webSearch: providerWebSearch(input.protocol, input.webSearch ?? 'disabled'),
+                        webSearch,
                         encryptedApiKey,
                         updatedAt: services.clock(),
                     }),
@@ -310,19 +380,31 @@ export function createAgentProviderService(services: ApiServices) {
             return repo.write(userId, async (tx) => {
                 const row = await repo.find(tx, userId, id);
                 revision(row, input.revision);
+                const previous = openProviderCredentials(row.encryptedApiKey, userId, id);
+                const webSearch = providerWebSearch(
+                    input.protocol,
+                    input.webSearch ?? row.webSearch,
+                );
+                const encryptedApiKey = sealProviderCredentials(
+                    {
+                        modelApiKey: input.apiKey ?? previous.modelApiKey,
+                        searchApi: providerSearchApi(
+                            input.searchApi,
+                            previous.searchApi,
+                            webSearch,
+                        ),
+                    },
+                    userId,
+                    id,
+                );
                 return providerDto(
                     await repo.update(tx, userId, id, {
                         name: input.name.trim(),
                         baseUrl,
                         model: input.model,
                         protocol: input.protocol,
-                        webSearch: providerWebSearch(
-                            input.protocol,
-                            input.webSearch ?? row.webSearch,
-                        ),
-                        ...(input.apiKey
-                            ? { encryptedApiKey: sealCredential(input.apiKey, userId, id) }
-                            : {}),
+                        webSearch,
+                        encryptedApiKey,
                         updatedAt: services.clock(),
                     }),
                 );
@@ -337,7 +419,7 @@ export function createAgentProviderService(services: ApiServices) {
                 const row = await repo.find(tx, userId, id);
                 revision(row, input.revision);
                 try {
-                    openCredential(row.encryptedApiKey, userId, id);
+                    openProviderCredentials(row.encryptedApiKey, userId, id);
                 } catch {
                     throw new ApiError(
                         503,
@@ -368,7 +450,8 @@ export function createAgentProviderService(services: ApiServices) {
             if (!row) return null;
             try {
                 return createModelProvider({
-                    apiKey: openCredential(row.encryptedApiKey, userId, row.id),
+                    apiKey: openProviderCredentials(row.encryptedApiKey, userId, row.id)
+                        .modelApiKey,
                     model: row.model,
                     baseUrl: row.baseUrl,
                     protocol: row.protocol,

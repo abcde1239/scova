@@ -11,6 +11,9 @@ import {
     ReportQuestionSchema,
     QuestionAnswerSchema,
     type QuestionAnswer,
+    ReportConversationSchema,
+    ReportConversationContextSchema,
+    type OutputFormat,
 } from '@scova/models';
 import type { ApiServices } from '@/app/services';
 import { createReportService } from '@/service/reports.ts';
@@ -22,6 +25,11 @@ import {
     validateQuestionAnswer,
 } from '@/utils/report-questions.ts';
 import { ApiError } from '@/utils/errors.ts';
+import {
+    conversationAnswer,
+    conversationContext,
+    questionContextInput,
+} from '@/utils/report-conversation.ts';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 function dto(row: StoredQuestion) {
     if (!row.answerJson)
@@ -32,6 +40,7 @@ function dto(row: StoredQuestion) {
         question: row.question,
         answer: row.answerJson,
         followupRunId: row.followupRunId,
+        revisionRunId: row.revisionRunId ?? null,
         createdAt: row.createdAt.toISOString(),
     });
 }
@@ -39,6 +48,22 @@ export function createReportQuestionService(services: ApiServices) {
     const repo = createReportQuestionRepo(services),
         budgets = createQuestionBudgetRepo(services),
         reports = createReportService(services);
+    const expire = (userId: string, reportId: string) =>
+        repo.expire(userId, reportId, services.reportQuestionPolicy.timeoutMs, {
+            status: 'insufficient',
+            statements: [],
+            reason: 'aborted',
+            needsResearch: true,
+            usage: {
+                attempts: 1,
+                inputTokens: services.reportQuestionPolicy.maxInputTokens,
+                outputTokens: Math.min(
+                    services.reportQuestionPolicy.maxOutputTokens,
+                    services.reportQuestionPolicy.outputTokensPerAttempt,
+                ),
+                estimated: true,
+            },
+        });
     async function owned(userId: string, reportId: string, id: string) {
         if (!uuid.test(id) || !uuid.test(reportId))
             throw new ApiError(404, 'NOT_FOUND', '资源不存在');
@@ -57,7 +82,14 @@ export function createReportQuestionService(services: ApiServices) {
         ) {
             const input = parseContract(ReportQuestionInputSchema, body);
             const report = await reports.get(userId, reportId);
-            const claim = await repo.claim(userId, reportId, input.question, key);
+            await expire(userId, reportId);
+            const claim = await repo.claim(
+                userId,
+                reportId,
+                input.question,
+                key,
+                input.afterQuestionId,
+            );
             if (claim.reused) return dto(claim.row);
             const usage: QuestionAnswer['usage'] = {
                 attempts: 0,
@@ -98,24 +130,29 @@ export function createReportQuestionService(services: ApiServices) {
                         alive();
                         const budget = await write(budgets.begin(userId, signal));
                         alive();
-                        if (!report.evidence.length) return insufficient('insufficient_evidence');
+                        // 限制上下文；截断只会减少可用引用，不会引入未授权资料。
+                        const policy = services.reportQuestionPolicy;
+                        const history = (await repo.list(userId, reportId))
+                            .filter((row) => row.id !== claim.row.id && row.answerJson)
+                            .map(dto);
+                        const context = conversationContext(
+                            report,
+                            claim.row.id,
+                            input.question,
+                            history,
+                        );
+                        const modelInput: StructuredInput = questionContextInput(
+                            context,
+                            questionPrompt,
+                            questionModelSchema,
+                            policy.maxInputTokens,
+                            Math.min(policy.maxOutputTokens, policy.outputTokensPerAttempt),
+                        );
+                        const evidence = context.sources.map((s) => ({ id: s.id, quote: s.text }));
+                        await write(repo.saveContext(claim.row, context));
+                        if (!evidence.length) return insufficient('insufficient_evidence');
                         const model = await services.reportQuestionModel(userId);
                         if (!model) return insufficient('model_unavailable');
-                        // 限制上下文；截断只会减少可用引用，不会引入未授权资料。
-                        const evidence = report.evidence
-                            .slice(0, 24)
-                            .map((e) => ({ id: e.id, quote: e.quote.slice(0, 4000) }));
-                        const policy = services.reportQuestionPolicy;
-                        const modelInput: StructuredInput = {
-                            prompt: questionPrompt,
-                            schema: questionModelSchema,
-                            untrustedSources: [{ question: input.question, evidence }],
-                            maxInputTokens: policy.maxInputTokens,
-                            maxOutputTokens: Math.min(
-                                policy.maxOutputTokens,
-                                policy.outputTokensPerAttempt,
-                            ),
-                        };
                         const reservedInput = estimateModelInputTokens(modelInput);
                         if (reservedInput > policy.maxInputTokens)
                             return insufficient('insufficient_evidence');
@@ -195,11 +232,98 @@ export function createReportQuestionService(services: ApiServices) {
         async get(userId: string, reportId: string, id: string) {
             return dto(await owned(userId, reportId, id));
         },
-        async followup(userId: string, reportId: string, id: string, key: string) {
+        async conversation(userId: string, reportId: string, beforeQuestionId?: string) {
+            await reports.get(userId, reportId);
+            await expire(userId, reportId);
+            const before = beforeQuestionId
+                ? await owned(userId, reportId, beforeQuestionId)
+                : undefined;
+            const rows = await repo.list(userId, reportId, 101, before);
+            const associations = rows.slice(-100).flatMap((row) => [
+                ...(row.followupRunId
+                    ? [
+                          {
+                              runId: row.followupRunId,
+                              questionId: row.id,
+                              operation: 'research' as const,
+                          },
+                      ]
+                    : []),
+                ...(row.revisionRunId
+                    ? [
+                          {
+                              runId: row.revisionRunId,
+                              questionId: row.id,
+                              operation: 'revise' as const,
+                          },
+                      ]
+                    : []),
+            ]);
+            const runIds = associations.map((item) => item.runId);
+            const artifacts = (await repo.artifacts(userId, runIds)).map((report) => ({
+                reportId: report.id,
+                runId: report.runId,
+                title: report.title,
+                questionId: associations.find((item) => item.runId === report.runId)!.questionId,
+                operation: associations.find((item) => item.runId === report.runId)!.operation,
+            }));
+            return parseContract(ReportConversationSchema, {
+                reportId,
+                artifacts,
+                activeRun: await repo.activeRun(userId, runIds),
+                hasEarlier: rows.length > 100,
+                turns: rows.slice(-100).map((row) =>
+                    row.answerJson
+                        ? dto(row)
+                        : {
+                              id: row.id,
+                              reportId,
+                              question: row.question,
+                              answer: null,
+                              followupRunId: row.followupRunId,
+                              revisionRunId: row.revisionRunId,
+                              createdAt: row.createdAt.toISOString(),
+                          },
+                ),
+            });
+        },
+        async followup(
+            userId: string,
+            reportId: string,
+            id: string,
+            key: string,
+            operation: 'research' | 'revise' = 'research',
+            outputFormats?: OutputFormat[],
+        ) {
             const row = await owned(userId, reportId, id);
-            dto(row);
+            const current = dto(row);
             const report = await reports.get(userId, reportId);
-            return createRunService(services).followup(userId, report.runId, row.id, key);
+            const history = (await repo.list(userId, reportId))
+                .filter((turn) => turn.answerJson && turn.createdAt <= row.createdAt)
+                .map(dto);
+            const snapshot = row.contextJson
+                ? parseContract(ReportConversationContextSchema, row.contextJson)
+                : conversationContext(
+                      report,
+                      row.id,
+                      row.question,
+                      history.filter((turn) => turn.id !== row.id),
+                  );
+            return createRunService(services).followup(
+                userId,
+                report.runId,
+                row.id,
+                key,
+                {
+                    ...snapshot,
+                    operation,
+                    messages: [
+                        ...snapshot.messages,
+                        { role: 'assistant', content: conversationAnswer(current.answer) },
+                    ],
+                },
+                outputFormats,
+            );
         },
     };
 }

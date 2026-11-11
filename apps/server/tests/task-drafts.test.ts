@@ -227,6 +227,8 @@ describe('草稿解析与独立预算', () => {
         const fixture = fixtureModel(() => ({
             ...draftConfig(),
             goal: '额外预测未来趋势',
+            outputFormat: 'list',
+            outputFormats: ['list', 'research_report'],
             sourcePreferences: searchScope.sourcePreferences,
             researchMode: 'analysis',
         }));
@@ -236,6 +238,7 @@ describe('草稿解析与独立预算', () => {
         });
         expect(result.mode).toBe(available ? 'model' : 'manual');
         expect(result.config).toMatchObject(searchScope);
+        expect(result.config.outputFormats).toBeUndefined();
         expect(result.warnings.some((w) => w.message.includes('已移除'))).toBe(false);
         if (available) expect(JSON.stringify(fixture.inputs[0])).toContain('confirmedSearchScope');
     });
@@ -755,7 +758,12 @@ describe('真实模型适配器的本地HTTP契约', () => {
                         choices: [
                             {
                                 finish_reason: 'stop',
-                                message: { content: JSON.stringify(draftConfig()) },
+                                message: {
+                                    content: JSON.stringify({
+                                        ...draftConfig(),
+                                        outputFormats: null,
+                                    }),
+                                },
                             },
                         ],
                         usage: { prompt_tokens: 100, completion_tokens: 100 },

@@ -9,8 +9,12 @@ import {
     RunSchema,
     TaskConfigSchema,
     parseContract,
+    selectedOutputFormats,
     type RunCommandInput,
     type TaskConfig,
+    type ReportConversationContext,
+    ReportConversationContextSchema,
+    type OutputFormat,
 } from '@scova/models';
 import type { ApiServices } from '@/app/services';
 import { ApiError } from '@/utils/errors.ts';
@@ -61,10 +65,38 @@ function commandBody(input: RunCommandInput | undefined) {
     return {
         mode: parsed.mode ?? 'live',
         ...(parsed.outputFormat !== undefined ? { outputFormat: parsed.outputFormat } : {}),
+        ...(parsed.outputFormats !== undefined ? { outputFormats: parsed.outputFormats } : {}),
         ...(parsed.agentProviderId !== undefined
             ? { agentProviderId: parsed.agentProviderId }
             : {}),
     } as const;
+}
+
+/** New work uses its effective collection config; unchanged retries retain their frozen scope. */
+export function runComparisonScopeHash(
+    config: TaskConfig,
+    mode: 'live' | 'demo',
+    inherited: { config?: TaskConfig; scope?: string; questionId?: string } = {},
+): string {
+    const formatsKey = (value: TaskConfig) => JSON.stringify(selectedOutputFormats(value).sort());
+    if (
+        inherited.scope &&
+        (!inherited.config || formatsKey(config) === formatsKey(inherited.config))
+    )
+        return inherited.scope;
+    const scope = comparisonScopeHash(config);
+    return effectiveRunScopeHash(
+        inherited.questionId
+            ? sha256(
+                  JSON.stringify({
+                      namespace: 'question-followup-v1',
+                      questionId: inherited.questionId,
+                      scope,
+                  }),
+              )
+            : scope,
+        mode,
+    );
 }
 
 /** Run 业务规则与事务编排；不包含请求对象、Elysia 或数据库查询。 */
@@ -85,14 +117,15 @@ export function createRunService(services: ApiServices) {
         idempotencyKey: string,
         parentRunId: string | null = null,
         taskVersionId?: string,
-        followup?: { questionId: string; reportRunId: string },
+        followup?: { questionId: string; reportRunId: string; context?: ReportConversationContext },
         inheritedConfig?: TaskConfig,
         inheritedScope?: string,
+        inheritedContext?: ReportConversationContext,
     ) {
         if (!UUID.test(taskId)) throw new ApiError(404, 'NOT_FOUND', '资源不存在');
         const command = commandBody(input);
         const scope = followup
-            ? `question:${followup.questionId}:followup`
+            ? `question:${followup.questionId}:${followup.context?.operation === 'revise' ? 'revision' : 'followup'}`
             : `run:${taskId}:${parentRunId ? 'retry' : 'create'}`;
         const keyHash = sha256(idempotencyKey);
         const payloadHash = sha256(
@@ -100,7 +133,14 @@ export function createRunService(services: ApiServices) {
                 taskId,
                 parentRunId,
                 ...command,
-                ...(followup ? { questionId: followup.questionId } : {}),
+                ...(followup
+                    ? {
+                          questionId: followup.questionId,
+                          ...(followup.context?.operation === 'revise'
+                              ? { operation: 'revise' }
+                              : {}),
+                      }
+                    : {}),
             }),
         );
         try {
@@ -136,8 +176,12 @@ export function createRunService(services: ApiServices) {
                     : null;
                 if (followup && (!question || !question.answerJson))
                     throw new ApiError(404, 'NOT_FOUND', '问题不存在或尚未完成');
-                if (question?.followupRunId) {
-                    const linked = await store.findRun(question.followupRunId, userId);
+                const linkedQuestionRun =
+                    followup?.context?.operation === 'revise'
+                        ? question?.revisionRunId
+                        : question?.followupRunId;
+                if (linkedQuestionRun) {
+                    const linked = await store.findRun(linkedQuestionRun, userId);
                     if (!linked) throw new ApiError(409, 'FOLLOWUP_UNAVAILABLE', '后续执行不可用');
                     return { run: linked, reused: true };
                 }
@@ -162,8 +206,16 @@ export function createRunService(services: ApiServices) {
                           schedule: { frequency: 'manual' },
                       })
                     : baseConfig;
-                if (command.outputFormat !== undefined)
-                    config = { ...config, outputFormat: command.outputFormat };
+                if (command.outputFormats !== undefined)
+                    config = {
+                        ...config,
+                        outputFormat: command.outputFormats[0]!,
+                        outputFormats: command.outputFormats,
+                    };
+                else if (command.outputFormat !== undefined) {
+                    const { outputFormats: _previousFormats, ...singleConfig } = config;
+                    config = { ...singleConfig, outputFormat: command.outputFormat };
+                }
                 if (command.agentProviderId !== undefined) {
                     const { agentProviderId: _previous, ...rest } = config;
                     config =
@@ -202,31 +254,24 @@ export function createRunService(services: ApiServices) {
                     userId,
                     taskId: task.id,
                     taskVersionId: version.id,
-                    comparisonScopeHash:
-                        inheritedScope ??
-                        effectiveRunScopeHash(
-                            question
-                                ? sha256(
-                                      JSON.stringify({
-                                          namespace: 'question-followup-v1',
-                                          questionId: question.id,
-                                          scope: comparisonScopeHash(config),
-                                      }),
-                                  )
-                                : version.comparisonScopeHash,
-                            command.mode,
-                        ),
+                    comparisonScopeHash: runComparisonScopeHash(config, command.mode, {
+                        config: inheritedConfig ?? baseConfig,
+                        scope: inheritedScope,
+                        questionId: question?.id,
+                    }),
                     mode: command.mode,
                     trigger: followup ? 'followup' : parentRunId ? 'retry' : 'manual',
                     ...(question ||
                     inheritedConfig ||
                     command.agentProviderId !== undefined ||
-                    command.outputFormat !== undefined
+                    command.outputFormat !== undefined ||
+                    command.outputFormats !== undefined
                         ? { followupConfigJson: config }
                         : {}),
                     parentRunId,
                     budgetJson: config.budget,
                     feedbackSnapshotJson: await store.feedbackSnapshot(userId, task.id),
+                    conversationContextJson: followup?.context ?? inheritedContext ?? null,
                     usageJson: usage,
                 });
                 const queued = eventDto(
@@ -251,7 +296,12 @@ export function createRunService(services: ApiServices) {
                     },
                 });
                 if (question) {
-                    const linked = await store.linkQuestion(question.id, userId, run.id);
+                    const linked = await store.linkQuestion(
+                        question.id,
+                        userId,
+                        run.id,
+                        followup?.context?.operation,
+                    );
                     if (linked.count !== 1)
                         throw new ApiError(409, 'FOLLOWUP_ALREADY_LINKED', '问题已有关联执行');
                 }
@@ -325,7 +375,14 @@ export function createRunService(services: ApiServices) {
             const result = await createRun(taskId, userId, input, key);
             return { run: toRun(result.run), reused: result.reused };
         },
-        async followup(userId: string, reportRunId: string, questionId: string, key: string) {
+        async followup(
+            userId: string,
+            reportRunId: string,
+            questionId: string,
+            key: string,
+            context?: ReportConversationContext,
+            outputFormats?: OutputFormat[],
+        ) {
             const parent = await requireRun(userId, reportRunId);
             if (parent.mode !== 'live')
                 throw new ApiError(
@@ -336,11 +393,20 @@ export function createRunService(services: ApiServices) {
             const result = await createRun(
                 parent.taskId,
                 userId,
-                { mode: parent.mode },
+                {
+                    mode: parent.mode,
+                    ...(outputFormats ? { outputFormats: [...outputFormats] } : {}),
+                },
                 key,
                 parent.id,
                 parent.taskVersionId,
-                { questionId, reportRunId },
+                {
+                    questionId,
+                    reportRunId,
+                    ...(context
+                        ? { context: parseContract(ReportConversationContextSchema, context) }
+                        : {}),
+                },
             );
             return { run: toRun(result.run), reused: result.reused };
         },
@@ -390,16 +456,19 @@ export function createRunService(services: ApiServices) {
                 old.followupConfigJson
                     ? parseContract(TaskConfigSchema, old.followupConfigJson)
                     : undefined,
-                old.followupConfigJson
-                    ? old.mode === commandBody(input).mode
-                        ? old.comparisonScopeHash
-                        : sha256(
-                              JSON.stringify({
-                                  namespace: 'question-followup-mode-v1',
-                                  previous: old.comparisonScopeHash,
-                                  mode: commandBody(input).mode,
-                              }),
-                          )
+                old.mode === commandBody(input).mode
+                    ? old.comparisonScopeHash
+                    : old.followupConfigJson
+                      ? sha256(
+                            JSON.stringify({
+                                namespace: 'question-followup-mode-v1',
+                                previous: old.comparisonScopeHash,
+                                mode: commandBody(input).mode,
+                            }),
+                        )
+                      : undefined,
+                old.conversationContextJson
+                    ? parseContract(ReportConversationContextSchema, old.conversationContextJson)
                     : undefined,
             );
             return { run: toRun(result.run), reused: result.reused };

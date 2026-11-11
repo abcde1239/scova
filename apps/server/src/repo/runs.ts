@@ -83,15 +83,24 @@ function createRunStore(database: DatabaseExecutor) {
                 .limit(1)
                 .then((rows) => rows[0]?.question ?? null);
         },
-        linkQuestion(id: string, userId: string, runId: string) {
+        linkQuestion(
+            id: string,
+            userId: string,
+            runId: string,
+            operation: 'research' | 'revise' = 'research',
+        ) {
             return database
                 .update(tables.reportQuestions)
-                .set({ followupRunId: runId })
+                .set(operation === 'revise' ? { revisionRunId: runId } : { followupRunId: runId })
                 .where(
                     and(
                         eq(tables.reportQuestions.id, id),
                         eq(tables.reportQuestions.userId, userId),
-                        isNull(tables.reportQuestions.followupRunId),
+                        isNull(
+                            operation === 'revise'
+                                ? tables.reportQuestions.revisionRunId
+                                : tables.reportQuestions.followupRunId,
+                        ),
                     ),
                 )
                 .returning()

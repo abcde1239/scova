@@ -77,6 +77,27 @@ export function resolveDraftTimezone(input: TaskDraftInput, userTimezone: string
         ],
     };
 }
+function strictOutputFormats(value: unknown): unknown {
+    if (Array.isArray(value)) return value.map(strictOutputFormats);
+    if (!object(value)) return value;
+    const result = Object.fromEntries(
+        Object.entries(value).map(([key, nested]) => [key, strictOutputFormats(nested)]),
+    );
+    if (object(result.properties) && result.properties.outputFormats) {
+        result.properties.outputFormats = {
+            anyOf: [result.properties.outputFormats, { type: 'null' }],
+        };
+        result.required = Object.keys(result.properties);
+    }
+    return result;
+}
+export function decodeDraftOutputFormats(data: unknown): unknown {
+    if (!object(data)) return data;
+    const result = { ...data };
+    if (result.outputFormats === null) delete result.outputFormats;
+    if (object(result.scope)) result.scope = decodeDraftOutputFormats(result.scope);
+    return result;
+}
 export const draftModelSchema = (() => {
     const removeFormats = (value: unknown): unknown => {
         if (Array.isArray(value)) return value.map(removeFormats);
@@ -91,12 +112,14 @@ export const draftModelSchema = (() => {
     // 执行配置必须由账号显式选择，不允许自然语言模型生成供应商ID。
     delete schema.properties.agentProviderId;
     delete schema.properties.researchMode;
-    return removeFormats(schema) as Record<string, unknown>;
+    return strictOutputFormats(removeFormats(schema)) as Record<string, unknown>;
 })();
 
-export const draftQuestionModelSchema = JSON.parse(
-    JSON.stringify(TaskDraftQuestionsResultSchema, (key, value) =>
-        ['format', 'description'].includes(key) ? undefined : value,
+export const draftQuestionModelSchema = strictOutputFormats(
+    JSON.parse(
+        JSON.stringify(TaskDraftQuestionsResultSchema, (key, value) =>
+            ['format', 'description'].includes(key) ? undefined : value,
+        ),
     ),
 ) as Record<string, unknown>;
 export const draftQuestionPrompt = [
@@ -106,7 +129,7 @@ export const draftQuestionPrompt = [
     'Adapt questions to previous answers. Never repeat an answered question or ask for information already clearly present. Offer two to four concrete options when useful; options may be empty for free text. Always allow a custom answer.',
     'If the requirements are sufficiently clear, or round is 2, return questions: [] and summarize the proposed scope. Do not manufacture questions to fill a template.',
     'scope is an editable proposal, never a confirmed user choice. Retain explicit requirements, URLs and answers faithfully. Do not invent URLs. Use collection for collecting existing data; use analysis for changes, explanation or inference.',
-    'Choose only the requested output form: brief, list, comparison or research_report. Do not add extra deliverables.',
+    'Choose only the requested output forms: brief, list, comparison or research_report. If multiple are explicitly requested use outputFormats for exactly those forms and outputFormat for the first. For a single form set outputFormats to null. Do not add extra deliverables.',
     'Use the supplied timezone and currentDate to interpret relative dates. For an unspecified time window propose rolling 7 days and make the default clear in summary; fixed timestamps must include UTC offsets. Do not silently discard a requested time range.',
     'question ids must be unique q1, q2, q3. Keep summary under 500 Chinese characters and each question/options short. Include a short reason explaining why the choice matters.',
 ].join('\n');
@@ -118,7 +141,7 @@ export const draftPrompt = [
     'Use only URLs literally present in the request. Do not invent URLs or sources.',
     'Keep the supplied server budget, timezone and notification preferences exactly.',
     'Default timeRange to rolling 7 days and outputFormat to brief when unspecified.',
-    'Choose only the requested output form: brief for 简报/摘要, list for 清单/条目, comparison for 对比/比较, research_report for 研究报告/详细研究. Do not propose multiple formats or extra deliverables.',
+    'Choose only requested output forms: brief for 简报/摘要, list for 清单/条目, comparison for 对比/比较, research_report for 研究报告/详细研究. If multiple are explicitly requested use outputFormats for exactly those forms and outputFormat for the first; otherwise outputFormats must be null. Do not add extra deliverables.',
     'When confirmedSearchScope is supplied, preserve its goal, focusPoints, exclusions, sourcePreferences, timeRange and outputFormat exactly. It describes the user-confirmed research boundary; do not broaden it or add inferred research questions. researchMode is controlled by the server.',
     'Only propose daily or weekly if the request explicitly says daily/每天/每日 or weekly/每周.',
     'A periodic schedule requires an explicitly specified localTime and weekday for weekly. Never guess either.',
@@ -143,8 +166,9 @@ export function manualDraft(input: TaskDraftInput, defaults: DraftDefaults): Tas
         ...input.searchScope,
     });
 }
-const object = (value: unknown): value is Record<string, unknown> =>
-    typeof value === 'object' && value !== null && !Array.isArray(value);
+function object(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 function hasExplicitTime(text: string, localTime: unknown): boolean {
@@ -189,7 +213,7 @@ export function normalizeDraft(data: unknown, input: TaskDraftInput, fallback: T
     const text = evidenceText(input);
     if (!object(data))
         throw new ContractValidationError([{ path: '/', message: '模型配置必须为对象' }]);
-    const config: Record<string, unknown> = { ...data };
+    const config = decodeDraftOutputFormats(data) as Record<string, unknown>;
     delete config.agentProviderId;
     delete config.researchMode;
     const modelTimezoneMatches =
@@ -293,11 +317,14 @@ export function normalizeDraft(data: unknown, input: TaskDraftInput, fallback: T
         } else warn('schedule', '周期计划待确认，尚未启用；只有显式保存任务后才会安排执行。');
     } else if (/持续关注|定期|每小时|每天|每日|每周|\bdaily\b|\bweekly\b|\bhourly\b/i.test(text))
         warn('schedule', '当前草稿使用手动计划，周期与当地时间需要用户确认。');
-    if (input.searchScope)
+    if (input.searchScope) {
+        // Absence in the confirmed legacy single selection also excludes model-added formats.
+        delete config.outputFormats;
         for (const [key, value] of Object.entries(input.searchScope)) {
             if (!same(config[key], value)) warn(key, '采用问答中已确认的搜索范围与交付要求。');
             config[key] = value;
         }
+    }
     const parsed = parseContract(TaskConfigSchema, config);
     return { config: parsed, warnings };
 }
