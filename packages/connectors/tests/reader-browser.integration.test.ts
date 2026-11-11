@@ -91,7 +91,8 @@ describe.each([
     });
     it('blocks private DNS, direct IP access, writes, iframes, WebSockets and media; never forwards page cookies or authorization', async () => {
         const { reader, transport } = fixture(
-            `<!doctype html>${article}<iframe src="https://private.example/frame"></iframe><img src="/image.png"><script>
+            `<!doctype html><main id="root">Loading</main><iframe src="https://private.example/frame"></iframe><img src="/image.png"><script>
+            document.getElementById('root').innerHTML=${JSON.stringify(article)};
             document.cookie='private_cookie=secret';
             fetch('https://private.example/metadata').catch(()=>{});
             fetch('http://127.0.0.1/admin').catch(()=>{});
@@ -131,7 +132,7 @@ describe.each([
     });
     it('rejects page-initiated navigation without making a second document request', async () => {
         const { reader, transport } = fixture(
-            `${article}<script>location.href='https://other.example/new-document';</script>`,
+            `<main>Loading</main><script>location.href='https://other.example/new-document';</script>`,
         );
         await expect(reader.read(url)).rejects.toMatchObject({ code: 'unsafe_url' });
         expect(transport).toHaveBeenCalledTimes(1);
@@ -144,13 +145,18 @@ describe.each([
             ]),
         );
         const first = fixture(
-            `${article}<script>for(let i=0;i<40;i++)fetch('/data-'+i).catch(()=>{});</script>`,
+            `<main id="root">Loading</main><script>document.getElementById('root').innerHTML=${JSON.stringify(article)};for(let i=0;i<40;i++)fetch('/data-'+i).catch(()=>{});</script>`,
             resources,
         );
-        await expect(first.reader.read(url)).rejects.toMatchObject({ code: 'response_too_large' });
+        const limited = await first.reader.read(url);
+        expect(limited.text).toContain('Rendered evidence');
+        expect(limited.collection).toMatchObject({
+            complete: false,
+            limitations: ['resource_limit'],
+        });
         expect(first.transport.mock.calls.length).toBeLessThanOrEqual(32);
         const second = fixture(
-            `${article}<script>document.body.append('x'.repeat(2*1024*1024));</script>`,
+            `<main id="root">Loading</main><script>document.getElementById('root').innerHTML=${JSON.stringify(article)};document.body.append('x'.repeat(2*1024*1024));</script>`,
         );
         await expect(second.reader.read(url)).rejects.toMatchObject({ code: 'response_too_large' });
     });
@@ -176,30 +182,37 @@ describe.each([
         ).rejects.toBe(repositoryError);
         expect(transport).not.toHaveBeenCalled();
     });
-    it('reserves each main-document retry and preserves the previous failure across the Node pipe', async () => {
-        let attempt = 0;
-        const beforeAttempt = vi.fn();
-        const reader = createPageReader({
-            renderWaitMs: 100,
-            http: createSafeHttpClient({
-                resolve: async () => [{ address: '93.184.216.34', family: 4 }],
-                transport: async () => {
-                    if (++attempt === 1)
-                        throw new ConnectorError('network', 'fixture transient', true);
-                    return { status: 200, headers: { 'content-type': 'text/html' }, body: article };
-                },
-            }),
-        });
-        readers.push(reader);
-        expect((await reader.read(url, { beforeAttempt })).text).toContain('Rendered evidence');
-        expect(attempt).toBe(2);
-        expect(beforeAttempt).toHaveBeenCalledTimes(2);
-        expect(beforeAttempt.mock.calls[1]![1]).toBeInstanceOf(ConnectorError);
-        expect(beforeAttempt.mock.calls[1]![1]).toMatchObject({ code: 'network', retryable: true });
-    });
+    it.each(['network', 'timeout'] as const)(
+        'reserves a main-document %s retry and preserves its identity across the Node pipe',
+        async (code) => {
+            let attempt = 0;
+            const beforeAttempt = vi.fn();
+            const reader = createPageReader({
+                renderWaitMs: 100,
+                http: createSafeHttpClient({
+                    resolve: async () => [{ address: '93.184.216.34', family: 4 }],
+                    transport: async () => {
+                        if (++attempt === 1)
+                            throw new ConnectorError(code, 'fixture transient', true);
+                        return {
+                            status: 200,
+                            headers: { 'content-type': 'text/html' },
+                            body: article,
+                        };
+                    },
+                }),
+            });
+            readers.push(reader);
+            expect((await reader.read(url, { beforeAttempt })).text).toContain('Rendered evidence');
+            expect(attempt).toBe(2);
+            expect(beforeAttempt).toHaveBeenCalledTimes(2);
+            expect(beforeAttempt.mock.calls[1]![1]).toBeInstanceOf(ConnectorError);
+            expect(beforeAttempt.mock.calls[1]![1]).toMatchObject({ code, retryable: true });
+        },
+    );
     it('caps cumulative resource bytes and does not dispatch queued resources after overflow', async () => {
         const { reader, transport } = fixture(
-            `${article}<script>for(let i=0;i<8;i++)fetch('/large-'+i).catch(()=>{});</script>`,
+            `<main id="root">Loading</main><script>document.getElementById('root').innerHTML=${JSON.stringify(article)};for(let i=0;i<8;i++)fetch('/large-'+i).catch(()=>{});</script>`,
             Object.fromEntries(
                 Array.from({ length: 8 }, (_, i) => [
                     `/large-${i}`,
@@ -210,7 +223,10 @@ describe.each([
                 ]),
             ),
         );
-        await expect(reader.read(url)).rejects.toMatchObject({ code: 'response_too_large' });
+        const limited = await reader.read(url);
+        expect(limited.text).toContain('Rendered evidence');
+        expect(limited.collection?.complete).toBe(false);
+        expect(limited.collection?.limitations).toContain('resource_limit');
         // Three complete 2 MiB resources plus the main page fit. The fourth exceeds
         // the remaining budget; no later request may reach even an injected transport.
         expect(transport).toHaveBeenCalledTimes(5);
@@ -266,7 +282,7 @@ describe.each([
                     return {
                         status: 200,
                         headers: { 'content-type': 'text/html' },
-                        body: `${article}<script src="/slow.js"></script>`,
+                        body: `<main id="root">Loading</main><script>document.getElementById('root').innerHTML=${JSON.stringify(article)};</script><script src="/slow.js"></script>`,
                     };
                 started();
                 await new Promise((_, reject) =>

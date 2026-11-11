@@ -1,11 +1,25 @@
 import { createHash } from 'node:crypto';
+import { createRequire } from 'node:module';
 import { JSDOM, VirtualConsole } from 'jsdom';
 import { Readability } from '@mozilla/readability';
 import { normalizeUrl } from './http.ts';
 import type { HttpResponse } from './http.ts';
 import { ConnectorError, type ReadPage } from './types.ts';
 import { extractPublication } from './dates.ts';
-export const EXTRACTION_VERSION = 'readability-0.6.0/scova-text-v1';
+import { checkPageQuality } from './page-quality.ts';
+import { primaryPageText, getPageTitle, preparePageFallback } from './page-content.ts';
+import { serializePageText } from './page-text.ts';
+import { EXTRACTION_VERSION } from './page-extraction-version.ts';
+import { compactRubyMarkup } from './page-ruby-compaction.ts';
+export { EXTRACTION_VERSION } from './page-extraction-version.ts';
+
+// This optional CJS entry has no upstream declaration. Keep its small trusted
+// constructor contract local so every consuming workspace type-checks it.
+const JSDOMParser = createRequire(import.meta.url)(
+    '@mozilla/readability/JSDOMParser.js',
+) as new () => {
+    parse(markup: string, url?: string): Document;
+};
 
 export function pageFingerprint(text: string): string {
     return createHash('sha256').update(text, 'utf8').digest('hex');
@@ -30,10 +44,13 @@ export function extractPage(
     virtualConsole.on('jsdomError', (error) => {
         if (Reflect.get(error, 'type') !== 'css parsing') console.error(error.message);
     });
-    const dom = new JSDOM(response.body, { url: response.url, virtualConsole });
+    let dom = new JSDOM(response.body, { url: response.url, virtualConsole });
     try {
-        const document = dom.window.document;
-        if (document.getElementsByTagName('*').length > 20_000)
+        let document = dom.window.document;
+        const exceedsStructureLimit = document.getElementsByTagName('*').length > 20_000;
+        // No ruby wrappers means normalization cannot recover this structure.
+        // Reject it before metadata scans and a pointless serialization pass.
+        if (exceedsStructureLimit && !document.getElementsByTagName('ruby').length)
             throw new ConnectorError('extraction_failed', '网页节点数超过提取限制');
         const contentMeta = [...document.querySelectorAll('meta[http-equiv]')].find(
             (meta) => meta.getAttribute('http-equiv')?.toLowerCase() === 'content-type',
@@ -44,29 +61,68 @@ export function extractPage(
         if (!normalizedEncoding && declared && !/^utf-?8$/i.test(declared))
             throw new ConnectorError('invalid_response', '网页声明的字符编码不支持');
         const publication = extractPublication(document);
-        document
-            .querySelectorAll('script,style,iframe,object,embed,form,noscript')
-            .forEach((node) => node.remove());
-        const article = new Readability(document, {
-            charThreshold: 0,
-            maxElemsToParse: 20_000,
-        }).parse();
-        const fullText = article?.textContent?.replace(/\s+/g, ' ').trim();
+        if (exceedsStructureLimit) {
+            const normalized = compactRubyMarkup(document);
+            dom.window.close();
+            dom = new JSDOM(normalized, { url: response.url, virtualConsole });
+            document = dom.window.document;
+            if (document.getElementsByTagName('*').length > 20_000)
+                throw new ConnectorError('extraction_failed', '网页节点数超过提取限制');
+        }
+        // Check gates before forms are removed; the script markers themselves
+        // are never retained as body evidence or executed by this extractor.
+        document.querySelectorAll('script,style,iframe,object,embed,noscript').forEach((node) => {
+            node.remove();
+        });
+        const limitations = checkPageQuality(document, response.body);
+        document.querySelectorAll('form').forEach((node) => node.remove());
+        // Readability mutates thousands of nodes. JSDOM's live collection
+        // bookkeeping can make ordinary long articles quadratic. Its bundled
+        // lightweight DOM has snapshot lists; feed it canonical XML so named
+        // entities and malformed source HTML retain the browser-parsed text.
+        let fullText = primaryPageText(document);
+        let fallbackTitle = '';
+        if (!fullText) {
+            preparePageFallback(document);
+            const serialized = new dom.window.XMLSerializer().serializeToString(document);
+            const extractionDocument = new JSDOMParser().parse(serialized, response.url);
+            const article = new Readability(extractionDocument, {
+                charThreshold: 0,
+                maxElemsToParse: 20_000,
+            }).parse();
+            fallbackTitle = article?.title ?? '';
+            if (article?.content)
+                fullText = serializePageText(
+                    new JSDOMParser().parse(article.content, response.url),
+                );
+        }
         if (!fullText) throw new ConnectorError('extraction_failed', '网页没有可提取正文');
-        const text = fullText.slice(0, maxText);
+        // Keep the snapshot and its offsets intact; avoid a dangling UTF-16 surrogate.
+        let text = fullText.slice(0, maxText);
+        if (/[\uD800-\uDBFF]$/.test(text)) text = text.slice(0, -1);
         return {
             kind: 'read_page' as const,
             mode: 'live' as const,
             originalUrl,
             fetchedUrl: response.url,
             url: normalizeUrl(response.url),
-            title: article?.title?.trim() ?? '',
+            title: getPageTitle(document, fallbackTitle),
             text,
             contentHash: pageFingerprint(text),
             extractionVersion,
             collectedAt: new Date().toISOString(),
             truncated: fullText.length > maxText,
             publication,
+            ...(limitations.length
+                ? {
+                      collection: {
+                          version: 1 as const,
+                          method: 'html' as const,
+                          complete: false,
+                          limitations,
+                      },
+                  }
+                : {}),
             untrusted: true as const,
         };
     } finally {

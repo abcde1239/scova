@@ -2,6 +2,8 @@ export type ConnectorKind = 'search' | 'model' | 'read';
 export const MODEL_CALL_TIMEOUT_MS = 120_000;
 export const MODEL_INPUT_TOKEN_LIMIT = 256_000;
 export const MODEL_OUTPUT_TOKEN_LIMIT = 64_000;
+/** Bounded independently from per-model input budgets; retain ordinary long articles in full. */
+export const PAGE_TEXT_CHAR_LIMIT = 1_000_000;
 
 export type ConnectorErrorCode =
     | 'configuration'
@@ -35,6 +37,8 @@ export class ConnectorError extends Error {
 }
 
 export interface CallContext {
+    /** Trusted internal observation only; never serialized into report or provider inputs. */
+    onReadDiagnostic?: (event: ReadDiagnostic) => void;
     /** Deployment-owned selection; never derived from task or model parameters. */
     engines?: string[];
     beforeDispatch?: () => Promise<void>;
@@ -45,12 +49,35 @@ export interface CallContext {
     beforeAttempt?: (kind: ConnectorKind, previousFailure?: ConnectorError) => void | Promise<void>;
 }
 
+export type ReadDiagnosticPhase =
+    | 'host'
+    | 'queue'
+    | 'dispatch'
+    | 'attempt'
+    | 'http'
+    | 'dns'
+    | 'headers'
+    | 'body'
+    | 'extract'
+    | 'render'
+    | 'cleanup';
+export interface ReadDiagnostic {
+    phase: ReadDiagnosticPhase;
+    state: 'start' | 'end' | 'error';
+    elapsedMs: number;
+    remainingMs: number;
+    durationMs?: number;
+    code?: ConnectorErrorCode;
+}
+
 export interface SearchResult {
     kind: 'search_snippet';
     originalUrl: string;
     url: string;
     title: string;
     snippet: string;
+    /** Optional provider-extracted body; evidence is accepted only through the read stage. */
+    page?: ReadPage;
     score?: number;
     engines?: string[];
 }
@@ -130,13 +157,31 @@ export interface ReadPage {
     extractionVersion: string;
     collectedAt: string;
     truncated: boolean;
+    /** Reader-owned acquisition status, persisted with the immutable tool output. */
+    collection?: PageCollection;
     /** Page-authored publication metadata, parsed independently of body extraction. */
     publication?: ReadPublication;
     untrusted: true;
 }
 
+export interface PageCollection {
+    version: 1;
+    method: 'html' | 'browser';
+    complete: boolean;
+    limitations: (
+        | 'resource_limit'
+        | 'resource_failure'
+        | 'render_timeout'
+        | 'content_restricted'
+        | 'interaction_required'
+        | 'visual_structure'
+    )[];
+}
+
 export interface StructuredInput {
     prompt: string;
+    /** Prior discussion only; it is never a source of verified evidence. */
+    messages?: { role: 'user' | 'assistant'; content: string }[];
     schema: Record<string, unknown>;
     maxInputTokens: number;
     maxOutputTokens: number;

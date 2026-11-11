@@ -5,6 +5,49 @@ import { describe, expect, it } from 'vite-plus/test';
 import { nodeHttpTransport } from '../src/http.ts';
 
 describe('web text over the real pinned Node transport (privileged local fixture)', () => {
+    it('signals response headers before the complete bounded body has arrived', async () => {
+        let finishBody!: () => void;
+        let headersStarted!: () => void;
+        const headers = new Promise<void>((resolve) => {
+            headersStarted = resolve;
+        });
+        const server = createServer((_request, response) => {
+            response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+            response.flushHeaders();
+            finishBody = () => response.end('<article>complete slow body</article>');
+        });
+        server.listen(0, '127.0.0.1');
+        await once(server, 'listening');
+        const address = server.address();
+        if (!address || typeof address === 'string') throw new Error('fixture has no TCP port');
+        let complete = false;
+        try {
+            const pending = nodeHttpTransport(
+                new URL(`http://fixture.example:${address.port}/article`),
+                {
+                    address: { address: '127.0.0.1', family: 4 },
+                    method: 'GET',
+                    headers: {},
+                    maxBytes: 1024,
+                    signal: AbortSignal.timeout(2000),
+                    responseEncoding: 'web-text',
+                    onResponseStarted: headersStarted,
+                },
+            ).then((response) => {
+                complete = true;
+                return response;
+            });
+            await headers;
+            expect(complete).toBe(false);
+            finishBody();
+            expect((await pending).body).toBe('<article>complete slow body</article>');
+        } finally {
+            server.closeAllConnections();
+            await new Promise<void>((resolve, reject) =>
+                server.close((error) => (error ? reject(error) : resolve())),
+            );
+        }
+    });
     it('decodes compressed HTML/legacy charset and retains empty redirects and HTTP errors', async () => {
         const server = createServer((request, response) => {
             if (request.url === '/redirect') {

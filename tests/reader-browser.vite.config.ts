@@ -5,7 +5,7 @@ export default defineConfig({
     resolve: { tsconfigPaths: true },
     root: fileURLToPath(new URL('../', import.meta.url)),
     test: {
-        include: ['packages/connectors/tests/reader-browser.integration.test.ts'],
+        include: ['packages/connectors/tests/reader-*.integration.test.ts'],
         fileParallelism: false,
         testTimeout: 30_000,
         hookTimeout: 30_000,

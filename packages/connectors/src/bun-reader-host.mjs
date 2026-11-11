@@ -3,6 +3,7 @@ import { createInterface } from 'node:readline';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createPageReader } from './browser-reader.ts';
 import { ConnectorError } from './types.ts';
+import { privateJsonLine } from './private-json.ts';
 
 const input = createInterface({ input: process.stdin });
 const reads = new AsyncLocalStorage();
@@ -11,7 +12,7 @@ const controllers = new Map();
 let reader;
 let sequence = 0;
 let closing;
-const send = (message) => process.stdout.write(`${JSON.stringify(message)}\n`);
+const send = (message) => process.stdout.write(privateJsonLine(message));
 const pack = (error) => ({
     code: error instanceof ConnectorError ? error.code : 'extraction_failed',
     message: error instanceof ConnectorError ? error.message : '网页读取失败',
@@ -24,8 +25,13 @@ function rpc(type, payload, signal) {
     if (signal?.aborted) return Promise.reject(new ConnectorError('aborted', '网页读取已停止'));
     return new Promise((resolve, reject) => {
         const id = ++sequence;
+        const readId = reads.getStore();
         const abort = () => {
             pending.delete(id);
+            signal?.removeEventListener('abort', abort);
+            // Resource budgets may end before the whole read. Cancel the matching
+            // privileged parent request instead of only dropping its RPC result.
+            if (type === 'http') send({ type: 'abortHttp', id, readId });
             reject(new ConnectorError('aborted', '网页读取已停止'));
         };
         pending.set(id, {
@@ -37,7 +43,7 @@ function rpc(type, payload, signal) {
             abort,
         });
         signal?.addEventListener('abort', abort, { once: true });
-        send({ type, id, readId: reads.getStore(), ...payload });
+        send({ type, id, readId, ...payload });
     });
 }
 async function close() {
@@ -92,6 +98,10 @@ input.on('line', async (line) => {
         await reads.run(message.id, async () => {
             try {
                 const result = await reader.read(message.originalUrl, {
+                    onReadDiagnostic: message.diagnosticsEnabled
+                        ? (diagnostic) =>
+                              send({ type: 'diagnostic', readId: message.id, diagnostic })
+                        : undefined,
                     timeoutMs: message.timeoutMs,
                     signal: controller.signal,
                     beforeDispatch: async () => {
