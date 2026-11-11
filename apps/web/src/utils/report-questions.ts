@@ -28,7 +28,7 @@ export function questionTextError(question: string) {
         parseContract(ReportQuestionInputSchema, { question });
         return '';
     } catch {
-        return question.length > 2000 ? '问题不能超过 2000 个 UTF-16 码元。' : '请输入非空白问题。';
+        return question.length > 2000 ? '问题不能超过 2000字。' : '请输入非空白问题。';
     }
 }
 export function questionAttempt(

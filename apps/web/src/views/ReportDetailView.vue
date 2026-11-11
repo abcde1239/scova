@@ -375,264 +375,166 @@ async function retry() {
 </script>
 
 <style scoped>
+/* Scoped UnoCSS keeps the long control/state combinations readable. */
 .report-detail {
-    display: grid;
-    gap: 0.875rem;
-    min-inline-size: 0;
+    @apply layout-grid gap-3.5;
 }
 .workspace-heading {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.75rem 1rem;
-    min-inline-size: 0;
+    @apply flex flex-wrap items-center gap-[0.75rem_1rem] min-w-0;
 }
 .workspace-heading {
-    justify-content: space-between;
+    @apply justify-between;
 }
 .workspace-heading > div {
-    min-inline-size: 0;
-    overflow-wrap: anywhere;
+    @apply min-w-0 break-anywhere;
 }
 .workspace-eyebrow {
-    margin: 0;
-    font-weight: 600;
+    @apply font-semibold m-0;
 }
 .workspace-description,
 .companion-heading p {
-    margin: 0;
-    color: var(--scova-muted);
-    font-size: 0.875rem;
-    line-height: 1.6;
+    @apply text-muted text-[0.875rem] leading-[1.6] m-0;
 }
 .workspace-description {
-    margin-block-start: 0.375rem;
+    @apply mt-1.5;
 }
 .companion-heading h2 {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    margin: 0;
-    font-size: 1rem;
-    font-weight: 600;
+    @apply flex items-center gap-2 text-[1rem] font-semibold m-0;
 }
 .companion-heading {
-    display: grid;
-    gap: 0.5rem;
-    padding-block-end: 1.5rem;
-    border-block-end: 0.0625rem solid var(--scova-border);
-    margin-block-end: 1rem;
+    @apply grid gap-2 pb-6 [border-bottom:0.0625rem_solid_var(--scova-border)] mb-4;
 }
 .report-workspace {
-    position: relative;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 1rem;
-    align-items: start;
-    min-inline-size: 0;
+    @apply layout-stack relative grid-cols-[minmax(0,_1fr)] items-start;
 }
 .report-conversation-column,
 .report-companion {
-    min-inline-size: 0;
+    @apply min-w-0;
 }
 .report-conversation-column {
-    display: grid;
-    gap: 1rem;
-    align-content: start;
+    @apply grid gap-4 [align-content:start];
 }
 .report-companion {
-    display: grid;
-    gap: 0;
-    padding: 1rem;
-    border: 0.0625rem solid var(--scova-border);
-    border-radius: 0.875rem;
-    background: var(--scova-surface);
-    scroll-margin-block-start: 1rem;
+    @apply grid gap-0 border-theme rounded-3.5 bg-surface [scroll-margin-block-start:1rem] p-4;
 }
 .report-companion:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
+    @apply [outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.25rem];
 }
 .report-companion :deep(.questions),
 .report-companion :deep(.feedback-effects),
 .tool-section :deep(.feedback-actions),
 .tool-section :deep(.notes-panel),
 .tool-section :deep(.report-bookmarks) {
-    inline-size: 100%;
-    padding: 0;
-    border: 0;
-    background: transparent;
+    @apply w-full [border:0] bg-transparent p-0;
 }
 .report-companion :deep(.questions),
 .report-companion :deep(.feedback-effects) {
-    padding-block: 0.5rem 1.5rem;
+    @apply pt-2 pb-6;
 }
 .report-companion :deep(.tool-section h2) {
-    font-size: 1rem;
+    @apply text-[1rem];
 }
 .report-companion :deep(.tool-section h2 .n-icon) {
-    display: none;
+    @apply hidden;
 }
 .report-bookmarks {
-    display: grid;
-    gap: 1rem;
-    min-inline-size: 0;
-    overflow-wrap: anywhere;
-    border-block-start: 0.0625rem solid var(--scova-border);
-    padding-block: 1rem;
+    @apply layout-stack break-anywhere [border-top:0.0625rem_solid_var(--scova-border)] pt-4 pb-4;
 }
 .report-bookmarks h2 {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
+    @apply flex items-center gap-2;
 }
 .report-source-history {
-    display: grid;
-    gap: 0.75rem;
-    min-inline-size: 0;
+    @apply layout-grid gap-3;
 }
 .report-bookmarks h2 {
-    margin: 0;
-    font-size: 1.25rem;
+    @apply text-[1.25rem] m-0;
 }
 select {
-    inline-size: 100%;
-    min-inline-size: 0;
-    max-inline-size: 100%;
-    min-block-size: 2.75rem;
-    padding: 0.625rem;
-    border: 0.0625rem solid var(--scova-border);
-    border-radius: 0.5rem;
-    background: var(--scova-surface);
-    color: var(--scova-text);
-    font: inherit;
-    cursor: pointer;
+    @apply font-inherit w-full min-w-0 max-w-full min-h-11 border-theme rounded-2 bg-surface
+        text-default cursor-pointer p-2.5;
 }
 select:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
+    @apply [outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.25rem];
 }
 select:disabled {
-    cursor: not-allowed;
+    @apply cursor-not-allowed;
 }
 .report-tools {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    padding: 0;
-    justify-self: start;
-    max-inline-size: 100%;
+    @apply flex flex-wrap gap-2 justify-self-start max-w-full p-0;
 }
 @media (min-width: 64rem) {
     .report-workspace {
-        grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
-        gap: 1.5rem;
+        @apply grid-cols-[minmax(0,_0.9fr)_minmax(0,_1.1fr)] gap-6;
     }
     .report-workspace--reading,
     .report-workspace--closed {
-        grid-template-columns: minmax(0, 1fr);
+        @apply grid-cols-[minmax(0,_1fr)];
     }
 }
 @media (max-width: 39.999rem) {
     .report-companion {
-        padding: 0.5rem;
+        @apply p-2;
     }
     .report-tools :deep(.navigation-button) {
-        padding-inline: 0.625rem;
+        @apply pl-2.5 pr-2.5;
     }
 }
 .report-artifact-card {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    inline-size: 100%;
-    min-inline-size: 0;
-    min-block-size: 2.75rem;
-    margin-block-end: 1.5rem;
-    padding: 1rem;
-    border: 0.0625rem solid var(--scova-border);
-    border-radius: 0.75rem;
-    background: var(--scova-surface);
-    color: var(--scova-text);
-    font: inherit;
-    text-align: start;
-    cursor: pointer;
+    @apply font-inherit flex items-center gap-3 w-full min-w-0 min-h-11 mb-6 border-theme rounded-3
+        bg-surface text-default text-start cursor-pointer p-4;
 }
 .report-artifact-card > span:not(.app-icon) {
-    display: grid;
-    flex: 1;
-    min-inline-size: 0;
-    gap: 0.375rem;
-    overflow-wrap: anywhere;
+    @apply layout-grid flex-1 gap-1.5 break-anywhere;
 }
 .report-artifact-card strong {
-    font-weight: 500;
+    @apply font-medium;
 }
 .report-artifact-card small {
-    color: var(--scova-muted);
-    font-size: 0.875rem;
+    @apply text-muted text-[0.875rem];
 }
 .report-artifact-card:hover {
-    background: var(--scova-selected);
+    @apply [background:var(--scova-selected)];
 }
 .report-artifact-card {
-    transition:
-        background-color 180ms ease,
-        box-shadow 180ms ease,
-        transform 180ms ease;
+    @apply [transition:background-color_180ms_ease,_box-shadow_180ms_ease,_transform_180ms_ease];
 }
 .report-artifact-card:hover {
-    transform: translateY(-0.125rem);
-    box-shadow: 0 0.375rem 1rem color-mix(in srgb, var(--scova-text) 5%, transparent);
+    @apply [transform:translateY(-0.125rem)]
+        [box-shadow:0_0.375rem_1rem_color-mix(in_srgb,_var(--scova-text)_5%,_transparent)];
 }
 .artifact-pane-enter-active,
 .artifact-pane-leave-active {
-    transition:
-        opacity 220ms ease,
-        transform 220ms cubic-bezier(0.2, 0.7, 0.2, 1);
+    @apply [transition:opacity_220ms_ease,_transform_220ms_cubic-bezier(0.2,_0.7,_0.2,_1)];
 }
 @media (min-width: 64rem) {
     .artifact-pane-leave-active {
-        position: absolute;
-        inset-block-start: 0;
-        inset-inline-end: 0;
-        inline-size: calc(55% - 0.75rem);
-        pointer-events: none;
+        @apply absolute [top:0] [right:0] w-[calc(55%_-_0.75rem)] [pointer-events:none];
     }
 }
 .artifact-pane-enter-from,
 .artifact-pane-leave-to {
-    opacity: 0;
-    transform: translateX(1.25rem) scale(0.985);
+    @apply opacity-0 [transform:translateX(1.25rem)_scale(0.985)];
 }
 @media (prefers-reduced-motion: reduce) {
     .artifact-pane-enter-active,
     .artifact-pane-leave-active,
     .report-artifact-card {
-        transition: none;
+        @apply [transition:none];
     }
     .artifact-pane-enter-from,
     .artifact-pane-leave-to,
     .report-artifact-card:hover {
-        transform: none;
+        @apply [transform:none];
     }
 }
 .report-artifact-card:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
+    @apply [outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.25rem];
 }
 a {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    min-block-size: 2.75rem;
-    color: var(--scova-primary);
-    cursor: pointer;
-    text-underline-offset: 0.2em;
-    overflow-wrap: anywhere;
+    @apply inline-flex items-center gap-2 min-h-11 text-primary cursor-pointer underline-offset-[0.2em]
+        break-anywhere;
 }
 a:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
+    @apply [outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.25rem];
 }
 </style>

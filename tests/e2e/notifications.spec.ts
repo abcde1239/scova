@@ -146,7 +146,7 @@ async function samples(context: BrowserContext) {
         });
         const failure = (status: number, code = 'LOCAL_FAILURE') =>
             route.fulfill({ status, json: { code, message: 'local sample', requestId: 'sample' } });
-        if (path.startsWith('/api/v1/reports/'))
+        if (/^\/api\/v1\/reports\/[^/]+$/.test(path))
             return route.fulfill({
                 json: report(
                     state.items.find((entry) => entry.reportId === path.split('/').at(-1))!,

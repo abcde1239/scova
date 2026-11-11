@@ -587,8 +587,8 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
                 expect(document.querySelectorAll('.object-card dt')).toHaveLength(2);
             } else {
                 expect(
-                    [...document.querySelectorAll('.object-matrix thead th')].map(
-                        (entry) => entry.textContent,
+                    [...document.querySelectorAll('.object-matrix thead th')].map((entry) =>
+                        entry.textContent?.trim(),
                     ),
                 ).toEqual(['共同维度', '模块 A', '模块 B']);
                 expect(text(document, '.object-matrix tbody th')).toBe('入口');
@@ -1064,7 +1064,7 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
                 expect(text(node.closest('.evidence-source-group')!, ':scope > summary')).toContain(
                     entry.title,
                 );
-                expect(text(node, 'summary')).toBe('采集与定位信息');
+                expect(text(node, 'summary').trim()).toBe('采集与定位信息');
                 expect(text(node, 'blockquote')).toBe(entry.quote);
                 expect(node.textContent).toContain(entry.location);
                 expect(node.querySelector('time')?.getAttribute('datetime')).toBe(entry.observedAt);

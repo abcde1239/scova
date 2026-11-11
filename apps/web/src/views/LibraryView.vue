@@ -278,124 +278,82 @@ watch(
 </script>
 
 <style scoped>
+/* Scoped UnoCSS keeps the long control/state combinations readable. */
 .library-view,
 .bookmark-content,
 header,
 .bookmark-entry {
-    display: grid;
-    gap: 1.25rem;
-    min-inline-size: 0;
-    overflow-wrap: anywhere;
+    @apply report-grid;
 }
 .library-view {
-    gap: 2rem;
+    @apply gap-8;
 }
 h2,
 p {
-    margin: 0;
+    @apply m-0;
 }
 h2 {
-    font-size: 1.25rem;
-    font-weight: 600;
+    @apply text-[1.25rem] font-semibold;
 }
 header nav {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 1rem;
-    border-block-end: 0.0625rem solid var(--scova-border);
+    @apply flex flex-wrap items-center gap-4 [border-bottom:0.0625rem_solid_var(--scova-border)];
 }
 header nav button {
-    min-block-size: 2.75rem;
-    padding: 0.75rem 1rem;
-    font: inherit;
-    background: transparent;
-    color: var(--scova-text);
-    border: 0;
-    cursor: pointer;
+    @apply font-inherit min-h-11 pt-3 pr-4 pb-3 pl-4 bg-transparent text-default [border:0] cursor-pointer;
 }
 header nav button[aria-current='page'] {
-    border-block-end: 0.1875rem solid var(--scova-primary);
+    @apply [border-bottom:0.1875rem_solid_var(--scova-primary)];
 }
 header nav button:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
+    @apply [outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.25rem];
 }
 .bookmark-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    min-inline-size: 0;
+    @apply list-none min-w-0 m-0 p-0;
 }
 .bookmark-entry {
-    gap: 0.5rem;
-    padding-block: 1.25rem;
-    border-block-end: 0.0625rem solid color-mix(in srgb, var(--scova-border) 55%, transparent);
+    @apply gap-2 pt-5 pb-5
+        [border-bottom:0.0625rem_solid_color-mix(in_srgb,_var(--scova-border)_55%,_transparent)];
 }
 .source-summary {
-    color: var(--scova-muted);
-    font-size: 0.875rem;
+    @apply text-muted text-[0.875rem];
 }
 .source-actions {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: start;
-    gap: 0.25rem 1rem;
+    @apply flex flex-wrap items-start gap-[0.25rem_1rem];
 }
 .source-details {
-    min-inline-size: 0;
-    max-inline-size: 100%;
+    @apply min-w-0 max-w-full;
 }
 .source-details[open] {
-    flex-basis: 100%;
+    @apply [flex-basis:100%];
 }
 summary {
-    display: list-item;
-    padding-block: 0.625rem;
-    min-block-size: 2.75rem;
-    box-sizing: border-box;
-    cursor: pointer;
-    color: var(--scova-muted);
+    @apply [display:list-item] pt-2.5 pb-2.5 min-h-11 box-border cursor-pointer text-muted;
 }
 summary:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
+    @apply [outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.25rem];
 }
 .source-details dl {
-    margin-block: 0.75rem;
+    @apply mt-3 mb-3;
 }
 dl {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1rem 2rem;
-    margin: 0;
+    @apply flex flex-wrap gap-[1rem_2rem] m-0;
 }
 dt {
-    color: var(--scova-muted);
+    @apply text-muted;
 }
 dd {
-    margin: 0;
+    @apply m-0;
 }
 .pagination,
 .library-toolbar {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1rem;
+    @apply flex flex-wrap gap-4;
 }
 a {
-    display: inline-flex;
-    align-items: center;
-    justify-self: start;
-    gap: 0.5rem;
-    min-block-size: 2.75rem;
-    max-inline-size: 100%;
-    color: var(--scova-primary);
-    cursor: pointer;
-    text-underline-offset: 0.2em;
+    @apply inline-flex items-center justify-self-start gap-2 min-h-11 max-w-full text-primary
+        cursor-pointer underline-offset-[0.2em];
 }
 a:focus-visible,
 #library-content:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
+    @apply [outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.25rem];
 }
 </style>

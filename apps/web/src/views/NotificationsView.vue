@@ -1,17 +1,25 @@
 <template>
-    <section ref="container" class="notifications-view" aria-label="站内通知">
-        <div class="notification-tools">
-            <label
+    <section ref="container" class="notifications-view layout-grid gap-6" aria-label="站内通知">
+        <div class="notification-tools flex flex-wrap gap-[1rem_2rem] items-end">
+            <label class="grid gap-2 max-w-full"
                 >通知类别
-                <select :value="filters.kind" @change="change('kind', $event)">
+                <select
+                    class="[appearance:auto] [font-family:inherit] [font-size:inherit] [font-weight:inherit] [font-style:inherit] leading-[1.5] [font-variant:inherit] min-h-11 max-w-full min-w-0 text-default bg-surface border-theme rounded-2 cursor-pointer py-2 px-4 keyboard-focus-wide"
+                    :value="filters.kind"
+                    @change="change('kind', $event)"
+                >
                     <option v-for="kind in notificationKinds" :key="kind.value" :value="kind.value">
                         {{ kind.label }}
                     </option>
                 </select>
             </label>
-            <label
+            <label class="grid gap-2 max-w-full"
                 >通知已读状态
-                <select :value="filters.read" @change="change('read', $event)">
+                <select
+                    class="[appearance:auto] [font-family:inherit] [font-size:inherit] [font-weight:inherit] [font-style:inherit] leading-[1.5] [font-variant:inherit] min-h-11 max-w-full min-w-0 text-default bg-surface border-theme rounded-2 cursor-pointer py-2 px-4 keyboard-focus-wide"
+                    :value="filters.read"
+                    @change="change('read', $event)"
+                >
                     <option value="all">全部状态</option>
                     <option value="unread">未读</option>
                     <option value="read">已读</option>
@@ -24,8 +32,10 @@
                 ><app-icon name="retry" />刷新</action-button
             >
         </div>
-        <p v-if="actionError" role="alert">{{ actionError }}</p>
-        <p v-if="announcement" role="status" aria-live="polite">{{ announcement }}</p>
+        <p class="break-anywhere m-0" v-if="actionError" role="alert">{{ actionError }}</p>
+        <p class="break-anywhere m-0" v-if="announcement" role="status" aria-live="polite">
+            {{ announcement }}
+        </p>
         <state-panel v-if="query.isPending.value" state="loading" message="正在读取通知" />
         <state-panel
             v-else-if="query.isError.value"
@@ -35,7 +45,7 @@
             @retry="retry"
         />
         <state-panel v-else-if="!items.length" state="empty" message="暂无通知" />
-        <div v-if="items.length" class="notification-list">
+        <div v-if="items.length" class="notification-list min-w-0">
             <notification-entry
                 v-for="item in items"
                 :key="item.id"
@@ -138,47 +148,3 @@ async function updateRead(item: Notification, read: boolean) {
     }
 }
 </script>
-
-<style scoped>
-.notifications-view {
-    display: grid;
-    gap: 1.5rem;
-    min-inline-size: 0;
-}
-.notification-tools {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1rem 2rem;
-    align-items: end;
-}
-label {
-    display: grid;
-    gap: 0.5rem;
-    max-inline-size: 100%;
-}
-select {
-    appearance: auto;
-    font: inherit;
-    line-height: 1.5;
-    min-block-size: 2.75rem;
-    max-inline-size: 100%;
-    min-inline-size: 0;
-    padding: 0.5rem 1rem;
-    color: var(--scova-text);
-    background: var(--scova-surface);
-    border: 0.0625rem solid var(--scova-border);
-    border-radius: 0.5rem;
-    cursor: pointer;
-}
-select:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
-}
-p {
-    margin: 0;
-    overflow-wrap: anywhere;
-}
-.notification-list {
-    min-inline-size: 0;
-}
-</style>

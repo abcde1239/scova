@@ -3,13 +3,20 @@
         <appearance-selector />
         <reading-preferences />
     </template>
-    <div v-else class="route-status">
+    <div v-else class="route-status grid [justify-items:start] gap-6 text-muted">
         <p v-if="route.name === 'not-found'">此页面不存在。</p>
         <p v-else>{{ route.meta.title }}功能尚未接入。</p>
-        <navigation-button v-if="route.name === 'account'" to="/account/appearance">
+        <navigation-button
+            class="inline-flex items-center min-h-11 text-primary underline-offset-[0.2em] cursor-pointer keyboard-focus-wide"
+            v-if="route.name === 'account'"
+            to="/account/appearance"
+        >
             外观设置
         </navigation-button>
-        <navigation-button v-if="route.name === 'not-found'" to="/tasks"
+        <navigation-button
+            class="inline-flex items-center min-h-11 text-primary underline-offset-[0.2em] cursor-pointer keyboard-focus-wide"
+            v-if="route.name === 'not-found'"
+            to="/tasks"
             >返回任务</navigation-button
         >
     </div>
@@ -23,26 +30,3 @@ import ReadingPreferences from '@/components/common/ReadingPreferences.vue';
 
 const route = useRoute();
 </script>
-
-<style scoped>
-.route-status {
-    display: grid;
-    justify-items: start;
-    gap: 1.5rem;
-    color: var(--scova-muted);
-}
-
-a {
-    display: inline-flex;
-    align-items: center;
-    min-block-size: 2.75rem;
-    color: var(--scova-primary);
-    text-underline-offset: 0.2em;
-    cursor: pointer;
-}
-
-a:focus-visible {
-    outline: 0.125rem solid var(--scova-primary);
-    outline-offset: 0.25rem;
-}
-</style>
