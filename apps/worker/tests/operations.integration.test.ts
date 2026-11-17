@@ -52,6 +52,7 @@ import { RunService } from '../src/service/runs.ts';
 import { createDeliveryService } from '../src/service/delivery.ts';
 import { outboxDatabase } from './support/outbox-database.ts';
 import { seedRun } from './support/run-database.ts';
+import { completeModelFixture } from './support/complete-model-fixture.ts';
 
 const fixture = outboxDatabase();
 const config = operationConfig({
@@ -76,6 +77,7 @@ afterAll(async () => {
 // Deterministic live-mode connector fixture exercises complete delivery and genuine baseline promotion.
 // It does not call a remote provider and is not a live-service acceptance result.
 function completeBundle(): ConnectorBundle {
+    const complete = completeModelFixture();
     const demo = createConnectorBundle();
     const url = 'https://example.com/operations-publication';
     const publication = new Date(Date.now() - 60_000).toISOString();
@@ -158,7 +160,7 @@ function completeBundle(): ConnectorBundle {
                       : { queries: [{ query: '公共公告', questionIds: ['q0', 'q1'] }] };
                 return {
                     mode: 'live',
-                    data: data as T,
+                    data: complete(input, data) as T,
                     usage: { inputTokens: 1, outputTokens: 1, estimated: false },
                 };
             },
@@ -193,7 +195,10 @@ async function prepare(db: DatabaseClient, checkpointer: PostgresSaver, complete
     });
     const candidate = await session.execute();
     await session.drain();
-    if (complete) expect(candidate.coverage.completeness).toBe('complete');
+    if (complete)
+        expect(candidate.coverage.completeness, JSON.stringify(candidate.coverage)).toBe(
+            'complete',
+        );
     return { ...seed, claimed, candidate, session };
 }
 async function deliver(db: DatabaseClient, checkpointer: PostgresSaver, complete = false) {

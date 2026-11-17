@@ -36,6 +36,7 @@ export const claimLabels: Record<Claim['kind'], string> = {
     inference: 'Agent 推断',
     conflict: '冲突证据',
     insufficient: '证据不足',
+    model_answer: '模型自回答',
 };
 
 export function reportSections(report: Report) {

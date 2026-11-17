@@ -236,7 +236,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         await expect(entries(page)).toHaveCount(3);
         await expect(entry(page, 1)).toContainText('演示报告');
         await expect(entry(page, 1)).toContainText('有范围说明');
-        await expect(entry(page, 2)).toContainText('真实查阅');
+        await expect(entry(page, 2)).toContainText('研究报告');
         await expect(entry(page, 2)).toContainText('计划范围内完成');
         expect(
             await link(page, 1).evaluate((element) => getComputedStyle(element).fontFamily),

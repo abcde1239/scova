@@ -51,13 +51,16 @@
                             <dt class="text-muted">本条记录的来源网址</dt>
                             <dd class="m-0">
                                 <a
-                                    class="min-h-11 box-border pt-2 pb-2 cursor-pointer block text-primary underline-offset-[0.2em] keyboard-focus-wide"
+                                    class="external-link box-border py-2 cursor-pointer keyboard-focus-wide"
                                     v-if="sourceLink(item.entry.url)"
                                     :href="sourceLink(item.entry.url)"
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    >{{ item.entry.url }}（在新窗口打开）</a
                                 >
+                                    <span class="min-w-0 break-anywhere"
+                                        >{{ item.entry.url }}（在新窗口打开）</span
+                                    ><app-icon name="source" />
+                                </a>
                                 <p
                                     v-else
                                     class="effect-text whitespace-pre-wrap break-anywhere m-0"
@@ -82,6 +85,7 @@ import { computed } from 'vue';
 import type { Report } from '@scova/models';
 import { sourceLink } from '@/composables/useReport';
 import { reportFeedbackEffects } from '@/utils/feedback-effects';
+import AppIcon from '@/components/common/AppIcon.vue';
 const props = defineProps<{ report: Report }>();
 const effects = computed(() => reportFeedbackEffects(props.report));
 </script>

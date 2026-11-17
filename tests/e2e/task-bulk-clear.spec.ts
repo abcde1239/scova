@@ -177,6 +177,11 @@ for (const width of [320, 1440]) {
         await confirm(page, 2);
         await expect(dialog(page, 2)).not.toBeVisible();
         await expect(page.locator('.bulk-feedback')).toHaveCount(0);
+        await expect(
+            page
+                .locator('.scova-notifications .n-notification')
+                .filter({ hasText: '已清除 2 个任务' }),
+        ).toHaveCount(1);
         await expect(page.locator('.task-card')).toHaveCount(0);
         await expect(page.getByRole('button', { name: '清除所选任务' })).toBeDisabled();
         expect(state.writes.map((item) => item.n)).toEqual([10, 11]);
@@ -250,7 +255,10 @@ test('预检发现修订变化时整批不发送清除', async ({ page }) => {
     await start(page);
     await selectAll(page);
     await page.getByRole('button', { name: '清除所选任务' }).click();
-    await expect(page.locator('.bulk-feedback')).toContainText('所选任务已变化，未执行清除');
+    await expect(page.locator('.scova-notifications .n-notification').last()).toContainText(
+        '所选任务已变化，未执行清除',
+    );
+    await expect(page.locator('.bulk-feedback')).toHaveCount(0);
     await expect(page.getByRole('dialog')).toHaveCount(0);
     expect(state.writes).toEqual([]);
 });

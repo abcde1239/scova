@@ -1,5 +1,5 @@
 import { logoutFromAccount, expectAccountReady } from './support/account-menu.ts';
-import { chooseOutputFormats } from './support/select.ts';
+import { chooseOption } from './support/select.ts';
 import { expect, test, type Page } from '@playwright/test';
 type Status =
     | 'queued'
@@ -110,7 +110,7 @@ function event(seq: number, type: 'tool.started' | 'tool.completed' = 'tool.star
 }
 
 for (const width of [390, 1440]) {
-    test(`本次输出形式选择与warning/error显示 ${width}`, async ({ page }) => {
+    test(`本次搜索方式选择与warning/error显示 ${width}`, async ({ page }) => {
         await page.setViewportSize({ width, height: 1000 });
         await install(page, snapshot('failed'));
         const warnings = [
@@ -160,26 +160,28 @@ for (const width of [390, 1440]) {
                 },
             });
         });
-        for (const [values, labels] of [
-            [['brief'], ['简报']],
-            [['list'], ['主题清单']],
-            [['comparison'], ['对比表']],
-            [['research_report'], ['研究报告']],
-            [
-                ['brief', 'comparison'],
-                ['简报', '对比表'],
-            ],
-        ]) {
+        for (const [searchMode, label] of [
+            [undefined, undefined],
+            ['api', 'Search API（搜索与网页读取）'],
+            ['searxng', '内置 SearXNG＋网页读取工具'],
+            ['auto', '沿用账号搜索配置'],
+        ] as const) {
             await page.goto(`/runs/${runId}`);
             const logs = page.getByRole('region', { name: '执行日志内容' });
             await expect(logs.locator('li.warning')).toContainText('warning');
             await expect(logs.locator('li.warning')).toContainText('检查链接');
             await expect(logs.locator('li.error')).toContainText('error');
             await expect(logs).not.toContainText('DO_NOT_RENDER');
-            await chooseOutputFormats(page, '本次输出形式', labels!);
+            await expect(
+                page.getByRole('group', { name: '本次输出形式', exact: true }),
+            ).toHaveCount(0);
+            await expect(page.getByLabel('本次搜索方式', { exact: true })).toContainText(
+                '沿用原执行搜索方式',
+            );
+            if (label) await chooseOption(page, '本次搜索方式', label);
             await page.getByRole('button', { name: '重试并创建新执行', exact: true }).click();
             await expect(page.getByRole('link', { name: '打开执行', exact: true })).toBeVisible();
-            expect(bodies.at(-1)).toMatchObject({ mode: 'live', outputFormats: values });
+            expect(bodies.at(-1)).toEqual({ mode: 'live', ...(searchMode ? { searchMode } : {}) });
             await noOverflow(page);
         }
     });
@@ -274,13 +276,91 @@ test('研究统计与固定诊断区分合法结论和请求成功', async ({ pa
     await expect(page.getByText('正文成功 3 / 5 次', { exact: false })).toBeVisible();
     await expect(page.getByText('保留结论 4 条', { exact: false })).toBeVisible();
     await expect(page.getByRole('region', { name: '执行日志内容' })).toContainText(
-        '已保留合法结论',
+        '正在修复结构或引用失败项',
     );
     await expect(page.getByText('本次使用启动时的预算快照', { exact: false })).toBeVisible();
     await noOverflow(page);
 });
 function frame(message: ReturnType<typeof event>) {
     return `id: ${message.eventId}\nevent: ${message.type}\ndata: ${JSON.stringify(message)}\n\n`;
+}
+
+for (const issue of ['slow', 'warning', 'error', 'api'] as const) {
+    test(`内置搜索可选API提示：${issue}`, async ({ page }, info) => {
+        await page.clock.install();
+        await page.setViewportSize({ width: 390, height: 1000 });
+        await page.emulateMedia({ reducedMotion: 'reduce' });
+        await install(page, snapshot('running'));
+        const now = new Date().toISOString();
+        const started = {
+            ...event(1),
+            occurredAt: now,
+            payload: {
+                toolCallId: taskId,
+                tool: 'search',
+                summary: '搜索',
+                searchProvider: issue === 'api' ? 'api' : 'searxng',
+            },
+        };
+        const failed = {
+            ...event(2),
+            occurredAt: now,
+            type: 'tool.failed',
+            payload: {
+                toolCallId: taskId,
+                tool: 'search',
+                code: 'TOOL_TIMEOUT',
+                message: 'hidden',
+                severity: issue === 'warning' ? 'warning' : 'error',
+                retryable: true,
+            },
+        };
+        const events = issue === 'slow' ? [started] : [started, failed];
+        await page.route(`**/api/v1/runs/${runId}/events?*`, (route) =>
+            route.fulfill({
+                contentType: 'text/event-stream',
+                body: events
+                    .map(
+                        (entry) =>
+                            `id: ${entry.eventId}\nevent: ${entry.type}\ndata: ${JSON.stringify(entry)}\n\n`,
+                    )
+                    .join(''),
+            }),
+        );
+        await page.goto(`/runs/${runId}`);
+        await expect(page.getByRole('region', { name: '执行日志内容' })).toContainText('搜索来源');
+        if (issue === 'slow') await page.clock.runFor(15_100);
+        const notices = page.locator('.scova-notifications .n-notification');
+        if (issue === 'api') {
+            await expect(page.getByRole('region', { name: '执行日志内容' })).toContainText(
+                'TOOL_TIMEOUT',
+            );
+            await expect(notices).toHaveCount(0);
+        } else {
+            await expect(notices).toHaveCount(1);
+            await expect(notices).toContainText(
+                issue === 'slow' ? '内置搜索等待较久' : '内置搜索暂不顺畅',
+            );
+            await expect(notices).toContainText('需要时在下次执行选择');
+            await page.clock.runFor(400);
+            expect(
+                await notices.evaluate(
+                    (notice) => notice.getBoundingClientRect().right <= innerWidth,
+                ),
+            ).toBe(true);
+            await expect(notices.getByRole('link', { name: '配置 Search API' })).toHaveAttribute(
+                'href',
+                '/account/agent#search-configuration-heading',
+            );
+            await page.screenshot({
+                path: info.outputPath(`search-api-suggestion-${issue}.png`),
+                fullPage: true,
+            });
+            await notices.locator('.n-notification__close').click();
+            await expect(notices).toHaveCount(0);
+        }
+        await expect(page.locator('.execution-detail')).toContainText('正在查阅');
+    });
 }
 function report(run: ReturnType<typeof snapshot>, id = reportId) {
     return {
@@ -415,7 +495,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
                     page.getByRole('heading', { name: states[status], exact: true }),
                 ).toBeVisible();
                 await expect(
-                    page.getByText(mode === 'demo' ? '演示模式 · Demo' : '真实查阅 · Live', {
+                    page.getByText(mode === 'demo' ? '演示执行' : '任务执行', {
                         exact: true,
                     }),
                 ).toBeVisible();

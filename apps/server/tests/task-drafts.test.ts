@@ -252,12 +252,14 @@ describe('草稿解析与独立预算', () => {
                 ...fallback,
                 researchMode: 'collection',
                 agentProviderId: '019a0000-0000-7000-8000-000000000002',
+                searchMode: 'api',
             },
             request,
             fallback,
         );
         expect(result.config.researchMode).toBeUndefined();
         expect(result.config.agentProviderId).toBeUndefined();
+        expect(result.config.searchMode).toBeUndefined();
     });
     it('无模型明确手工回退，原样保留描述并使用用户偏好与合法完整配置', async () => {
         const { service, evalRedis } = setup();
@@ -781,6 +783,7 @@ describe('真实模型适配器的本地HTTP契约', () => {
         expect((await setup(model).service.create(session, request)).mode).toBe('model');
         expect(http.request).toHaveBeenCalledTimes(1);
         expect(JSON.stringify(draftModelSchema)).not.toContain('scova-timezone');
+        expect(JSON.stringify(draftModelSchema)).not.toContain('searchMode');
     });
     it('上游HTTP失败不会触发内置三次重试或结构repair', async () => {
         const http = {

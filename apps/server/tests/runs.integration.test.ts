@@ -125,11 +125,16 @@ describe('Run API、事务 Outbox 与事件回放', () => {
         await admin.end();
     });
 
-    async function createTask(auth: { cookie: string; csrf: string }) {
+    async function createTask(
+        auth: { cookie: string; csrf: string },
+        searchMode?: 'auto' | 'api' | 'searxng',
+    ) {
         const response = await request('/api/v1/tasks', {
             method: 'POST',
             headers: authHeaders(auth),
-            body: JSON.stringify({ config: config() }),
+            body: JSON.stringify({
+                config: { ...config(), ...(searchMode ? { searchMode } : {}) },
+            }),
         });
         expect(response.status).toBe(201);
         return (await json(response)).task as { id: string; currentVersionId: string };
@@ -571,6 +576,58 @@ describe('Run API、事务 Outbox 与事件回放', () => {
             ).comparisonScopeHash,
         ).toBe(liveStored.comparisonScopeHash);
     });
+    it.each(['auto', 'api', 'searxng'] as const)(
+        'freezes search mode %s in overrides, idempotency and retries without editing the task',
+        async (searchMode) => {
+            const auth = await register();
+            const task = await createTask(auth, 'api');
+            const start = (body: unknown) =>
+                request(`/api/v1/tasks/${task.id}/runs`, {
+                    method: 'POST',
+                    headers: authHeaders(auth, {
+                        'idempotency-key': 'search-mode-freeze-123456789',
+                    }),
+                    body: JSON.stringify(body),
+                });
+            const response = await start({ searchMode });
+            expect(response.status).toBe(202);
+            const original = (await json(response)).run;
+            const stored = await db.query.runs.findFirst({
+                where: eq(tables.runs.id, original.id),
+            });
+            expect(stored?.followupConfigJson).toMatchObject({ searchMode, outputFormat: 'brief' });
+            const version = await db.query.taskVersions.findFirst({
+                where: eq(tables.taskVersions.id, task.currentVersionId),
+            });
+            expect(version?.configJson).toMatchObject({ searchMode: 'api' });
+            expect((await json(await start({ searchMode }))).run.id).toBe(original.id);
+            expect(
+                (await start({ searchMode: searchMode === 'api' ? 'searxng' : 'api' })).status,
+            ).toBe(409);
+            await db
+                .update(tables.runs)
+                .set({
+                    status: 'failed',
+                    finishedAt: services.clock(),
+                    failureCode: 'EXECUTOR_FAILED',
+                })
+                .where(eq(tables.runs.id, original.id));
+            const retried = await request(`/api/v1/runs/${original.id}/retry`, {
+                method: 'POST',
+                headers: authHeaders(auth, { 'idempotency-key': 'search-mode-retry-123456789' }),
+                body: '{}',
+            });
+            expect(retried.status).toBe(202);
+            const retry = (await json(retried)).run;
+            const retryStored = await db.query.runs.findFirst({
+                where: eq(tables.runs.id, retry.id),
+            });
+            expect(retryStored?.followupConfigJson).toMatchObject({ searchMode });
+            expect(retryStored?.comparisonScopeHash).toBe(stored?.comparisonScopeHash);
+            expect(retry.taskVersionId).toBe(original.taskVersionId);
+            expect(retry.budget).toEqual(original.budget);
+        },
+    );
     it.each([false, true])(
         'freezes selected formats without editing the task; replay, mismatch and retry preserve semantics (multiple=%s)',
         async (multiple) => {

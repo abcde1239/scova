@@ -14,13 +14,13 @@
                 <strong class="text-default font-medium">{{
                     item.readAt ? '已读' : '未读'
                 }}</strong>
-                <span>{{ item.mode === 'demo' ? '演示执行' : '真实查阅' }}</span>
+                <span>{{ item.mode === 'demo' ? '演示执行' : '任务执行' }}</span>
                 <span>{{ notificationStatus[item.runStatus] }}</span>
                 <time :datetime="item.createdAt">{{ localTaskTime(item.createdAt) }}</time>
             </p>
             <p class="m-0">{{ notificationMessage(item) }}</p>
             <router-link
-                class="inline-flex items-center gap-2 justify-self-start min-h-11 max-w-full text-primary underline-offset-[0.2em] cursor-pointer keyboard-focus-wide"
+                class="inline-flex items-center gap-2 justify-self-start min-h-11 max-w-full scova-link cursor-pointer keyboard-focus-wide"
                 :id="`notification-target-${item.id}`"
                 :to="notificationTarget(item)"
             >

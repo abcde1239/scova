@@ -61,6 +61,57 @@ export function conversationContext(
     };
 }
 
+/** Freeze real evidence from every selected document; summaries remain discussion. */
+export function mergeContext(original: Report, selected: Report[]): ReportConversationContext {
+    const documents = [original, ...selected];
+    const sources: ReportConversationContext['sources'] = [];
+    for (let index = 0; sources.length < 24; index++) {
+        if (!documents.some((report) => report.evidence[index])) break;
+        for (const report of documents) {
+            const item = report.evidence[index];
+            if (!item || sources.some((entry) => entry.id === item.id) || sources.length === 24)
+                continue;
+            sources.push({
+                id: item.id,
+                url: item.url,
+                title: item.title.slice(0, 1000),
+                text: item.quote.slice(0, 4000),
+                observedAt: item.observedAt,
+            });
+        }
+    }
+    return {
+        version: 1,
+        reportId: original.id,
+        questionId: selected.at(-1)!.conversation!.questionId,
+        operation: 'revise',
+        merge: { reportIds: selected.map((report) => report.id).sort() },
+        report: {
+            title: `合并：${original.title}`.slice(0, 1000),
+            summary: original.summary.slice(0, 16000),
+            claims: original.claims.slice(0, 30).map((claim) => claim.text.slice(0, 4000)),
+        },
+        messages: [
+            ...selected.map((report) => ({
+                role: 'assistant' as const,
+                content: JSON.stringify({
+                    title: report.title,
+                    summary: report.summary,
+                    claims: report.claims.map((claim) => claim.text),
+                    limitations: report.limitations,
+                }).slice(0, 16000),
+            })),
+            {
+                role: 'user',
+                content:
+                    'Merge the original report and selected follow-up reports into a complete Chinese deliverable. Consolidate duplicates, preserve material conditions, disagreements and unresolved questions. Discussion and report summaries are not evidence; cite only frozen sources. Do not browse or search. The evidence collection is bounded; retain relevant gaps rather than assuming full coverage.',
+            },
+        ],
+        sources,
+        omittedTurns: 0,
+    };
+}
+
 export function questionContextInput(
     context: ReportConversationContext,
     prompt: string,

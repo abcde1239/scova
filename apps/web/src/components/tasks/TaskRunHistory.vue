@@ -24,7 +24,12 @@
             @retry="retry"
         />
         <template v-else>
-            <state-panel v-if="!items.length" state="empty" message="此任务尚无执行记录" />
+            <state-panel
+                v-if="!items.length"
+                state="empty"
+                icon="run"
+                message="此任务尚无执行记录"
+            />
             <ol class="grid gap-6 list-none m-0 p-0" v-else>
                 <li
                     v-for="run in items"
@@ -32,12 +37,12 @@
                     class="history-entry layout-grid gap-3 break-anywhere [.history-entry_+_&.history-entry]:([border-top:0.0625rem_solid_var(--scova-border)] pt-6)"
                 >
                     <router-link
-                        class="inline-flex items-center justify-self-start min-h-11 text-primary cursor-pointer underline-offset-[0.2em] keyboard-focus-wide"
+                        class="inline-flex items-center justify-self-start min-h-11 scova-link cursor-pointer keyboard-focus-wide"
                         :to="`/runs/${run.id}`"
                         >{{ executionTitle(run) }} · 查看执行</router-link
                     >
                     <p class="[.run-history_>_&:is(p)]:text-muted">
-                        {{ run.mode === 'demo' ? '演示模式 · Demo' : '真实查阅 · Live' }}
+                        {{ run.mode === 'demo' ? '演示执行' : '任务执行' }}
                     </p>
                     <p class="[.run-history_>_&:is(p)]:text-muted">
                         排队于

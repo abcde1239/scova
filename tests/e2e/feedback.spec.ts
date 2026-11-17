@@ -269,7 +269,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
             { taskId: id(2), sourceId: id(21), kind: 'known' },
             { taskId: id(2), claimId: id(10), kind: 'deeper' },
         ]);
-        expect(calls.filter((entry) => entry.path.startsWith('/api/v1/reports/'))).toHaveLength(1);
+        expect(calls.filter((entry) => entry.path === `/api/v1${path}`)).toHaveLength(1);
         expect(external).toEqual([]);
         expect(errors).toEqual([]);
     });
@@ -351,7 +351,9 @@ test('未知写可能已保存：失败重读继续锁，只有新验证GET解�
     await openReportTool(page, 'feedback');
     await ready(page);
     await action(page, '希望深入').click();
-    await expect(panel(page)).toContainText('提交结果尚未确认');
+    await expect(page.locator('.scova-notifications .n-notification').last()).toContainText(
+        '提交结果尚未确认',
+    );
     await expect(current(page)).toHaveText('当前反馈：已了解');
     await expect(select(page)).toBeDisabled();
     await expect(action(page, '不相关')).toBeDisabled();
@@ -419,7 +421,9 @@ test('满200允许同目标切换，新增第201返回409并保原列表', async
     await expect(select(page)).toBeEnabled();
     await select(page).selectOption(claim);
     await action(page, '已了解').click();
-    await expect(panel(page)).toContainText('最多同时生效 200 条反馈');
+    await expect(page.locator('.scova-notifications .n-notification').last()).toContainText(
+        '最多同时生效 200 条反馈',
+    );
     await expect(current(page)).toHaveText('当前反馈：未设置');
     await expect(summary(page)).toContainText('200 / 200');
     await expect(select(page)).toBeEnabled();
@@ -447,7 +451,7 @@ test('确认写后精确GET包含其他目标并发变更，局部列表可单�
     await expect(summary(page)).toContainText('1 / 200');
     expect(await page.locator('.report-brief').innerText()).toBe(report);
     expect(writes(calls).at(-1)!.path).toBe(`/api/v1/feedback/${id(777)}`);
-    expect(calls.filter((entry) => entry.path.startsWith('/api/v1/reports/'))).toHaveLength(1);
+    expect(calls.filter((entry) => entry.path === `/api/v1${path}`)).toHaveLength(1);
 });
 for (const status of [404, 403, 409]) {
     test(`已知写${status}保原且不自动重试`, async ({ page }, info) => {
@@ -458,7 +462,7 @@ for (const status of [404, 403, 409]) {
         await openReportTool(page, 'feedback');
         await ready(page);
         await action(page, '希望深入').click();
-        await expect(panel(page).getByRole('status')).toContainText(
+        await expect(page.locator('.scova-notifications .n-notification').last()).toContainText(
             status === 404 ? '目标不存在' : status === 409 ? '200' : '未能提交',
         );
         await expect(current(page)).toHaveText('当前反馈：已了解');

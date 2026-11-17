@@ -38,7 +38,11 @@ export const RUN_FAILURE_MESSAGES: Readonly<Record<string, string>> = {
     DEADLINE_EXCEEDED: '执行时间预算已耗尽，未完成报告交付',
     RECOVERY_LIMIT_EXCEEDED: '执行恢复次数已达到上限',
     INVALID_RUN_CONFIGURATION: '执行配置快照无效，未启动外部调用',
-    AGENT_CONFIGURATION_INVALID: '真实研究服务配置不完整或模式不符，未切换演示服务',
+    AGENT_CONFIGURATION_INVALID: '任务模型或执行服务配置不可用',
+    SEARCH_API_NOT_CONFIGURED: '请在账号中配置 Search API，或选择内置 SearXNG',
+    SEARCH_CREDENTIAL_INVALID: '搜索密钥无法读取，请在账号中重新保存 Search API',
+    SEARCH_API_READING_UNSUPPORTED:
+        '所选 Search API 暂不支持独立网页读取，请改选 DeepSeek 或 Tavily',
     AGENT_DELIVERY_NOT_CONFIGURED: '研究候选已保存，但报告交付服务尚未接入',
     NO_EVIDENCE: '没有可验证的已采集正文，未生成报告',
     INVALID_DELIVERY_EVIDENCE: '来源、引用或候选授权校验失败，未生成报告',

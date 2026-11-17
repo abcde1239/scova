@@ -70,14 +70,6 @@
             <p v-if="file" class="help break-anywhere text-muted m-0">
                 已选择 {{ file.name }}，上传后生效。
             </p>
-            <p
-                class="break-anywhere m-0"
-                v-if="message"
-                :class="{ 'scova-failure': !success }"
-                :role="success ? 'status' : 'alert'"
-            >
-                {{ message }}
-            </p>
         </div>
     </div>
 </template>
@@ -87,6 +79,7 @@ import { ref } from 'vue';
 import AccountAvatar from '@/components/account/AccountAvatar.vue';
 import ActionButton from '@/components/common/ActionButton.vue';
 import { useAvatar } from '@/composables/useAvatar';
+import { useActionNotification } from '@/composables/useActionNotification';
 const {
     query,
     file,
@@ -101,6 +94,7 @@ const {
     remove,
     refresh,
 } = useAvatar();
+useActionNotification().watch(message, () => (success.value ? 'success' : 'error'));
 const input = ref<HTMLInputElement>();
 function choose(event: Event) {
     const target = event.target as HTMLInputElement;

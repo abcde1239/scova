@@ -83,11 +83,9 @@ export class ComposeEnvironment {
             SCOVA_BIND: '127.0.0.1',
             SCOVA_PORT: String(address.port),
             REGISTRATION_ENABLED: 'true',
-            SEARCH_PROVIDER: 'searxng',
             MODEL_API_KEY: '',
             MODEL_NAME: '',
             MODEL_BASE_URL: '',
-            TAVILY_API_KEY: '',
             SEARXNG_SECRET: '',
             COMPOSE_PROFILES: '',
         };

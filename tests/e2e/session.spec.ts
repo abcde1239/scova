@@ -220,6 +220,18 @@ for (const width of [1440, 320]) {
                 await page.evaluate(() => {
                     document.documentElement.style.fontSize = '200%';
                 });
+            const alignment = await page.locator('.state-panel').evaluate((panel) => {
+                const bounds = panel.getBoundingClientRect();
+                const image = panel.querySelector('img')!.getBoundingClientRect();
+                const message = panel.querySelector('[role="status"]')!.getBoundingClientRect();
+                return {
+                    panelX: Math.abs(bounds.x + bounds.width / 2 - innerWidth / 2),
+                    panelY: Math.abs(bounds.y + bounds.height / 2 - innerHeight / 2),
+                    imageX: Math.abs(image.x + image.width / 2 - innerWidth / 2),
+                    messageX: Math.abs(message.x + message.width / 2 - innerWidth / 2),
+                };
+            });
+            for (const offset of Object.values(alignment)) expect(offset).toBeLessThan(2);
             await page.screenshot({
                 path: info.outputPath(`loading-${colorScheme}.png`),
                 fullPage: true,

@@ -15,6 +15,7 @@ import {
 import { CoverageSchema } from './runs.ts';
 import { validReportValueClaims } from './report-value.ts';
 import { classifyReportDelivery } from './report-delivery.ts';
+import { researchCoverageMetrics } from './research-coverage.ts';
 import { validReportArtifacts } from './report-artifact-validation.ts';
 import { SourceDatesSchema } from './source-dates.ts';
 import { FeedbackEffectsSchema } from './feedback.ts';
@@ -87,6 +88,7 @@ export const ClaimKindSchema = Type.Union(
         Type.Literal('inference'),
         Type.Literal('conflict'),
         Type.Literal('insufficient'),
+        Type.Literal('model_answer'),
     ],
     { description: '来源事实、Agent 推断、冲突证据或证据不足' },
 );
@@ -106,7 +108,9 @@ const ClaimObject = Type.Object(
 export const ClaimSchema = refineSchema(
     ClaimObject,
     'ScovaClaim',
-    (value) => value.kind !== 'fact' || value.evidenceIds.length > 0,
+    (value) =>
+        (value.kind !== 'fact' || value.evidenceIds.length > 0) &&
+        (value.kind !== 'model_answer' || value.evidenceIds.length === 0),
 );
 export const ChangeKindSchema = Type.Union(
     [
@@ -168,7 +172,11 @@ const ReportObject = Type.Object(
                 {
                     reportId: UuidSchema,
                     questionId: UuidSchema,
-                    operation: Type.Union([Type.Literal('research'), Type.Literal('revise')]),
+                    operation: Type.Union([
+                        Type.Literal('research'),
+                        Type.Literal('revise'),
+                        Type.Literal('merge'),
+                    ]),
                 },
                 { additionalProperties: false },
             ),
@@ -184,8 +192,7 @@ const ReportObject = Type.Object(
         }),
         claims: Type.Array(ClaimSchema, { minItems: 1, description: '至少一条有内容的结构化结论' }),
         evidence: Type.Array(EvidenceSchema, {
-            minItems: 1,
-            description: '至少一条可查证证据；没有证据时不能发布报告',
+            description: '外部证据；仅模型自回答的报告允许为空',
         }),
         changes: Type.Array(ChangeRecordSchema),
         feedbackEffects: Type.Optional(FeedbackEffectsSchema),
@@ -194,6 +201,96 @@ const ReportObject = Type.Object(
     { additionalProperties: false, description: '包含已生成成果索引、结论及证据的不可变报告 DTO' },
 );
 export const ReportSchema = refineSchema(ReportObject, 'ScovaReport', (value) => {
+    if (
+        value.coverage.metrics &&
+        Object.entries(
+            researchCoverageMetrics(
+                value.coverage.reportValue,
+                value.claims,
+                value.coverage.artifacts,
+            ),
+        ).some(
+            ([key, expected]) =>
+                JSON.stringify(Reflect.get(value.coverage.metrics!, key)) !==
+                JSON.stringify(expected),
+        )
+    )
+        return false;
+    if (
+        value.coverage.propositions &&
+        (new Set(value.coverage.propositions.map((p) => p.claimIndex)).size !==
+            value.coverage.propositions.length ||
+            value.claims.some(
+                (claim, i) =>
+                    claim.kind !== 'insufficient' &&
+                    !value.coverage.propositions!.some((p) => p.claimIndex === i),
+            ))
+    )
+        return false;
+    if (
+        value.coverage.propositions?.some((p) => {
+            const claim = value.claims[p.claimIndex];
+            const selection = value.coverage.reportValue?.selections.find(
+                (s) => s.claimIndex === p.claimIndex,
+            );
+            const requirements =
+                value.coverage.artifacts?.flatMap((a) => a.coverage?.requirements ?? []) ?? [];
+            return (
+                !claim ||
+                claim.kind === 'insufficient' ||
+                p.conditions !== (selection?.assessment?.conditions ?? '') ||
+                p.support !==
+                    (claim.kind === 'model_answer'
+                        ? 'none'
+                        : (selection?.assessment?.support ?? 'unknown')) ||
+                p.requirementIds.some(
+                    (id) =>
+                        !requirements.some(
+                            (r) => r.id === id && r.claimIndexes.includes(p.claimIndex),
+                        ),
+                ) ||
+                requirements.some(
+                    (r) =>
+                        r.claimIndexes.includes(p.claimIndex) && !p.requirementIds.includes(r.id),
+                ) ||
+                claim.evidenceIds.some(
+                    (id) =>
+                        !value.evidence.some(
+                            (e) =>
+                                e.id === id &&
+                                p.passages.some(
+                                    (span) =>
+                                        e.snapshot?.contentHash === span.contentHash &&
+                                        e.snapshot.selector.start === span.start &&
+                                        e.snapshot.selector.end === span.end,
+                                ),
+                        ),
+                ) ||
+                p.passages.some(
+                    (span) =>
+                        span.end <= span.start ||
+                        !value.evidence.some(
+                            (e) =>
+                                claim.evidenceIds.includes(e.id) &&
+                                e.snapshot?.contentHash === span.contentHash &&
+                                e.snapshot.selector.start === span.start &&
+                                e.snapshot.selector.end === span.end,
+                        ),
+                )
+            );
+        })
+    )
+        return false;
+    if (
+        value.coverage.reportValue?.selections.some(
+            (s) =>
+                (s.basis === 'model_knowledge') !==
+                (value.claims[s.claimIndex]?.kind === 'model_answer'),
+        )
+    )
+        return false;
+    if (!value.evidence.length && !value.claims.some((claim) => claim.kind === 'model_answer'))
+        return false;
     const artifacts = value.coverage.artifacts;
     if (!validReportArtifacts(artifacts, value.claims, value.coverage.reportValue)) return false;
     if (
@@ -228,10 +325,15 @@ export const ReportSchema = refineSchema(ReportObject, 'ScovaReport', (value) =>
         value.coverage.reportValue &&
         (!validReportValueClaims(value.coverage.reportValue, value.claims.length) ||
             value.coverage.reportValue.selections.some(
-                (s) => s.placement === 'main' && !value.claims[s.claimIndex]?.evidenceIds.length,
+                (s) =>
+                    s.placement === 'main' &&
+                    value.claims[s.claimIndex]?.kind !== 'model_answer' &&
+                    !value.claims[s.claimIndex]?.evidenceIds.length,
             ) ||
             (value.coverage.completeness === 'complete' &&
-                value.coverage.reportValue.questions.some((q) => q.status !== 'supported')) ||
+                (value.coverage.reportValue.questions.some((q) => q.status === 'disputed') ||
+                    classifyReportDelivery(value.coverage.reportValue, value.claims, artifacts)
+                        .answeredQuestions !== value.coverage.reportValue.questions.length)) ||
             value.coverage.reportValue.questions.some(
                 (q) =>
                     q.status === 'disputed' &&

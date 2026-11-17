@@ -244,7 +244,10 @@ test('本地任务样本：摘要直接打开与刷新、历史失败重试', as
     await expect(page.getByText('本地契约样例主题', { exact: true })).toBeVisible();
     await expect(page.getByText('尚无执行', { exact: true })).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath('summary-390.png'), fullPage: true });
-    await page.getByRole('link', { name: '返回任务', exact: true }).click();
+    await page
+        .getByRole('navigation', { name: '面包屑导航' })
+        .getByRole('link', { name: '任务', exact: true })
+        .click();
     await expect(page.getByRole('radio', { name: '暂停', exact: true })).toBeChecked();
     await expect(page.locator('.task-card')).toHaveCount(1);
 });

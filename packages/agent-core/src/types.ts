@@ -14,12 +14,45 @@ import type {
 import type { ModelResponse, ReadPage, SearchResponse, StructuredInput } from '@scova/connectors';
 
 export interface AgentTools {
+    /** Remote provider decides document support; do not apply local HTML Reader filters. */
+    providerReads?: boolean;
     search: (operationKey: string, query: string) => Promise<SearchResponse>;
     read: (operationKey: string, url: string) => Promise<ReadPage>;
-    model: (operationKey: string, input: StructuredInput) => Promise<AgentModelResponse>;
+    model: (operationKey: string, input: AgentModelInput) => Promise<AgentModelResponse>;
+}
+
+/** Worker-authored metadata, outside model-generated content and provider schemas. */
+export interface ResearchPolicy {
+    answerCompletionPolicy?: 1;
+    gapKindPolicy?: 1;
+    knowledgeFirstPolicy?: 1;
+    gapLoopPolicy?: 1;
+}
+export interface AgentModelInput extends StructuredInput {
+    researchPolicy?: ResearchPolicy;
 }
 
 export interface AgentContext {
+    /** Enable coverage-driven rounds for newly created executions; persisted checkpoints win. */
+    coverageDriven?: boolean;
+    /** Field patches use a separate policy; existing promoted checkpoints keep their decoder. */
+    fieldDriven?: boolean;
+    /** Allow an explicitly labelled knowledge answer after external research is exhausted. */
+    modelAnswerFallback?: boolean;
+    /** Passage-scoped cross-question associations and unverified knowledge-guided planning. */
+    evidenceReasoning?: boolean;
+    /** Classify field gaps before repair/search and freeze external-verification obligations. */
+    gapDriven?: boolean;
+    /** Normalize conflicts before knowledge fallback or complementary search. */
+    conflictResolution?: boolean;
+    /** Complete delivery means every question answered; external support is reported separately. */
+    answerCompletion?: boolean;
+    /** Require a structured gap kind so detail gaps no longer veto supported answers. */
+    gapKinds?: boolean;
+    /** Draft stable fields before retrieval; saved checkpoints retain their original policy. */
+    knowledgeFirst?: boolean;
+    /** Reserve retrieval and schedule one persisted gap action at a time. */
+    gapLoop?: boolean;
     conversation?: ReportConversationContext;
     answerSupplementEnabled?: boolean;
     adaptiveSearchDisabled?: boolean;
@@ -104,7 +137,7 @@ export interface AgentCitation {
 export interface AgentClaim {
     outputFormat?: TaskConfig['outputFormat'];
     assessment?: ClaimAssessment;
-    kind: 'fact' | 'inference' | 'conflict' | 'insufficient';
+    kind: 'fact' | 'inference' | 'conflict' | 'insufficient' | 'model_answer';
     text: string;
     citations: AgentCitation[];
     questionIds: string[];
@@ -123,13 +156,14 @@ export interface ComparisonSourceCoverage {
 }
 
 export interface AgentModelResponse extends ModelResponse {
+    researchPolicy?: ResearchPolicy;
     /** null identifies a reused legacy receipt whose actual input coverage is unknown. */
     sourceCoverage?: ComparisonSourceCoverage | null;
 }
 
 export interface ComparisonExtraction {
     operationKey: string;
-    response: ModelResponse;
+    response: AgentModelResponse;
     sourceCoverage?: ComparisonSourceCoverage;
 }
 

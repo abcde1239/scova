@@ -77,11 +77,15 @@ api.listen(4190, '127.0.0.1');
 await once(api, 'listening');
 let server;
 async function close() {
+    api.closeAllConnections();
+    server?.httpServer.closeAllConnections();
     await new Promise((resolve) => api.close(resolve));
     if (server) await new Promise((resolve) => server.httpServer.close(resolve));
 }
-process.once('SIGTERM', () => void close());
-process.once('SIGINT', () => void close());
+// Vite's config loader may keep internal handles alive after both HTTP servers stop.
+// This process belongs exclusively to the browser fixture and exits after cleanup.
+process.once('SIGTERM', () => void close().then(() => process.exit(0)));
+process.once('SIGINT', () => void close().then(() => process.exit(0)));
 try {
     server = await preview({
         root: webRoot,

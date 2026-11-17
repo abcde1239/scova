@@ -74,6 +74,19 @@ function setup(fetcher: typeof fetch) {
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe('手工任务配置', () => {
+    it('saves search choice and keeps it when applying model-generated task content', () => {
+        expect(taskInput(validDraft()).config.searchMode).toBeUndefined();
+        expect(taskInput({ ...validDraft(), searchMode: 'searxng' }).config.searchMode).toBe(
+            'searxng',
+        );
+        expect(() => taskInput({ ...validDraft(), searchMode: 'invalid' })).toThrow();
+        const { controller } = setup(async () => Response.json(detail()));
+        controller.draft.searchMode = 'api';
+        expect(controller.applyParsed({ ...detail().version.config, searchMode: 'searxng' })).toBe(
+            true,
+        );
+        expect(controller.draft.searchMode).toBe('api');
+    });
     it('persists collection explicitly and preserves the choice when applying a draft', () => {
         const draft = { ...validDraft(), researchMode: 'collection' };
         expect(taskInput(draft).config.researchMode).toBe('collection');

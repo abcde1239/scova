@@ -112,6 +112,7 @@ export const draftModelSchema = (() => {
     // 执行配置必须由账号显式选择，不允许自然语言模型生成供应商ID。
     delete schema.properties.agentProviderId;
     delete schema.properties.researchMode;
+    delete schema.properties.searchMode;
     return strictOutputFormats(removeFormats(schema)) as Record<string, unknown>;
 })();
 
@@ -216,6 +217,7 @@ export function normalizeDraft(data: unknown, input: TaskDraftInput, fallback: T
     const config = decodeDraftOutputFormats(data) as Record<string, unknown>;
     delete config.agentProviderId;
     delete config.researchMode;
+    delete config.searchMode;
     const modelTimezoneMatches =
         canonicalTimezone(config.timezone) !== null &&
         canonicalTimezone(config.timezone) === canonicalTimezone(fallback.timezone);

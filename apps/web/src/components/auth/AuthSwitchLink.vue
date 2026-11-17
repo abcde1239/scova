@@ -24,13 +24,7 @@ defineProps<{ register?: boolean }>();
 }
 .auth-switch a {
     @apply inline-flex items-center justify-center gap-1.5 min-w-11 min-h-11 max-w-full pt-1.5 pr-2.5
-        pb-1.5 pl-2.5 rounded-2 text-primary no-underline break-anywhere cursor-pointer;
-}
-.auth-switch a:hover {
-    @apply [background:var(--scova-selected)] underline underline-offset-[0.2em];
-}
-.auth-switch a:focus-visible {
-    @apply [outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.1875rem];
+        pb-1.5 pl-2.5 rounded-2 scova-link break-anywhere cursor-pointer;
 }
 @media (max-width: 22rem) {
     .auth-switch a {

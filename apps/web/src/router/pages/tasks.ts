@@ -17,7 +17,10 @@ export default [
     {
         name: 'task-summary',
         path: '/tasks/:taskId',
-        component,
+        components: {
+            default: component,
+            tools: () => import('@/components/tasks/TaskSummaryTools.vue'),
+        },
         meta: { title: '任务摘要', section: 'tasks' },
     },
 ] satisfies RouteRecordRaw[];

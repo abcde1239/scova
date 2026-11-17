@@ -48,6 +48,28 @@ async function samples(page: Page) {
         };
     }
     await page.route('**/api/v1/me', (route) => route.fulfill({ json: account }));
+    await page.route('**/api/v1/me/agent-providers', (route) =>
+        route.fulfill({
+            json: {
+                items: [
+                    {
+                        id: id(901),
+                        name: '研究模型（示例）',
+                        protocol: 'openai_json',
+                        baseUrl: 'https://example.test/v1',
+                        model: 'research-example',
+                        hasApiKey: true,
+                        active: true,
+                        draftActive: true,
+                        revision: 1,
+                        updatedAt: '2026-10-31T00:00:00Z',
+                    },
+                ],
+                systemConfigured: false,
+                storageReady: true,
+            },
+        }),
+    );
     await page.route('**/api/v1/tasks**', async (route) => {
         const request = route.request(),
             url = new URL(request.url());
@@ -94,9 +116,10 @@ test('资料收集方式保存到配置且任务显示已启用', async ({ page 
     const saved = calls.find((call) => call.method === 'POST')?.body;
     expect(saved?.config).toMatchObject({ researchMode: 'collection', outputFormat: 'list' });
     await expect(page.locator('.task-card')).toContainText('已启用');
-    const runFormats = page.getByRole('group', { name: '本次输出形式', exact: true });
-    await expect(runFormats).toContainText('留空沿用已保存配置');
-    await expect(runFormats.locator('input:checked')).toHaveCount(0);
+    await expect(page.getByRole('group', { name: '本次输出形式', exact: true })).toHaveCount(0);
+    await expect(page.getByLabel('本次搜索方式', { exact: true })).toContainText(
+        '沿用任务搜索方式',
+    );
 });
 
 test('任务保存多种采集目标，最后一个必选成果不能取消', async ({ page }) => {
@@ -104,6 +127,7 @@ test('任务保存多种采集目标，最后一个必选成果不能取消', as
     await page.goto('/tasks/new');
     await fillMain(page);
     await chooseOutputFormats(page, '输出形式', ['简报', '对比表']);
+    await chooseOption(page, '搜索方式', 'Search API（搜索与网页读取）');
     const group = page.getByRole('group', { name: '输出形式', exact: true });
     await expect(group).toContainText('核心答案与重要发现');
     await expect(group).toContainText('共同维度与差异依据');
@@ -112,6 +136,7 @@ test('任务保存多种采集目标，最后一个必选成果不能取消', as
     expect(calls.find((call) => call.method === 'POST')?.body?.config).toMatchObject({
         outputFormat: 'brief',
         outputFormats: ['brief', 'comparison'],
+        searchMode: 'api',
     });
     await page.goto('/tasks/new');
     const brief = page
@@ -275,6 +300,7 @@ for (const width of [1440, 320]) {
             await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
         await page.goto('/tasks/new');
         const output = page.getByRole('group', { name: '输出形式', exact: true });
+        await expect(output.getByRole('checkbox')).toHaveCount(4);
         const originalOutput = await output
             .getByRole('checkbox')
             .evaluateAll((elements) =>
@@ -290,20 +316,31 @@ for (const width of [1440, 320]) {
         const dialog = page.getByRole('dialog');
         await expect(dialog).toContainText('虚构内容');
         for (const [label, heading] of [
-            ['简报', '主要发现'],
-            ['主题清单', '费用与材料'],
-            ['对比', '与上次查阅对比'],
-            ['研究报告', '事实与分析'],
+            ['简报', '两馆预约要求不同，均需读者证'],
+            ['主题清单', '甲馆'],
+            ['对比', '两馆的共同维度'],
+            ['研究报告', '预约与开放安排'],
         ]) {
             const choice = dialog.getByRole('button', { name: label, exact: true });
             await choice.press('Enter');
             await expect(choice).toHaveAttribute('aria-pressed', 'true');
-            await expect(dialog.getByRole('heading', { name: heading, exact: true })).toBeVisible();
+            await expect(
+                dialog.getByRole(label === '对比' ? 'table' : 'heading', {
+                    name: heading,
+                    exact: true,
+                }),
+            ).toBeVisible();
             await expect(
                 dialog.getByRole('heading', { name: '来源与引用', exact: true }),
             ).toBeVisible();
             await noOverflow(page);
             const sample = dialog.getByRole('article');
+            await expect(sample.locator('footer p')).toHaveText([
+                '[1] 虚构来源：甲馆开放说明',
+                '[2] 虚构来源：乙馆预约说明',
+            ]);
+            await expect(sample).not.toContainText('待核实');
+            await expect(sample).toContainText('免费');
             expect(await sample.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
             expect(await sample.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe(
                 width === 320 ? 'rgb(25, 31, 38)' : 'rgb(255, 255, 255)',
@@ -362,6 +399,47 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
             if (doubled)
                 await page.evaluate(() => (document.documentElement.style.fontSize = '200%'));
             await noOverflow(page);
+            const manageAgent = page.getByRole('link', { name: '管理 Agent 配置', exact: true });
+            expect(
+                await page.locator('.task-execution-settings').evaluate((group) => {
+                    const search = group.querySelector('[aria-label="搜索方式"]')!;
+                    const footer = group.querySelector('.execution-settings-footer')!;
+                    return (
+                        footer.getBoundingClientRect().top >= search.getBoundingClientRect().bottom
+                    );
+                }),
+            ).toBe(true);
+            await manageAgent.hover();
+            expect(
+                await manageAgent.evaluate((link) => ({
+                    background: getComputedStyle(link).backgroundColor,
+                    align: getComputedStyle(link).justifySelf,
+                    height: link.getBoundingClientRect().height,
+                    width: link.getBoundingClientRect().width,
+                    container: link.parentElement!.getBoundingClientRect().width,
+                })),
+            ).toMatchObject({ background: 'rgba(0, 0, 0, 0)', align: 'start' });
+            await expect(manageAgent.locator('.app-icon')).toHaveCount(1);
+            if (width >= 768)
+                expect(
+                    await manageAgent.evaluate(
+                        (link) =>
+                            link.getBoundingClientRect().width <
+                            link.parentElement!.getBoundingClientRect().width - 24,
+                    ),
+                ).toBe(true);
+            await page.keyboard.press('Tab');
+            await manageAgent.focus();
+            expect(await manageAgent.evaluate((link) => getComputedStyle(link).outlineStyle)).toBe(
+                'solid',
+            );
+            if (!doubled) {
+                await page.getByLabel('任务标题', { exact: true }).focus();
+                await page.mouse.move(0, 0);
+                await page.locator('.task-execution-settings').screenshot({
+                    path: `artifacts/link-navigation-refinement/internal-${width}.png`,
+                });
+            }
             for (const label of ['开始时间', '结束时间']) {
                 expect(
                     await page.getByLabel(label, { exact: true }).evaluate((input) => {
@@ -423,7 +501,10 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         expect(
             calls.filter((call) => call.method === 'POST' && call.path.includes('/runs')),
         ).toEqual([]);
-        await page.getByRole('link', { name: '返回任务', exact: true }).click();
+        await page
+            .getByRole('navigation', { name: '面包屑导航' })
+            .getByRole('link', { name: '任务', exact: true })
+            .click();
         await expect(page.getByRole('link', { name: title, exact: true })).toBeVisible();
         expect(errors).toEqual([]);
     });
@@ -547,10 +628,10 @@ test('在途双击只一次，不确定结果不能直接重发', async ({ page 
     );
     expect(count).toBe(1);
     release();
-    await expect(page.getByRole('alert')).toContainText('核对');
+    await expect(page.locator('.scova-notifications .n-notification').last()).toContainText('核对');
     await expect(page.getByRole('button', { name: '确认保存任务', exact: true })).toBeDisabled();
     await expect(page.getByLabel('任务标题', { exact: true })).toHaveValue(title);
-    await expect(page.getByRole('alert')).toBeFocused();
+    await expect(page.locator('.scova-notifications .n-notification').last()).not.toBeFocused();
     await noOverflow(page);
     await page.screenshot({ path: testInfo.outputPath('uncertain-320.png'), fullPage: true });
     expect(count).toBe(1);

@@ -131,7 +131,7 @@ export async function openReport(page: Page, report: Report) {
     await expect(page.locator('#report-title')).toHaveText(report.title);
     await expect(page.locator('.metadata')).toContainText(report.taskVersionId);
     await expect(page.locator('.mode')).toHaveText(
-        report.mode === 'demo' ? '演示报告：来自演示数据，不代表真实查阅成果。' : '真实查阅报告',
+        report.mode === 'demo' ? '演示报告：来自演示数据，不代表真实查阅成果。' : '研究报告',
     );
 }
 

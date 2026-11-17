@@ -1,9 +1,9 @@
 <template>
     <section ref="container" class="inbox-view layout-grid gap-6" aria-label="报告收件箱">
         <div class="inbox-tools flex flex-wrap justify-between gap-[1rem_2rem] items-center">
-            <nav class="flex flex-wrap gap-2" aria-label="收件箱筛选">
+            <nav class="segmented-track" aria-label="收件箱筛选">
                 <router-link
-                    class="[nav_&:is(a)]:(inline-flex items-center min-h-11 text-muted no-underline cursor-pointer rounded-2 py-2 px-4) [nav_&:is(a)[aria-current='page']]:(text-primary bg-surface font-semibold) [nav_&:is(a):focus-visible]:([outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.25rem])"
+                    class="segmented-item [&[aria-current='page']]:segmented-selected focus-visible:([outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.125rem])"
                     v-for="option in filters"
                     :key="option.value"
                     :to="inboxPath(option.value)"
@@ -20,10 +20,6 @@
                 <app-icon name="retry" />刷新
             </action-button>
         </div>
-        <p class="break-anywhere m-0" v-if="actionError" role="alert">{{ actionError }}</p>
-        <p class="break-anywhere m-0" v-if="announcement" role="status" aria-live="polite">
-            {{ announcement }}
-        </p>
         <state-panel v-if="query.isPending.value" state="loading" message="正在读取收件箱" />
         <state-panel
             v-else-if="query.isError.value"
@@ -35,6 +31,7 @@
         <state-panel
             v-else-if="!items.length"
             state="empty"
+            icon="inbox"
             :message="
                 filter === 'unread'
                     ? '暂无未读报告'
@@ -42,7 +39,11 @@
                       ? '暂无已读报告'
                       : '暂无报告'
             "
-        />
+        >
+            <template #action>
+                <router-link class="internal-link" to="/tasks">查看任务</router-link>
+            </template>
+        </state-panel>
         <div v-if="items.length" class="inbox-list min-w-0">
             <inbox-entry
                 v-for="item in items"
@@ -87,6 +88,7 @@ import {
     type InboxFilter,
 } from '@/composables/useInbox';
 import { useSessionLifecycle } from '@/composables/useSessionQuery';
+import { useActionNotification } from '@/composables/useActionNotification';
 const route = useRoute();
 const router = useRouter();
 const lifecycle = useSessionLifecycle();
@@ -100,6 +102,9 @@ const { query, items, error, pendingId, actionError, announcement, setRead } = u
     filter,
     lifecycle,
 );
+const notification = useActionNotification();
+notification.watch(announcement, 'success');
+notification.watch(actionError, 'error');
 const container = ref<HTMLElement>();
 function focusEntry(id?: string) {
     const target = id ? document.getElementById(`inbox-report-${id}`) : undefined;

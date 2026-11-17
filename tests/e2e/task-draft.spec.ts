@@ -253,7 +253,7 @@ async function generateDraft(
 }
 const apply = (page: Page) =>
     panel(page).getByRole('button', { name: '应用草稿并替换当前配置', exact: true });
-const feedback = (page: Page) => panel(page).getByRole('status');
+const feedback = (page: Page) => page.locator('.scova-notifications .n-notification').last();
 const taskPosts = (calls: Awaited<ReturnType<typeof samples>>['calls']) =>
     calls.filter((call) => call.method === 'POST' && !call.path.startsWith('/api/v1/task-drafts'));
 const draftPosts = (calls: Awaited<ReturnType<typeof samples>>['calls']) =>
@@ -342,7 +342,7 @@ for (const width of [390, 1440]) {
         ).toBeFocused();
         await panel(page).getByRole('button', { name: '继续与 AI 确认', exact: true }).click();
         expect(questionCalls).toHaveLength(1);
-        await expect(panel(page)).toContainText('请逐项回答');
+        await expect(feedback(page)).toContainText('请逐项回答');
         await panel(page).getByRole('button', { name: '上海', exact: true }).click();
         await panel(page).getByRole('button', { name: '继续与 AI 确认', exact: true }).click();
         await expect(panel(page)).toContainText('上海需要哪一类课程？');
@@ -420,7 +420,7 @@ test('AI追问失败保留当前回答，显式重试不重复追加对话', asy
     const answer = panel(page).getByLabel('你的回答：关注哪种课程？', { exact: true });
     await answer.fill('编程，保留原回答');
     await panel(page).getByRole('button', { name: '继续与 AI 确认', exact: true }).click();
-    await expect(panel(page)).toContainText('已有回答已保留');
+    await expect(feedback(page)).toContainText('已有回答已保留');
     await expect(answer).toHaveValue('编程，保留原回答');
     expect(attempts).toBe(2);
     await panel(page).getByRole('button', { name: '继续与 AI 确认', exact: true }).click();
@@ -489,7 +489,7 @@ test('手动填写保留原文和配置，取消在途解析并可返回问答�
     await generateDraft(page);
     await expect.poll(() => draftPosts(calls).length).toBe(1);
     await panel(page).getByRole('button', { name: '手动填写', exact: true }).click();
-    await expect(panel(page)).toContainText('已进入手工配置');
+    await expect(feedback(page)).toContainText('已进入手工配置');
     await expect(title(page)).toBeFocused();
     release();
     await expect(title(page)).toHaveValue('保留手工内容');
@@ -561,7 +561,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         await chooseTimezone(page, 'Asia/Tokyo', '需求时区');
         await generateDraft(page, 'keyboard');
         await expect(apply(page)).toBeEnabled();
-        await expect(feedback(page)).toBeFocused();
+        await expect(feedback(page)).not.toBeFocused();
         await expect(title(page)).toHaveValue('原有手工配置');
         await expect(page.getByLabel('搜索次数上限', { exact: true })).toHaveValue('1');
         await expect(original(page)).toHaveValue(inputText);
@@ -699,7 +699,7 @@ for (const status of [429, 408]) {
         await page.evaluate(() => (document.documentElement.style.fontSize = '200%'));
         await generateDraft(page);
         await expect(feedback(page)).toContainText(status === 429 ? '解析过于频繁' : '解析超时');
-        await expect(feedback(page)).toBeFocused();
+        await expect(feedback(page)).not.toBeFocused();
         await expect(original(page)).toHaveValue(inputText);
         await expect(title(page)).toHaveValue('解析失败前的手工标题');
         await expect(title(page)).toBeEditable();
@@ -819,7 +819,7 @@ test('在途重复解析与停止不会写任务，迟到结果不复活', async
     await pending.press('Space');
     await panel(page).getByRole('button', { name: '停止解析', exact: true }).click();
     await expect(feedback(page)).toContainText('解析已停止');
-    await expect(feedback(page)).toBeFocused();
+    await expect(feedback(page)).not.toBeFocused();
     release();
     await expect(parse(page)).toBeEnabled();
     await expect(apply(page)).toHaveCount(0);

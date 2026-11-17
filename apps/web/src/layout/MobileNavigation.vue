@@ -269,7 +269,7 @@ onUnmounted(() => {
     @apply [background:var(--scova-selected)] text-primary;
 }
 .menu-panel a[aria-current='page'] {
-    @apply underline underline-offset-[0.25em];
+    @apply font-semibold;
 }
 a:focus-visible,
 button:focus-visible {

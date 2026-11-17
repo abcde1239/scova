@@ -9,7 +9,7 @@
             :id="headingId"
         >
             <router-link
-                class="text-inherit no-underline cursor-pointer keyboard-focus-wide hover:(text-primary underline underline-offset-[0.2em])"
+                class="title-link cursor-pointer keyboard-focus-wide"
                 v-if="link"
                 :to="{
                     name: 'task-summary',
@@ -62,7 +62,7 @@
         </dl>
         <navigation-button
             v-if="link"
-            class="task-history-link text-inherit no-underline cursor-pointer keyboard-focus-wide [.task-row_&.task-history-link]:m-0 [@media(max-width:_29.999rem)]:[.task-row_&.task-history-link]:justify-self-start hover:(text-primary underline underline-offset-[0.2em]) [&&]:(inline-flex items-center min-h-11 max-w-full mt-4 text-primary)"
+            class="task-history-link scova-link cursor-pointer keyboard-focus-wide [.task-row_&.task-history-link]:m-0 [@media(max-width:_29.999rem)]:[.task-row_&.task-history-link]:justify-self-start [&&]:(inline-flex items-center min-h-11 max-w-full mt-4)"
             icon="report"
             :to="{ name: 'report-history', query: { taskId: task.id } }"
             >报告历史</navigation-button
@@ -72,31 +72,20 @@
 
 <script setup lang="ts">
 import NavigationButton from '@/components/common/NavigationButton.vue';
-import { computed, useId } from 'vue';
-import { useQuery } from '@tanstack/vue-query';
+import { useId } from 'vue';
 import { RouterLink } from 'vue-router';
 import type { Task, RunStatus } from '@scova/models';
-import { taskRunsEndpoint, taskKeys } from '@/api/tasks';
-import { useSessionLifecycle } from '@/composables/useSessionQuery';
+import { useLatestTaskRun } from '@/composables/useLatestTaskRun';
 import { localTaskTime, type TaskFilter } from '@/composables/useTasks';
 const props = withDefaults(
     defineProps<{ task: Task; filter: TaskFilter; timezone: string; link?: boolean }>(),
     { link: true },
 );
 const headingId = useId();
-const lifecycle = useSessionLifecycle();
-const runs = useQuery(
-    computed(() => ({
-        ...lifecycle.queryOptions(
-            taskRunsEndpoint,
-            { params: { taskId: props.task.id }, query: { limit: 1 } },
-            taskKeys.runs(props.task.id),
-        ),
-        enabled: !props.link && !!lifecycle.session.user,
-    })),
-    lifecycle.queryClient,
+const { query: runs, latest } = useLatestTaskRun(
+    () => props.task.id,
+    () => !props.link,
 );
-const latest = computed(() => runs.data.value?.data.items[0]);
 const labels = { active: '已启用', paused: '暂停', archived: '归档' };
 const runLabels: Record<RunStatus, string> = {
     queued: '排队中',

@@ -1,89 +1,90 @@
 <template>
-    <div class="structured-value scova-reading layout-grid gap-2 break-anywhere">
+    <span
+        v-if="compact"
+        class="structured-value structured-value--compact break-anywhere"
+        :class="{ 'text-muted': value.status === 'unknown' }"
+    >
+        <model-answer-tag v-if="isModelAnswer" class="mr-1.5" />
+        <span
+            v-if="!isModelAnswer && value.status !== 'supported'"
+            class="value-tag scova-interface inline-flex items-center rounded-1 px-1.5 mr-1.5 text-[0.75rem] leading-[1.6] [border:0.0625rem_dashed_currentColor]"
+            :class="value.status === 'unknown' ? 'text-muted' : 'theme-partial'"
+            >{{ value.status === 'unknown' ? '未知' : '部分' }}</span
+        ><template v-if="value.text && value.status !== 'unknown'">
+            <span
+                v-for="(paragraph, index) in paragraphs"
+                :key="index"
+                class="structured-paragraph whitespace-pre-wrap"
+                :class="{ 'block mt-3': index > 0 }"
+                >{{ paragraph }}</span
+            > </template
+        ><sup
+            v-for="number in notes"
+            :key="number"
+            class="value-note scova-interface text-primary ml-0.5 text-[0.6875rem]"
+            ><a :href="`#${noteId}-${number}`" :aria-label="`注 ${number}`">{{ number }}</a></sup
+        >
+    </span>
+    <div v-else class="structured-value scova-reading layout-grid gap-2 break-anywhere">
+        <model-answer-tag v-if="isModelAnswer" />
         <p
-            v-if="value.status !== 'supported'"
+            v-if="!isModelAnswer && value.status !== 'supported'"
             class="scova-warning scova-interface whitespace-pre-wrap m-0"
         >
             {{ value.status === 'unknown' ? '未知' : '部分资料，待核实'
             }}{{ value.gap ? `：${value.gap}` : '' }}
         </p>
-        <p class="whitespace-pre-wrap m-0" v-if="value.text && value.status !== 'unknown'">
-            {{ value.text }}
-        </p>
+        <template v-if="value.text && value.status !== 'unknown'">
+            <p
+                v-for="(paragraph, index) in paragraphs"
+                :key="index"
+                class="whitespace-pre-wrap m-0"
+            >
+                {{ paragraph }}
+            </p>
+        </template>
         <p
-            v-for="notice in notices"
+            v-for="notice in details.notices"
             :key="notice"
             class="structured-notice scova-warning scova-interface whitespace-pre-wrap m-0"
         >
             {{ notice }}
         </p>
         <p
-            v-for="condition in conditions"
+            v-for="condition in details.conditions"
             :key="condition"
             class="structured-condition scova-interface whitespace-pre-wrap m-0"
         >
-            适用条件：{{ condition }}
+            {{ condition }}
         </p>
         <p
-            v-for="gap in gaps"
+            v-for="gap in details.gaps"
             :key="gap"
             class="structured-gap scova-warning scova-interface whitespace-pre-wrap m-0"
         >
             补充说明：{{ gap }}
         </p>
-        <nav
-            v-if="indexes.length"
-            class="structured-links scova-interface action-group"
-            aria-label="本项依据"
-        >
-            <a
-                class="inline-flex min-h-11 items-center text-primary underline-offset-[0.2em] keyboard-focus-wide"
-                v-for="index in indexes"
-                :key="index"
-                :href="`#claim-${report.claims[index]!.id}`"
-                >依据 {{ index + 1 }}</a
-            >
-        </nav>
     </div>
 </template>
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { Report } from '@scova/models';
-type Content = NonNullable<NonNullable<Report['coverage']['artifacts']>[number]['content']>;
-type Value = Pick<
-    NonNullable<Content['list']>['entries'][number]['fields'][number],
-    'text' | 'claimIndexes' | 'status' | 'gap'
->;
-const props = defineProps<{ report: Report; value: Value }>();
-const indexes = computed(() =>
-    [...new Set(props.value.claimIndexes)].filter((index) => props.report.claims[index]),
+import { structuredValueNotes, type StructuredValue } from '@/utils/report-artifacts';
+import ModelAnswerTag from '@/components/reports/ModelAnswerTag.vue';
+const props = withDefaults(
+    defineProps<{
+        report: Report;
+        value: StructuredValue;
+        /** Table cell mode: details move to numbered footnotes under the table. */
+        compact?: boolean;
+        notes?: number[];
+        noteId?: string;
+    }>(),
+    { compact: false, notes: () => [], noteId: 'structured-note' },
 );
-const selections = computed(() =>
-    (props.report.coverage.reportValue?.selections ?? []).filter((entry) =>
-        indexes.value.includes(entry.claimIndex),
-    ),
-);
-const uniqueText = (values: (string | undefined)[]) => [
-    ...new Set(values.map((value) => value?.trim()).filter((value): value is string => !!value)),
-];
-const conditions = computed(() =>
-    uniqueText(selections.value.map((entry) => entry.assessment?.conditions)),
-);
-const gaps = computed(() =>
-    uniqueText(selections.value.map((entry) => entry.assessment?.gap)).filter(
-        (gap) => gap !== props.value.gap.trim(),
-    ),
-);
-const notices = computed(() =>
-    uniqueText(
-        indexes.value.map((index) => {
-            const selection = selections.value.find((entry) => entry.claimIndex === index);
-            if (props.report.claims[index]?.kind === 'insufficient')
-                return '关联内容待核实，尚不能作为已确认结论';
-            if (selection?.placement === 'reference')
-                return `关联内容为参考材料，未作为当前结论${selection.reason ? `：${selection.reason}` : ''}`;
-            return undefined;
-        }),
-    ),
+const details = computed(() => structuredValueNotes(props.report, props.value));
+const paragraphs = computed(() => props.value.text.split(/\r?\n[\t ]*\r?\n/));
+const isModelAnswer = computed(() =>
+    props.value.claimIndexes.some((index) => props.report.claims[index]?.kind === 'model_answer'),
 );
 </script>

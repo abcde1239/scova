@@ -61,6 +61,27 @@ export function createQuestionBudgetRepo(services: ApiServices) {
 
 export function createReportQuestionRepo(services: Pick<ApiServices, 'db' | 'clock'>) {
     return {
+        async round(userId: string, reportId: string, row: ReportQuestion) {
+            const rows = await queryRows<{ count: string }>(
+                services.db(),
+                querySql`SELECT count(*)::text AS count FROM report_questions WHERE user_id=${userId}::uuid AND report_id=${reportId}::uuid AND (created_at,id)<=(${row.createdAt},${row.id}::uuid)`,
+            );
+            return Number(rows[0]?.count ?? 0);
+        },
+        conversationRuns(userId: string, reportId: string, questionIds: string[]) {
+            if (!questionIds.length) return Promise.resolve([]);
+            return services.db().query.runs.findMany({
+                where: and(
+                    eq(tables.runs.userId, userId),
+                    querySql`${tables.runs.conversationContextJson}->>'reportId'=${reportId}`,
+                    inArray(
+                        querySql<string>`${tables.runs.conversationContextJson}->>'questionId'`,
+                        questionIds,
+                    ),
+                ),
+                orderBy: [tables.runs.queuedAt, tables.runs.id],
+            });
+        },
         async expire(userId: string, reportId: string, timeoutMs: number, answer: QuestionAnswer) {
             await services
                 .db()

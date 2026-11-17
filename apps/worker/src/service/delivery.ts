@@ -2,15 +2,56 @@ import { type DatabaseClient, runs as dbRuns, eq, and, reports as dbReports } fr
 import type { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import type { AgentCandidate } from '@scova/agent-core';
 
-import { createDeliveryRepository } from '@/repo/delivery.ts';
+import {
+    createDeliveryRepository,
+    findBaseline,
+    loadDeliveryInputs,
+    saveReport,
+    saveSources,
+} from '@/repo/delivery.ts';
+import {
+    applyBaselineGaps,
+    authenticateCandidate,
+    deliveryOutcome,
+    finalizeCoverage,
+    type DeliveryProof,
+} from '@/service/delivery-proof.ts';
+import { invalid } from '@/utils/delivery.ts';
 import { RunExecutionError, type RunLeaseToken } from '@/utils/runs.ts';
 
 /** Trusted worker only. Reads one explicitly promoted checkpoint, never the latest raw state. */
 export function createDeliveryService(database: DatabaseClient, saver: PostgresSaver) {
     const repository = createDeliveryRepository(database);
+    const settle = (token: RunLeaseToken, raw: DeliveryProof) => {
+        const proof = structuredClone(raw);
+        return repository.inRunFence(token, proof.deadline, async (tx, run, now) => {
+            if (proof.deadline && (!run.deadlineAt || run.deadlineAt > now)) invalid();
+            const { config, context, calls } = await loadDeliveryInputs(tx, run);
+            const successful = calls.filter(
+                (call) =>
+                    call.status === 'succeeded' &&
+                    call.finishedAt &&
+                    call.finishedAt <= run.deadlineAt!,
+            );
+            const candidate = authenticateCandidate(run, context, proof, successful);
+            finalizeCoverage(candidate, run, config, proof, calls, successful);
+            const pageRecords = await saveSources(tx, run, now, candidate, successful);
+            applyBaselineGaps(candidate, await findBaseline(tx, run), run, context);
+            const { complete, changes, outcome } = deliveryOutcome(candidate, run);
+            return saveReport(tx, run, now, {
+                candidate,
+                config,
+                context,
+                pageRecords,
+                complete,
+                outcome,
+                changes,
+            });
+        });
+    };
     return {
         async deliver(token: RunLeaseToken, candidate: AgentCandidate, deadline = false) {
-            if (deadline) return repository.deliver(token, { candidate, deadline });
+            if (deadline) return settle(token, { candidate, deadline });
             const run = await database.query.runs.findFirst({
                 where: and(eq(dbRuns.id, token.runId), eq(dbRuns.userId, token.userId)),
             });
@@ -42,7 +83,7 @@ export function createDeliveryService(database: DatabaseClient, saver: PostgresS
             });
             if (!tuple || tuple.checkpoint.id !== ref.checkpointId)
                 throw new RunExecutionError('INVALID_DELIVERY_EVIDENCE');
-            return repository.deliver(token, {
+            return settle(token, {
                 candidate,
                 deadline,
                 checkpointRef: ref,

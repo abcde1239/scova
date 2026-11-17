@@ -263,7 +263,7 @@ test('连续发送两轮后刷新恢复历史，收起成果保留草稿', async
     expect(errors).toEqual([]);
     expect(state.unexpected).toEqual([]);
 });
-const result = (page: Page) => panel(page).locator('.question-result');
+const result = (page: Page) => panel(page).locator('.conversation-turn:visible').last();
 const input = (page: Page) => panel(page).getByRole('textbox', { name: '问题', exact: true });
 const button = (page: Page, name: string) => panel(page).getByRole('button', { name, exact: true });
 const requests = (state: State, method?: string) =>
@@ -272,7 +272,7 @@ const requests = (state: State, method?: string) =>
     );
 async function open(page: Page, query = '') {
     await page.goto(`${path}${query}`);
-    await expect(page.locator('.report-brief')).toBeVisible();
+    await expect(input(page)).toBeVisible();
     await expect(panel(page)).toBeVisible();
 }
 async function ask(page: Page, text = '原文如何说明？') {
@@ -280,7 +280,9 @@ async function ask(page: Page, text = '原文如何说明？') {
     await button(page, '提问').click();
 }
 async function notice(page: Page, text: string) {
-    await expect(panel(page).getByRole('status').filter({ hasText: text })).toBeVisible();
+    await expect(
+        page.locator('.scova-notifications .n-notification').filter({ hasText: text }),
+    ).toBeVisible();
 }
 async function dismissClick(page: Page, name: string, accept: boolean) {
     page.once('dialog', (dialog) => (accept ? dialog.accept() : dialog.dismiss()));
@@ -301,7 +303,7 @@ async function staleReturn(page: Page, state: State) {
     state.reportHold = true;
     await page.goBack();
     await expect.poll(() => state.reportWaiting).toBe(true);
-    await expect(page.locator('.report-brief')).toBeVisible();
+    await expect(input(page)).toBeVisible();
 }
 test.beforeAll(async ({ browser }) => console.log(`Browser: Chromium ${browser.version()}`));
 
@@ -318,11 +320,11 @@ test('HTTP sample: answered sends raw body once, updates ID URL without dirty di
         await dialog.dismiss();
     });
     await input(page).fill('  原始问题\n保留空格  ');
-    await input(page).press('Tab');
+    await button(page, '提问').focus();
     await expect(button(page, '提问')).toBeFocused();
     await button(page, '提问').press('Enter');
     await expect(result(page)).toBeVisible();
-    await expect(page.locator('#question-result-title')).toBeFocused();
+    await expect(input(page)).toBeFocused();
     expect(dialogs).toBe(0);
     expect(requests(state, 'POST')).toHaveLength(1);
     const posted = requests(state, 'POST')[0]!;
@@ -334,16 +336,16 @@ test('HTTP sample: answered sends raw body once, updates ID URL without dirty di
     const url = new URL(page.url());
     expect(url.searchParams.get('questionId')).toBe(id(50));
     expect([...url.searchParams.keys()]).toEqual(['questionId']);
-    await expect(result(page).getByRole('heading', { name: '证据回答' })).toBeVisible();
-    await expect(result(page).getByText('仍需更多资料。本次没有启动后续研究。')).toBeVisible();
+    await expect(result(page).locator('.assistant-message')).toBeVisible();
+    await expect(result(page)).toContainText('这部分仍需补充资料。');
     expect(await page.locator('.report-brief').textContent()).toBe(original);
     await page.reload();
     await expect(result(page)).toBeVisible();
     expect(requests(state, 'POST')).toHaveLength(1);
     expect(requests(state, 'GET')).toHaveLength(1);
-    await button(page, '提出新问题').click();
+    await expect(input(page)).toBeEditable();
+    await input(page).focus();
     await expect(input(page)).toBeFocused();
-    expect(new URL(page.url()).searchParams.has('questionId')).toBe(false);
     expect(state.unexpected).toEqual([]);
 });
 
@@ -363,16 +365,17 @@ for (const reason of Object.keys(reasons) as (keyof typeof reasons)[]) {
         state.reason = reason;
         await open(page);
         await ask(page);
-        await expect(result(page).getByRole('heading', { name: '未获得可核验回答' })).toBeVisible();
+        await expect(result(page).locator('.assistant-message')).toBeVisible();
+        await result(page).getByText('本轮用量', { exact: true }).click();
         await expect(result(page).getByText(reasons[reason], { exact: true })).toBeVisible();
         await expect(result(page).locator('.statement,.question-citation')).toHaveCount(0);
         await expect(result(page)).toContainText(reason === 'model_unavailable' ? '0 次' : '1 次');
         await expect(result(page)).toContainText(
             reason === 'model_unavailable'
-                ? '以上为本次问答记录的用量。'
-                : '以上含保守估算或未知调用预留，并非精确扣款。',
+                ? '本轮已记录的问答用量。'
+                : '含保守估算，不代表精确扣款。',
         );
-        await expect(result(page)).toContainText('不计入原报告 Run 预算。');
+        await expect(result(page)).toContainText('问答用量单独计量。');
         expect(state.unexpected).toEqual([]);
     });
 }
@@ -436,7 +439,7 @@ for (const mode of ['lost', 'pending', 'rate', 'unavailable'] as const) {
         await expect(input(page)).not.toBeEditable();
         if (mode === 'rate' || mode === 'unavailable') {
             await expect(button(page, '读取本次结果')).toBeDisabled();
-            await expect(panel(page)).toContainText('读取可能返回已保存结果，不代表重新调用模型');
+            await expect(panel(page)).toContainText('服务提供的时间');
         }
         await page.clock.runFor(2100);
         await expect(button(page, '读取本次结果')).toBeEnabled();
@@ -448,7 +451,7 @@ for (const mode of ['lost', 'pending', 'rate', 'unavailable'] as const) {
         expect(requests(state, 'POST')[1]).toEqual(requests(state, 'POST')[0]);
         if (before)
             await expect(page).toHaveURL((url) => url.searchParams.get('questionId') === before.id);
-        await expect(result(page)).toContainText('未获得可核验回答');
+        await expect(result(page)).toContainText('本次模型调用失败');
         expect(requests(state, 'POST')).toHaveLength(2);
         expect(state.unexpected).toEqual([]);
     });
@@ -594,7 +597,9 @@ for (const status of [503, 403, 404]) {
         await staleReturn(page, state);
         await input(page).fill(`保稿-${status}`);
         state.releaseReport!(status);
-        await notice(page, '本地问题仍可复制');
+        await expect(
+            panel(page).getByRole('status').filter({ hasText: '本地问题与未确认的请求仍保留' }),
+        ).toBeVisible();
         await expect(page.locator('.report-brief')).toHaveCount(0);
         await expect(input(page)).toHaveValue(`保稿-${status}`);
         await expect(input(page)).not.toBeEditable();
@@ -623,7 +628,9 @@ test('HTTP sample: unavailable Report hides saved answer and citations, keeps co
     await expect(result(page)).toBeVisible();
     await input(page).fill('结果后的本地问题');
     state.releaseReport!(503);
-    await notice(page, '本地问题仍可复制');
+    await expect(
+        panel(page).getByRole('status').filter({ hasText: '本地问题与未确认的请求仍保留' }),
+    ).toBeVisible();
     await expect(result(page)).toHaveCount(0);
     await expect(panel(page).locator('.question-citation')).toHaveCount(0);
     await expect(input(page)).toHaveValue('结果后的本地问题');
@@ -646,7 +653,9 @@ test('HTTP sample: unavailable Report keeps unresolved attempt locked and recove
     await ask(page, '授权恢复前保留的未知请求');
     await notice(page, '仍在处理中');
     state.releaseReport!(503);
-    await notice(page, '本地问题仍可复制');
+    await expect(
+        panel(page).getByRole('status').filter({ hasText: '本地问题与未确认的请求仍保留' }),
+    ).toBeVisible();
     await expect(button(page, '读取本次结果')).toBeDisabled();
     await expect(input(page)).toHaveValue('授权恢复前保留的未知请求');
     expect(requests(state, 'POST')).toHaveLength(1);
@@ -773,12 +782,16 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         const summary = result(page).locator('summary').first();
         await summary.focus();
         await summary.press('Enter');
-        await expect(result(page).locator('details blockquote')).toBeVisible();
-        const link = result(page).getByRole('link', { name: '打开原始来源（新窗口）' });
+        await expect(
+            result(page).locator('.source-quotes > div > blockquote').first(),
+        ).toBeVisible();
+        const link = result(page).locator('.source-group a.external-link');
         await summary.press('Tab');
         await expect(link).toBeFocused();
         await expect(link).toHaveAttribute('href', 'https://example.test/saved');
         await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+        await result(page).getByText('保存片段与定位', { exact: true }).click();
+        await page.keyboard.press('Tab');
         await page.evaluate(() => document.fonts.ready);
         for (const dark of [false, true]) {
             await page.emulateMedia({ colorScheme: dark ? 'dark' : 'light' });
@@ -814,6 +827,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
                         (quote) =>
                             quote.raw === raw && quote.width >= 4 && quote.font.includes('Inter'),
                     ),
+                    JSON.stringify({ width, dark, enlarged, quotes }),
                 ).toBe(true);
                 const controls = await panel(page)
                     .locator('button,summary,a')
@@ -854,8 +868,12 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
             }
         }
         await summary.press('Space');
-        await expect(result(page).locator('details blockquote')).toBeHidden();
-        await expect(panel(page).locator('script,img,iframe')).toHaveCount(0);
+        await expect(
+            result(page).locator('.source-quotes > div > blockquote').first(),
+        ).toBeHidden();
+        await expect(
+            panel(page).locator('script,iframe,img:not([src^="/favicon.ico?"])'),
+        ).toHaveCount(0);
         expect(await page.evaluate(() => 'questionInjected' in window)).toBe(false);
         expect(external).toEqual([]);
         expect(errors).toEqual([]);

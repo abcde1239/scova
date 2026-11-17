@@ -8,34 +8,40 @@
         </h2>
         <p v-if="!run && taskStatus === 'archived'">归档任务不能启动执行。</p>
         <template v-else-if="canStart">
-            <p v-if="run">
-                原执行：{{
-                    run.mode === 'live' ? '真实 live' : '演示 demo'
-                }}。重试使用原任务版本与预算，创建关联的新执行。
-            </p>
-            <p>执行会调用已配置的搜索与模型，可能产生服务费用；缺少配置时会明确报错。</p>
-            <output-format-select
-                v-model="outputSelection"
-                label="本次输出形式"
-                allow-empty
-                :disabled="actions.locked.value || actions.pending.value"
-            />
-            <p>只生成所选形式的内容。本次选择不改写已保存的报告。</p>
-            <execution-agent-select
-                v-model="agentSelection"
+            <task-execution-settings
+                v-model:agent="agentSelection"
+                v-model:search="searchSelection"
                 inherit
-                :disabled="actions.locked.value || actions.pending.value"
-                hint="仅影响本次新执行，重试仍保留原任务版本和预算。"
-            />
+                :retry="!!run"
+                :disabled="startBlocked || actions.locked.value || actions.pending.value"
+            >
+                <router-link class="navigation-link" :to="{ name: 'task-edit', params: { taskId } }"
+                    >任务配置编辑页<app-icon name="chevron" />
+                </router-link>
+            </task-execution-settings>
             <action-button
-                :disabled="actions.locked.value && !actions.pending.value"
+                :disabled="startBlocked || (actions.locked.value && !actions.pending.value)"
                 :busy="actions.pending.value"
                 @click="actions.submit(run ? 'retry' : 'start')"
             >
                 <app-icon :name="run ? 'retry' : 'run'" />{{
-                    run ? '重试并创建新执行' : '立即执行'
+                    run ? '重试并创建新执行' : activeRun ? '执行进行中' : '立即执行'
                 }}
             </action-button>
+            <template v-if="!run">
+                <p v-if="latestQuery.isPending.value" role="status">正在读取执行状态…</p>
+                <div v-else-if="latestQuery.isError.value" class="layout-stack">
+                    <p role="status">执行状态暂不可用</p>
+                    <action-button
+                        :busy="latestQuery.isFetching.value"
+                        @click="latestQuery.refetch()"
+                        >重新读取执行状态</action-button
+                    >
+                </div>
+                <router-link v-if="activeRun" class="navigation-link" :to="`/runs/${activeRun.id}`"
+                    >查看当前执行<app-icon name="chevron"
+                /></router-link>
+            </template>
         </template>
         <template
             v-else-if="
@@ -58,14 +64,14 @@
         </template>
         <p v-else>本次执行不提供失败重试。使用任务页的“立即执行”可按当前任务版本新建执行。</p>
         <div
-            v-if="actions.message.value"
+            v-if="
+                actions.phase.value === 'uncertain' ||
+                (actions.result.value && actions.attempt.value?.action !== 'cancel')
+            "
             ref="feedback"
             class="command-result keyboard-focus-wide layout-stack [&.command-result_.scova-action-button]:justify-self-start"
-            role="status"
-            aria-live="polite"
             tabindex="-1"
         >
-            <p>{{ actions.message.value }}</p>
             <p
                 v-if="
                     actions.attempt.value &&
@@ -84,7 +90,7 @@
             <template v-if="actions.result.value && actions.attempt.value?.action !== 'cancel'">
                 <p>
                     实际执行：{{
-                        actions.result.value.run.mode === 'live' ? '真实 live' : '演示 demo'
+                        actions.result.value.run.mode === 'live' ? '任务执行' : '演示执行'
                     }}
                     · {{ executionStates[actions.result.value.run.status][0] }}
                 </p>
@@ -101,33 +107,42 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue';
 import { RouterLink } from 'vue-router';
-import {
-    parseContract,
-    OutputFormatsSchema,
-    type Run,
-    type Task,
-    type TaskConfig,
-} from '@scova/models';
+import { parseContract, SearchModeSchema, type Run, type Task } from '@scova/models';
 import ActionButton from '@/components/common/ActionButton.vue';
 import AppIcon from '@/components/common/AppIcon.vue';
-import ExecutionAgentSelect from '@/components/tasks/ExecutionAgentSelect.vue';
-import OutputFormatSelect from '@/components/tasks/OutputFormatSelect.vue';
+import TaskExecutionSettings from '@/components/tasks/TaskExecutionSettings.vue';
 import { useRunActions } from '@/composables/useRunActions';
+import { useActionNotification } from '@/composables/useActionNotification';
 import { executionStates } from '@/composables/useExecution';
+import { useLatestTaskRun, isActiveRun } from '@/composables/useLatestTaskRun';
 const props = defineProps<{
     taskId: string;
     run?: Run;
     taskStatus?: Task['status'];
-    outputFormat?: TaskConfig['outputFormat'];
 }>();
 const agentSelection = ref('');
-const outputSelection = ref<TaskConfig['outputFormat'][]>([]);
+const searchSelection = ref('');
+const { query: latestQuery, latest } = useLatestTaskRun(
+    () => props.taskId,
+    () => !props.run && props.taskStatus !== 'archived',
+);
+const activeRun = computed(() => (isActiveRun(latest.value) ? latest.value : undefined));
+const startBlocked = computed(
+    () =>
+        !props.run &&
+        (latestQuery.isPending.value ||
+            latestQuery.isError.value ||
+            latestQuery.isFetching.value ||
+            !!activeRun.value),
+);
 const actions = useRunActions(() => ({
     taskId: props.taskId,
     run: props.run,
     taskStatus: props.taskStatus,
-    outputFormats: outputSelection.value.length
-        ? parseContract(OutputFormatsSchema, outputSelection.value)
+    latestRun: latest.value,
+    startBlocked: startBlocked.value,
+    searchMode: searchSelection.value
+        ? parseContract(SearchModeSchema, searchSelection.value)
         : undefined,
     agentProviderId:
         agentSelection.value === ''
@@ -140,13 +155,20 @@ watch(
     () => `${props.taskId}:${props.run?.id ?? ''}`,
     () => {
         agentSelection.value = '';
-        outputSelection.value = [];
+        searchSelection.value = '';
     },
 );
 const canStart = computed(() => !props.run || ['failed', 'canceled'].includes(props.run.status));
+useActionNotification().watch(actions.message, () =>
+    actions.phase.value === 'success'
+        ? 'success'
+        : actions.phase.value === 'rejected'
+          ? 'error'
+          : 'warning',
+);
 const feedback = ref<HTMLElement>();
 watch(actions.phase, async (phase) => {
-    if (!['success', 'uncertain', 'rejected'].includes(phase)) return;
+    if (!['success', 'uncertain'].includes(phase)) return;
     await nextTick();
     if (actions.phase.value === phase) feedback.value?.focus();
 });

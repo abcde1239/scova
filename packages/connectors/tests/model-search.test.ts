@@ -80,7 +80,6 @@ describe('authorized model web search', () => {
         expect(transport).not.toHaveBeenCalled();
         const allowed = createConnectorBundle({
             ...config,
-            searchProvider: 'api',
             modelSearch: 'openai_responses',
         });
         expect(allowed.search.tokenReservation).toEqual(search.tokenReservation);

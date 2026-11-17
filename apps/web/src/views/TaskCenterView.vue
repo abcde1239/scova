@@ -18,7 +18,7 @@
                         <app-icon name="retry" />刷新
                     </action-button>
                     <navigation-button
-                        class="back-link keyboard-focus-wide [&&]:(inline-flex items-center min-h-11 justify-self-start text-primary cursor-pointer underline-offset-[0.2em])"
+                        class="back-link keyboard-focus-wide [&&]:(inline-flex items-center min-h-11 justify-self-start scova-link cursor-pointer)"
                         icon="create"
                         :to="{ name: 'task-create' }"
                     >
@@ -80,12 +80,6 @@
             </template>
         </template>
         <template v-else>
-            <navigation-button
-                class="back-link keyboard-focus-wide [&&]:(inline-flex items-center min-h-11 justify-self-start text-primary cursor-pointer underline-offset-[0.2em])"
-                icon="back"
-                :to="{ name: 'tasks', query: { status: filter } }"
-                >返回任务</navigation-button
-            >
             <state-panel v-if="detail.isPending.value" state="loading" />
             <state-panel
                 v-else-if="detail.isError.value && (!detail.data.value || detailUnavailable)"
@@ -102,15 +96,9 @@
                     retryable
                     @retry="detail.refetch()"
                 />
-                <navigation-button
-                    class="back-link keyboard-focus-wide [&&]:(inline-flex items-center min-h-11 justify-self-start text-primary cursor-pointer underline-offset-[0.2em])"
-                    icon="edit"
-                    :to="{ name: 'task-edit', params: { taskId } }"
-                    >编辑任务配置</navigation-button
-                >
-                <p class="scope-note text-muted text-[0.875rem] m-0">时间按 {{ timezone }} 显示</p>
-                <p class="scope-note text-muted text-[0.875rem] m-0">
-                    任务启用表示允许后续计划；本次是否正在运行请查看执行历史。手动任务完成后仍会保持启用。
+                <p class="scope-note text-muted text-[0.875rem] leading-relaxed m-0">
+                    时间按 {{ timezone }}
+                    显示。任务启用表示允许后续计划，是否正在运行请查看执行历史；手动任务完成后仍保持启用。
                 </p>
                 <task-card
                     :task="detail.data.value.data.task"
@@ -136,7 +124,6 @@
                 <run-actions
                     :task-id="detail.data.value.data.task.id"
                     :task-status="detail.data.value.data.task.status"
-                    :output-format="detail.data.value.data.version.config.outputFormat"
                 />
                 <task-lifecycle-actions :task-id="detail.data.value.data.task.id" />
             </template>

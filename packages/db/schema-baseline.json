@@ -28,6 +28,14 @@
         {
             "name": "0006_harsh_forge",
             "hash": "e00169d1d8d7e18debb0b8f1ce1b02847cc92a5983dd9e715c267cd841bfac0b"
+        },
+        {
+            "name": "0007_known_stick",
+            "hash": "411d0ab603f1f5c4db2cd68c50204b4546876a0cffd6b86fb9f9d350d27ff759"
+        },
+        {
+            "name": "0008_illegal_iceman",
+            "hash": "07c8a489611118083edad98b2eca4d775f67d1cb371ba37af867e02b50154b9d"
         }
     ],
     "signature": {
@@ -174,6 +182,13 @@
             },
             {
                 "name": "schedule_occurrences",
+                "kind": "r",
+                "persistence": "p",
+                "row_security": false,
+                "force_row_security": false
+            },
+            {
+                "name": "search_configurations",
                 "kind": "r",
                 "persistence": "p",
                 "row_security": false,
@@ -2365,6 +2380,105 @@
                 "collation": null
             },
             {
+                "table_name": "search_configurations",
+                "name": "user_id",
+                "position": 1,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "search_configurations",
+                "name": "id",
+                "position": 2,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "search_configurations",
+                "name": "default_mode",
+                "position": 3,
+                "type": "text",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "search_configurations",
+                "name": "protocol",
+                "position": 4,
+                "type": "text",
+                "not_null": false,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "search_configurations",
+                "name": "base_url",
+                "position": 5,
+                "type": "text",
+                "not_null": false,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "search_configurations",
+                "name": "content_mode",
+                "position": 6,
+                "type": "text",
+                "not_null": false,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "search_configurations",
+                "name": "encrypted_api_key",
+                "position": 7,
+                "type": "text",
+                "not_null": false,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "search_configurations",
+                "name": "revision",
+                "position": 8,
+                "type": "integer",
+                "not_null": true,
+                "default_value": "1",
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "search_configurations",
+                "name": "updated_at",
+                "position": 9,
+                "type": "timestamp(6) with time zone",
+                "not_null": true,
+                "default_value": "now()",
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
                 "table_name": "sessions",
                 "name": "id",
                 "position": 1,
@@ -3113,6 +3227,11 @@
                 "name": "ClaimKind",
                 "value": "insufficient",
                 "position": 4
+            },
+            {
+                "name": "ClaimKind",
+                "value": "model_answer",
+                "position": 5
             },
             {
                 "name": "Completeness",
@@ -4100,6 +4219,41 @@
                 "validated": true
             },
             {
+                "table_name": "search_configurations",
+                "name": "search_configuration_api_complete",
+                "type": "c",
+                "definition": "CHECK (protocol IS NULL AND base_url IS NULL AND content_mode IS NULL AND encrypted_api_key IS NULL AND default_mode = 'searxng'::text OR protocol IS NOT NULL AND (protocol = ANY (ARRAY['deepseek'::text, 'perplexity'::text, 'tavily'::text])) AND base_url IS NOT NULL AND length(base_url) > 0 AND content_mode IS NOT NULL AND (content_mode = ANY (ARRAY['reader'::text, 'prefer_api'::text])) AND encrypted_api_key IS NOT NULL AND length(encrypted_api_key) > 0)",
+                "validated": true
+            },
+            {
+                "table_name": "search_configurations",
+                "name": "search_configuration_mode_valid",
+                "type": "c",
+                "definition": "CHECK (default_mode = ANY (ARRAY['api'::text, 'searxng'::text]))",
+                "validated": true
+            },
+            {
+                "table_name": "search_configurations",
+                "name": "search_configuration_revision_positive",
+                "type": "c",
+                "definition": "CHECK (revision > 0)",
+                "validated": true
+            },
+            {
+                "table_name": "search_configurations",
+                "name": "search_configurations_pkey",
+                "type": "p",
+                "definition": "PRIMARY KEY (user_id)",
+                "validated": true
+            },
+            {
+                "table_name": "search_configurations",
+                "name": "search_configurations_user_id_users_id_fk",
+                "type": "f",
+                "definition": "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE",
+                "validated": true
+            },
+            {
                 "table_name": "sessions",
                 "name": "session_hashes_only",
                 "type": "c",
@@ -4868,6 +5022,20 @@
                 "table_name": "schedule_occurrences",
                 "name": "schedule_occurrences_user_id_task_id_id_key",
                 "definition": "CREATE UNIQUE INDEX schedule_occurrences_user_id_task_id_id_key ON schedule_occurrences USING btree (user_id, task_id, id)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "search_configurations",
+                "name": "search_configurations_id_key",
+                "definition": "CREATE UNIQUE INDEX search_configurations_id_key ON search_configurations USING btree (id)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "search_configurations",
+                "name": "search_configurations_pkey",
+                "definition": "CREATE UNIQUE INDEX search_configurations_pkey ON search_configurations USING btree (user_id)",
                 "valid": true,
                 "ready": true
             },
@@ -6132,6 +6300,18 @@
                 "enabled": "O"
             },
             {
+                "table_name": "search_configurations",
+                "constraint_name": "search_configurations_user_id_users_id_fk",
+                "event": 5,
+                "enabled": "O"
+            },
+            {
+                "table_name": "search_configurations",
+                "constraint_name": "search_configurations_user_id_users_id_fk",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
                 "table_name": "sessions",
                 "constraint_name": "sessions_user_id_fkey",
                 "event": 5,
@@ -6692,6 +6872,18 @@
             {
                 "table_name": "users",
                 "constraint_name": "schedule_occurrences_user_id_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "users",
+                "constraint_name": "search_configurations_user_id_users_id_fk",
+                "event": 9,
+                "enabled": "O"
+            },
+            {
+                "table_name": "users",
+                "constraint_name": "search_configurations_user_id_users_id_fk",
                 "event": 17,
                 "enabled": "O"
             },

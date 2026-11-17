@@ -4,7 +4,8 @@ import { verificationTasks } from './tests/tasks.ts';
 export default defineConfig({
     resolve: { tsconfigPaths: true },
     staged: {
-        '*': 'vp check --fix',
+        // 直接运行 CLI，避免 Windows 的 vp.cmd 包装触发命令行长度限制。
+        '*': `"${process.execPath}" "node_modules/vite-plus/bin/vp" check --fix`,
     },
     fmt: {
         ignorePatterns: ['scripts/vendor/**', '.pnpm-store/**'],

@@ -1,90 +1,151 @@
 import { describe, expect, it } from 'vite-plus/test';
 import { createConnectorBundle } from '@scova/connectors';
-import { readSearchConfig, effectiveSearchConfig } from '../src/app/search-config.ts';
+import { effectiveSearchConfig, accountSearchConfig } from '../src/app/search-config.ts';
+import { sealCredential } from '@scova/shared/credentials';
 
-describe('deployment-owned search configuration', () => {
-    it('uses the selected account API and its own key before deployment config, without SearxNG wrapping', () => {
-        const searchApi = {
-            protocol: 'tavily' as const,
-            baseUrl: 'https://api.tavily.com',
-            apiKey: 'account-search-key',
-            contentMode: 'prefer_api' as const,
+const api = {
+    protocol: 'tavily' as const,
+    baseUrl: 'https://api.tavily.com',
+    apiKey: 'account-search-key',
+    contentMode: 'prefer_api' as const,
+};
+const deployment: NodeJS.ProcessEnv = {
+    SEARCH_PROVIDER: 'api',
+    SEARCH_API_PROTOCOL: 'deepseek',
+    SEARCH_API_KEY: 'deployment-key',
+    TAVILY_API_KEY: 'deployment-tavily-key',
+    MODEL_API_KEY: 'model-key',
+    SEARXNG_BASE_URL: 'http://searxng:8080',
+};
+
+describe('account-owned search configuration', () => {
+    it('opens only the independent search key bound to its account and search record', () => {
+        const key = 'ac'.repeat(32);
+        const saved = {
+            id: 'search-record',
+            defaultMode: 'api' as const,
+            ...api,
+            encryptedApiKey: sealCredential(api.apiKey, 'owner', 'search-record', key),
         };
         expect(
-            effectiveSearchConfig(
-                { SEARCH_PROVIDER: 'invalid', MODEL_API_KEY: 'model-key' },
-                { webSearch: 'disabled', searchApi },
-            ),
-        ).toEqual({ searchProvider: 'api', searchApi });
-        expect(
-            effectiveSearchConfig(
-                { SEARCH_PROVIDER: 'invalid' },
-                { webSearch: 'openai_responses' },
-            ),
-        ).toEqual({});
+            accountSearchConfig({ ...deployment, AGENT_CREDENTIAL_KEY: key }, saved, 'owner'),
+        ).toMatchObject({ searchProvider: 'api', searchApi: api });
         expect(() =>
-            effectiveSearchConfig({}, { webSearch: 'openai_responses', searchApi }),
+            accountSearchConfig({ AGENT_CREDENTIAL_KEY: key }, saved, 'other-account'),
         ).toThrow();
-        expect(effectiveSearchConfig({}, {})).toMatchObject({ searchProvider: 'searxng' });
+        expect(() =>
+            accountSearchConfig(
+                { AGENT_CREDENTIAL_KEY: key },
+                { ...saved, id: 'model-record' },
+                'owner',
+            ),
+        ).toThrow();
+        expect(
+            accountSearchConfig(
+                {},
+                { ...saved, encryptedApiKey: 'unreadable' },
+                'owner',
+                'searxng',
+            ),
+        ).toMatchObject({ searchProvider: 'searxng', modelSearch: 'disabled' });
     });
-    it('retains SearxNG by default even if paid API and model keys exist', () => {
-        const options = readSearchConfig({
-            SEARCH_API_KEY: 'search-key',
-            MODEL_API_KEY: 'model-key',
+    it('defaults to built-in search without reading deployment search credentials', () => {
+        expect(effectiveSearchConfig(deployment, null)).toMatchObject({
+            searchProvider: 'searxng',
+            modelSearch: 'disabled',
         });
-        expect(options.searchProvider).toBe('searxng');
-        expect(options.searchApi).toBeUndefined();
+        expect(effectiveSearchConfig({}, null)).toMatchObject({ searchProvider: 'searxng' });
+        expect(() => effectiveSearchConfig(deployment, null, 'api')).toThrow(
+            expect.objectContaining({ failureCode: 'SEARCH_API_NOT_CONFIGURED' }),
+        );
+        expect(() =>
+            effectiveSearchConfig(deployment, { defaultMode: 'searxng' }, 'api'),
+        ).toThrow();
     });
-
-    it.each(['deepseek', 'perplexity', 'tavily'])(
-        'maps explicit %s configuration into a live bundle',
-        (protocol) => {
-            const options = readSearchConfig({
-                SEARCH_PROVIDER: 'api',
-                SEARCH_API_PROTOCOL: protocol,
-                SEARCH_API_KEY: 'search-key',
-                SEARCH_API_BASE_URL: 'https://search.example/prefix',
-                ...(protocol === 'perplexity' ? { SEARCH_API_SEARCH_TYPE: 'fast' } : {}),
+    it('reports an unreadable independent search key without changing search services', () => {
+        expect(() =>
+            accountSearchConfig(
+                {},
+                {
+                    id: 'search-record',
+                    defaultMode: 'api',
+                    ...api,
+                    encryptedApiKey: 'invalid',
+                },
+                'owner',
+            ),
+        ).toThrow(expect.objectContaining({ failureCode: 'SEARCH_CREDENTIAL_INVALID' }));
+    });
+    it('honors the independent account API and disables model-native search', () => {
+        expect(effectiveSearchConfig(deployment, { defaultMode: 'api', searchApi: api })).toEqual({
+            searchProvider: 'api',
+            searchApi: api,
+            modelSearch: 'disabled',
+        });
+    });
+    it('normalizes stored Reader policy to API reading without changing credentials', () => {
+        const key = 'ac'.repeat(32);
+        expect(
+            accountSearchConfig(
+                { AGENT_CREDENTIAL_KEY: key },
+                {
+                    id: 'search-record',
+                    defaultMode: 'api',
+                    ...api,
+                    contentMode: 'reader',
+                    encryptedApiKey: sealCredential(api.apiKey, 'owner', 'search-record', key),
+                },
+                'owner',
+            ),
+        ).toMatchObject({ searchProvider: 'api', searchApi: api });
+    });
+    it('uses explicit account built-in preference even with stored API credentials', () => {
+        expect(
+            effectiveSearchConfig(deployment, { defaultMode: 'searxng', searchApi: api }),
+        ).toEqual({
+            searchProvider: 'searxng',
+            searxngBaseUrl: 'http://searxng:8080',
+            modelSearch: 'disabled',
+        });
+    });
+    it('lets a task or run explicitly override either account preference', () => {
+        expect(
+            effectiveSearchConfig(deployment, { defaultMode: 'searxng', searchApi: api }, 'api'),
+        ).toMatchObject({ searchProvider: 'api', searchApi: api });
+        expect(effectiveSearchConfig(deployment, null, 'searxng')).toMatchObject({
+            searchProvider: 'searxng',
+        });
+        expect(
+            effectiveSearchConfig(deployment, { defaultMode: 'api', searchApi: api }, 'searxng'),
+        ).toMatchObject({ searchProvider: 'searxng', modelSearch: 'disabled' });
+    });
+    it('creates API search and reading tools for any execution model', () => {
+        const search = effectiveSearchConfig(deployment, { defaultMode: 'api', searchApi: api });
+        for (const modelProtocol of ['openai_json', 'anthropic_messages', 'gemini'] as const) {
+            const bundle = createConnectorBundle({
+                modelApiKey: 'model-key',
+                model: 'example',
+                modelProtocol,
+                ...search,
             });
-            expect(options.searchApi).toMatchObject({ protocol, apiKey: 'search-key' });
-            expect(
-                createConnectorBundle({ ...options, modelApiKey: 'model-key', model: 'model' })
-                    .mode,
-            ).toBe('live');
-        },
-    );
-
-    it('preserves the Tavily opt-in independently of generic API settings', () => {
-        expect(
-            readSearchConfig({ SEARCH_PROVIDER: 'tavily', TAVILY_API_KEY: 'tavily-key' }),
-        ).toMatchObject({
-            searchProvider: 'tavily',
-            tavilyApiKey: 'tavily-key',
-        });
-    });
-
-    it('never inherits a model key when the search key is absent', () => {
-        const options = readSearchConfig({
-            SEARCH_PROVIDER: 'api',
-            SEARCH_API_PROTOCOL: 'deepseek',
-            MODEL_API_KEY: 'private-model-key',
-        });
-        expect(options.searchApi?.apiKey).toBe('');
+            expect(bundle.mode).toBe('live');
+            expect(bundle.search.tokenReservation).toBeUndefined();
+            expect(bundle.reader).toBeDefined();
+            expect(bundle.reader).toBe(bundle.search);
+        }
         expect(() =>
-            createConnectorBundle({ ...options, modelApiKey: 'private-model-key', model: 'model' }),
+            effectiveSearchConfig(deployment, {
+                defaultMode: 'api',
+                searchApi: { ...api, apiKey: '' },
+            }),
         ).toThrow();
     });
-
-    it.each([
-        { SEARCH_PROVIDER: 'unknown' },
-        { SEARCH_PROVIDER: 'api' },
-        { SEARCH_PROVIDER: 'api', SEARCH_API_PROTOCOL: 'unknown' },
-        {
-            SEARCH_PROVIDER: 'api',
-            SEARCH_API_PROTOCOL: 'perplexity',
-            SEARCH_API_SEARCH_TYPE: 'unknown',
-        },
-    ])('rejects unsupported deployment settings before an API call', (env) => {
-        expect(() => readSearchConfig(env)).toThrow();
+    it('rejects old Perplexity configurations rather than using local reading', () => {
+        expect(() =>
+            effectiveSearchConfig(
+                {},
+                { defaultMode: 'api', searchApi: { ...api, protocol: 'perplexity' } },
+            ),
+        ).toThrow(expect.objectContaining({ failureCode: 'SEARCH_API_READING_UNSUPPORTED' }));
     });
 });

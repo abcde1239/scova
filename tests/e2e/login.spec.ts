@@ -45,11 +45,17 @@ test('本地HTTP样本：字段、401/429、键盘提交、忙碌拦截及成功
     );
     await page.keyboard.press('Enter');
     await page.keyboard.press('Space');
-    await expect(page.getByRole('alert')).toHaveText('邮箱或密码不正确');
-    await expect(page.getByRole('alert')).toBeFocused();
+    await expect(
+        page.locator('.scova-notifications .n-notification').last().getByRole('alert'),
+    ).toHaveText('邮箱或密码不正确');
+    await expect(
+        page.locator('.scova-notifications .n-notification').last().getByRole('alert'),
+    ).not.toBeFocused();
     expect(attempts).toBe(1);
     await page.getByRole('button', { name: '登录', exact: true }).click();
-    await expect(page.getByRole('alert')).toHaveText('登录尝试过于频繁，请稍后重试');
+    await expect(
+        page.locator('.scova-notifications .n-notification').last().getByRole('alert'),
+    ).toHaveText('登录尝试过于频繁，请稍后重试');
     await page.getByRole('button', { name: '登录', exact: true }).click();
     await expect(page).toHaveURL(/\/tasks$/);
     expect(attempts).toBe(3);

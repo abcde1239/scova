@@ -8,6 +8,18 @@ export const ReportConversationContextSchema = Type.Object(
         reportId: UuidSchema,
         questionId: UuidSchema,
         operation: Type.Union([Type.Literal('research'), Type.Literal('revise')]),
+        merge: Type.Optional(
+            Type.Object(
+                {
+                    reportIds: Type.Array(UuidSchema, {
+                        minItems: 1,
+                        maxItems: 8,
+                        uniqueItems: true,
+                    }),
+                },
+                { additionalProperties: false },
+            ),
+        ),
         report: Type.Object(
             {
                 title: Type.String({ maxLength: 1000 }),

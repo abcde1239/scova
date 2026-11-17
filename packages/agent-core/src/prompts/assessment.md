@@ -3,6 +3,7 @@
 For each claim, fill `assessment` using the exact schema enums:
 
 - relevance: direct answers the user's question; background supplies context; unrelated does not address it; unknown means not established.
+  Only `direct`, `background`, `unrelated`, `unknown` are allowed here. Do not reuse the comparison-stage values `relevant` or `excluded`.
 - support: direct when the cited passage supports the statement and its conditions; partial when it supports only part; none when it does not support it; unknown when not determined. Do not equate a verbatim quote with semantic support.
 - role: answer, comparison, condition, risk, or lead, according to the claim's function.
 - sourceRelation: original or secondary only when the supplied material establishes the relationship; otherwise unknown. Domain count is not evidence of independent verification.

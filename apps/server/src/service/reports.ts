@@ -226,7 +226,7 @@ function detail(row: StoredReport): Report {
                       conversation: {
                           reportId: conversation.reportId,
                           questionId: conversation.questionId,
-                          operation: conversation.operation,
+                          operation: conversation.merge ? 'merge' : conversation.operation,
                       },
                   }
                 : {}),

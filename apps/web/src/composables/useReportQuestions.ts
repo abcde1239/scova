@@ -89,6 +89,21 @@ export function useReportQuestions(
                 }
                 if (response.data.artifacts?.some((artifact) => !ids.has(artifact.questionId)))
                     invalidQuestion('成果不属于当前会话轮次');
+                if (
+                    response.data.mergeRuns?.some((run) => !ids.has(run.questionId)) ||
+                    response.data.continuations?.some((run) => !ids.has(run.questionId))
+                )
+                    invalidQuestion('执行不属于当前会话轮次');
+                const continuations = new Set<string>();
+                for (const run of response.data.continuations ?? []) {
+                    const turn = response.data.turns.find((turn) => turn.id === run.questionId);
+                    const root =
+                        run.operation === 'research' ? turn?.followupRunId : turn?.revisionRunId;
+                    const key = `${run.questionId}:${run.operation}`;
+                    if (root !== run.rootRunId || continuations.has(key))
+                        invalidQuestion('重试执行与原轮次关联不一致');
+                    continuations.add(key);
+                }
                 return response;
             },
             refetchInterval: (query: {
@@ -114,6 +129,12 @@ export function useReportQuestions(
                 ).values(),
             ],
             artifacts: all.flatMap((page) => page.data.artifacts ?? []),
+            continuations: all.flatMap((page) => page.data.continuations ?? []),
+            mergeRuns: [
+                ...new Map(
+                    all.flatMap((page) => page.data.mergeRuns ?? []).map((run) => [run.runId, run]),
+                ).values(),
+            ],
         };
     });
     const turns = computed(() => {

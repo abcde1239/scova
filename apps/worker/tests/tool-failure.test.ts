@@ -1,8 +1,51 @@
 import { describe, expect, it } from 'vite-plus/test';
 import { ConnectorError } from '@scova/connectors';
-import { classifyToolFailure, toolFailures } from '../src/utils/tool-failure.ts';
+import {
+    classifyToolFailure,
+    toolFailures,
+    modelFailureDiagnostic,
+} from '../src/utils/tool-failure.ts';
 
 describe('公开工具错误分类', () => {
+    it.each([
+        ['plan-0', 'planning'],
+        ['compare-facts-0-0', 'comparison'],
+        ['synthesize-batch-7-1', 'synthesis'],
+        ['other', 'other'],
+    ])('attaches safe stage metadata for %s', (operation, stage) => {
+        const error = new ConnectorError('invalid_response', 'DO_NOT_RENDER sk-secret');
+        error.modelDiagnostic = {
+            schemaHash: 'a'.repeat(64),
+            failure: 'schema',
+            issues: [
+                { schemaPath: '#/required', keyword: 'required', requiredProperty: 'assessment' },
+                {
+                    schemaPath: '#/additionalProperties',
+                    keyword: 'additionalProperties',
+                    allowedProperties: ['pageId', 'quote'],
+                },
+            ],
+        };
+        const diagnostic = modelFailureDiagnostic(error, operation!);
+        expect(diagnostic).toEqual({ modelDiagnostic: { ...error.modelDiagnostic, stage } });
+        expect(JSON.stringify(diagnostic)).not.toMatch(/DO_NOT_RENDER|sk-secret/);
+        error.modelDiagnostic = {
+            ...error.modelDiagnostic,
+            response: 'sk-secret',
+        } as typeof error.modelDiagnostic;
+        expect(modelFailureDiagnostic(error, operation!)).toEqual({});
+    });
+    it.each([
+        ['json', 'TOOL_MODEL_INVALID_JSON'],
+        ['schema', 'TOOL_MODEL_SCHEMA_MISMATCH'],
+        ['envelope', 'TOOL_MODEL_INVALID_RESPONSE'],
+        ['refusal', 'TOOL_MODEL_REFUSED'],
+    ] as const)('preserves the model %s failure without publishing values', (reason, code) => {
+        const error = new ConnectorError('invalid_response', 'DO_NOT_RENDER');
+        error.modelFailure = reason;
+        expect(classifyToolFailure(error)).toBe(code);
+        expect(JSON.stringify(toolFailures[code])).not.toContain('DO_NOT_RENDER');
+    });
     it('keeps safe limit and format summaries broad enough for DOM/resources and decoded HTML', () => {
         expect(toolFailures.TOOL_RESPONSE_TOO_LARGE[0]).toContain('资源数量');
         expect(toolFailures.TOOL_RESPONSE_TOO_LARGE[0]).toContain('页面结构');

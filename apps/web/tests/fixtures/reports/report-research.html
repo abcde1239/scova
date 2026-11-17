@@ -89,6 +89,7 @@
             import AppThemeProvider from '/src/theme/AppThemeProvider.vue';
             import ReportBrief from '/src/components/reports/ReportBrief.vue';
             import ResearchReport from '/src/components/reports/ResearchReport.vue';
+            import ReportFormatsShowcase from './ReportFormatsShowcase.vue';
             import { useAppearanceStore } from '/src/store/appearance';
             import { useReadingStore } from '/src/store/reading';
             import '/src/main.css';
@@ -276,6 +277,14 @@
                 getView: () => view,
             };
             mount();
+            if (new URLSearchParams(location.search).get('sample') === 'formats') {
+                app.unmount();
+                const toolbar = document.querySelector('.fixture-controls');
+                if (toolbar instanceof HTMLElement) toolbar.style.display = 'none';
+                document.title = '四类报告交付预览 · Scova';
+                app = createApp(ReportFormatsShowcase);
+                app.use(pinia).mount('#fixture');
+            }
         </script>
     </body>
 </html>

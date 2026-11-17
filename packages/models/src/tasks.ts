@@ -138,6 +138,15 @@ export const SourcePreferencesSchema = Type.Object(
     },
     { additionalProperties: false, description: '来源偏好，不授予任意网络地址访问权限' },
 );
+export const SearchModeSchema = Type.Union(
+    [Type.Literal('auto'), Type.Literal('api'), Type.Literal('searxng')],
+    {
+        description:
+            '搜索方式：auto沿用账号独立搜索配置，api使用账号搜索API，searxng使用内置SearXNG与网页读取；省略等同auto，无服务器搜索默认',
+    },
+);
+export type SearchMode = Static<typeof SearchModeSchema>;
+
 const TaskConfigObject = Type.Object(
     {
         title: Type.String({
@@ -156,6 +165,7 @@ const TaskConfigObject = Type.Object(
         schedule: ScheduleSchema,
         outputFormat: OutputFormatSchema,
         outputFormats: Type.Optional(OutputFormatsSchema),
+        searchMode: Type.Optional(SearchModeSchema),
         researchMode: Type.Optional(
             Type.Union([Type.Literal('collection'), Type.Literal('analysis')], {
                 description:

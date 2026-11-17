@@ -1,6 +1,6 @@
 <template>
     <a
-        class="evidence-link scova-citation-tools inline-flex min-h-11 items-center min-w-0 break-anywhere text-primary underline-offset-[0.2em] keyboard-focus-wide"
+        class="evidence-link scova-citation-tools source-inline-action inline-flex min-h-11 items-center min-w-0 break-anywhere scova-link keyboard-focus-wide"
         :href="`#evidence-${evidence.id}`"
         >{{ evidence.title }} · 核对保存引用</a
     >

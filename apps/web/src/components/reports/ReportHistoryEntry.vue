@@ -5,7 +5,7 @@
     >
         <h2 :id="`history-title-${item.id}`" class="scova-content-title m-0">
             <router-link
-                class="[h2_&:is(a)]:(inline-flex items-center min-h-11 max-w-full text-default no-underline) [h2_&:is(a):hover]:(text-primary underline) cursor-pointer underline-offset-[0.2em] keyboard-focus-wide"
+                class="[h2_&:is(a)]:(inline-flex items-center min-h-11 max-w-full title-link) cursor-pointer scova-link keyboard-focus-wide"
                 :id="`history-report-${item.id}`"
                 :to="{ name: 'report-detail', params: { reportId: item.id } }"
                 @click="emit('open', item.id, $event)"
@@ -14,7 +14,7 @@
         </h2>
         <p class="history-metadata flex flex-wrap gap-[0.5rem_1.25rem] text-muted m-0">
             <strong class="text-default font-medium">{{
-                item.mode === 'demo' ? '演示报告' : '真实查阅'
+                item.mode === 'demo' ? '演示报告' : '研究报告'
             }}</strong>
             <span>{{
                 item.coverage.delivery
@@ -33,7 +33,7 @@
         </p>
         <p class="history-summary max-w-[60ch] whitespace-pre-wrap m-0">{{ item.summary }}</p>
         <router-link
-            class="run-link cursor-pointer underline-offset-[0.2em] keyboard-focus-wide [h2_&:is(a)]:(inline-flex items-center min-h-11 max-w-full text-default no-underline) [h2_&:is(a):hover]:(text-primary underline) [&&]:(inline-flex items-center gap-2 justify-self-start min-h-11 max-w-full text-primary)"
+            class="run-link cursor-pointer scova-link keyboard-focus-wide [h2_&:is(a)]:(inline-flex items-center min-h-11 max-w-full title-link) [&&]:(inline-flex items-center gap-2 justify-self-start min-h-11 max-w-full text-primary)"
             :to="{ name: 'run-detail', params: { runId: item.runId } }"
             ><app-icon name="run" />查看对应执行</router-link
         >

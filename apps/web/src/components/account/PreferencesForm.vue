@@ -89,7 +89,7 @@
             </p>
         </fieldset>
         <p
-            v-if="message"
+            v-if="message && Object.keys(fields).length"
             ref="errorMessage"
             role="alert"
             tabindex="-1"
@@ -97,7 +97,6 @@
         >
             {{ message }}
         </p>
-        <p class="break-anywhere m-0" v-if="saved" role="status">默认偏好已保存。</p>
         <div class="form-actions flex flex-wrap gap-4">
             <action-button
                 attr-type="submit"
@@ -120,7 +119,7 @@ import { timezoneOptions } from '@/utils/timezones';
 const id = useId();
 const { form, query } = usePreferences();
 const notice = useActionNotification();
-const { draft, fields, message, saved, pending, dirty } = form;
+const { draft, fields, message, pending, dirty } = form;
 const timezones = computed(() => timezoneOptions(draft.value.defaultTimezone));
 const notificationMode = computed({
     get: () => draft.value.notificationPreference.mode,

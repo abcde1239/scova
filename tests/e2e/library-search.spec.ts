@@ -218,6 +218,8 @@ async function installApi(page: Page, state = newState()) {
                     quotesTruncated: false,
                 },
             });
+        if (path === `/api/v1/reports/${reportId}/conversation`)
+            return route.fulfill({ json: { reportId, turns: [], hasEarlier: false } });
         if (path === `/api/v1/reports/${reportId}`)
             return route.fulfill({
                 json: {

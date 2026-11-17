@@ -67,7 +67,6 @@
             以下保留上次读取值，尚未确认当前状态。
         </p>
         <p class="m-0" v-if="pending" role="status">正在提交反馈，请稍候。</p>
-        <p class="m-0" v-if="notice" role="status">{{ notice }}</p>
         <p v-if="needsRecheck" class="scova-warning m-0">
             请重新读取并核对当前生效项，再继续操作。
         </p>
@@ -112,6 +111,7 @@ import { computed, ref, watch } from 'vue';
 import type { Feedback, Report } from '@scova/models';
 import ActionButton from '@/components/common/ActionButton.vue';
 import AppIcon from '@/components/common/AppIcon.vue';
+import { useActionNotification } from '@/composables/useActionNotification';
 import {
     feedbackKinds,
     feedbackLabels,
@@ -144,6 +144,7 @@ const {
     reload,
     write,
 } = useFeedback(() => props.report.taskId, selected);
+useActionNotification().watch(notice, () => (needsRecheck.value ? 'warning' : 'info'));
 function describe(item: Feedback) {
     const key = item.sourceId ? `source:${item.sourceId}` : `claim:${item.claimId}`;
     const target = targets.value.find((entry) => targetKey(entry) === key);

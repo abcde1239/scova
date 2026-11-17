@@ -19,29 +19,16 @@
                 >重试读取配置</action-button
             >
         </template>
-        <p
-            class="text-muted break-anywhere m-0"
-            v-else-if="query.data.value && !query.data.value.data.items.length"
-        >
-            尚未添加个人配置，可前往账号设置添加。
-        </p>
-        <p class="text-muted break-anywhere m-0" v-else>
-            {{ hint || '此选择用于该任务的手动和计划执行，不改变账号默认配置。' }}
-        </p>
-        <router-link class="scova-reference" :to="{ name: 'agent-settings' }"
-            >管理 Agent 配置</router-link
-        >
     </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { RouterLink } from 'vue-router';
 import AppSelect from '@/components/common/AppSelect.vue';
 import ActionButton from '@/components/common/ActionButton.vue';
 import { listProvidersEndpoint } from '@/api/agent-providers';
 import { useSessionQuery } from '@/composables/useSessionQuery';
-const props = defineProps<{ disabled?: boolean; inherit?: boolean; hint?: string }>();
+const props = defineProps<{ disabled?: boolean; inherit?: boolean }>();
 const selection = defineModel<string>({ required: true });
 const query = useSessionQuery(listProvidersEndpoint, {}, ['agent-providers']);
 const options = computed(() => {

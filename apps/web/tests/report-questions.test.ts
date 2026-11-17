@@ -116,6 +116,7 @@ function mount(
     fetcher: typeof fetch,
     selection?: unknown,
     initialReport: Report | null = reportFixture(),
+    conversation: unknown = { reportId: id(1), turns: [], hasEarlier: false },
 ) {
     const lifecycle = setup(async (input, init) =>
         (typeof input === 'string'
@@ -124,7 +125,7 @@ function mount(
               ? input.href
               : input.url
         ).endsWith('/conversation')
-            ? Response.json({ reportId: id(1), turns: [], hasEarlier: false })
+            ? Response.json(conversation)
             : fetcher(input, init),
     );
     const conversationOptions = lifecycle.queryOptions(
@@ -379,6 +380,30 @@ describe('actual requestlane report question endpoints', () => {
 });
 
 describe('report-question action and owner lifecycle', () => {
+    it.each(['wrong-root', 'duplicate', 'wrong-question'])(
+        'rejects invalid continuation metadata: %s',
+        async (kind) => {
+            const turn = { ...resultFixture(), followupRunId: id(40) };
+            const continuation = {
+                runId: id(41),
+                rootRunId: id(40),
+                questionId: turn.id,
+                operation: 'research',
+            };
+            if (kind === 'wrong-root') continuation.rootRunId = id(99);
+            if (kind === 'wrong-question') continuation.questionId = id(99);
+            const { state } = mount(async () => Response.json(turn), undefined, reportFixture(), {
+                reportId: id(1),
+                turns: [turn],
+                hasEarlier: false,
+                continuations: kind === 'duplicate' ? [continuation, continuation] : [continuation],
+            });
+            await state.conversation.refetch();
+            await vi.waitFor(() => expect(state.conversation.isError.value).toBe(true));
+            expect(state.conversationData.value).toBeUndefined();
+            expect(state.canSubmit.value).toBe(false);
+        },
+    );
     it.each([429, 503])(
         'reads a persisted insufficient result after initial HTTP%s without claiming another model call',
         async (status) => {

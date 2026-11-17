@@ -17,24 +17,24 @@ vp run worker#start:node  # Node.js
 
 默认通过 SearxNG 搜索；可显式配置 Tavily、DeepSeek/Perplexity 独立搜索 API，或在账号供应商配置中授权 OpenAI/Anthropic 内置搜索。内置搜索同时计入搜索与 Token 预算，详见[搜索配置](../../docs/public/guides/search.md)。
 
-| 环境变量                             | 默认值        | 用途                                                 |
-| ------------------------------------ | ------------- | ---------------------------------------------------- |
-| `WORKER_QUEUE_NAME`                  | `scova-runs`  | BullMQ 队列名                                        |
-| `WORKER_POLL_INTERVAL_MS`            | `1000`        | 批次间隔                                             |
-| `WORKER_FAILURE_DELAY_MS`            | `5000`        | 批次失败等待                                         |
-| `WORKER_BATCH_SIZE`                  | `50`          | 单批领取上限                                         |
-| `WORKER_LEASE_SECONDS`               | `30`          | 单条投递租约                                         |
-| `WORKER_RUN_LEASE_SECONDS`           | `30`          | Run 租约；续期间隔为其三分之一，最多 10 秒           |
-| `WORKER_RUN_CONCURRENCY`             | `2`           | Run 消费并发数，最大 32                              |
-| `WORKER_SCHEDULER_INTERVAL_MS`       | `30000`       | 周期任务扫描间隔                                     |
-| `WORKER_SCHEDULER_CONCURRENCY`       | `2`           | 同批调度事务并发数，最大 8                           |
-| `SEARCH_ENGINE_INTERVAL_MS`          | `10000`       | 每引擎共享启动间隔（毫秒）                           |
-| `SEARCH_CONFIG_VERSION`              | `1`           | 搜索实例出口、地区或 CX 配置指纹版本                 |
-| `SEARCH_CACHE_ENABLED`               | `true`        | 同账号候选缓存与在途复用                             |
-| `SEARCH_ADAPTIVE_ENABLED`            | `true`        | Agent 最多两次预算内补搜                             |
-| `RESEARCH_ANSWER_SUPPLEMENT_ENABLED` | `false`       | 核心问题缺口的可选一轮定向补证；复用原有综合修复预算 |
-| `READER_RENDER_WAIT_MS`              | `1000`        | 浏览器 DOM 渲染等待，范围 1–5000 毫秒                |
-| `READER_CHROMIUM_SANDBOX`            | `false`(容器) | Chromium sandbox；宿主机可设为 `true`                |
+| 环境变量                             | 默认值        | 用途                                                                        |
+| ------------------------------------ | ------------- | --------------------------------------------------------------------------- |
+| `WORKER_QUEUE_NAME`                  | `scova-runs`  | BullMQ 队列名                                                               |
+| `WORKER_POLL_INTERVAL_MS`            | `1000`        | 批次间隔                                                                    |
+| `WORKER_FAILURE_DELAY_MS`            | `5000`        | 批次失败等待                                                                |
+| `WORKER_BATCH_SIZE`                  | `50`          | 单批领取上限                                                                |
+| `WORKER_LEASE_SECONDS`               | `30`          | 单条投递租约                                                                |
+| `WORKER_RUN_LEASE_SECONDS`           | `30`          | Run 租约；续期间隔为其三分之一，最多 10 秒                                  |
+| `WORKER_RUN_CONCURRENCY`             | `2`           | Run 消费并发数，最大 32                                                     |
+| `WORKER_SCHEDULER_INTERVAL_MS`       | `30000`       | 周期任务扫描间隔                                                            |
+| `WORKER_SCHEDULER_CONCURRENCY`       | `2`           | 同批调度事务并发数，最大 8                                                  |
+| `SEARCH_ENGINE_INTERVAL_MS`          | `10000`       | 每引擎共享启动间隔（毫秒）                                                  |
+| `SEARCH_CONFIG_VERSION`              | `1`           | 搜索实例出口、地区或 CX 配置指纹版本                                        |
+| `SEARCH_CACHE_ENABLED`               | `true`        | 同账号候选缓存与在途复用                                                    |
+| `SEARCH_ADAPTIVE_ENABLED`            | `true`        | Agent 最多两次预算内补搜                                                    |
+| `RESEARCH_ANSWER_SUPPLEMENT_ENABLED` | `false`       | 旧策略的可选补证；新执行按覆盖缺口自动补证，仍受SEARCH_ADAPTIVE_ENABLED约束 |
+| `READER_RENDER_WAIT_MS`              | `1000`        | 浏览器 DOM 渲染等待，范围 1–5000 毫秒                                       |
+| `READER_CHROMIUM_SANDBOX`            | `false`(容器) | Chromium sandbox；宿主机可设为 `true`                                       |
 
 Run 从数据库固定 owner、版本、模式和预算，队列只能选择 runId。同一 Run 只有一个有效租约，接管递增 epoch，最多恢复三次；恢复保留首次开始时间和 deadline。数据库恢复扫描独立于原始 job，能处理消息丢失和保留的 completed/failed job。
 
@@ -44,7 +44,7 @@ Bun 入口通过 `scripts/run-bun.mjs` 将当前 Node 路径传给 Reader；直�
 
 调度以 IANA 时区的每日/每周当地时间计算 UTC 时点。DST 缺失时刻取首个有效时刻，重复时刻取较早一次。停机只补最近一次到期，较早时点计入 `missedCount`；已有活动执行则记 `skipped_overlap`。Occurrence、Run、首事件、Outbox 与下一时点在一个 PostgreSQL 事务内提交，多 Worker 通过任务行锁和唯一约束去重。暂停保留当前执行且允许显式手动运行，恢复只安排未来时点；归档阻止新执行并请求取消当前执行。
 
-`AGENT_CHECKPOINT_SCHEMA` 默认为 `scova_agent`，启动时在独立表空间串行运行 saver 迁移。真实执行使用 `SEARXNG_BASE_URL`（默认 `http://127.0.0.1:8080`）、`MODEL_API_KEY`、`MODEL_NAME` 和可选 `MODEL_BASE_URL`。`SEARCH_PROVIDER` 默认为 `searxng`，只有显式选择 `tavily` 时才读取 `TAVILY_API_KEY`。详情见[搜索部署](../../docs/public/guides/search.md)。密钥仅来自部署者环境，不写入任务或事件。真实 Run 缺配置以 `AGENT_CONFIGURATION_INVALID` 失败，生产 Worker 不接受 demo 队列；历史演示报告仍可读取，测试可显式注入固定供应商。
+`AGENT_CHECKPOINT_SCHEMA` 默认为 `scova_agent`，启动时在独立表空间串行运行 saver 迁移。模型优先使用账号配置，可用 `MODEL_API_KEY`、`MODEL_NAME` 和可选 `MODEL_BASE_URL` 设置部署默认模型。搜索与正文提取默认使用内置 SearXNG，账号可配置独立 Search API，任务或单次执行可覆盖；不读取服务器搜索 API 默认或模型内嵌搜索。`SEARXNG_BASE_URL`（默认 `http://127.0.0.1:8080`）仅指定内置工具地址，不选择搜索方式；搜索密钥单独加密保存，不写入任务或事件。升级须先执行数据库迁移，旧搜索 API 可在账号页显式迁入，见[搜索配置](../../docs/public/guides/search.md)。任务模型配置不可用时以 `AGENT_CONFIGURATION_INVALID` 失败，显式 API 缺配置或密钥无法读取分别使用 `SEARCH_API_NOT_CONFIGURED`、`SEARCH_CREDENTIAL_INVALID`，生产 Worker 不接受 demo 队列；历史演示报告仍可读取，测试可显式注入固定供应商。
 
 执行层通过受限上下文发出进度事件并检查执行权限；受信领域 repository 必须通过 `withRunFence` 在同一 Run 行锁事务内写入。普通写入拒绝取消、超期或失效租约；失败/取消终结有单独入口。执行器返回本身不代表已交付成果。
 
@@ -58,7 +58,9 @@ SearxNG 搜索在出站前通过 Redis 原子申请引擎资格，跨 Worker 保
 
 证据质量采用软约束：结论可保留为有引用的模型归纳或待核实内容，报告逐条说明不确定性；不匹配原文的文字不会作为引用保存。全部结论均待核实时，真实正文摘录单独放入来源附录，不与无直接依据的结论关联。比较按最多 3 页分批并局部修复，交付逐批核对成功账本；部分比较值未核实也可交付，只有完整结果才能推进基线。筛选说明与真正覆盖缺口分别记录，原有预算和权限约束继续生效。
 
-报告先冻结目标和焦点问题，再为结论记录问题关联、支持关系、时间适用性、来源关系和内容作用。`coverage.reportValue` 将问题展示为已回答、主要结论、不同来源或暂无直接回答，并将结论分为主回答、参考线索或省略。模型评估只是自评，引用定位不代表语义已独立核实；同一问题内同源观点与引用集中展示，条件与缺口保留在对应说明；旧报告没有该字段时兼容读取。启用 `RESEARCH_ANSWER_SUPPLEMENT_ENABLED` 后，核心问题仍有具体缺口时最多补搜一次、读取两页并复用原第二次综合调用；预算、期限、账本和恢复不放宽，无新增信息即停止。默认关闭。
+新执行按形式和问题范围分组，每组最多6项冻结需求、最多24条结论（简报8条），修复只请求未完整的字段。当前字段绑定决定活动结论，完整字段不因局部失败退化，冲突仍保留；所有原始尝试保存在不可变回执中，活动集最多192条。稳定组最多60个，实际调用受原累计预算和deadline约束；直接答复先于历史变化抽取。一组证据综合和局部修复各一次；覆盖不足时在原预算内定向补搜、读取最多4页，仅新增正文可开启第二组，最多4轮。输出配额基于不可变回执的实际usage回收，输入先容纳固定契约再适配本批正文，累计账本始终是硬限。新wire强制assessment、形式和单问题关联，旧检查点保持原协议。0/N标记覆盖验收失败。结构失败事件保存阶段、schema指纹和可信预期约束，不保存无效响应值；失败usage与修复分别结算。
+
+报告先冻结目标和焦点问题，再为结论记录问题关联、支持关系、时间适用性、来源关系和内容作用。`coverage.reportValue` 将问题展示为已回答、主要结论、不同来源或暂无直接回答，并将结论分为主回答、参考线索或省略。模型评估只是自评，引用定位不代表语义已独立核实；同一问题内同源观点与引用集中展示，条件与缺口保留在对应说明；旧报告没有该字段时兼容读取。对于不带新覆盖策略的旧检查点，启用 `RESEARCH_ANSWER_SUPPLEMENT_ENABLED` 后，核心问题仍有具体缺口时最多补搜一次、读取两页并复用原第二轮综合额度；预算、期限、账本和恢复不放宽，无新增信息即停止。默认关闭。
 
 首次领取固定同 owner/task/有效范围/mode 的完整基线，恢复不重新选择。比较清单随报告保存，交付事务重新验证成功模型账本、事实原文和双方证据后保存变化；完整执行推进基线，partial 保留原指针。范围包含比较策略版本，演示与真实基线隔离。图与当前引用校验边界见 [Agent Core](../../packages/agent-core/README.md)；未核验新来源发布日期、官方身份、来源失败或正文截断均显示覆盖缺口。
 

@@ -1,6 +1,11 @@
 import { toolIssueLevel, toolIssueGuidance, type RunEvent } from '@scova/models';
 
 export const stepLabels = {
+    answer_supplement: '按问题缺口补证',
+    model_answer: '模型自回答',
+    model_draft: '知识候选与待核验要点',
+    gap_loop: '调度字段缺口',
+    conflict_review: '冲突复核',
     load_context: '加载上下文',
     plan: '制定计划',
     search: '搜索来源',
@@ -28,6 +33,10 @@ const failures: Record<string, string> = {
     TOOL_RATE_LIMITED: '目标服务限流（HTTP 429）',
     TOOL_HTTP_ERROR: '目标服务返回 HTTP 错误',
     TOOL_INVALID_RESPONSE: '响应格式或内容类型不符合要求',
+    TOOL_MODEL_INVALID_JSON: '模型生成内容不是有效 JSON',
+    TOOL_MODEL_SCHEMA_MISMATCH: '模型生成内容不符合报告结构要求',
+    TOOL_MODEL_INVALID_RESPONSE: '模型响应结构或完成状态无效',
+    TOOL_MODEL_REFUSED: '模型拒绝生成本次内容',
     TOOL_OUTPUT_TRUNCATED: '模型输出达到长度上限，未完成生成',
     TOOL_MODEL_QUOTA_EXCEEDED: '模型服务额度不足，请补充额度后新建执行',
     TOOL_BUDGET_EXCEEDED: '剩余调用预算不足',
@@ -37,6 +46,10 @@ const failures: Record<string, string> = {
     NO_EVIDENCE: '未取得可用证据，未生成报告',
     DEADLINE_EXCEEDED: '执行时间预算已耗尽',
     AGENT_CONFIGURATION_INVALID: '研究服务配置不可用',
+    SEARCH_API_NOT_CONFIGURED: '请在账号中配置 Search API，或选择内置 SearXNG',
+    SEARCH_CREDENTIAL_INVALID: '搜索密钥无法读取，请在账号中重新保存 Search API',
+    SEARCH_API_READING_UNSUPPORTED:
+        '所选 Search API 暂不支持独立网页读取，请改选 DeepSeek 或 Tavily',
     EXECUTOR_FAILED: '执行器未完成本次工作',
 };
 export interface ExecutionLogEntry {
@@ -128,7 +141,7 @@ export function appendExecutionLog(state: ExecutionLog, event: RunEvent): Execut
             waiting: '搜索等待 · 等待共享额度或相同查询结果',
             cooldown: '搜索冷却 · 上游暂不可用',
             cache_hit: '搜索复用 · 使用已缓存候选，仍需读取和核验正文',
-            claims_repair: '引用校验 · 已保留合法结论，正在修复失败项',
+            claims_repair: '生成修复 · 正在修复结构或引用失败项',
         };
         entry.text = labels[event.payload.state];
     } else if (event.type === 'run.failed') {
@@ -138,7 +151,7 @@ export function appendExecutionLog(state: ExecutionLog, event: RunEvent): Execut
         if (Object.hasOwn(failures, code)) entry.code = code;
     } else if (event.type === 'budget.updated') {
         const u = event.payload.usage;
-        entry.text = `累计用量 · 搜索 ${u.searches} 次 · 网页 ${u.pages} 次 · 输入 ${u.inputTokens} / 输出 ${u.outputTokens} token`;
+        entry.text = `累计用量${u.estimated ? '（保守估算）' : ''} · 搜索 ${u.searches} 次 · 网页 ${u.pages} 次 · 输入 ${u.inputTokens} / 输出 ${u.outputTokens} token`;
     } else if (event.type === 'coverage.updated') {
         entry.text =
             event.payload.completeness === 'partial'

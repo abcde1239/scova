@@ -143,7 +143,7 @@ async function openReport(page: Page, state: State) {
 test.beforeAll(async ({ browser }) => console.log(`Browser: Chromium ${browser.version()}`));
 
 for (const width of [1280, 390]) {
-    test(`question answers group one source while keeping distinct views and quote links at ${width}`, async ({
+    test(`question answers preserve distinct claims with end-only provenance at ${width}`, async ({
         page,
     }) => {
         await page.setViewportSize({ width, height: 1000 });
@@ -201,7 +201,13 @@ for (const width of [1280, 390]) {
         await expect(first.locator('.claim')).toHaveCount(1);
         await expect(answer.locator('blockquote')).toHaveCount(0);
         await expect(answer).toContainText('只适用于后续批次。');
-        const link = first.locator('.citation').last();
+        await expect(answer.locator('a[href^="#evidence-"]')).toHaveCount(0);
+        await page.locator('.claim-provenance > summary').press('Enter');
+        const claimId = await first.locator('.claim').getAttribute('id');
+        const attribution = page
+            .locator(`.claim-provenance a[href="#${claimId}"]`)
+            .locator('xpath=parent::li');
+        const link = attribution.locator('a[href^="#evidence-"]').last();
         const target = await link.getAttribute('href');
         await link.click();
         await expect(page.locator(`${target} blockquote`)).toBeVisible();
@@ -270,15 +276,21 @@ test('ResearchReport 目录、四类结论、changes 与孤立 evidence 按真�
     await expect(page.getByRole('note', { name: '查阅范围说明' })).toContainText(
         '查看来源覆盖说明',
     );
-    await expect(page.getByText('研究范围', { exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '研究范围', exact: true })).toBeVisible();
     await expect(
         page
             .locator('.evidence-appendix .evidence-source-group > summary')
             .filter({ hasText: '孤立来源：未归入结论' }),
     ).toBeVisible();
-    await expect(
-        page.getByText('每份来源集中保存引用，展开即可核对原文；不同保存版本分别列出。'),
-    ).toBeVisible();
+    await expect(page.locator('.claim a,.claim details')).toHaveCount(0);
+    expect(
+        await page
+            .locator('a[href^="#evidence-"]')
+            .evaluateAll((links) => links.every((link) => !!link.closest('.evidence-appendix'))),
+    ).toBe(true);
+    await expect(page.locator('.evidence-appendix .claim-provenance > summary')).toHaveText(
+        '结论依据',
+    );
     expect(state.requests).toEqual([]);
 });
 
@@ -322,20 +334,35 @@ test('Brief 与 Research 切换共享同一 DTO、claim 文本与保存引用，
     const report = researchReport();
     const claims = async () =>
         page.locator('.claim').evaluateAll((nodes) =>
-            nodes.map((node) => ({
-                id: node.id,
-                text: node.querySelector('.claim-text')?.textContent,
-                confidence: node.querySelector('.confidence')?.textContent,
-                citations: Array.from(node.querySelectorAll('.citation')).map(
-                    (link) =>
-                        document
-                            .getElementById(link.getAttribute('href')!.slice(1))!
-                            .closest('.source-quote')!
-                            .querySelector('blockquote')!.textContent,
-                ),
-            })),
+            nodes.map((node) => {
+                const attribution = document
+                    .querySelector(`.claim-provenance a[href="#${node.id}"]`)!
+                    .closest('li')!;
+                return {
+                    id: node.id,
+                    text: node.querySelector('.claim-text')?.textContent,
+                    confidence: attribution.querySelector('p')!.textContent,
+                    citations: Array.from(
+                        attribution.querySelectorAll('a[href^="#evidence-"]'),
+                    ).map(
+                        (link) =>
+                            document
+                                .getElementById(link.getAttribute('href')!.slice(1))!
+                                .closest('.source-quote')!
+                                .querySelector('blockquote')!.textContent,
+                    ),
+                };
+            }),
         );
     const research = await claims();
+    expect(research.map((entry) => entry.citations)).toEqual(
+        report.claims.map((entry) =>
+            entry.evidenceIds.map(
+                (evidenceId) =>
+                    report.evidence.find((evidence) => evidence.id === evidenceId)!.quote,
+            ),
+        ),
+    );
     await page.evaluate(() => window.scovaResearchFixture.setView('brief'));
     await expect(article(page)).toHaveCount(0);
     expect(await claims()).toEqual(research);
@@ -423,10 +450,58 @@ test('页面不自动请求外站，证据链接安全且不产生写请求', as
     await openReport(page, state);
     const details = page.locator('.evidence-source-group').first();
     await details.locator(':scope > summary').click();
-    const link = details.getByRole('link', { name: '打开原始来源（新窗口）' });
+    const link = details.getByRole('link', { name: '打开网页（新窗口）' });
+    await details.locator(':scope > summary').focus();
+    await details.locator(':scope > summary').press('Tab');
+    await expect(link).toBeFocused();
+    await expect(link).toHaveAttribute('href', researchReport().evidence[0]!.snapshot.canonicalUrl);
     await expect(link).toHaveAttribute('target', '_blank');
     await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
     expect(external).toEqual([]);
+    expect(state.requests).toEqual([]);
+});
+
+test('同一网页仅列一次，跟踪参数不拆分页面且不同保存版本与逐条结论关系保留', async ({ page }) => {
+    const state: State = { baselineOnly: false, requests: [] };
+    await openReport(page, state);
+    const report = researchReport();
+    const first = report.evidence[0]!;
+    const second = report.evidence[1]!;
+    second.sourceId = id(99);
+    second.snapshot.canonicalUrl = `${first.snapshot.canonicalUrl}?utm_source=fixture#saved`;
+    await page.evaluate((value) => window.scovaResearchFixture.setReport(value), report);
+    const pages = page.locator('.evidence-appendix .evidence-source-group');
+    await expect(pages).toHaveCount(2);
+    const shared = pages.filter({ has: page.locator(`#evidence-${first.id}`) });
+    await shared.locator(':scope > summary').press('Enter');
+    await expect(shared.locator('.source-page-link')).toHaveCount(1);
+    await expect(shared.locator('.source-page-link')).toHaveAttribute(
+        'href',
+        first.snapshot.canonicalUrl,
+    );
+    await expect(shared.locator('.source-version')).toHaveCount(2);
+    for (const evidence of [first, second]) {
+        const version = shared
+            .locator('.source-version')
+            .filter({ has: page.locator(`#evidence-${evidence.id}`) });
+        await expect(version.locator('blockquote')).toHaveText(evidence.quote);
+        await expect(version.locator('h4 time')).toHaveAttribute('datetime', evidence.observedAt);
+    }
+    await expect(shared.locator('.source-quote a[target="_blank"]')).toHaveCount(0);
+    await page.locator('.claim-provenance > summary').press('Enter');
+    for (const claim of report.claims) {
+        const attribution = page
+            .locator(`.claim-provenance a[href="#claim-${claim.id}"]`)
+            .locator('xpath=parent::li');
+        expect(
+            await attribution
+                .locator('a[href^="#evidence-"]')
+                .evaluateAll((links) => links.map((link) => link.getAttribute('href'))),
+        ).toEqual(claim.evidenceIds.map((evidenceId) => `#evidence-${evidenceId}`));
+    }
+    const ids = await page.locator('[id]').evaluateAll((nodes) => nodes.map((node) => node.id));
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(await page.evaluate(() => window.scovaResearchFixture.getReport())).toEqual(report);
     expect(state.requests).toEqual([]);
 });
 

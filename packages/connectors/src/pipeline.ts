@@ -21,6 +21,7 @@ const DEMO_TEXT = '演示资料：这是固定的 Scova 功能示例，不是从
 
 export interface ConnectorBundle {
     mode: 'live' | 'demo';
+    searchProvider?: 'searxng' | 'api';
     reason?: string;
     search: SearchProvider;
     reader: PageReader;
@@ -43,15 +44,23 @@ export function createConnectorBundle(
     } = {},
 ): ConnectorBundle {
     const searchProvider = options.searchProvider ?? 'searxng';
-    const modelSearch = options.modelSearch === 'disabled' ? undefined : options.modelSearch;
+    const modelSearch =
+        searchProvider === 'api' || options.modelSearch === 'disabled'
+            ? undefined
+            : options.modelSearch;
     if (!['searxng', 'tavily', 'api'].includes(searchProvider))
         throw new ConnectorError('configuration', '搜索服务选项无效');
     if (!modelSearch && searchProvider === 'api' && !options.searchApi)
         throw new ConnectorError('configuration', '搜索 API 未配置');
+    if (!modelSearch && searchProvider === 'api' && options.searchApi?.protocol === 'perplexity')
+        throw new ConnectorError(
+            'configuration',
+            'Perplexity Search 暂不支持独立网页读取，请选择 DeepSeek 或 Tavily',
+        );
     if (
-        (options.modelSearch === 'anthropic_web_search' &&
+        (modelSearch === 'anthropic_web_search' &&
             options.modelProtocol !== 'anthropic_messages') ||
-        (options.modelSearch === 'openai_responses' &&
+        (modelSearch === 'openai_responses' &&
             options.modelProtocol &&
             !['openai_chat_completions', 'openai_json'].includes(options.modelProtocol))
     )
@@ -83,6 +92,11 @@ export function createConnectorBundle(
     ) {
         return {
             mode: 'live',
+            searchProvider: apiSearch
+                ? 'api'
+                : !nativeSearch && searchProvider === 'searxng'
+                  ? 'searxng'
+                  : undefined,
             search:
                 nativeSearch ??
                 apiSearch ??
@@ -94,7 +108,7 @@ export function createConnectorBundle(
                           maxAttempts: options.managedSearch ? 1 : undefined,
                       })
                     : createTavilySearch({ apiKey: options.tavilyApiKey!, http: options.http })),
-            reader: createPageReader({ http: options.http }),
+            reader: apiSearch ?? createPageReader({ http: options.http }),
             model: createModelProvider({
                 apiKey: options.modelApiKey,
                 model: options.model,

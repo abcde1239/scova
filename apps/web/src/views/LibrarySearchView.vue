@@ -9,7 +9,7 @@
             aria-label="资料库分区"
         >
             <navigation-button
-                class="inline-flex items-center min-h-11 text-primary cursor-pointer underline-offset-[0.2em] keyboard-focus-wide"
+                class="inline-flex items-center min-h-11 scova-link cursor-pointer keyboard-focus-wide"
                 to="/library"
                 >收藏</navigation-button
             >
@@ -84,7 +84,6 @@
             :aria-busy="state.query.isFetching.value"
         >
             <h2 id="search-results-title" class="scova-interface text-[1.25rem] m-0">检索结果</h2>
-            <p class="m-0" v-if="state.notice.value" role="status">{{ state.notice.value }}</p>
             <p
                 class="m-0"
                 v-if="state.committed.value && state.query.isFetching.value"
@@ -134,7 +133,9 @@ import ActionButton from '@/components/common/ActionButton.vue';
 import LibrarySearchResults from '@/components/library/LibrarySearchResults.vue';
 import { librarySearchError, useLibrarySearch } from '@/composables/useLibrarySearch';
 import { useReadingTypography } from '@/composables/useReadingTypography';
+import { useActionNotification } from '@/composables/useActionNotification';
 const state = useLibrarySearch();
+useActionNotification().watch(state.notice);
 const { reading } = useReadingTypography();
 const results = ref<HTMLElement>();
 let pageFocus = false;

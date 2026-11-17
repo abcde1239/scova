@@ -82,6 +82,11 @@ p {
     color-scheme: dark;
 }
 
+/* Low specificity lets navigation, cards and button links retain their own treatment. */
+:where(.scova-theme) :where(a[href]) {
+    @apply scova-link;
+}
+
 .scova-theme select:not([multiple]) {
     appearance: none;
     min-block-size: 2.75rem;

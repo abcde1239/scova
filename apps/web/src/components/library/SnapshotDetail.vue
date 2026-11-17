@@ -102,18 +102,19 @@
             aria-label="快照关联入口"
         >
             <router-link
-                class="inline-flex items-center min-h-11 max-w-full text-primary cursor-pointer underline-offset-[0.2em] keyboard-focus-wide"
+                class="inline-flex items-center min-h-11 max-w-full scova-link cursor-pointer keyboard-focus-wide"
                 :to="`/runs/${detail.snapshot.runId}`"
                 >查看该次执行</router-link
             >
             <a
-                class="inline-flex items-center min-h-11 max-w-full text-primary cursor-pointer underline-offset-[0.2em] keyboard-focus-wide"
+                class="external-link cursor-pointer keyboard-focus-wide"
                 v-if="sourceLink(detail.snapshot.originalUrl)"
                 :href="sourceLink(detail.snapshot.originalUrl)"
                 target="_blank"
                 rel="noopener noreferrer"
-                >打开原始来源（新窗口）</a
             >
+                打开原始来源（新窗口）<app-icon name="source" />
+            </a>
         </nav>
         <section
             class="saved-quotes scova-citation-tools layout-grid gap-6 break-anywhere"
@@ -161,7 +162,7 @@
                     </div>
                 </dl>
                 <router-link
-                    class="inline-flex items-center min-h-11 max-w-full text-primary cursor-pointer underline-offset-[0.2em] keyboard-focus-wide"
+                    class="inline-flex items-center min-h-11 max-w-full scova-link cursor-pointer keyboard-focus-wide"
                     :to="`/runs/${quote.runId}`"
                     >查看片段对应执行</router-link
                 >
@@ -174,5 +175,6 @@
 import { RouterLink } from 'vue-router';
 import type { SnapshotDetail } from '@/api/source-history';
 import { sourceLink } from '@/composables/useReport';
+import AppIcon from '@/components/common/AppIcon.vue';
 defineProps<{ detail: SnapshotDetail; body: string | null }>();
 </script>

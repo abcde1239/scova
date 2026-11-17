@@ -8,34 +8,57 @@
     >
         <header class="report-header">
             <h2 id="report-title" class="scova-report-title" tabindex="-1">{{ report.title }}</h2>
-            <p class="mode scova-interface">
-                {{
-                    report.mode === 'demo'
-                        ? '演示报告：来自演示数据，不代表真实查阅成果。'
-                        : '真实查阅报告'
-                }}
-            </p>
-            <p v-if="delivery" class="scova-interface report-delivery">
-                <strong>{{
-                    hasAnswerGaps ? '部分内容待补充' : reportDeliveryLabels[delivery.status]
-                }}</strong>
-                <span v-if="delivery.questionCount">
-                    · {{ delivery.answeredQuestions }}/{{
-                        delivery.questionCount
+            <div class="report-metadata flex flex-wrap items-center gap-x-4 gap-y-1 min-w-0">
+                <p class="mode scova-interface">
+                    {{
+                        report.mode === 'demo'
+                            ? '演示报告：来自演示数据，不代表真实查阅成果。'
+                            : formatNames[format]
                     }}
-                    个问题已整理相关材料，逐项完整性见下方</span
-                >
-            </p>
-            <p class="published scova-interface">
-                <time :datetime="report.publishedAt">{{ published }}</time>
-            </p>
+                </p>
+                <p v-if="delivery" class="scova-interface report-delivery">
+                    <a
+                        v-if="organized"
+                        class="scova-link inline-flex items-center min-h-11"
+                        href="#coverage-title"
+                        @click="openCoverage"
+                        >{{
+                            hasAnswerGaps
+                                ? '部分交付 · 查看详情'
+                                : reportDeliveryLabels[delivery.status]
+                        }}</a
+                    >
+                    <strong v-else>{{
+                        hasAnswerGaps ? '部分内容待补充' : reportDeliveryLabels[delivery.status]
+                    }}</strong>
+                    <span v-if="delivery.questionCount && !organized">
+                        · {{ delivery.answeredQuestions }}/{{
+                            delivery.questionCount
+                        }}
+                        个问题已整理相关材料，逐项完整性见下方</span
+                    >
+                </p>
+                <p class="published scova-interface">
+                    <time :datetime="report.publishedAt">{{ published }}</time>
+                </p>
+            </div>
+            <research-coverage-summary :metrics="report.coverage.metrics" />
         </header>
 
         <slot name="format-notice" />
-        <section aria-labelledby="summary-title" class="report-summary scova-reading">
+        <section
+            v-if="!replacesSummary"
+            aria-labelledby="summary-title"
+            class="report-summary scova-reading"
+        >
             <h3 id="summary-title">{{ summaryTitle }}</h3>
+            <model-answer-tag v-if="report.claims.some((claim) => claim.kind === 'model_answer')" />
             <p>{{ summary }}</p>
-            <p v-if="answerGaps.length" class="answer-gap-overview scova-interface" role="note">
+            <p
+                v-if="answerGaps.length && !organized"
+                class="answer-gap-overview scova-interface"
+                role="note"
+            >
                 <span>需留意：</span>
                 <template v-for="gap in answerGaps.slice(0, 3)" :key="gap.key">
                     <a
@@ -50,11 +73,36 @@
                 >
             </p>
         </section>
-        <slot name="after-summary" />
-        <report-answers v-if="report.coverage.reportValue" :report="report" :format="format" />
+        <slot v-if="!document || structured" name="after-summary" />
+        <report-document
+            v-if="document && !structured"
+            :report="report"
+            :document="document"
+            :format="format"
+        >
+            <template #navigation><slot name="after-summary" /></template>
+        </report-document>
+        <report-document
+            v-if="structured && split.lead"
+            :report="report"
+            :document="split.lead"
+            :format="format"
+        />
+        <report-answers
+            v-if="report.coverage.reportValue"
+            :report="report"
+            :format="format"
+            :document="document"
+        />
+        <report-document
+            v-if="structured && split.tail"
+            :report="report"
+            :document="split.tail"
+            :format="format"
+        />
         <slot />
         <aside
-            v-if="integrity.partial"
+            v-if="integrity.partial && !organized"
             class="report-warning scova-interface"
             role="note"
             aria-label="查阅范围说明"
@@ -78,7 +126,7 @@
                         {{
                             integrity.partial
                                 ? '本次结果覆盖已执行范围。'
-                                : '本次计划范围内查阅完成，不代表穷尽互联网资料。'
+                                : '已完成本次计划范围内的查阅。'
                         }}
                     </p>
                     <dl class="metadata scova-interface">
@@ -137,7 +185,7 @@
             </details>
         </section>
 
-        <report-sources :report="report" />
+        <report-sources v-if="showSources" :report="report" />
     </article>
 </template>
 
@@ -147,26 +195,56 @@ import { classifyReportDelivery, reportDeliveryLabels, type Report } from '@scov
 import { reportIntegrity } from '@/composables/useReport';
 import { useReadingTypography } from '@/composables/useReadingTypography';
 import ReportSources from '@/components/reports/ReportSources.vue';
+import ModelAnswerTag from '@/components/reports/ModelAnswerTag.vue';
+import ResearchCoverageSummary from '@/components/reports/ResearchCoverageSummary.vue';
 import ReportAnswers from '@/components/reports/ReportAnswers.vue';
-import { reportSummary } from '@/utils/report-artifacts';
+import ReportDocument from '@/components/reports/ReportDocument.vue';
+import {
+    reportSummary,
+    savedArtifactDocument,
+    splitStructuredDocument,
+} from '@/utils/report-artifacts';
 import { uniqueCoverageNotes } from '@/utils/report-coverage';
 const props = withDefaults(
-    defineProps<{ report: Report; summaryTitle?: string; format?: Report['format'] }>(),
+    defineProps<{
+        report: Report;
+        summaryTitle?: string;
+        format?: Report['format'];
+        showSources?: boolean;
+    }>(),
     {
         summaryTitle: '报告概述',
         format: 'brief',
+        showSources: true,
     },
 );
 const { reading } = useReadingTypography();
+const formatNames = {
+    brief: '简报',
+    list: '主题清单',
+    comparison: '对比表',
+    research_report: '研究报告',
+};
 const integrity = computed(() => reportIntegrity(props.report));
 const summary = computed(() => reportSummary(props.report));
+const document = computed(() => savedArtifactDocument(props.report, props.format));
+const structured = computed(() => props.format === 'list' || props.format === 'comparison');
+// A structured artifact keeps its summary unless its own scope/core-difference section replaces it.
+const replacesSummary = computed(() => (structured.value ? !!split.value.lead : !!document.value));
+const split = computed(() =>
+    splitStructuredDocument(structured.value ? document.value : undefined),
+);
 const artifact = computed(() =>
     props.report.coverage.artifacts?.find((entry) => entry.format === props.format),
+);
+const organized = computed(
+    () =>
+        !!(document.value || artifact.value?.content?.list || artifact.value?.content?.comparison),
 );
 const answerGaps = computed(() => {
     const requirements =
         artifact.value?.coverage?.requirements.filter(
-            (entry) => entry.required && entry.status !== 'supported',
+            (entry) => entry.required && !['supported', 'model_answered'].includes(entry.status),
         ) ?? [];
     const requiredGaps = requirements.map((entry) => ({
         key: entry.id,
@@ -281,22 +359,30 @@ const budgetLabels = {
 .report-frame {
     @apply report-grid w-full max-w-full;
 }
+.report-frame--brief,
+.report-frame--research_report {
+    @apply max-w-[52rem] mx-auto;
+}
+.report-frame--comparison > .report-header,
+.report-frame--comparison > .report-summary {
+    @apply w-full max-w-[52rem];
+}
 .report-header,
 .report-summary,
 .coverage {
     @apply layout-grid gap-2.5;
 }
 .answer-gaps a {
-    @apply text-inherit underline-offset-[0.2em];
+    @apply scova-link;
 }
 .answer-gap-overview {
     @apply flex flex-wrap items-baseline gap-[0.25rem_0.75rem] text-muted text-[0.875rem];
 }
 .answer-gap-overview a {
-    @apply inline-flex items-center min-h-11 max-w-full text-inherit underline-offset-[0.2em];
+    @apply inline-flex items-center min-h-11 max-w-full scova-link;
 }
 .scope-status {
-    @apply inline-flex items-center min-h-11 justify-self-start text-muted underline-offset-[0.2em];
+    @apply inline-flex items-center min-h-11 justify-self-start scova-link;
 }
 h2,
 h3,

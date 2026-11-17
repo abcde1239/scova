@@ -65,13 +65,12 @@
             个；加载更多不会自动选中。启用状态不代表正在执行，清除时会检查活动执行。
         </p>
         <div
-            v-if="actions.message.value || failedResults.length"
+            v-if="failedResults.length"
             ref="feedback"
             class="bulk-feedback break-anywhere focus-visible:([outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.125rem])"
             role="status"
             tabindex="-1"
         >
-            <p v-if="actions.message.value">{{ actions.message.value }}</p>
             <ul v-if="failedResults.length">
                 <li v-for="result in failedResults" :key="result.id">
                     {{ result.title }}：{{ result.message }}
@@ -178,6 +177,7 @@ import ActionButton from '@/components/common/ActionButton.vue';
 import AppIcon from '@/components/common/AppIcon.vue';
 import TaskCard from '@/components/tasks/TaskCard.vue';
 import { bulkTaskLimit, useBulkTaskDeletion } from '@/composables/useBulkTaskDeletion';
+import { useActionNotification } from '@/composables/useActionNotification';
 import type { TaskFilter } from '@/composables/useTasks';
 const props = defineProps<{
     tasks: Task[];
@@ -186,6 +186,19 @@ const props = defineProps<{
     unavailable: boolean;
 }>();
 const actions = useBulkTaskDeletion(() => props.tasks);
+const notification = useActionNotification();
+notification.watch(actions.message, 'warning');
+watch(actions.pending, (pending, wasPending) => {
+    if (pending || !wasPending || !actions.results.value.length) return;
+    const removed = actions.results.value.filter((result) => result.status === 'removed').length;
+    const remaining = actions.results.value.length - removed;
+    if (remaining)
+        notification.warning(
+            `已清除 ${removed} 个任务，${remaining} 个需处理`,
+            '请查看未完成项并核对后重新选择。',
+        );
+    else notification.success(`已清除 ${removed} 个任务`);
+});
 const failedResults = computed(() =>
     actions.results.value.filter((result) => result.status !== 'removed'),
 );
@@ -227,12 +240,12 @@ watch(actions.confirmation, async (items) => {
         dialog.value?.close();
         confirmationText.value = '';
         await nextTick();
-        if (actions.message.value || failedResults.value.length) feedback.value?.focus();
+        if (failedResults.value.length) feedback.value?.focus();
         else if (actions.results.value.length) finishTrigger.value?.$el.focus();
     }
 });
-watch([actions.message, actions.busy, failedResults], async ([value, busy, failures]) => {
-    if ((value || failures.length) && !busy) {
+watch([actions.busy, failedResults], async ([busy, failures]) => {
+    if (failures.length && !busy) {
         await nextTick();
         feedback.value?.focus();
     }

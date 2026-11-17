@@ -5,9 +5,59 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <link rel="icon" type="image/x-icon" href="/favicon.ico?v=ebde566c" />
         <title>Scova</title>
+        <!-- Must render before application scripts, styles and fonts are available. -->
+        <style>
+            #startup-screen {
+                box-sizing: border-box;
+                display: grid;
+                place-content: center;
+                gap: 1rem;
+                min-height: 100vh;
+                min-height: 100dvh;
+                padding: 1.5rem;
+                background: #f8fafc;
+                color: #17212f;
+                font:
+                    1rem/1.6 system-ui,
+                    sans-serif;
+                text-align: center;
+                overflow-wrap: anywhere;
+            }
+            #startup-screen p {
+                margin: 0;
+            }
+            #startup-screen:has(noscript p) [data-startup-message] {
+                display: none;
+            }
+            #startup-screen a {
+                display: inline-grid;
+                place-items: center;
+                min-height: 2.75rem;
+                color: inherit;
+            }
+            body:has(#startup-screen) {
+                margin: 0;
+            }
+            @media (prefers-color-scheme: dark) {
+                #startup-screen {
+                    background: #101418;
+                    color: #f1f5f9;
+                    color-scheme: dark;
+                }
+            }
+        </style>
     </head>
     <body>
-        <div id="app"></div>
+        <div id="app">
+            <main id="startup-screen">
+                <strong>Scova</strong>
+                <p role="status" data-startup-message>正在加载应用</p>
+                <a href="" data-startup-retry>重新加载</a>
+                <noscript>
+                    <p>请启用 JavaScript 后重新加载。</p>
+                </noscript>
+            </main>
+        </div>
         <script type="module" src="/src/main.ts"></script>
     </body>
 </html>

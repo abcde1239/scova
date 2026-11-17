@@ -71,22 +71,38 @@ async function domMapping(page: Page) {
     return article(page)
         .locator('.claim')
         .evaluateAll((elements) =>
-            elements.map((element) => ({
-                id: element.id.slice('claim-'.length),
-                text: element.querySelector('.claim-text')!.textContent,
-                confidence: element.querySelector('.confidence')!.textContent,
-                evidence: [...element.querySelectorAll('.citation')].map(
-                    (citation) => citation.id.split('-evidence-')[1],
-                ),
-                quotes: [...element.querySelectorAll('.citation')].map(
-                    (link) =>
-                        document
-                            .getElementById(link.getAttribute('href')!.slice(1))!
-                            .closest('.source-quote')!
-                            .querySelector('blockquote')!.textContent,
-                ),
-            })),
+            elements.map((element) => {
+                const attribution = document
+                    .querySelector(`.claim-provenance a[href="#${element.id}"]`)!
+                    .closest('li')!;
+                const citations = [...attribution.querySelectorAll('a[href^="#evidence-"]')];
+                return {
+                    id: element.id.slice('claim-'.length),
+                    text: element.querySelector('.claim-text')!.textContent,
+                    confidence: attribution.querySelector('p')!.textContent,
+                    evidence: citations.map((citation) => citation.id.split('-evidence-')[1]),
+                    quotes: citations.map(
+                        (link) =>
+                            document
+                                .getElementById(link.getAttribute('href')!.slice(1))!
+                                .closest('.source-quote')!
+                                .querySelector('blockquote')!.textContent,
+                    ),
+                };
+            }),
         );
+}
+async function openQuote(page: Page, evidenceId: string) {
+    const quote = page
+        .locator(`#evidence-${evidenceId}`)
+        .locator('xpath=ancestor-or-self::*[contains(@class,"source-quote")]');
+    const group = quote.locator(
+        'xpath=ancestor::details[contains(@class,"evidence-source-group")]',
+    );
+    if ((await group.getAttribute('open')) === null)
+        await group.locator(':scope > summary').press('Enter');
+    await expect(quote.locator('blockquote')).toBeVisible();
+    return { quote, group };
 }
 async function capture(page: Page, info: TestInfo, name: string) {
     await info.attach(name, {
@@ -109,7 +125,7 @@ async function assertReadableQuote(
 }
 test.beforeAll(async ({ browser }) => console.log(`Browser: Chromium ${browser.version()}`));
 
-test('real SFCs: same DTO has identical claims, raw confidence and ordered shared citations', async ({
+test('real SFCs: same DTO has identical claims and ordered end-only provenance', async ({
     page,
 }) => {
     const api: string[] = [];
@@ -122,7 +138,7 @@ test('real SFCs: same DTO has identical claims, raw confidence and ordered share
     const expected = sorted.map((entry) => ({
         id: entry.id,
         text: entry.text,
-        confidence: `证据说明：${entry.confidenceLabel}`,
+        confidence: `${labels[kinds.indexOf(entry.kind)]} · ${entry.confidenceLabel}`,
         evidence: entry.evidenceIds,
         quotes: entry.evidenceIds.map(
             (id) => report.evidence.find((entry) => entry.id === id)!.quote,
@@ -139,6 +155,27 @@ test('real SFCs: same DTO has identical claims, raw confidence and ordered share
         expect(await page.evaluate(() => window.scovaReportFixture.getReport())).toEqual(report);
         expect(await page.evaluate(() => window.scovaReportFixture.getView())).toBe(view);
         await expect(article(page).locator('.claim')).toHaveCount(report.claims.length);
+        await expect(article(page).locator('.claim a,.claim details')).toHaveCount(0);
+        expect(
+            await article(page)
+                .locator('a[href^="#evidence-"]')
+                .evaluateAll((links) =>
+                    links.every((link) => !!link.closest('.evidence-appendix')),
+                ),
+        ).toBe(true);
+        expect(
+            await article(page)
+                .locator('.claim-provenance')
+                .evaluate((appendix) =>
+                    [...document.querySelectorAll('.claim')].every(
+                        (entry) =>
+                            !!(
+                                entry.compareDocumentPosition(appendix) &
+                                Node.DOCUMENT_POSITION_FOLLOWING
+                            ),
+                    ),
+                ),
+        ).toBe(true);
         await expect(page.locator('#report-title')).toHaveText(report.title);
         await expect(article(page).locator('time').first()).toHaveAttribute(
             'datetime',
@@ -189,9 +226,12 @@ test('real SFCs: summary and claims precede scope notes; raw coverage and modes 
             '演示报告：来自演示数据，不代表真实查阅成果。',
         );
         const noEvidence = report.claims.find((entry) => entry.evidenceIds.length === 0)!;
-        await expect(claim(page, noEvidence.id)).toContainText(
-            '这条内容暂时没有可展开的直接引用，保留为线索。',
-        );
+        await expect(
+            article(page)
+                .locator(`.claim-provenance a[href="#claim-${noEvidence.id}"]`)
+                .locator('xpath=parent::li')
+                .locator('a[href^="#evidence-"]'),
+        ).toHaveCount(0);
         if (view === 'topic-list') {
             await expect(article(page).locator('.topic-section')).toHaveCount(4);
             await expect(article(page).locator('.topic-items > li')).toHaveCount(5);
@@ -213,8 +253,10 @@ test('real SFCs: complete/live sample and saved format remain distinct from view
     for (const view of ['brief', 'topic-list'] as const) {
         await setView(page, view);
         await expect(warning(page)).toHaveCount(0);
-        await expect(article(page).locator('.mode')).toHaveText('真实查阅报告');
-        await expect(article(page)).toContainText('本次计划范围内查阅完成，不代表穷尽互联网资料。');
+        await expect(article(page).locator('.mode')).toHaveText(
+            view === 'brief' ? '简报' : '主题清单',
+        );
+        await expect(article(page)).toContainText('已完成本次计划范围内的查阅。');
         await expect(page.locator('#summary-title')).toHaveText(
             view === 'brief' ? '简报概述' : '报告概述',
         );
@@ -275,13 +317,12 @@ test('real SFCs: full multiline content and script-like summary/quote stay inert
         expect(await text.evaluate((element) => getComputedStyle(element).whiteSpace)).toBe(
             'pre-wrap',
         );
-        await expect(claim(page, report.claims[0]!.id).locator('.confidence')).toHaveText(
-            `证据说明：${report.claims[0]!.confidenceLabel}`,
-        );
-        const reference = page.locator(
-            `#claim-${report.claims[0]!.id}-evidence-${report.evidence[0]!.id}`,
-        );
-        await reference.press('Enter');
+        await expect(
+            article(page)
+                .locator(`.claim-provenance a[href="#claim-${report.claims[0]!.id}"]`)
+                .locator('xpath=parent::li'),
+        ).toContainText(report.claims[0]!.confidenceLabel);
+        await openQuote(page, report.evidence[0]!.id);
         const quoted = page.locator(`#evidence-${report.evidence[0]!.id}`);
         expect(await quoted.locator('blockquote').textContent()).toBe(report.evidence[0]!.quote);
         await expect(article(page).locator('script, img, iframe')).toHaveCount(0);
@@ -290,12 +331,13 @@ test('real SFCs: full multiline content and script-like summary/quote stay inert
     expect(external).toEqual([]);
 });
 
-test('real SFCs: keyboard opens and closes each quote and reaches safe original link', async ({
+test('real SFCs: appendix keyboard opens each page once and reaches safe original link', async ({
     page,
 }) => {
     const report = await open(page);
     for (const view of ['brief', 'topic-list'] as const) {
         await setView(page, view);
+        await article(page).locator('.claim-provenance > summary').press('Enter');
         for (const entry of report.claims)
             for (const evidenceId of entry.evidenceIds) {
                 const reference = page.locator(`#claim-${entry.id}-evidence-${evidenceId}`);
@@ -310,8 +352,9 @@ test('real SFCs: keyboard opens and closes each quote and reaches safe original 
                 );
                 const summary = group.locator(':scope > summary');
                 await expect(wrapper.locator('blockquote')).toBeVisible();
-                const link = wrapper.getByRole('link', { name: '打开原始来源（新窗口）' });
-                await wrapper.press('Tab');
+                const link = group.locator('.source-page-link');
+                await summary.focus();
+                await summary.press('Tab');
                 await expect(link).toBeFocused();
                 await expect(link).toHaveAttribute(
                     'href',
@@ -362,12 +405,8 @@ test('real SFCs: narrow enlarged citations retain readable width in both layouts
     for (const view of ['brief', 'topic-list'] as const) {
         await setView(page, view);
         const firstFact = report.claims.find((entry) => entry.kind === 'fact')!;
-        const reference = page.locator(
-            `#claim-${firstFact.id}-evidence-${firstFact.evidenceIds[0]}`,
-        );
-        await reference.focus();
-        await reference.press('Enter');
-        const quote = page.locator((await reference.getAttribute('href'))!).locator('blockquote');
+        const { quote: wrapper } = await openQuote(page, firstFact.evidenceIds[0]!);
+        const quote = wrapper.locator('blockquote');
         await assertReadableQuote(page, quote);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
             true,
@@ -414,7 +453,7 @@ test('shared typography: stored reading size and live family preference reach bo
             ).toBe('19px');
             expect(
                 await article(page)
-                    .locator('.confidence')
+                    .locator('.claim-provenance p')
                     .first()
                     .evaluate((element) => getComputedStyle(element).fontFamily),
             ).toContain('Inter');

@@ -9,7 +9,7 @@
             <div>
                 <dt class="text-muted">当前报告模式</dt>
                 <dd class="mt-1 mb-0 mx-0">
-                    {{ report.mode === 'demo' ? '演示数据' : '真实查阅' }}
+                    {{ report.mode === 'demo' ? '演示数据' : '任务执行' }}
                 </dd>
             </div>
             <div>
@@ -69,14 +69,6 @@
                         <p class="change-value scova-reading whitespace-pre-wrap m-0">
                             {{ entry.record.oldValue ?? '未提供旧值' }}
                         </p>
-                        <evidence-link
-                            v-for="evidence in entry.oldEvidence"
-                            :key="evidence.id"
-                            :evidence="evidence"
-                        />
-                        <p v-if="!entry.oldEvidence.length" class="scova-interface m-0">
-                            未提供旧侧引用。
-                        </p>
                     </section>
                     <section
                         class="change-side new-side layout-grid gap-5"
@@ -87,14 +79,6 @@
                         </h6>
                         <p class="change-value scova-reading whitespace-pre-wrap m-0">
                             {{ entry.record.newValue ?? '未提供新值' }}
-                        </p>
-                        <evidence-link
-                            v-for="evidence in entry.newEvidence"
-                            :key="evidence.id"
-                            :evidence="evidence"
-                        />
-                        <p v-if="!entry.newEvidence.length" class="scova-interface m-0">
-                            未提供本次观测引用。
                         </p>
                     </section>
                 </div>
@@ -109,7 +93,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { Report } from '@scova/models';
-import EvidenceLink from '@/components/reports/EvidenceLink.vue';
 import { changeSummary, mapReportChanges } from '@/utils/report-changes';
 import { useReadingTypography } from '@/composables/useReadingTypography';
 const { reading } = useReadingTypography();

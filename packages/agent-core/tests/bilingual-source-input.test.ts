@@ -150,12 +150,15 @@ describe('production source input from bilingual task requirements', () => {
                 }[];
                 expect(
                     sources[0]!.excerpts.some((text) => text.includes(watcherSourceParagraphs[0]!)),
+                    `${key}: cleanup conditions in selected source ranges ${JSON.stringify(sources[0]!.excerptRanges)}`,
                 ).toBe(true);
                 expect(
                     sources[0]!.excerpts.some((text) => text.includes(watcherSourceParagraphs[2]!)),
+                    `${key}: async lifecycle conditions in selected source ranges ${JSON.stringify(sources[0]!.excerptRanges)}`,
                 ).toBe(true);
                 expect(
                     sources[0]!.excerpts.some((text) => text.includes(watcherSourceParagraphs[3]!)),
+                    `${key}: manual stopping paragraph in selected source ranges ${JSON.stringify(sources[0]!.excerptRanges)}`,
                 ).toBe(true);
                 sources[0]!.excerptRanges.forEach((range, index) =>
                     expect(bilingualWatcherBody.slice(range.start, range.end)).toBe(

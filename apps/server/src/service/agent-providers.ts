@@ -16,28 +16,12 @@ import {
     credentialStorageReady,
     sealProviderCredentials,
     openProviderCredentials,
-    type ProviderCredentials,
 } from '@scova/shared/credentials';
 import type { ApiServices } from '@/app/services';
 import { createAgentProviderRepo } from '@/repo/agent-providers';
 import { ApiError } from '@/utils/errors';
 
 type ProviderRow = Awaited<ReturnType<ReturnType<typeof createAgentProviderRepo>['list']>>[number];
-export function providerWebSearch(
-    protocol: AgentProvider['protocol'],
-    search: NonNullable<AgentProvider['webSearch']>,
-) {
-    if (
-        search === 'disabled' ||
-        (search === 'openai_responses' &&
-            ['openai_chat_completions', 'openai_json'].includes(protocol)) ||
-        (search === 'anthropic_web_search' && protocol === 'anthropic_messages')
-    )
-        return search;
-    throw new ApiError(422, 'VALIDATION_ERROR', '内置搜索与接口协议不匹配', [
-        { path: '/webSearch', message: '请选择当前接口支持的搜索方式，或关闭内置搜索' },
-    ]);
-}
 export function providerDto(row: ProviderRow): AgentProvider {
     let searchApi: AgentProvider['searchApi'];
     try {
@@ -67,44 +51,6 @@ export function providerDto(row: ProviderRow): AgentProvider {
         ...(searchApi !== undefined ? { searchApi } : {}),
         updatedAt: row.updatedAt.toISOString(),
     };
-}
-export function providerSearchApi(
-    input:
-        | {
-              protocol: 'deepseek' | 'perplexity' | 'tavily';
-              baseUrl: string;
-              contentMode: 'prefer_api' | 'reader';
-              apiKey?: string;
-          }
-        | null
-        | undefined,
-    previous: ProviderCredentials['searchApi'],
-    webSearch: NonNullable<AgentProvider['webSearch']>,
-): ProviderCredentials['searchApi'] {
-    const next = input === undefined ? previous : input;
-    if (!next) return undefined;
-    if (webSearch !== 'disabled')
-        throw new ApiError(422, 'VALIDATION_ERROR', '请选择一种研究搜索方式', [
-            { path: '/searchApi', message: '独立搜索 API 与内置搜索不能同时启用' },
-        ]);
-    let baseUrl: string;
-    try {
-        baseUrl = providerBaseUrl(next.baseUrl);
-    } catch {
-        throw new ApiError(422, 'VALIDATION_ERROR', '搜索 API 地址无效', [
-            { path: '/searchApi/baseUrl', message: '请填写公网 HTTPS API 根地址' },
-        ]);
-    }
-    const apiKey =
-        next.apiKey ||
-        (previous?.protocol === next.protocol && previous.baseUrl === baseUrl
-            ? previous.apiKey
-            : undefined);
-    if (!apiKey)
-        throw new ApiError(422, 'VALIDATION_ERROR', '请填写独立搜索密钥', [
-            { path: '/searchApi/apiKey', message: '新建或更改搜索地址、协议时必须重新填写密钥' },
-        ]);
-    return { protocol: next.protocol, baseUrl, contentMode: next.contentMode, apiKey };
 }
 export function providerBaseUrl(value: string) {
     try {
@@ -348,12 +294,8 @@ export function createAgentProviderService(services: ApiServices) {
             writable();
             const id = randomUUID(),
                 baseUrl = providerBaseUrl(input.baseUrl);
-            const webSearch = providerWebSearch(input.protocol, input.webSearch ?? 'disabled');
             const encryptedApiKey = sealProviderCredentials(
-                {
-                    modelApiKey: input.apiKey,
-                    searchApi: providerSearchApi(input.searchApi, undefined, webSearch),
-                },
+                { modelApiKey: input.apiKey },
                 userId,
                 id,
             );
@@ -366,7 +308,7 @@ export function createAgentProviderService(services: ApiServices) {
                         baseUrl,
                         model: input.model,
                         protocol: input.protocol,
-                        webSearch,
+                        webSearch: 'disabled',
                         encryptedApiKey,
                         updatedAt: services.clock(),
                     }),
@@ -381,18 +323,11 @@ export function createAgentProviderService(services: ApiServices) {
                 const row = await repo.find(tx, userId, id);
                 revision(row, input.revision);
                 const previous = openProviderCredentials(row.encryptedApiKey, userId, id);
-                const webSearch = providerWebSearch(
-                    input.protocol,
-                    input.webSearch ?? row.webSearch,
-                );
                 const encryptedApiKey = sealProviderCredentials(
                     {
                         modelApiKey: input.apiKey ?? previous.modelApiKey,
-                        searchApi: providerSearchApi(
-                            input.searchApi,
-                            previous.searchApi,
-                            webSearch,
-                        ),
+                        // Preserve historical search secrets until explicitly imported.
+                        searchApi: previous.searchApi,
                     },
                     userId,
                     id,
@@ -403,7 +338,7 @@ export function createAgentProviderService(services: ApiServices) {
                         baseUrl,
                         model: input.model,
                         protocol: input.protocol,
-                        webSearch,
+                        webSearch: 'disabled',
                         encryptedApiKey,
                         updatedAt: services.clock(),
                     }),

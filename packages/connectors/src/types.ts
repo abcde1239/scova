@@ -1,4 +1,17 @@
 export type ConnectorKind = 'search' | 'model' | 'read';
+export interface ModelSchemaIssue {
+    schemaPath: string;
+    keyword: string;
+    allowedValues?: string[];
+    limit?: number;
+    requiredProperty?: string;
+    allowedProperties?: string[];
+}
+export interface ModelOutputDiagnostic {
+    schemaHash: string;
+    failure: 'json' | 'schema' | 'envelope' | 'refusal';
+    issues: ModelSchemaIssue[];
+}
 export const MODEL_CALL_TIMEOUT_MS = 120_000;
 export const MODEL_INPUT_TOKEN_LIMIT = 256_000;
 export const MODEL_OUTPUT_TOKEN_LIMIT = 64_000;
@@ -22,6 +35,12 @@ export type ConnectorErrorCode =
     | 'extraction_failed';
 
 export class ConnectorError extends Error {
+    /** Local validation diagnostics only; never include response values or upstream messages. */
+    modelFailure?: 'json' | 'schema' | 'envelope' | 'refusal';
+    modelSchemaIssues?: ModelSchemaIssue[];
+    modelDiagnostic?: ModelOutputDiagnostic;
+    /** Confirmed provider usage can survive rejection of the generated content. */
+    modelUsage?: ModelResponse['usage'];
     engineFailures?: { engine: string; error: string }[];
     retryAfterMs?: number;
     searchNetworkAttempts?: number;

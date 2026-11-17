@@ -287,6 +287,29 @@ export function reportSummary(claims: AgentClaim[], value?: ReportValue): string
 }
 
 /** Persist the default artifact's overview while retaining the union as immutable report evidence. */
+type SummaryArtifact = NonNullable<Coverage['artifacts']>[number];
+
+/** Lists and matrices summarize by their own synthesis claim or shape, never by gluing cells. */
+function structuredSummary(claims: AgentClaim[], artifact: SummaryArtifact): string | undefined {
+    const content = artifact.content;
+    const values = content?.list
+        ? content.list.entries.flatMap((entry) => entry.fields)
+        : (content?.comparison?.cells ?? []);
+    if (!content?.list && !content?.comparison) return;
+    const overview = content.document?.sections
+        .filter((section) => section.role === 'overview')
+        .flatMap((section) => section.claimIndexes)
+        .map((index) => claims[index]?.text.trim())
+        .filter(Boolean)
+        .join('\n\n');
+    if (overview) return overview.slice(0, 2000);
+    const unknown = values.filter((value) => value.status === 'unknown').length;
+    const shape = content.list
+        ? `共 ${content.list.entries.length} 项 · ${new Set(values.map((v) => ('label' in v ? v.label : ''))).size} 个字段`
+        : `${content.comparison!.objects.length} 个对象 × ${content.comparison!.dimensions.length} 个维度`;
+    return `${shape}${unknown ? ` · ${unknown} 项未知` : ''}`;
+}
+
 export function primaryArtifactSummary(
     claims: AgentClaim[],
     coverage: Pick<Coverage, 'artifacts' | 'reportValue'>,
@@ -294,6 +317,8 @@ export function primaryArtifactSummary(
     const artifact = coverage.artifacts?.[0];
     if (!artifact) return reportSummary(claims, coverage.reportValue);
     if (artifact.summary) return artifact.summary;
+    const structured = structuredSummary(claims, artifact);
+    if (structured) return structured;
     const requirements = artifact.coverage?.requirements;
     if (requirements?.some((r) => r.object.trim()) && coverage.reportValue) {
         const owned = new Set(artifact.claimIndexes);

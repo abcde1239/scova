@@ -52,7 +52,7 @@ const agent = createAgentRuntime({
             ? {
                   ...fixtureBundle,
                   reader: {
-                      async read(...args) {
+                      async read(...args: Parameters<typeof fixtureBundle.reader.read>) {
                           const page = await fixtureBundle.reader.read(...args);
                           return { ...page, truncated: true };
                       },

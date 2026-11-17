@@ -1,218 +1,197 @@
 <template>
     <section
         ref="root"
-        class="followup scova-question-tools layout-stack break-anywhere pt-6 [border-top:0.0625rem_solid_var(--scova-border)] cursor-default keyboard-focus-wide [&.followup_>_.scova-action-button]:justify-self-start"
-        :aria-label="revision ? '基于现有资料生成新版报告' : '问题的后续研究'"
+        class="followup scova-question-tools min-w-0"
+        :aria-label="revision ? '资料内改写' : '补充研究'"
         tabindex="-1"
     >
-        <h3 class="text-[1.125rem] m-0">{{ revision ? '生成新版报告' : '后续研究' }}</h3>
-        <p class="m-0" v-if="!state.available.value">
-            报告或回答当前不可读取。已有未知请求会保留，恢复后才能确认或读取关联。
-        </p>
-        <action-button
-            class="min-h-11 min-w-11 max-w-full bg-surface text-default border-theme rounded-2 font-inherit cursor-pointer break-anywhere py-2.5 px-4 keyboard-focus-wide disabled:cursor-not-allowed"
-            v-if="state.canOpen.value"
+        <button
+            v-if="state.canOpen.value && !state.opened.value"
+            type="button"
+            class="followup-trigger"
             @click="open"
-            >{{ revision ? '基于现有资料生成新版报告' : '确认后建立独立后续执行' }}</action-button
         >
+            {{ revision ? '用已有资料改写' : '据此补查新资料' }}
+        </button>
         <p
-            class="m-0"
-            v-if="state.available.value && report?.mode === 'demo' && !state.candidateId.value"
+            v-if="report?.mode === 'demo' && !state.candidateId.value && !revision"
+            class="text-muted m-0"
         >
-            历史演示报告仅供查阅，请从任务页启动真实研究。
+            演示报告仅供讨论，请从任务页启动研究。
         </p>
-        <p class="m-0" v-if="state.message.value" role="status">{{ state.message.value }}</p>
-        <template v-if="state.protectedState.value">
-            <p class="m-0">离开或刷新会清除此页面的原请求标识；取消客户端读取不代表服务器回滚。</p>
-            <div class="followup-actions action-row min-w-0">
+        <section v-if="state.opened.value" class="plan-card" :aria-labelledby="`${cardId}-title`">
+            <header class="flex items-start justify-between gap-2">
+                <h3 :id="`${cardId}-title`" tabindex="-1">
+                    {{ revision ? '用已有资料改写' : '补查新资料' }}
+                </h3>
+                <button
+                    type="button"
+                    class="dismiss"
+                    :disabled="state.pending.value"
+                    aria-label="收起执行计划"
+                    @click="cancel"
+                >
+                    <app-icon name="close" />
+                </button>
+            </header>
+            <p>{{ question?.question }}</p>
+            <p class="text-muted">
+                {{
+                    revision
+                        ? '使用保存的证据和本轮讨论，生成独立成果。'
+                        : '围绕本轮问题补充查阅，生成独立成果。'
+                }}
+            </p>
+            <output-format-select
+                compact
+                v-model="formats"
+                label="本次成果形式"
+                :allow-empty="true"
+                :disabled="state.pending.value"
+            />
+            <p v-if="!formats.length" class="text-muted text-sm">成果形式沿用原报告配置</p>
+            <p v-if="!revision" class="text-sm">搜索方式：沿用任务</p>
+            <p v-if="state.parentQuery.isFetching.value" role="status">正在读取执行预算</p>
+            <template v-if="state.parent.value">
+                <details class="text-sm">
+                    <summary>预算详情</summary>
+                    <dl class="budget-grid">
+                        <div>
+                            <dt>页面读取</dt>
+                            <dd>{{ state.parent.value.budget.maxPages }} 页</dd>
+                        </div>
+                        <div>
+                            <dt>时长</dt>
+                            <dd>{{ state.parent.value.budget.maxDurationSeconds }} 秒</dd>
+                        </div>
+                        <div>
+                            <dt>输入 token</dt>
+                            <dd>{{ state.parent.value.budget.maxInputTokens }}</dd>
+                        </div>
+                        <div>
+                            <dt>输出 token</dt>
+                            <dd>{{ state.parent.value.budget.maxOutputTokens }}</dd>
+                        </div>
+                    </dl>
+                </details>
+                <footer class="plan-footer">
+                    <span class="text-muted text-sm"
+                        >{{
+                            revision
+                                ? '不联网 · '
+                                : `最多搜索 ${state.parent.value.budget.maxSearches} 次 · `
+                        }}计入模型额度</span
+                    ><action-button
+                        :disabled="!state.available.value || state.pending.value"
+                        :busy="state.pending.value"
+                        @click="state.confirm"
+                        >{{ state.pending.value ? '正在提交' : '开始执行' }}</action-button
+                    >
+                </footer>
+            </template>
+            <div
+                v-else-if="state.parentQuery.isError.value || !state.parentQuery.isFetching.value"
+                role="alert"
+            >
+                原执行暂不可读取，无法开始。<button
+                    type="button"
+                    @click="state.parentQuery.refetch()"
+                >
+                    重新读取预算
+                </button>
+            </div>
+        </section>
+        <div
+            v-if="state.protectedState.value"
+            class="recovery-card layout-grid gap-2 border-theme rounded-3 p-3"
+            role="status"
+        >
+            <p class="m-0">执行结果尚未确认，原请求已保留。</p>
+            <div class="flex flex-wrap gap-2">
                 <action-button
-                    class="min-h-11 min-w-11 max-w-full bg-surface text-default border-theme rounded-2 font-inherit cursor-pointer break-anywhere py-2.5 px-4 keyboard-focus-wide disabled:cursor-not-allowed"
                     :disabled="!state.available.value || state.pending.value"
                     :busy="state.pending.value"
                     @click="state.recover"
                     >读取已保存关联</action-button
-                >
-                <action-button
-                    class="min-h-11 min-w-11 max-w-full bg-surface text-default border-theme rounded-2 font-inherit cursor-pointer break-anywhere py-2.5 px-4 keyboard-focus-wide disabled:cursor-not-allowed"
+                ><action-button
                     v-if="state.phase.value === 'uncertain'"
                     :disabled="!state.available.value || state.pending.value"
-                    :busy="state.pending.value"
                     @click="state.replay"
                     >使用同一请求重发</action-button
                 >
             </div>
-        </template>
-        <template v-if="state.available.value && state.candidateId.value">
-            <p
-                class="m-0"
-                v-if="state.parentQuery.isFetching.value || state.linkedQuery.isFetching.value"
-                role="status"
-            >
-                正在核验已保存的关联执行。
-            </p>
-            <p
-                class="m-0"
-                v-if="state.parentQuery.isError.value || state.linkedQuery.isError.value"
-                role="alert"
-            >
-                关联执行暂时无法核验，请重新读取。
-            </p>
-            <action-button
-                class="min-h-11 min-w-11 max-w-full bg-surface text-default border-theme rounded-2 font-inherit cursor-pointer break-anywhere py-2.5 px-4 keyboard-focus-wide disabled:cursor-not-allowed"
-                v-if="state.parentQuery.isError.value || state.linkedQuery.isError.value"
-                :disabled="state.parentQuery.isFetching.value || state.linkedQuery.isFetching.value"
-                @click="readLinked"
-                >重新读取关联执行</action-button
-            >
-            <p class="m-0" v-if="state.linkedRun.value">
-                关联执行：{{ state.linkedRun.value.mode === 'demo' ? '演示 demo' : '真实 live' }} ·
-                {{ executionStates[state.linkedRun.value.status][0] }}
-            </p>
+        </div>
+        <div v-if="state.phase.value === 'rejected'" class="layout-grid gap-2" role="status">
+            <p class="m-0">{{ state.message.value }}</p>
             <router-link
-                class="justify-self-start inline-flex items-center min-h-11 text-primary cursor-pointer underline-offset-[0.2em] keyboard-focus-wide"
-                v-if="state.linkedId.value"
-                :to="`/runs/${state.linkedId.value}`"
-                >查看关联执行</router-link
+                v-if="report"
+                :to="`/tasks/${report.taskId}`"
+                class="scova-link min-h-11 inline-flex items-center"
+                >查看任务执行</router-link
             >
-        </template>
-        <dialog
-            ref="dialog"
-            class="followup-dialog box-border w-[min(42rem,_calc(100%_-_2rem))] max-w-[calc(100%_-_2rem)] max-h-[calc(100dvh_-_2rem)] border-theme rounded-3 text-default bg-surface [font-family:var(--scova-font-interface)] overflow-hidden cursor-default m-[auto] p-0 [&.followup-dialog[open]]:(grid grid-rows-[auto_minmax(0,_1fr)_auto]) [&.followup-dialog::backdrop]:[background:rgb(0_0_0_/_45%)]"
-            :aria-labelledby="`${dialogId}-title`"
-            :aria-describedby="`${dialogId}-consequences`"
-            @cancel.prevent="cancel"
-        >
-            <header
-                class="[.followup-dialog_&:is(header)]:(min-w-0 [border-bottom:0.0625rem_solid_var(--scova-border)] p-4)"
-            >
-                <h3 class="text-[1.125rem] m-0" :id="`${dialogId}-title`">
-                    {{ revision ? '确认生成新版报告' : '确认建立独立后续执行' }}
-                </h3>
-            </header>
-            <div
-                class="dialog-body layout-stack break-anywhere [overflow-y:auto] min-h-0 [overscroll-behavior:contain] p-4"
-            >
-                <p class="m-0" :id="`${dialogId}-consequences`">
-                    {{
-                        revision
-                            ? '使用原报告已保存的证据及本轮对话生成新版报告，不搜索网页或重新抓取来源；会使用模型额度。'
-                            : '将为这个已保存的问题建立独立后续执行，携带报告与本轮对话上下文，可能调用搜索与模型并使用服务额度。'
-                    }}沿用原报告的配置版本与预算上限，以问题原文为目标，清空重点条目并改为手动执行。原报告与任务配置版本保留，原任务计划不改，普通监控基线不变。
-                </p>
-                <p class="question-text whitespace-pre-wrap m-0">{{ question?.question }}</p>
-                <output-format-select
-                    v-model="formats"
-                    label="本次成果形式"
-                    :allow-empty="true"
-                    :disabled="state.pending.value"
-                />
-                <p class="m-0" v-if="revision">
-                    修订只使用保存证据，所选形式缺少的材料会明确说明。
-                </p>
-                <p class="m-0" v-if="state.parentQuery.isFetching.value" role="status">
-                    正在读取原报告执行的模式与预算。
-                </p>
-                <template v-if="state.parent.value">
-                    <p class="m-0">
-                        {{
-                            revision
-                                ? '仅使用现有证据，模型生成会计量；页面额度用于读取保存证据。'
-                                : '真实研究可能调用已配置的搜索与模型并使用服务额度。'
-                        }}
-                    </p>
-                    <dl class="grid gap-3 m-0">
-                        <div>
-                            <dt class="font-semibold">原配置版本</dt>
-                            <dd class="m-0">{{ state.parent.value.taskVersionId }}</dd>
-                        </div>
-                        <div>
-                            <dt class="font-semibold">搜索上限</dt>
-                            <dd class="m-0">
-                                {{ revision ? 0 : state.parent.value.budget.maxSearches }} 次
-                            </dd>
-                        </div>
-                        <div>
-                            <dt class="font-semibold">页面读取上限</dt>
-                            <dd class="m-0">{{ state.parent.value.budget.maxPages }} 页</dd>
-                        </div>
-                        <div>
-                            <dt class="font-semibold">执行时长上限</dt>
-                            <dd class="m-0">
-                                {{ state.parent.value.budget.maxDurationSeconds }} 秒
-                            </dd>
-                        </div>
-                        <div>
-                            <dt class="font-semibold">输入 token 上限</dt>
-                            <dd class="m-0">{{ state.parent.value.budget.maxInputTokens }}</dd>
-                        </div>
-                        <div>
-                            <dt class="font-semibold">输出 token 上限</dt>
-                            <dd class="m-0">{{ state.parent.value.budget.maxOutputTokens }}</dd>
-                        </div>
-                    </dl>
-                </template>
-                <template
-                    v-if="
-                        state.parentQuery.isError.value ||
-                        (!state.parentQuery.isFetching.value && !state.parent.value)
-                    "
-                >
-                    <p class="m-0" role="alert">原执行暂不可读取或与报告不一致，不能确认创建。</p>
-                    <action-button
-                        class="min-h-11 min-w-11 max-w-full bg-surface text-default border-theme rounded-2 font-inherit cursor-pointer break-anywhere py-2.5 px-4 keyboard-focus-wide disabled:cursor-not-allowed"
-                        :disabled="state.pending.value"
-                        @click="state.parentQuery.refetch()"
-                        >重新读取原执行</action-button
-                    >
-                </template>
-            </div>
-            <footer
-                class="followup-actions action-row min-w-0 [.followup-dialog_&:is(footer)]:(min-w-0 [border-top:0.0625rem_solid_var(--scova-border)] p-4)"
-            >
-                <button
-                    class="min-h-11 min-w-11 max-w-full bg-surface text-default border-theme rounded-2 font-inherit cursor-pointer break-anywhere py-2.5 px-4 keyboard-focus-wide disabled:cursor-not-allowed"
+        </div>
+        <template v-if="state.candidateId.value || validatedId">
+            <report-run-card
+                :report="state.linkedRun.value ? report : undefined"
+                v-if="validatedId"
+                v-show="!!state.linkedRun.value"
+                :run-id="validatedId"
+                :latest-run-id="latestRunId"
+                :question-id="questionId"
+                :operation="operation ?? 'research'"
+                :round="round"
+                @open-artifact="emit('openArtifact', $event)"
+                @merge="emit('merge', $event)"
+                @artifact="emit('artifact', $event)"
+                @active-change="emit('activeChange', $event)"
+                @protected-change="runProtected = $event"
+            />
+            <div v-if="!state.linkedRun.value" role="status">
+                {{
+                    state.parentQuery.isError.value || state.linkedQuery.isError.value
+                        ? '关联执行暂时无法核验'
+                        : '正在读取关联执行'
+                }}<button
+                    v-if="state.parentQuery.isError.value || state.linkedQuery.isError.value"
                     type="button"
-                    :id="`${dialogId}-cancel`"
-                    :disabled="state.pending.value"
-                    @click="cancel"
+                    @click="readLinked"
                 >
-                    取消
+                    重新读取关联执行
                 </button>
-                <action-button
-                    class="min-h-11 min-w-11 max-w-full bg-surface text-default border-theme rounded-2 font-inherit cursor-pointer break-anywhere py-2.5 px-4 keyboard-focus-wide disabled:cursor-not-allowed"
-                    :disabled="
-                        !state.parent.value ||
-                        !state.available.value ||
-                        state.pending.value ||
-                        state.parentQuery.isFetching.value
-                    "
-                    :busy="state.pending.value"
-                    @click="state.confirm"
-                    >{{ revision ? '确认并生成新版报告' : '确认并建立后续执行' }}</action-button
-                >
-            </footer>
-        </dialog>
+            </div>
+        </template>
     </section>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, ref, watch, useId } from 'vue';
-import { RouterLink } from 'vue-router';
-import type { Report, ReportQuestion, OutputFormat } from '@scova/models';
+import type { Report, ReportQuestion, OutputFormat, ReportConversation } from '@scova/models';
 import OutputFormatSelect from '@/components/tasks/OutputFormatSelect.vue';
 import ActionButton from '@/components/common/ActionButton.vue';
+import AppIcon from '@/components/common/AppIcon.vue';
+import ReportRunCard from '@/components/reports/ReportRunCard.vue';
 import { useFollowup } from '@/composables/useFollowup';
-import { executionStates } from '@/composables/useExecution';
+import { useActionNotification } from '@/composables/useActionNotification';
+type Artifact = NonNullable<ReportConversation['artifacts']>[number];
 const props = defineProps<{
     reportId: string;
     questionId: string;
     report?: Report;
     question?: ReportQuestion;
     operation?: 'research' | 'revise';
+    round?: number;
+    latestRunId?: string;
 }>();
-const emit = defineEmits<{ protectedChange: [value: boolean]; linkedChange: [value: boolean] }>();
+const emit = defineEmits<{
+    protectedChange: [value: boolean];
+    linkedChange: [value: boolean];
+    activeChange: [value: boolean];
+    artifact: [artifact: Artifact];
+    openArtifact: [artifact: Artifact];
+    merge: [reportId: string];
+}>();
 const revision = computed(() => props.operation === 'revise');
-const dialogId = `followup-${useId()}`;
+const cardId = `followup-${useId()}`;
 const formats = ref<OutputFormat[]>([]);
 const state = useFollowup(
     () => props.reportId,
@@ -224,35 +203,41 @@ const state = useFollowup(
     formats,
 );
 const root = ref<HTMLElement>();
-const dialog = ref<HTMLDialogElement>();
-let trigger: HTMLElement | undefined;
-function open(event: MouseEvent) {
-    trigger = event.currentTarget as HTMLElement;
+const runProtected = ref(false);
+const validatedId = ref('');
+watch(
+    state.linkedRun,
+    (value) => {
+        if (value) validatedId.value = value.id;
+    },
+    { immediate: true },
+);
+useActionNotification().watch(state.message, () =>
+    state.phase.value === 'success'
+        ? 'success'
+        : state.phase.value === 'rejected'
+          ? 'error'
+          : 'warning',
+);
+async function open() {
     state.open();
+    await nextTick();
+    root.value?.querySelector<HTMLElement>('h3')?.focus({ preventScroll: true });
 }
-function cancel() {
+async function cancel() {
     state.close();
+    await nextTick();
+    root.value?.querySelector<HTMLButtonElement>('.followup-trigger')?.focus();
 }
 async function readLinked() {
     await state.parentQuery.refetch({ cancelRefetch: false });
     if (state.parent.value) await state.linkedQuery.refetch({ cancelRefetch: false });
 }
-watch(state.opened, async (opened) => {
-    await nextTick();
-    if (opened && state.opened.value && dialog.value?.isConnected) {
-        dialog.value.showModal();
-        dialog.value.querySelector<HTMLButtonElement>(`#${CSS.escape(dialogId)}-cancel`)?.focus();
-    } else if (!state.opened.value && dialog.value?.open) {
-        dialog.value.close();
-        await nextTick();
-        if (trigger?.isConnected) trigger.focus();
-        else root.value?.focus();
-    }
-});
-watch(state.protectedState, (value) => emit('protectedChange', value), {
-    immediate: true,
-    flush: 'sync',
-});
+watch(
+    () => state.protectedState.value || runProtected.value,
+    (value) => emit('protectedChange', value),
+    { immediate: true, flush: 'sync' },
+);
 watch(
     () => !!state.candidateId.value,
     (value) => emit('linkedChange', value),
@@ -261,5 +246,44 @@ watch(
 onUnmounted(() => {
     emit('protectedChange', false);
     emit('linkedChange', false);
+    emit('activeChange', false);
 });
 </script>
+
+<style scoped>
+.followup-trigger {
+    @apply font-inherit min-h-11 rounded-2 border-theme bg-transparent text-default text-start px-3 py-2 cursor-pointer keyboard-focus-wide;
+}
+.followup-trigger:hover {
+    @apply [background:var(--scova-selected)];
+}
+.plan-card {
+    @apply grid gap-3 border-theme rounded-3 overflow-hidden p-4;
+}
+.plan-card h3 {
+    @apply text-base m-0;
+}
+.plan-card p {
+    @apply m-0 whitespace-pre-wrap;
+}
+.plan-footer {
+    @apply flex flex-wrap items-center justify-between gap-3 [border-top:0.0625rem_solid_var(--scova-border)] pt-3;
+}
+.dismiss {
+    @apply flex items-center justify-center min-h-11 min-w-11 text-default bg-transparent border-0 rounded-2 cursor-pointer keyboard-focus-wide;
+}
+.budget-grid {
+    @apply grid grid-cols-[repeat(auto-fit,_minmax(min(100%,_9rem),_1fr))] gap-3;
+}
+.budget-grid dd {
+    @apply m-0;
+}
+summary {
+    @apply cursor-pointer min-h-11 flex items-center keyboard-focus-wide;
+}
+@media (max-width: 39.999rem) {
+    .plan-footer :deep(.scova-action-button) {
+        @apply flex-1;
+    }
+}
+</style>

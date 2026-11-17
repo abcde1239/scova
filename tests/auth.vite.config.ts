@@ -9,6 +9,7 @@ export default defineConfig({
             'apps/server/tests/auth.integration.test.ts',
             'apps/server/tests/avatar.integration.test.ts',
             'apps/server/tests/agent-providers.integration.test.ts',
+            'apps/server/tests/search-configuration.integration.test.ts',
         ],
         testTimeout: 30_000,
         fileParallelism: false,

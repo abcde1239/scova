@@ -426,6 +426,13 @@ test('pending保留原已读、重复键盘不重写，刷新持久显示并可�
     state.patchWait = undefined;
     await entry(page, 1).getByRole('button').click();
     await expect(entry(page, 1).locator('strong')).toHaveText('未读');
+    await expect(
+        page
+            .locator('.scova-notifications .n-notification')
+            .filter({ hasText: '通知已恢复为未读。' }),
+    ).toHaveCount(1);
+    await expect(region(page)).not.toContainText('通知已恢复为未读。');
+    await expect(entry(page, 1).getByRole('button')).toBeFocused();
     expect(patches(calls).map((call) => call.body)).toEqual([{ read: true }, { read: false }]);
     expect(patches(calls)[0]!.csrf).toBe('sample-csrf');
     expect(calls.some((call) => call.path.includes('/inbox'))).toBe(false);
@@ -437,7 +444,9 @@ test('写失败保原、可键盘重试，320/200%错误可读', async ({ page }
     await page.goto('/notifications');
     await page.evaluate(() => (document.documentElement.style.fontSize = '200%'));
     await entry(page, 1).getByRole('button').click();
-    await expect(region(page).getByRole('alert')).toContainText('保留原显示状态');
+    await expect(page.locator('.scova-notifications .n-notification')).toContainText(
+        '保留原显示状态',
+    );
     await expect(entry(page, 1).locator('strong')).toHaveText('未读');
     await noOverflow(page);
     await info.attach('write-failure-200', {

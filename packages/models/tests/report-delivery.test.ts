@@ -5,6 +5,8 @@ import {
     ReportDeliverySchema,
     type ReportValue,
     type ReportArtifact,
+    researchCoverageMetrics,
+    ResearchMetricsSchema,
 } from '../src/index.ts';
 
 function value(status = 'provisional', priority = 'core'): ReportValue {
@@ -50,6 +52,62 @@ function value(status = 'provisional', priority = 'core'): ReportValue {
     } as ReportValue;
 }
 describe('content delivery independent from complete monitoring', () => {
+    it('separates five completed answers from two externally supported answers and remaining unknown fields', () => {
+        const kinds = ['inference', 'inference', 'model_answer', 'model_answer', 'model_answer'];
+        const claims = kinds.map((kind) => ({ kind }));
+        const data = value();
+        data.questions = kinds.map((_, i) => ({
+            ...data.questions[0]!,
+            id: `q${i}`,
+            status: i < 2 ? 'supported' : 'provisional',
+            claimIndexes: [i],
+        }));
+        data.selections = kinds.map((_, i) => ({
+            ...data.selections[0]!,
+            claimIndex: i,
+            questionIds: [`q${i}`],
+            ...(i < 2 ? {} : { basis: 'model_knowledge' as const }),
+        }));
+        const artifacts: ReportArtifact[] = [
+            {
+                format: 'brief',
+                claimIndexes: [0, 1, 2, 3, 4],
+                coverage: {
+                    version: 1,
+                    requirements: kinds.map((_, i) => ({
+                        id: `r${i}`,
+                        questionIds: [`q${i}`],
+                        object: '',
+                        field: '机制',
+                        required: true,
+                        status: i < 2 ? 'supported' : 'model_answered',
+                        claimIndexes: [i],
+                        gap: '',
+                    })),
+                },
+            },
+        ];
+        expect(
+            parseContract(ResearchMetricsSchema, researchCoverageMetrics(data, claims, artifacts)),
+        ).toEqual({
+            version: 1,
+            questionCount: 5,
+            answeredQuestions: 5,
+            externallySupportedQuestions: 2,
+            unresolvedQuestionIds: [],
+            requiredFields: 5,
+            answeredFields: 5,
+            externallySupportedFields: 2,
+        });
+        artifacts[0]!.coverage!.requirements[4]!.status = 'unknown';
+        artifacts[0]!.coverage!.requirements[4]!.claimIndexes = [];
+        expect(researchCoverageMetrics(data, claims, artifacts)).toMatchObject({
+            answeredQuestions: 4,
+            externallySupportedQuestions: 2,
+            unresolvedQuestionIds: ['q4'],
+            answeredFields: 4,
+        });
+    });
     it.each(['provisional', 'disputed', 'supported'])(
         'delivers a cited %s core answer despite unknown dates or missing supporting questions',
         (status) => {

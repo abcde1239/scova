@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
 import { MemorySaver } from '@langchain/langgraph';
 import { describe, expect, it, vi } from 'vite-plus/test';
-import { DEFAULT_TASK_BUDGET } from '@scova/models';
-import type { ReadPage, StructuredInput } from '@scova/connectors';
+import { DEFAULT_TASK_BUDGET, type TaskConfig } from '@scova/models';
+import { outputInstructions } from '../src/output-instructions.ts';
+import { ConnectorError, type ReadPage, type StructuredInput } from '@scova/connectors';
 import {
     runResearchAgent,
     candidateFromCheckpoint,
@@ -132,6 +133,60 @@ function fixture() {
 }
 
 describe('output selection reaches research planning and saved content', () => {
+    it('passes bounded contract diagnostics to the single synthesis repair without copying raw errors', async () => {
+        const { context, deps, calls } = fixture();
+        const original = deps.tools.model;
+        deps.tools.model = async (key, input) => {
+            if (key === 'synthesize-0') {
+                const error = new ConnectorError('invalid_response', 'DO_NOT_RENDER sk-secret');
+                error.modelFailure = 'schema';
+                error.modelSchemaIssues = [
+                    { schemaPath: '#/properties/claims/items/required', keyword: 'required' },
+                ];
+                throw error;
+            }
+            return original(key, input);
+        };
+        const result = await runResearchAgent(context, deps);
+        const repair = calls.find((call) => call.key === 'synthesize-1')!.input.prompt;
+        expect(repair).toContain('model_schema_failed');
+        expect(repair).toContain('#/properties/claims/items/required');
+        expect(repair).not.toMatch(/DO_NOT_RENDER|sk-secret/);
+        expect(result.claims.some((claim) => claim.kind === 'inference')).toBe(true);
+    });
+    it('retains verified source excerpts for multiple formats when both synthesis attempts fail', async () => {
+        const { context, deps } = fixture();
+        context.config.outputFormat = 'research_report';
+        context.config.outputFormats = ['research_report', 'comparison', 'list', 'brief'];
+        const original = deps.tools.model;
+        let attempts = 0;
+        deps.tools.model = async (key, input) => {
+            if (key.startsWith('synthesize')) {
+                attempts++;
+                throw new ConnectorError('invalid_response', 'Invalid model output');
+            }
+            return original(key, input);
+        };
+        const result = await runResearchAgent(context, deps);
+        expect(attempts).toBe(context.config.outputFormats!.length * 2);
+        expect(result.coverage.completeness).toBe('partial');
+        expect(result.coverage.delivery?.status).not.toBe('answered');
+        expect(result.coverage.artifacts?.map((artifact) => artifact.format)).toEqual(
+            context.config.outputFormats,
+        );
+        expect(result.claims.every((claim) => claim.kind === 'insufficient')).toBe(true);
+        const excerpts = result.claims.flatMap((claim) => claim.citations);
+        expect(excerpts.length).toBeGreaterThan(0);
+        expect(excerpts.every((citation) => sourceText.includes(citation.quote))).toBe(true);
+        expect(result.claims.every((claim) => !!claim.outputFormat)).toBe(true);
+        const tuple = await (deps.checkpointer as MemorySaver).getTuple(deps.config);
+        const restored = candidateFromCheckpoint(
+            context,
+            tuple!.checkpoint.channel_values.research,
+        );
+        expect(restored.claims).toEqual(result.claims);
+        expect(restored.coverage.artifacts).toEqual(result.coverage.artifacts);
+    });
     it('persists planned object dimensions, per-cell values and immutable structure on checkpoint restore', async () => {
         const { context, deps, calls } = fixture();
         const original = deps.tools.model;
@@ -191,19 +246,40 @@ describe('output selection reaches research planning and saved content', () => {
                     },
                 ];
             }
-            if (key === 'synthesize-0')
-                (data.artifacts as { requirements: unknown[] }[])[1]!.requirements = [];
+            if (key.startsWith('synthesize')) {
+                const format = key.startsWith('synthesize-batch-1-') ? 'comparison' : 'brief';
+                const claims = data.claims as { outputFormat: string }[];
+                data.artifacts = (
+                    data.artifacts as {
+                        format: string;
+                        requirements: { claimIndexes: number[] }[];
+                    }[]
+                )
+                    .filter((a) => a.format === format)
+                    .map((a) => ({
+                        ...a,
+                        requirements: a.requirements.map((r) => ({
+                            ...r,
+                            claimIndexes: r.claimIndexes.map((i) =>
+                                format === 'comparison' ? i - 1 : i,
+                            ),
+                        })),
+                    }));
+                data.claims = claims.filter((c) => c.outputFormat === format);
+            }
+            if (key === 'synthesize-batch-1-0')
+                (data.artifacts as { requirements: unknown[] }[])[0]!.requirements = [];
             return response;
         };
         const result = await runResearchAgent(context, deps);
         expect(result.coverage.delivery?.status).toBe('answered');
         expect(
             calls.filter((call) => call.key.startsWith('synthesize')).map((call) => call.key),
-        ).toEqual(['synthesize-0', 'synthesize-1']);
-        expect(calls.find((call) => call.key === 'synthesize-1')?.input.prompt).toContain(
+        ).toEqual(['synthesize-0', 'synthesize-batch-1-0', 'synthesize-batch-1-1']);
+        expect(calls.find((call) => call.key === 'synthesize-batch-1-1')?.input.prompt).toContain(
             'artifact_requirement_unresolved',
         );
-        expect(calls.find((call) => call.key === 'synthesize-1')?.input.prompt).toContain(
+        expect(calls.find((call) => call.key === 'synthesize-batch-1-1')?.input.prompt).toContain(
             'Never invent information',
         );
         expect(
@@ -336,5 +412,42 @@ describe('output selection reaches research planning and saved content', () => {
         expect(claims.every((claim) => claim.kind === 'insufficient')).toBe(true);
         expect(claims.some((claim) => claim.text === result.claims[0]!.text)).toBe(false);
         expect(result.coverage.completeness).toBe('partial');
+    });
+});
+
+describe('format layout instructions', () => {
+    const config = (formats: TaskConfig['outputFormats']) =>
+        ({ outputFormat: formats![0], outputFormats: formats }) as TaskConfig;
+    it('asks each format for its conventional sections', () => {
+        const write = outputInstructions(
+            config(['brief', 'list', 'comparison', 'research_report']),
+            'write',
+        );
+        for (const title of [
+            '结论',
+            '关键发现',
+            '需留意',
+            '收录范围',
+            '核心差异',
+            '主要差异',
+            '摘要',
+            '局限',
+        ])
+            expect(write).toContain(title);
+        expect(write).toContain('WITHOUT the entry name or field label');
+        expect(write).toContain('Never invent scores, rankings or an overall winner');
+    });
+    it('adds structured outline rules only when a list or comparison is selected', () => {
+        const rule = 'not bound to a field or cell';
+        expect(outputInstructions(config(['brief']), 'write')).not.toContain(rule);
+        expect(outputInstructions(config(['research_report']), 'write')).not.toContain(rule);
+        expect(outputInstructions(config(['list']), 'write')).toContain(rule);
+        expect(outputInstructions(config(['brief', 'comparison']), 'write')).toContain(rule);
+    });
+    it('keeps collection instructions free of writing rules', () => {
+        const collect = outputInstructions(config(['comparison', 'list']), 'collect');
+        expect(collect).not.toContain('document:');
+        expect(collect).toContain('grouping attribute');
+        expect(collect).toContain('Combine queries and sources');
     });
 });

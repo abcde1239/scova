@@ -8,6 +8,7 @@ import { assessPublication, normalizeUrl } from '@scova/connectors';
 import { researchWindow } from './research-context.ts';
 import type { AgentClaim, AgentContext, AgentPage } from './types.ts';
 import { assessmentPrompt } from './prompts.ts';
+import { structuredSupport, type ReportSupportOptions } from './gap-kind.ts';
 
 export function readAssessment(value: unknown): ClaimAssessment | undefined {
     try {
@@ -50,6 +51,7 @@ export function buildReportValue(
     claims: AgentClaim[],
     pages: AgentPage[],
     superseded: ReadonlySet<number> = new Set(),
+    supportOptions: ReportSupportOptions = {},
 ): ReportValue {
     const window = researchWindow(context);
     const seen = new Set<string>();
@@ -75,6 +77,7 @@ export function buildReportValue(
               ? 'within'
               : 'unknown';
         const duplicateKey = JSON.stringify([
+            claim.outputFormat ?? context.config.outputFormat,
             claim.kind,
             claim.text.normalize('NFKC').trim().replace(/\s+/g, ' '),
             [...questionIds].sort(),
@@ -89,9 +92,9 @@ export function buildReportValue(
             claim.kind !== 'insufficient' &&
             !claim.uncertainty?.length &&
             questionIds.length > 0 &&
-            claim.citations.length > 0 &&
+            (claim.citations.length > 0 || claim.kind === 'model_answer') &&
             assessment?.relevance === 'direct' &&
-            ['direct', 'partial'].includes(assessment.support) &&
+            (claim.kind === 'model_answer' || ['direct', 'partial'].includes(assessment.support)) &&
             assessment.role !== 'lead';
         return {
             claimIndex,
@@ -103,10 +106,17 @@ export function buildReportValue(
                   ? '模型评估与任务问题无关，未选入正文'
                   : superseded.has(claimIndex)
                     ? '同一成果字段已有后续综合版本补充条件，旧表述保留为参考。'
-                    : main
-                      ? '直接回应问题并有材料基础；支持关系来自模型自评'
-                      : '未形成有材料支撑的直接回答，保留为参考线索',
-            basis: assessment ? 'model_assessment' : 'unassessed',
+                    : claim.kind === 'model_answer'
+                      ? '模型自回答'
+                      : main
+                        ? '直接回应问题并有材料基础；支持关系来自模型自评'
+                        : '未形成有材料支撑的直接回答，保留为参考线索',
+            basis:
+                claim.kind === 'model_answer'
+                    ? 'model_knowledge'
+                    : assessment
+                      ? 'model_assessment'
+                      : 'unassessed',
             timeScope,
             ...(assessment ? { assessment } : {}),
         };
@@ -122,19 +132,28 @@ export function buildReportValue(
                 (s) => s.placement === 'main' && s.questionIds.includes(question.id),
             );
             const disputed = selected.some((s) => claims[s.claimIndex]?.kind === 'conflict');
+            const timely = (s: (typeof selected)[number]) =>
+                s.timeScope === 'within' ||
+                context.config.researchMode === 'collection' ||
+                !requiresFreshness(context);
+            const structured = structuredSupport(
+                selected.map((s) => ({ claim: claims[s.claimIndex]!, assessment: s.assessment })),
+                [question.id],
+                { ...supportOptions, pages },
+            );
             const supported =
                 selected.length > 0 &&
-                selected.every((s) => {
-                    const claim = claims[s.claimIndex]!;
-                    return (
-                        claim.kind !== 'insufficient' &&
-                        s.assessment?.support === 'direct' &&
-                        !s.assessment.gap &&
-                        (s.timeScope === 'within' ||
-                            context.config.researchMode === 'collection' ||
-                            !requiresFreshness(context))
-                    );
-                });
+                selected.every(timely) &&
+                (structured ??
+                    selected.every((s) => {
+                        const claim = claims[s.claimIndex]!;
+                        return (
+                            claim.kind !== 'insufficient' &&
+                            claim.kind !== 'model_answer' &&
+                            s.assessment?.support === 'direct' &&
+                            !s.assessment.gap
+                        );
+                    }));
             const status = disputed
                 ? 'disputed'
                 : supported
@@ -156,13 +175,15 @@ export function buildReportValue(
                 claimIndexes: selected.map((s) => s.claimIndex),
                 gap: (
                     gap ||
-                    (status === 'unresolved'
-                        ? '尚无直接回应此问题且有材料支撑的答案；相关背景或未评估观点列入参考。'
-                        : status === 'disputed'
-                          ? '来源说法存在差异，尚未解决分歧。'
-                          : status === 'provisional'
-                            ? '支持关系、时间适用性或必要条件尚未完整确认。'
-                            : '')
+                    (selected.some((s) => claims[s.claimIndex]?.kind === 'model_answer')
+                        ? ''
+                        : status === 'unresolved'
+                          ? '尚无直接回应此问题且有材料支撑的答案；相关背景或未评估观点列入参考。'
+                          : status === 'disputed'
+                            ? '来源说法存在差异，尚未解决分歧。'
+                            : status === 'provisional'
+                              ? '支持关系、时间适用性或必要条件尚未完整确认。'
+                              : '')
                 ).slice(0, 1000),
             };
         }),

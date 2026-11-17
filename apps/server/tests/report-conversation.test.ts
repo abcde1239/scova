@@ -2,7 +2,11 @@ import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vite-plus/test';
 import { estimateModelInputTokens } from '@scova/connectors';
 import type { Report, ReportQuestion } from '@scova/models';
-import { conversationContext, questionContextInput } from '../src/utils/report-conversation.ts';
+import {
+    conversationContext,
+    questionContextInput,
+    mergeContext,
+} from '../src/utils/report-conversation.ts';
 import {
     questionModelSchema,
     questionPrompt,
@@ -46,6 +50,45 @@ const turn = (question: string): ReportQuestion => ({
 });
 
 describe('report conversation input and provenance', () => {
+    it('merges bounded saved evidence fairly without promoting generated prose into citations', () => {
+        const original = {
+            ...report,
+            evidence: Array.from({ length: 30 }, (_, i) => ({
+                ...report.evidence[0]!,
+                id: randomUUID(),
+                quote: `original quote ${i}`,
+            })),
+        };
+        const followup = {
+            ...report,
+            id: randomUUID(),
+            summary: 'UNSUPPORTED ASSISTANT CLAIM',
+            conversation: {
+                reportId: original.id,
+                questionId: randomUUID(),
+                operation: 'research' as const,
+            },
+            evidence: Array.from({ length: 30 }, (_, i) => ({
+                ...report.evidence[0]!,
+                id: randomUUID(),
+                quote: `followup quote ${i}`,
+            })),
+        };
+        const before = structuredClone([original, followup]);
+        const context = mergeContext(original, [followup]);
+        expect(context.operation).toBe('revise');
+        expect(context.merge?.reportIds).toEqual([followup.id]);
+        expect(context.sources).toHaveLength(24);
+        expect(context.sources.filter((source) => source.text.startsWith('original'))).toHaveLength(
+            12,
+        );
+        expect(context.sources.filter((source) => source.text.startsWith('followup'))).toHaveLength(
+            12,
+        );
+        expect(JSON.stringify(context.sources)).not.toContain('UNSUPPORTED ASSISTANT CLAIM');
+        expect(context.messages[0]!.content).toContain('UNSUPPORTED ASSISTANT CLAIM');
+        expect([original, followup]).toEqual(before);
+    });
     it('keeps recent ordered roles and traceable older excerpts without inventing evidence', () => {
         const history = Array.from({ length: 40 }, (_, i) => turn(`第${i}轮`));
         const context = conversationContext(report, randomUUID(), '解释第二点', history);

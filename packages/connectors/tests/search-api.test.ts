@@ -36,6 +36,169 @@ function fixture(
 
 describe('raw search API compatibility', () => {
     it.each(['deepseek', 'tavily'] as const)(
+        '%s remotely reads a URL with its own key and preserves the configured path prefix',
+        async (protocol) => {
+            const url = 'https://source.example/manual.pdf';
+            const text = 'Extracted source text with necessary conditions.';
+            const { source, transport } = fixture(
+                protocol,
+                protocol === 'deepseek'
+                    ? { title: 'Manual', content: text }
+                    : {
+                          results: [{ url, raw_content: text }],
+                          failed_results: [],
+                      },
+                { baseUrl: 'https://search.example/proxy/v1', contentMode: 'reader' },
+            );
+            const beforeAttempt = vi.fn();
+            expect(await source.read(url, { beforeAttempt })).toMatchObject({
+                url,
+                originalUrl: url,
+                text,
+                contentHash: createHash('sha256').update(text).digest('hex'),
+                extractionVersion: `search-api/${protocol}/fetch-v1`,
+                truncated: false,
+            });
+            expect(transport).toHaveBeenCalledTimes(1);
+            const [target, request] = transport.mock.calls[0];
+            expect(target.toString()).toBe(
+                `https://search.example/proxy/v1/${protocol === 'deepseek' ? 'tools/fetch' : 'extract'}`,
+            );
+            expect(request.headers.authorization).toBe('Bearer fixture-search-key');
+            expect(JSON.parse(request.body!)).toEqual(
+                protocol === 'deepseek'
+                    ? { url }
+                    : {
+                          urls: [url],
+                          extract_depth: 'advanced',
+                          format: 'markdown',
+                      },
+            );
+            expect(beforeAttempt).toHaveBeenCalledExactlyOnceWith('read');
+        },
+    );
+    it.each(['reader', 'prefer_api'] as const)(
+        'legacy content policy %s always requests provider body',
+        async (contentMode) => {
+            const { source, transport } = fixture('deepseek', undefined, { contentMode });
+            expect((await source.search('query')).results[0].page?.text).toBe(item().content);
+            expect(JSON.parse(transport.mock.calls[0][1].body!).need_content).toBe(true);
+        },
+    );
+    it('API bundle reads only from the API endpoint when no search body exists', async () => {
+        const { options, transport, http } = fixture('deepseek', {
+            title: 'Page',
+            content: 'Remote body',
+        });
+        const bundle = createConnectorBundle({
+            searchProvider: 'api',
+            searchApi: options,
+            model: 'model',
+            modelApiKey: 'model-key',
+            http,
+        });
+        expect(bundle.searchProvider).toBe('api');
+        expect(await bundle.reader.read(item().url)).toMatchObject({ text: 'Remote body' });
+        expect(transport.mock.calls.map(([target]) => target.hostname)).toEqual([
+            'api.deepseek.com',
+        ]);
+        expect(transport.mock.calls[0][0].pathname).toBe('/v1/tools/fetch');
+    });
+    it('explicit API mode cannot be replaced by legacy model search configuration', async () => {
+        const { options, transport, http } = fixture('deepseek', {
+            title: 'Page',
+            content: 'Remote body',
+        });
+        const bundle = createConnectorBundle({
+            searchProvider: 'api',
+            searchApi: options,
+            model: 'model',
+            modelApiKey: 'model-key',
+            modelProtocol: 'gemini',
+            modelSearch: 'openai_responses',
+            http,
+        });
+        expect(bundle.reader).toBe(bundle.search);
+        await bundle.reader.read(item().url);
+        expect(transport.mock.calls[0][0].hostname).toBe('api.deepseek.com');
+    });
+    it.each([
+        { results: [], failed_results: [{ url: item().url, error: 'PRIVATE UPSTREAM ERROR' }] },
+        {
+            results: [{ url: 'https://other.example/', raw_content: 'Unrelated body' }],
+            failed_results: [],
+        },
+        { results: [{ url: item().url, raw_content: ' ' }], failed_results: [] },
+        { results: [{ url: item().url, content: 'summary' }], failed_results: [] },
+    ])(
+        'rejects failed, unrelated or absent Tavily extraction without any local request',
+        async (payload) => {
+            const { source, transport } = fixture('tavily', payload);
+            await expect(source.read(item().url)).rejects.toBeInstanceOf(ConnectorError);
+            expect(transport).toHaveBeenCalledTimes(1);
+            expect(transport.mock.calls[0][0].hostname).toBe('api.tavily.com');
+        },
+    );
+    it.each([{}, { content: '' }, { content: ' ', answer: 'generated summary' }])(
+        'rejects absent DeepSeek fetch text',
+        async (payload) => {
+            const { source, transport } = fixture('deepseek', payload);
+            await expect(source.read(item().url)).rejects.toMatchObject({
+                code: 'extraction_failed',
+            });
+            expect(transport).toHaveBeenCalledTimes(1);
+        },
+    );
+    it('does not pretend Perplexity Search can read standalone URLs', async () => {
+        const { source, transport, options } = fixture('perplexity');
+        await expect(source.read(item().url)).rejects.toMatchObject({ code: 'configuration' });
+        expect(() => createConnectorBundle({ searchProvider: 'api', searchApi: options })).toThrow(
+            '独立网页读取',
+        );
+        expect(transport).not.toHaveBeenCalled();
+    });
+    it('never dispatches a remote read after a refused reservation or unsafe target', async () => {
+        const { source, transport } = fixture();
+        await expect(
+            source.read(item().url, {
+                beforeAttempt: () => {
+                    throw new ConnectorError('budget_exceeded', 'Budget exhausted');
+                },
+            }),
+        ).rejects.toMatchObject({ code: 'budget_exceeded' });
+        await expect(source.read('http://127.0.0.1/')).rejects.toMatchObject({
+            code: 'unsafe_url',
+        });
+        expect(transport).not.toHaveBeenCalled();
+    });
+    it('honors remote read cancellation, deadline, redirect and paid retry boundaries', async () => {
+        const { source, transport } = fixture();
+        const controller = new AbortController();
+        await expect(
+            source.read(item().url, {
+                signal: controller.signal,
+                beforeAttempt: () => controller.abort(),
+            }),
+        ).rejects.toMatchObject({ code: 'aborted' });
+        expect(transport).not.toHaveBeenCalled();
+        transport.mockResolvedValueOnce(json({}, 302, { location: item().url }));
+        await expect(source.read(item().url)).rejects.toMatchObject({ code: 'unsafe_url' });
+        transport.mockResolvedValueOnce(json({}, 503));
+        await expect(source.read(item().url)).rejects.toMatchObject({ code: 'http', status: 503 });
+        expect(transport).toHaveBeenCalledTimes(2);
+        transport.mockImplementation(async (_target, request) => {
+            await new Promise((_resolve, reject) =>
+                request.signal.addEventListener('abort', () => reject(request.signal.reason), {
+                    once: true,
+                }),
+            );
+            return json({});
+        });
+        await expect(source.read(item().url, { timeoutMs: 30 })).rejects.toMatchObject({
+            code: 'timeout',
+        });
+    });
+    it.each(['deepseek', 'tavily'] as const)(
         '%s requests original body and keeps provenance separate from snippets',
         async (protocol) => {
             const body = 'The plan costs $20 per month when billed annually.';
@@ -68,7 +231,7 @@ describe('raw search API compatibility', () => {
         },
     );
     it.each(['', '   ', null, undefined])(
-        'leaves absent body %s for Reader instead of promoting summaries',
+        'leaves absent body %s for provider fetch instead of promoting summaries',
         async (content) => {
             const { source } = fixture(
                 'deepseek',
@@ -80,7 +243,7 @@ describe('raw search API compatibility', () => {
             expect(result.results[0].snippet).toBe(item().snippet);
         },
     );
-    it('Perplexity snippets still require Reader even with content preference enabled', async () => {
+    it('Perplexity snippets never become evidence', async () => {
         const { source } = fixture('perplexity', undefined, { contentMode: 'prefer_api' });
         expect((await source.search('query')).results[0].page).toBeUndefined();
     });
@@ -117,7 +280,7 @@ describe('raw search API compatibility', () => {
         expect(Buffer.byteLength(JSON.stringify(response))).toBeLessThan(2 * 1024 * 1024);
     });
     it.each(['deepseek', 'perplexity'] as const)(
-        'sends the documented %s request and returns only candidate snippets',
+        'sends the documented %s request and keeps snippets separate from provider bodies',
         async (protocol) => {
             const { source, transport } = fixture(protocol);
             const beforeAttempt = vi.fn();
@@ -134,7 +297,7 @@ describe('raw search API compatibility', () => {
             expect(options.headers.authorization).toBe('Bearer fixture-search-key');
             expect(JSON.parse(options.body!)).toEqual(
                 protocol === 'deepseek'
-                    ? { query: result.query, count: 5, need_content: false }
+                    ? { query: result.query, count: 5, need_content: true }
                     : { query: result.query, max_results: 5, search_type: 'web' },
             );
             expect(beforeAttempt).toHaveBeenCalledExactlyOnceWith('search');
@@ -144,7 +307,9 @@ describe('raw search API compatibility', () => {
                 results: [{ kind: 'search_snippet', snippet: item().snippet }],
                 coverage: { complete: true, totalResults: null, returnedResults: 1 },
             });
-            expect(JSON.stringify(result)).not.toContain(item().content);
+            expect(result.results[0].page?.text).toBe(
+                protocol === 'deepseek' ? item().content : undefined,
+            );
         },
     );
 

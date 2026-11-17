@@ -5,48 +5,29 @@
             href="#main-content"
             >跳到主内容</a
         >
-        <header
-            class="workbench-header w-[min(100%,_88rem)] ml-auto mr-auto min-w-0 flex flex-wrap items-center gap-[0.5rem_1.5rem] min-h-[4.5rem] [border-bottom:0.0625rem_solid_color-mix(in_srgb,_var(--scova-border)_30%,_transparent)] py-2 px-[clamp(1rem,_2.5vw,_2rem)] [@media(max-width:_53.999rem)]:(gap-[0.5rem_1rem] min-h-[3.75rem] pt-1.5 pb-1.5)"
+        <div
+            class="workbench-header-bar [border-bottom:0.0625rem_solid_color-mix(in_srgb,_var(--scova-border)_30%,_transparent)]"
         >
-            <mobile-navigation :items="mobileItems" />
-            <router-link
-                class="brand inline-flex items-center gap-[0.5em] min-h-11 text-inherit no-underline cursor-pointer keyboard-focus-wide [&&]:(text-[1.25rem] [font-weight:650] whitespace-nowrap) [nav_&:is(a)]:(rounded-2 py-2 px-3.5) [nav_&:is(a):hover]:([background:var(--scova-selected)] text-primary)"
-                to="/tasks"
-                aria-label="Scova，任务首页"
+            <header
+                class="workbench-header w-[min(100%,_88rem)] ml-auto mr-auto min-w-0 flex flex-wrap items-center gap-[0.5rem_1.5rem] min-h-[4.5rem] py-2 px-[clamp(1rem,_2.5vw,_2rem)] [@media(max-width:_53.999rem)]:(gap-[0.5rem_1rem] min-h-[3.75rem] pt-1.5 pb-1.5)"
             >
-                <span lang="en">Scova</span>
-            </router-link>
-            <nav
-                class="primary-navigation flex flex-wrap gap-2 [@media(max-width:_53.999rem)]:hidden"
-                aria-label="主导航"
-            >
+                <mobile-navigation :items="mobileItems" />
                 <router-link
-                    class="inline-flex items-center gap-[0.5em] min-h-11 text-inherit no-underline cursor-pointer keyboard-focus-wide [nav_&:is(a)]:(rounded-2 py-2 px-3.5) [nav_&:is(a):hover]:([background:var(--scova-selected)] text-primary) [&.selected]:([background:var(--scova-selected)] text-primary font-semibold underline underline-offset-[0.35em])"
-                    v-for="item in primary"
-                    :key="String(item.name)"
-                    :to="item.path"
-                    :class="{ selected: isSelected(item) }"
-                    :aria-current="route.path === item.path ? 'page' : undefined"
+                    class="brand inline-flex items-center gap-[0.5em] min-h-11 text-inherit no-underline cursor-pointer keyboard-focus-wide [&&]:(text-[1.25rem] [font-weight:650] whitespace-nowrap) [nav_&:is(a)]:(rounded-2 py-2 px-3.5) [nav_&:is(a):hover]:([background:var(--scova-selected)] text-primary)"
+                    to="/tasks"
+                    aria-label="Scova，任务首页"
                 >
-                    <app-icon
-                        class="[.page-heading_>_&]:(min-w-0 max-w-full break-anywhere)"
-                        :name="navigationIcon(item.meta.section)"
-                    />
-                    {{ item.meta.title }}
+                    <img src="/favicon.ico?v=ebde566c" alt="" class="w-6 h-6 object-contain" />
+                    <span lang="en">Scova</span>
                 </router-link>
-            </nav>
-            <nav
-                class="tool-navigation flex flex-wrap gap-2 ml-auto [@media(max-width:_53.999rem)]:hidden"
-                aria-label="全局工具"
-            >
-                <template v-for="item in tools" :key="String(item.name)">
-                    <notification-menu
-                        v-if="item.meta.section === 'notifications'"
-                        :selected="isSelected(item)"
-                    />
+                <nav
+                    class="primary-navigation flex flex-wrap gap-2 [@media(max-width:_53.999rem)]:hidden"
+                    aria-label="主导航"
+                >
                     <router-link
-                        class="inline-flex items-center gap-[0.5em] min-h-11 text-inherit no-underline cursor-pointer keyboard-focus-wide [nav_&:is(a)]:(rounded-2 py-2 px-3.5) [nav_&:is(a):hover]:([background:var(--scova-selected)] text-primary) [&.selected]:([background:var(--scova-selected)] text-primary font-semibold underline underline-offset-[0.35em])"
-                        v-else
+                        class="inline-flex items-center gap-[0.5em] min-h-11 text-inherit no-underline cursor-pointer keyboard-focus-wide [nav_&:is(a)]:(rounded-2 py-2 px-3.5) [nav_&:is(a):hover]:([background:var(--scova-selected)] text-primary) [&.selected]:([background:var(--scova-selected)] text-primary font-semibold)"
+                        v-for="item in primary"
+                        :key="String(item.name)"
                         :to="item.path"
                         :class="{ selected: isSelected(item) }"
                         :aria-current="route.path === item.path ? 'page' : undefined"
@@ -57,13 +38,37 @@
                         />
                         {{ item.meta.title }}
                     </router-link>
-                </template>
-            </nav>
-            <account-menu />
-        </header>
+                </nav>
+                <nav
+                    class="tool-navigation flex flex-wrap gap-2 ml-auto [@media(max-width:_53.999rem)]:hidden"
+                    aria-label="全局工具"
+                >
+                    <template v-for="item in tools" :key="String(item.name)">
+                        <notification-menu
+                            v-if="item.meta.section === 'notifications'"
+                            :selected="isSelected(item)"
+                        />
+                        <router-link
+                            class="inline-flex items-center gap-[0.5em] min-h-11 text-inherit no-underline cursor-pointer keyboard-focus-wide [nav_&:is(a)]:(rounded-2 py-2 px-3.5) [nav_&:is(a):hover]:([background:var(--scova-selected)] text-primary) [&.selected]:([background:var(--scova-selected)] text-primary font-semibold)"
+                            v-else
+                            :to="item.path"
+                            :class="{ selected: isSelected(item) }"
+                            :aria-current="route.path === item.path ? 'page' : undefined"
+                        >
+                            <app-icon
+                                class="[.page-heading_>_&]:(min-w-0 max-w-full break-anywhere)"
+                                :name="navigationIcon(item.meta.section)"
+                            />
+                            {{ item.meta.title }}
+                        </router-link>
+                    </template>
+                </nav>
+                <account-menu />
+            </header>
+        </div>
         <main
             id="main-content"
-            class="workbench-main w-[min(100%,_88rem)] ml-auto mr-auto min-w-0 pt-3 pb-8 px-[clamp(1rem,_2.5vw,_2rem)] [&.workbench]:min-h-[100dvh] focus:[outline:none] [&.workbench-main--form]:w-[min(100%,_calc(44rem_+_clamp(2rem,_5vw,_4rem)))]"
+            class="workbench-main w-[min(100%,_88rem)] ml-auto mr-auto min-w-0 pt-8 [&:has(>_.breadcrumbs)]:pt-3 pb-8 px-[clamp(1rem,_2.5vw,_2rem)] [&.workbench]:min-h-[100dvh] focus:[outline:none] [&.workbench-main--form]:w-[min(100%,_calc(44rem_+_clamp(2rem,_5vw,_4rem)))]"
             :class="{ 'workbench-main--form': route.meta.contentWidth === 'form' }"
             tabindex="-1"
             aria-labelledby="page-title"

@@ -1,5 +1,9 @@
 <template>
-    <fieldset class="output-formats [border:0] min-w-0 m-0 p-0" :disabled="disabled">
+    <fieldset
+        class="output-formats [border:0] min-w-0 m-0 p-0"
+        :class="{ 'output-formats--compact': compact }"
+        :disabled="disabled"
+    >
         <legend class="mb-3 font-medium p-0">{{ label }}</legend>
         <div
             class="output-options grid grid-cols-[repeat(auto-fit,_minmax(min(100%,_13rem),_1fr))] gap-2.5"
@@ -19,7 +23,7 @@
                 />
                 <span class="layout-grid gap-1"
                     ><strong class="font-medium">{{ name }}</strong
-                    ><small class="text-muted text-[0.875rem] leading-[1.6]">{{
+                    ><small v-if="!compact" class="text-muted text-[0.875rem] leading-[1.6]">{{
                         descriptions[format]
                     }}</small></span
                 >
@@ -45,7 +49,13 @@
 <script setup lang="ts">
 import { outputFormatLabels, type OutputFormat } from '@scova/models';
 const props = withDefaults(
-    defineProps<{ label?: string; disabled?: boolean; error?: string; allowEmpty?: boolean }>(),
+    defineProps<{
+        label?: string;
+        disabled?: boolean;
+        error?: string;
+        allowEmpty?: boolean;
+        compact?: boolean;
+    }>(),
     { label: '输出形式' },
 );
 const model = defineModel<OutputFormat[]>({ required: true });
@@ -64,3 +74,18 @@ function toggle(event: Event, format: OutputFormat) {
         event.currentTarget.checked = model.value.includes(format);
 }
 </script>
+
+<style scoped>
+.output-formats--compact .output-options {
+    @apply flex flex-wrap gap-2;
+}
+.output-formats--compact label {
+    @apply py-2 px-3 rounded-2;
+}
+.output-formats--compact > p {
+    @apply hidden;
+}
+.output-formats--compact legend {
+    @apply mb-2 text-sm;
+}
+</style>

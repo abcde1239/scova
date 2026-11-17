@@ -7,7 +7,7 @@
         >
             <h3 class="scova-content-title text-[1.25rem] font-semibold m-0">
                 <router-link
-                    class="inline-flex items-center min-h-11 max-w-full justify-self-start text-primary cursor-pointer underline-offset-[0.2em] break-anywhere keyboard-focus-wide"
+                    class="inline-flex items-center min-h-11 max-w-full justify-self-start scova-link cursor-pointer break-anywhere keyboard-focus-wide"
                     :to="searchTarget(item).path"
                     >{{ item.title }}</router-link
                 >
@@ -40,7 +40,7 @@
             </dl>
             <router-link
                 :to="searchTarget(item).path"
-                class="scova-interface inline-flex items-center min-h-11 max-w-full justify-self-start text-primary cursor-pointer underline-offset-[0.2em] break-anywhere keyboard-focus-wide"
+                class="scova-interface inline-flex items-center min-h-11 max-w-full justify-self-start scova-link cursor-pointer break-anywhere keyboard-focus-wide"
                 >{{ searchTarget(item).label }}</router-link
             >
         </li>

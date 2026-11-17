@@ -405,6 +405,8 @@ describe('报告证据问答与明确确认后续研究', () => {
         );
         expect(latest.turns).toHaveLength(100);
         expect(latest.turns[0].question).toBe('第5轮');
+        expect(latest.turns[0].round).toBe(6);
+        expect(latest.turns.at(-1).round).toBe(105);
         expect(latest.hasEarlier).toBe(true);
         const earlier = await json(
             await request(
@@ -420,6 +422,7 @@ describe('报告证据问答与明确确认后续研究', () => {
             '第4轮',
         ]);
         expect(earlier.hasEarlier).toBe(false);
+        expect(earlier.turns.map((turn: { round: number }) => turn.round)).toEqual([1, 2, 3, 4, 5]);
         const other = await fixture(a);
         expect(
             (
@@ -498,6 +501,97 @@ describe('报告证据问答与明确确认后续研究', () => {
             (await request(`/reports/${f.report.id}/conversation`, { headers: headers(b) })).status,
         ).toBe(404);
     });
+    it('merge authorizes conversation artifacts, replays one run, freezes sources and never searches or overwrites originals', async () => {
+        const a = await register(),
+            f = await liveFixture(a, '解释申请日期');
+        model = modelFixture(answer(f.evidence.id, f.quote));
+        const q = await json(await ask(a, f.report.id, '整理已有资料'));
+        const revision = await json(
+            await request(`/reports/${f.report.id}/questions/${q.id}/followup`, {
+                method: 'POST',
+                headers: { ...headers(a), 'idempotency-key': randomUUID() },
+                body: JSON.stringify({ confirm: true, operation: 'revise' }),
+            }),
+        );
+        const child = executeQuestionRun(revision.run.id);
+        expect(child.reportId).toBeTruthy();
+        const key = randomUUID();
+        const merge = (reportIds = [child.reportId], commandKey = key, auth = a, extra = {}) =>
+            request(`/reports/${f.report.id}/merge`, {
+                method: 'POST',
+                headers: { ...headers(auth), 'idempotency-key': commandKey },
+                body: JSON.stringify({
+                    confirm: true,
+                    reportIds,
+                    outputFormats: ['brief'],
+                    ...extra,
+                }),
+            });
+        const b = await register();
+        expect((await merge([child.reportId], randomUUID(), b)).status).toBe(404);
+        const unrelated = await liveFixture(a, '独立报告');
+        expect((await merge([unrelated.report.id], randomUUID())).status).toBe(404);
+        expect((await merge([f.report.id], randomUUID())).status).toBe(404);
+        expect((await merge([child.reportId], randomUUID(), a, { confirm: false })).status).toBe(
+            422,
+        );
+        const result = await merge();
+        expect(result.status).toBe(202);
+        const created = await json(result);
+        const [replayed, concurrent] = await Promise.all([merge(), merge()]);
+        expect((await json(replayed)).run.id).toBe(created.run.id);
+        expect((await json(concurrent)).run.id).toBe(created.run.id);
+        expect((await merge([child.reportId], key, a, { outputFormats: ['list'] })).status).toBe(
+            409,
+        );
+        expect((await merge([child.reportId], randomUUID())).status).toBe(409);
+        const frozen = await db.query.runs
+            .findFirst({ where: eq(tables.runs.id, created.run.id) })
+            .then(requireRow);
+        expect(frozen.conversationContextJson).toMatchObject({
+            reportId: f.report.id,
+            questionId: q.id,
+            operation: 'revise',
+            merge: { reportIds: [child.reportId] },
+        });
+        expect(frozen.followupConfigJson).toMatchObject({
+            outputFormats: ['brief'],
+            schedule: { frequency: 'manual' },
+        });
+        const pending = await json(
+            await request(`/reports/${f.report.id}/conversation`, { headers: headers(a) }),
+        );
+        expect(pending.mergeRuns).toEqual([
+            expect.objectContaining({
+                runId: created.run.id,
+                rootRunId: created.run.id,
+                questionId: q.id,
+                round: 1,
+            }),
+        ]);
+        expect(pending.activeRun).toBe(true);
+        const executed = executeQuestionRun(created.run.id);
+        expect(executed.queries).toEqual([]);
+        expect(executed.reportId).toBeTruthy();
+        const merged = await json(
+            await request(`/reports/${executed.reportId}`, { headers: headers(a) }),
+        );
+        expect(merged.conversation).toMatchObject({
+            reportId: f.report.id,
+            questionId: q.id,
+            operation: 'merge',
+        });
+        const history = await json(
+            await request(`/reports/${f.report.id}/conversation`, { headers: headers(a) }),
+        );
+        expect(history.artifacts).toContainEqual(
+            expect.objectContaining({ reportId: executed.reportId, operation: 'merge', round: 1 }),
+        );
+        expect(
+            await db.query.reports.findFirst({ where: eq(tables.reports.id, f.report.id) }),
+        ).toEqual(f.report);
+        expect(calls).toBe(1);
+    }, 90_000);
     it('revision freezes context, never searches, creates a new report and keeps the original immutable', async () => {
         const a = await register(),
             f = await liveFixture(a, '解释申请日期');
@@ -1150,6 +1244,15 @@ describe('报告证据问答与明确确认后续研究', () => {
             status: 'succeeded',
             baselineRunId: null,
             comparisonScopeHash: frozen.comparisonScopeHash,
+        });
+        const conversation = await json(
+            await request(`/reports/${f.report.id}/conversation`, { headers: headers(a) }),
+        );
+        expect(conversation.continuations).toContainEqual({
+            runId: stored.id,
+            rootRunId: first.id,
+            questionId: q.id,
+            operation: 'research',
         });
         expect(
             await db

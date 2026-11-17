@@ -2,6 +2,7 @@ import { logoutFromAccount, expectAccountReady } from './support/account-menu.ts
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { classifyReportDelivery, type Report } from '@scova/models';
+import { reportFormatSample } from '../../apps/web/tests/fixtures/reports/report-format-sample.ts';
 
 // Local HTTP samples exercise the real Web bundle; database delivery is verified separately.
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -104,6 +105,10 @@ async function samples(page: Page) {
     await page.route('**/api/v1/me', (route) => route.fulfill({ json: account() }));
     await page.route(`**/api/v1/reports/${id(1)}`, (route) => route.fulfill({ json: report() }));
 }
+async function readOnMobile(page: Page) {
+    if ((page.viewportSize()?.width ?? 1440) < 1024)
+        await page.getByRole('button', { name: '成果', exact: true }).click();
+}
 const article = (page: Page) =>
     page.getByRole('article', { name: '开放研究资料：可追溯的基础简报' });
 
@@ -166,6 +171,7 @@ for (const width of [320, 1440]) {
             await page.setViewportSize({ width, height: 900 });
             const state = await formatSamples(page, saved);
             await page.goto(reportPath);
+            await readOnMobile(page);
             await expect(page.locator('.report-delivery')).toContainText('部分内容待补充');
             await expect(page.locator('.answer-gap-overview')).toBeVisible();
             await expect(page.locator('.answer-gaps')).toBeHidden();
@@ -202,6 +208,7 @@ test('宽屏左侧对话右侧成果、窄屏对话在前，基线在成果内�
     await samples(page);
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto(reportPath);
+    await readOnMobile(page);
     await expect(article(page)).toBeVisible();
     const main = await page.getByRole('main').boundingBox();
     expect(main!.width).toBeGreaterThan(1300);
@@ -217,7 +224,7 @@ test('宽屏左侧对话右侧成果、窄屏对话在前，基线在成果内�
     expect(baseline!.y).toBeGreaterThanOrEqual(reportDocument!.y + reportDocument!.height);
     await expect(page.locator('.report-document .report-changes')).toHaveCount(0);
     await expect(page.locator('.report-content .report-baseline')).toBeVisible();
-    await expect(page.getByRole('heading', { name: '对话与后续研究', exact: true })).toBeVisible();
+    await expect(page.locator('#report-conversation')).toBeVisible();
     await expect(page.getByRole('link', { name: '执行详情', exact: true })).toHaveAttribute(
         'href',
         `/runs/${id(3)}`,
@@ -228,15 +235,18 @@ test('宽屏左侧对话右侧成果、窄屏对话在前，基线在成果内�
             true,
         );
         const tools = page.getByRole('navigation', { name: '报告内容导航' });
-        const body = await page.locator('.report-content').boundingBox();
-        const following = await page.locator('.report-companion').boundingBox();
-        expect(body!.y).toBeGreaterThanOrEqual(following!.y + following!.height);
+        await expect(page.locator('.report-content')).toBeHidden();
+        await expect(page.locator('.report-companion')).toBeVisible();
+        await page.getByRole('button', { name: '成果', exact: true }).click();
+        await expect(page.locator('.report-content')).toBeVisible();
+        await expect(page.locator('.report-companion')).toBeHidden();
         const jump = tools.getByRole('link', { name: '正文', exact: true });
         await expect(jump).toHaveClass(/n-button/);
         expect((await jump.boundingBox())!.height).toBeGreaterThanOrEqual(44);
         await jump.focus();
         await jump.press('Enter');
-        await expect(page.locator('#summary-title')).toBeFocused();
+        await expect(page.locator('#report-title')).toBeFocused();
+        await page.getByRole('button', { name: '返回对话', exact: true }).click();
         const section = page.locator('.bookmarks-tool');
         await expect(section.locator('.report-bookmarks')).toBeHidden();
         expect((await section.boundingBox())!.width).toBeLessThanOrEqual(width);
@@ -247,9 +257,10 @@ test('成果关闭恢复与完整阅读保留布局、问题和笔记草稿，�
     const state = await formatSamples(page, multiFormatReport());
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto(reportPath);
+    await readOnMobile(page);
     const question = page.getByLabel('问题', { exact: true });
-    await page.getByRole('button', { name: '总结主要发现', exact: true }).click();
-    await expect(question).toHaveValue('请总结这份报告的主要发现。');
+    await page.locator('[aria-label="提问建议"]').getByRole('button').first().click();
+    await expect(question).not.toHaveValue('');
     await expect(question).toBeFocused();
     await question.fill('阅读模式切换时保留的问题');
     await page.locator('.notes-tool > summary').click();
@@ -260,14 +271,14 @@ test('成果关闭恢复与完整阅读保留布局、问题和笔记草稿，�
         expect(await input.evaluate((element) => getComputedStyle(element).resize)).toBe('none');
     const editor = await page.locator('.note-editor').elementHandle();
     const questions = await page.locator('.questions').elementHandle();
-    const panel = page.getByRole('region', { name: '报告交付物' });
+    const panel = page.locator('#report-artifact');
     const card = page.locator('.report-artifact-card');
     const close = page.getByRole('button', { name: '关闭成果预览', exact: true });
     const selector = generatedFormat(page, 'comparison');
     await selector.click();
-    const citation = page.locator('.report-document .evidence-source-group').first();
+    const citation = page.locator('.evidence-appendix .evidence-source-group').first();
     await citation.locator(':scope > summary').click();
-    await expect(citation.locator('blockquote')).toBeVisible();
+    await expect(citation.locator('blockquote').first()).toBeVisible();
     const reportDocument = await page.locator('.report-document').elementHandle();
     await close.click();
     await expect(panel).toBeHidden();
@@ -279,7 +290,7 @@ test('成果关闭恢复与完整阅读保留布局、问题和笔记草稿，�
     await expect(close).toBeFocused();
     await expect(card).toHaveAttribute('aria-expanded', 'true');
     await expect(selector).toHaveAttribute('aria-pressed', 'true');
-    await expect(citation.locator('blockquote')).toBeVisible();
+    await expect(citation.locator('blockquote').first()).toBeVisible();
     expect(await reportDocument!.evaluate((element) => element.isConnected)).toBe(true);
     await close.focus();
     await close.press('Escape');
@@ -292,21 +303,19 @@ test('成果关闭恢复与完整阅读保留布局、问题和笔记草稿，�
     await expect(page.locator('.report-baseline')).toBeVisible();
     await expect(panel).toBeVisible();
     await expect(page.locator('#report-title')).toBeFocused();
-    await expect(citation.locator('blockquote')).toBeVisible();
-    await page.getByRole('button', { name: '返回研究对话', exact: true }).click();
+    await expect(citation.locator('blockquote').first()).toBeVisible();
+    await page.getByRole('button', { name: '返回对话', exact: true }).click();
     await expect(question).toBeFocused();
     await expect(question).toHaveValue('阅读模式切换时保留的问题');
     await expect(draft).toHaveValue('阅读模式切换时保留的笔记');
     expect(await editor!.evaluate((element) => element.isConnected)).toBe(true);
     expect(await questions!.evaluate((element) => element.isConnected)).toBe(true);
     await page.setViewportSize({ width: 320, height: 844 });
-    await close.click();
     await expect(panel).toBeHidden();
     await card.click();
-    await expect(close).toBeFocused();
-    await focus.click();
+    await expect(page.locator('#report-title')).toBeFocused();
     await expect(question).toBeHidden();
-    await page.getByRole('button', { name: '返回研究对话', exact: true }).click();
+    await page.getByRole('button', { name: '返回对话', exact: true }).click();
     await expect(question).toBeFocused();
     await expect(draft).toHaveValue('阅读模式切换时保留的笔记');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
@@ -323,6 +332,7 @@ test.beforeAll(async ({ browser }) => {
 test('报告默认只展开问答，辅助工具按需打开且折叠保留笔记草稿', async ({ page }) => {
     const state = await formatSamples(page);
     await page.goto(reportPath);
+    await readOnMobile(page);
     await expect(page.getByLabel('问题', { exact: true })).toBeVisible();
     for (const tool of ['notes', 'bookmarks', 'feedback']) {
         const section = page.locator(`.${tool}-tool`);
@@ -357,6 +367,7 @@ test('本地 HTTP 样本：正文优先且保留范围说明、四类结论、�
         if (request.url().includes('example.test')) sourceRequests.push(request.url());
     });
     await page.goto(reportPath);
+    await readOnMobile(page);
     await expect(article(page)).toBeVisible();
     await expect(page.getByRole('note', { name: '查阅范围说明' })).toContainText(
         '查看来源覆盖说明',
@@ -387,9 +398,13 @@ test('本地 HTTP 样本：正文优先且保留范围说明、四类结论、�
     await citation.locator('.citation-metadata > summary').click();
     await expect(citation).toContainText('第 2 段，第 10–28 字符');
     await expect(citation).toContainText('2026-10-31T01:00:00Z');
-    await expect(citation).toContainText('完整采集正文过期后引用仍保留');
-    const link = citation.getByRole('link', { name: '打开原始来源（新窗口）' });
-    await expect(link).toHaveAttribute('href', 'https://example.test/original');
+    await expect(citation).toContainText('采集正文曾截断，引用仅代表已保存片段。');
+    const link = citation.getByRole('link', { name: '打开网页（新窗口）' });
+    await expect(link).toHaveCount(1);
+    await expect(link).toHaveAttribute('href', report().evidence[0]!.snapshot.canonicalUrl);
+    await toggle.focus();
+    await toggle.press('Tab');
+    await expect(link).toBeFocused();
     await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
     await expect(link).toHaveAttribute('target', '_blank');
     expect(await page.evaluate(() => 'sourceExecuted' in window)).toBe(false);
@@ -413,6 +428,7 @@ for (const status of [403, 404, 409]) {
                 : route.fallback(),
         );
         await page.goto(reportPath);
+        await readOnMobile(page);
         await expect(page.getByRole('status')).toContainText(
             status === 403 ? '无权' : status === 404 ? '不存在' : '证据校验未通过',
         );
@@ -442,6 +458,7 @@ test('本地 HTTP 样本：无效 UUID、非法引用及非简报布局边界', 
     invalid.evidence[0]!.url = 'javascript:alert(1)';
     await page.route(`**/api/v1/reports/${id(1)}`, (route) => route.fulfill({ json: invalid }));
     await page.goto(reportPath);
+    await readOnMobile(page);
     await expect(page.getByRole('status')).toContainText('报告结构或引用不完整');
     await expect(page.locator('article')).toHaveCount(0);
     const other = report();
@@ -461,7 +478,7 @@ test('本地 HTTP 样本：无效 UUID、非法引用及非简报布局边界', 
     await expect(page.getByLabel('报告形式', { exact: true })).toHaveCount(0);
     await expect(page.getByRole('navigation', { name: '已生成成果', exact: true })).toHaveCount(0);
     await page.locator('.coverage summary').press('Enter');
-    await expect(page.getByText('本次计划范围内查阅完成，不代表穷尽互联网资料。')).toBeVisible();
+    await expect(page.getByText('已完成本次计划范围内的查阅。')).toBeVisible();
     await expect(page.getByRole('note', { name: '查阅范围说明' })).toHaveCount(0);
 });
 
@@ -517,6 +534,7 @@ test('本地 HTTP 样本：断网可键盘重试，已展开报告退出换号�
         return route.fulfill({ json: account(101) });
     });
     await page.goto(reportPath);
+    await readOnMobile(page);
     await expect(page.getByRole('status')).toContainText('报告暂时无法读取');
     offline = false;
     await page.getByRole('button', { name: '重试', exact: true }).press('Enter');
@@ -544,6 +562,7 @@ for (const width of [320, 390, 768, 1024, 1280, 1440]) {
         await samples(page);
         await page.setViewportSize({ width, height: 1000 });
         await page.goto(reportPath);
+        await readOnMobile(page);
         await expect(article(page)).toBeVisible();
         await page.locator('.evidence-source-group > summary').first().click();
         await page.evaluate(() => document.fonts.ready);
@@ -632,6 +651,7 @@ for (const width of [320, 390, 1024, 1440]) {
         const state = await formatSamples(page, saved);
         await page.setViewportSize({ width, height: 1000 });
         await page.goto(reportPath);
+        await readOnMobile(page);
         for (const dark of [false, true]) {
             await page.emulateMedia({ colorScheme: dark ? 'dark' : 'light' });
             await expect(page.locator('.scova-theme--dark')).toHaveCount(dark ? 1 : 0);
@@ -675,17 +695,21 @@ for (const width of [320, 390, 1024, 1440]) {
                         const citation = citations.nth(i);
                         if ((await citation.getAttribute('open')) === null)
                             await citation.locator(':scope > summary').click();
-                        expect(
-                            await citation.locator('blockquote').evaluate((element) => {
-                                const style = getComputedStyle(element);
-                                return (
-                                    (element.clientWidth -
-                                        parseFloat(style.paddingLeft) -
-                                        parseFloat(style.paddingRight)) /
-                                    parseFloat(style.fontSize)
-                                );
-                            }),
-                        ).toBeGreaterThanOrEqual(4);
+                        const widths = await citation
+                            .locator('blockquote')
+                            .evaluateAll((elements) =>
+                                elements.map((element) => {
+                                    const style = getComputedStyle(element);
+                                    return (
+                                        (element.clientWidth -
+                                            parseFloat(style.paddingLeft) -
+                                            parseFloat(style.paddingRight)) /
+                                        parseFloat(style.fontSize)
+                                    );
+                                }),
+                            );
+                        expect(widths.length).toBeGreaterThan(0);
+                        expect(widths.every((width) => width >= 4)).toBe(true);
                     }
                     expect(
                         await page.evaluate(
@@ -850,6 +874,7 @@ test('仅展示已保存的两份独立成果，阅读切换与刷新不会生�
     const original = structuredClone(saved);
     const state = await formatSamples(page, saved);
     await page.goto(reportPath);
+    await readOnMobile(page);
     const nav = page.getByRole('navigation', { name: '已生成成果', exact: true });
     await expect(nav.getByRole('button')).toHaveCount(2);
     await expect(nav.getByRole('button', { name: '主题清单', exact: true })).toHaveCount(0);
@@ -860,9 +885,7 @@ test('仅展示已保存的两份独立成果，阅读切换与刷新不会生�
     await generatedFormat(page, 'comparison').click();
     await expect(claims).toHaveText([saved.claims[1]!.text]);
     await expect(page.locator('.report-document .report-comparison')).toBeVisible();
-    await expect(page.locator('.report-document .evidence-appendix .evidence-entry')).toHaveCount(
-        1,
-    );
+    await expect(page.locator('.evidence-appendix .evidence-entry')).toHaveCount(1);
     await page.reload();
     await expect(generatedFormat(page, 'brief')).toHaveAttribute('aria-pressed', 'true');
     await expect(claims).toHaveText([saved.claims[0]!.text]);
@@ -885,7 +908,7 @@ test('仅展示已保存的两份独立成果，阅读切换与刷新不会生�
     }
 });
 
-test('同快照引用按来源合并并去除重复原文，其他快照与全部定位锚点保留', async ({ page }) => {
+test('同网页仅列一次，同快照去除重复原文，其他快照与全部定位锚点保留', async ({ page }) => {
     const saved = report() as Report;
     const first = saved.evidence[0]!;
     saved.evidence = [
@@ -904,19 +927,27 @@ test('同快照引用按来源合并并去除重复原文，其他快照与全�
     ];
     const state = await formatSamples(page, saved);
     await page.goto(reportPath);
+    await readOnMobile(page);
     const appendix = page.locator('.evidence-appendix');
     const groups = appendix.locator('.evidence-source-group');
-    await expect(groups).toHaveCount(2);
-    await expect(groups.first().locator(':scope > summary')).toContainText('2条引用');
-    await expect(groups.last().locator(':scope > summary')).toContainText('1条引用');
+    await expect(groups).toHaveCount(1);
+    await expect(groups.first().locator(':scope > summary')).toContainText('3条引用');
+    await expect(groups.first().locator(':scope > summary')).toContainText('2个版本');
     await groups.first().locator(':scope > summary').click();
-    await expect(groups.first().locator('blockquote')).toHaveText([
+    const versions = groups.first().locator('.source-version');
+    await expect(versions).toHaveCount(2);
+    await expect(versions.first().locator('blockquote')).toHaveText([
         first.quote,
         saved.evidence[1]!.quote,
     ]);
     await expect(groups.first().locator(`#evidence-${id(24)}`)).toHaveCount(1);
-    await groups.last().locator(':scope > summary').click();
-    await expect(groups.last().locator('blockquote')).toHaveText([saved.evidence[3]!.quote]);
+    await expect(versions.last().locator('blockquote')).toHaveText([saved.evidence[3]!.quote]);
+    await expect(groups.first().locator('a[target="_blank"]')).toHaveCount(1);
+    await expect(groups.first().locator('.source-page-link')).toHaveAttribute(
+        'href',
+        first.snapshot!.canonicalUrl,
+    );
+    await expect(groups.first().locator('.source-quote a[target="_blank"]')).toHaveCount(0);
     for (const evidence of saved.evidence)
         await expect(appendix.locator(`#evidence-${evidence.id}`)).toHaveCount(1);
     expect(
@@ -929,10 +960,109 @@ test('同快照引用按来源合并并去除重复原文，其他快照与全�
     expect(state.unexpected).toEqual([]);
 });
 
+test('完整阅读从成果浮窗连续放大，保留滚动和节点，Escape收起且减少动态时直接切换', async ({
+    page,
+}) => {
+    const state = await formatSamples(page, reportFormatSample('research_report'));
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await page.goto(reportPath);
+    await readOnMobile(page);
+    const panel = page.locator('#report-artifact');
+    await expect(panel).toBeVisible();
+    await expect(
+        page.getByRole('heading', { name: '两馆自习室使用条件', exact: true }),
+    ).toBeVisible();
+    const original = await panel.elementHandle();
+    const scroll = panel.locator(':scope > .artifact-scroll');
+    await scroll.evaluate((node) => {
+        node.scrollTo({ top: 180, behavior: 'instant' });
+    });
+    expect(await scroll.evaluate((node) => node.scrollTop)).toBe(180);
+    const bounds = await page.evaluate(async () => {
+        const panel = document.querySelector<HTMLElement>('#report-artifact')!;
+        const before = panel.getBoundingClientRect();
+        const button = [...panel.querySelectorAll('button')].find((node) =>
+            node.textContent?.includes('完整阅读'),
+        )!;
+        button.click();
+        await new Promise(requestAnimationFrame);
+        const animation = panel.getAnimations()[0]!;
+        animation.pause();
+        animation.currentTime = 0;
+        const start = panel.getBoundingClientRect();
+        animation.currentTime = 210;
+        const middle = panel.getBoundingClientRect();
+        animation.currentTime = 420;
+        const end = panel.getBoundingClientRect();
+        animation.currentTime = 210;
+        return {
+            before: before.width,
+            start: start.width,
+            middle: middle.width,
+            end: end.width,
+            duration: animation.effect!.getTiming().duration,
+        };
+    });
+    expect(bounds.duration).toBe(420);
+    expect(bounds.start).toBeCloseTo(bounds.before, 0);
+    expect(bounds.middle).toBeGreaterThan(bounds.start);
+    expect(bounds.middle).toBeLessThan(bounds.end);
+    expect(bounds.end).toBeGreaterThan(bounds.start * 1.5);
+    await page.screenshot({ path: 'artifacts/report-reading-polish/expanding.png' });
+    await panel.evaluate((node) => node.getAnimations().forEach((animation) => animation.finish()));
+    await expect(page.locator('#report-title')).toBeFocused();
+    expect(await scroll.evaluate((node) => node.scrollTop)).toBe(180);
+    expect(
+        await original!.evaluate((node) => node === document.querySelector('#report-artifact')),
+    ).toBe(true);
+    await scroll.evaluate((node) => {
+        node.scrollTo({ top: 0, behavior: 'instant' });
+    });
+    await page.locator('#report-title').evaluate((node) => node.blur());
+    await page.screenshot({ path: 'artifacts/report-reading-polish/research-report-reading.png' });
+    await page.locator('#report-title').press('Escape');
+    await expect(page.getByLabel('问题', { exact: true })).toBeFocused();
+    await expect(page.locator('.report-companion')).toBeVisible();
+    await page.screenshot({ path: 'artifacts/report-reading-polish/research-report-preview.png' });
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.getByRole('button', { name: '完整阅读', exact: true }).click();
+    await expect(page.locator('#report-title')).toBeFocused();
+    expect(await panel.evaluate((node) => node.getAnimations().length)).toBe(0);
+    await page.getByRole('button', { name: '返回对话', exact: true }).click();
+    await expect(page.getByLabel('问题', { exact: true })).toBeFocused();
+    expect(await panel.evaluate((node) => node.getAnimations().length)).toBe(0);
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    const interruptedFocus = await panel.evaluate(async (node) => {
+        const targets: string[] = [];
+        const record = (event: FocusEvent) => targets.push((event.target as HTMLElement).id);
+        document.addEventListener('focusin', record);
+        [...node.querySelectorAll('button')]
+            .find((button) => button.textContent?.includes('完整阅读'))!
+            .click();
+        await new Promise(requestAnimationFrame);
+        [...node.querySelectorAll('button')]
+            .find((button) => button.textContent?.includes('返回对话'))!
+            .click();
+        await new Promise(requestAnimationFrame);
+        await Promise.all(
+            node.getAnimations().map((animation) => animation.finished.catch(() => {})),
+        );
+        await new Promise(requestAnimationFrame);
+        document.removeEventListener('focusin', record);
+        return targets;
+    });
+    expect(interruptedFocus).not.toContain('report-title');
+    await expect(page.getByLabel('问题', { exact: true })).toBeFocused();
+    expect(state.calls.filter((call) => call.method !== 'GET')).toEqual([]);
+    expect(state.unexpected).toEqual([]);
+});
+
 test('成果面板使用220毫秒过渡并尊重减少动态效果设置', async ({ page }) => {
     await formatSamples(page);
     await page.emulateMedia({ reducedMotion: 'no-preference' });
     await page.goto(reportPath);
+    await readOnMobile(page);
     const panel = page.locator('.report-artifact-panel');
     await expect(panel).toBeVisible();
     const durations = await page.evaluate(async () => {
@@ -963,22 +1093,33 @@ test('成果面板使用220毫秒过渡并尊重减少动态效果设置', async
     expect(await panel.evaluate((element) => element.getAnimations().length)).toBe(0);
 });
 
-test('同一页面的多句话共用集中来源引用，正文链接可展开并定位原文', async ({ page }) => {
+test('同一页面的多句话共用文末来源，结论依据可展开并定位原文', async ({ page }) => {
     const saved = questionReport();
     const state = await formatSamples(page, saved);
     await page.goto(reportPath);
+    await readOnMobile(page);
     const answer = page.locator('.answers #question-q0');
     await expect(answer.locator('.claim')).toHaveCount(2);
     const group = page.locator('.evidence-appendix .evidence-source-group').first();
     await expect(group).toHaveCount(1);
-    await expect(group.locator('blockquote')).toHaveCount(1);
-    await expect(group.locator('blockquote')).toBeHidden();
-    const links = answer.locator('.citation');
+    await expect(group.locator('blockquote')).toHaveText(
+        saved.evidence.map((entry) => entry.quote),
+    );
+    const quote = group.locator(`#evidence-${saved.evidence[0]!.id}`);
+    await expect(quote).toBeHidden();
+    await expect(answer.locator('a[href^="#evidence-"],.citation')).toHaveCount(0);
+    const provenance = page.locator('.evidence-appendix .claim-provenance');
+    await provenance.locator(':scope > summary').press('Enter');
+    const links = provenance.locator(
+        ['#claim-support-' + saved.claims[0]!.id, '#claim-support-' + saved.claims[1]!.id]
+            .map((selector) => `${selector} a[href^="#evidence-"]`)
+            .join(','),
+    );
     await expect(links).toHaveCount(2);
     await links.last().click();
-    await expect(group.locator('blockquote')).toBeVisible();
-    await expect(group.locator('.source-quote')).toBeFocused();
-    await expect(group.locator('blockquote')).toHaveText(saved.evidence[0]!.quote);
+    await expect(quote.locator('blockquote')).toBeVisible();
+    await expect(quote).toBeFocused();
+    await expect(quote.locator('blockquote')).toHaveText(saved.evidence[0]!.quote);
     expect(state.calls.filter((call) => call.method !== 'GET')).toEqual([]);
     expect(state.unexpected).toEqual([]);
 });
@@ -1065,33 +1206,52 @@ for (const width of [320, 1440]) {
         const state = await formatSamples(page, saved);
         await page.setViewportSize({ width, height: 1000 });
         await page.goto(reportPath);
+        await readOnMobile(page);
         for (const format of ['list', 'comparison'] as const) {
             await generatedFormat(page, format).click();
+            await expect(page.locator('.report-delivery')).toContainText('部分交付');
+            await page.locator('.report-delivery a').click();
             await expect(page.locator('.answer-gaps')).toContainText('对象乙 · 用途');
-            await expect(page.locator('.report-delivery')).toContainText('部分内容待补充');
             await expect(page.locator('.structured-content')).toContainText('尚未取得对象乙用途');
-            await expect(page.locator('.structured-content .scova-warning').first()).toBeVisible();
-            await expect(page.locator('.structured-condition').first()).toBeVisible();
-            await expect(page.locator('.structured-condition').first()).toContainText(
+            const tableMode =
+                format === 'comparison' || (await page.locator('.list-table').isVisible());
+            const details = page.locator(tableMode ? '.structured-notes' : '.list-cards');
+            await expect(details).toBeVisible();
+            await expect(details).toContainText('尚未取得对象乙用途');
+            await expect(details).toContainText(
                 '直接对 reactive 对象调用 watch 会隐式创建 deep watcher',
             );
-            await expect(page.locator('.structured-gap').first()).toHaveText(
-                '补充说明：其它调用方式仍需单独核实',
-            );
+            await expect(details).toContainText('补充说明：其它调用方式仍需单独核实');
             await expect(page.locator('.answer-support')).not.toHaveAttribute('open');
             if (format === 'list')
                 await expect(page.locator('.object-card h4')).toHaveText(['对象甲', '对象乙']);
             else
                 await expect(page.locator('.object-matrix thead th')).toHaveText([
-                    '共同维度',
+                    '维度',
                     '对象甲',
                     '对象乙',
                 ]);
-            const evidenceLink = page.locator('.structured-links a').first();
-            await evidenceLink.click();
-            const claimId = (await evidenceLink.getAttribute('href'))!;
-            await expect(page.locator(claimId)).toBeVisible();
-            const sourceLink = page.locator(`${claimId} .citation`).first();
+            await expect(
+                page.locator(
+                    '.structured-content a:not([href^="#structured-note-"]), .structured-links',
+                ),
+            ).toHaveCount(0);
+            const artifact = saved.coverage.artifacts!.find((entry) => entry.format === format)!;
+            const currentClaim = saved.claims[artifact.claimIndexes[0]!]!;
+            const provenance = page.locator(`.claim-provenance #claim-support-${currentClaim.id}`);
+            if ((await page.locator('.claim-provenance').getAttribute('open')) === null)
+                await page.locator('.claim-provenance > summary').press('Enter');
+            const claimLink = provenance.locator(`a[href="#claim-${currentClaim.id}"]`);
+            await claimLink.click();
+            await expect(page.locator(`#claim-${currentClaim.id}`)).toBeFocused();
+            await expect(page.locator(`#claim-${currentClaim.id} .claim-text`)).toHaveText(
+                currentClaim.text,
+            );
+            const sourceLink = provenance.locator('a[href^="#evidence-"]').first();
+            await expect(sourceLink).toHaveAttribute(
+                'href',
+                `#evidence-${currentClaim.evidenceIds[0]}`,
+            );
             await sourceLink.click();
             const sourceId = (await sourceLink.getAttribute('href'))!;
             await expect(page.locator(sourceId)).toBeFocused();
@@ -1124,6 +1284,27 @@ for (const width of [320, 1440]) {
 async function assertFormatContent(page: Page, expected: Report) {
     const frame = page.locator('.report-frame');
     await expect(frame).toHaveCount(1);
+    await expect(page.locator('.report-document .evidence-appendix')).toHaveCount(0);
+    await expect(page.locator('.evidence-appendix')).toHaveCount(1);
+    await expect(frame.locator('.claim a,.claim details')).toHaveCount(0);
+    await expect(page.locator('.report-baseline .evidence-link')).toHaveCount(0);
+    expect(
+        await page
+            .locator('a[href^="#evidence-"]')
+            .evaluateAll((links) => links.every((link) => !!link.closest('.evidence-appendix'))),
+    ).toBe(true);
+    expect(
+        await page
+            .locator('.evidence-appendix')
+            .evaluate(
+                (appendix) =>
+                    !!(
+                        document
+                            .querySelector('.report-baseline')!
+                            .compareDocumentPosition(appendix) & Node.DOCUMENT_POSITION_FOLLOWING
+                    ),
+            ),
+    ).toBe(true);
     await expect(frame.locator('#report-title')).toHaveText(expected.title);
     await expect(frame.locator('.metadata')).toContainText(expected.taskVersionId);
     await expect(frame.locator('.metadata time')).toHaveAttribute('datetime', expected.publishedAt);
@@ -1132,25 +1313,30 @@ async function assertFormatContent(page: Page, expected: Report) {
     );
     expect(
         await frame.locator('.claim').evaluateAll((elements) =>
-            elements.map((element) => ({
-                id: element.id.slice('claim-'.length),
-                text: element.querySelector('.claim-text')!.textContent,
-                confidence: element.querySelector('.confidence')!.textContent,
-                evidenceIds: [...element.querySelectorAll('.citation')].map(
-                    (entry) => entry.id.split('-evidence-')[1],
-                ),
-            })),
+            elements.map((element) => {
+                const attribution = document
+                    .querySelector(`.claim-provenance a[href="#${element.id}"]`)!
+                    .closest('li')!;
+                return {
+                    id: element.id.slice('claim-'.length),
+                    text: element.querySelector('.claim-text')!.textContent,
+                    confidence: attribution.querySelector('p')!.textContent,
+                    evidenceIds: [...attribution.querySelectorAll('a[href^="#evidence-"]')].map(
+                        (entry) => entry.id.split('-evidence-')[1],
+                    ),
+                };
+            }),
         ),
     ).toEqual(
         orderedClaims.map((entry) => ({
             id: entry.id,
             text: entry.text,
-            confidence: `证据说明：${entry.confidenceLabel}`,
+            confidence: `${{ fact: '来源事实', inference: 'Agent 推断', conflict: '冲突证据', insufficient: '证据不足', model_answer: '模型自回答' }[entry.kind]} · ${entry.confidenceLabel}`,
             evidenceIds: entry.evidenceIds,
         })),
     );
     expect(
-        await frame.locator('.evidence-entry').evaluateAll((elements) =>
+        await page.locator('.evidence-appendix .evidence-entry').evaluateAll((elements) =>
             elements.map((element) => ({
                 id: element.id.slice('evidence-'.length),
                 quote: element.querySelector('blockquote')!.textContent,
@@ -1170,7 +1356,8 @@ async function assertFormatContent(page: Page, expected: Report) {
                 entry[`${side}Value`] ?? `未提供${side === 'old' ? '旧' : '新'}值`,
             );
             expect(
-                await section
+                await page
+                    .locator(`.change-provenance [data-change-id="${entry.id}"] .${side}-side`)
                     .locator('.evidence-link')
                     .evaluateAll((links) => links.map((link) => link.getAttribute('href'))),
             ).toEqual(entry[`${side}EvidenceIds`].map((evidenceId) => `#evidence-${evidenceId}`));
@@ -1209,7 +1396,7 @@ for (const [savedFormat, renderer] of formats) {
         await assertFormatContent(page, saved);
         const navigation = page.getByRole('navigation', { name: '报告内容导航', exact: true });
         for (const [label, target] of [
-            ['正文', 'summary-title'],
+            ['正文', 'report-title'],
             ['变化', 'report-changes-title'],
             ['来源', 'saved-evidence-title'],
         ]) {
@@ -1231,6 +1418,7 @@ for (const [savedFormat, renderer] of formats) {
 test('生产四视图：格式切换保留未提交问题和同页笔记编辑器，换报告重置', async ({ page }) => {
     const state = await formatSamples(page, multiFormatReport());
     await page.goto(reportPath);
+    await readOnMobile(page);
     const selector = page.getByRole('navigation', { name: '已生成成果', exact: true });
     await expect(selector).toBeVisible();
     await page.getByLabel('问题', { exact: true }).fill('保留的未提交问题');
@@ -1285,6 +1473,7 @@ for (const width of [320, 360, 390, 768, 1024, 1440]) {
         const state = await formatSamples(page, multiFormatReport());
         await page.setViewportSize({ width, height: 1000 });
         await page.goto(reportPath);
+        await readOnMobile(page);
         for (const enlarged of [false, true]) {
             await page.evaluate(
                 (value) => (document.documentElement.style.fontSize = value ? '200%' : ''),

@@ -3,14 +3,19 @@
         id="report-artifact"
         ref="panel"
         class="report-content report-artifact-panel"
-        :class="{ 'report-artifact-panel--reading': reading }"
+        :class="[
+            `report-artifact-panel--${activeFormat}`,
+            { 'report-artifact-panel--reading': reading },
+        ]"
         aria-label="报告交付物"
+        :role="reading ? 'dialog' : undefined"
+        :aria-modal="reading ? true : undefined"
         @keydown="onKeydown"
         @click="revealCitation"
     >
         <header class="deliverable-heading scova-interface">
             <div>
-                <h2><app-icon name="report" />{{ reading ? '完整阅读' : '成果预览' }}</h2>
+                <p class="artifact-name">{{ report?.title ?? '成果' }}</p>
                 <p v-if="report">
                     <span class="artifact-kind">{{ formatLabels[activeFormat] }}</span
                     ><time :datetime="report.publishedAt">{{ savedDate }}</time>
@@ -18,10 +23,10 @@
             </div>
             <div v-if="report" class="artifact-actions">
                 <n-button v-if="reading" @click="emit('conversation')">
-                    <app-icon name="back" />返回研究对话
+                    <app-icon name="back" />返回对话
                 </n-button>
                 <template v-else>
-                    <n-button quaternary @click="emit('read')">
+                    <n-button quaternary v-bind="readButtonAccessibility" @click="emit('read')">
                         完整阅读<app-icon name="source" />
                     </n-button>
                     <button
@@ -36,6 +41,7 @@
             </div>
         </header>
         <div class="artifact-scroll">
+            <slot name="toolbar" />
             <div v-if="report" class="report-presentation scova-interface">
                 <nav v-if="formats.length > 1" class="artifact-formats" aria-label="已生成成果">
                     <button
@@ -62,13 +68,14 @@
                     </n-button>
                 </nav>
             </div>
-            <div v-if="report && projected" class="report-document">
+            <div v-if="report && projected" class="artifact-document">
                 <keep-alive>
                     <component
                         :is="renderer"
                         :key="`${report.id}-${activeFormat}`"
                         :report="projected"
                         :show-changes="false"
+                        :show-sources="false"
                     />
                 </keep-alive>
             </div>
@@ -82,11 +89,13 @@
             <section v-if="report" class="report-baseline" aria-label="历史变化与比较基线">
                 <report-changes :report="report" />
             </section>
+            <report-sources v-if="appendixReport" :report="appendixReport" />
         </div>
     </section>
 </template>
 
 <script setup lang="ts">
+const readButtonAccessibility = { 'aria-expanded': 'false' };
 import { computed, ref } from 'vue';
 import { NButton } from 'naive-ui';
 import type { Report } from '@scova/models';
@@ -98,6 +107,7 @@ import TopicListReport from '@/components/reports/TopicListReport.vue';
 import ComparisonReport from '@/components/reports/ComparisonReport.vue';
 import ResearchReport from '@/components/reports/ResearchReport.vue';
 import ReportChanges from '@/components/reports/ReportChanges.vue';
+import ReportSources from '@/components/reports/ReportSources.vue';
 import { artifactReport, savedArtifactFormats } from '@/utils/report-artifacts';
 
 const props = defineProps<{
@@ -136,6 +146,17 @@ const activeFormat = computed(() =>
 const projected = computed(() =>
     props.report ? artifactReport(props.report, activeFormat.value) : undefined,
 );
+const appendixReport = computed(() => {
+    if (!props.report || !projected.value) return undefined;
+    const ids = new Set(projected.value.evidence.map((entry) => entry.id));
+    for (const change of props.report.changes)
+        for (const id of [...change.oldEvidenceIds, ...change.newEvidenceIds]) ids.add(id);
+    return {
+        ...projected.value,
+        changes: props.report.changes,
+        evidence: props.report.evidence.filter((entry) => ids.has(entry.id)),
+    };
+});
 const renderer = computed(() => renderers[activeFormat.value]);
 const savedDate = computed(() =>
     props.report
@@ -148,7 +169,7 @@ const savedDate = computed(() =>
         : '',
 );
 const sections: { id: string; label: string; icon: IconName }[] = [
-    { id: 'summary-title', label: '正文', icon: 'report' },
+    { id: 'report-title', label: '正文', icon: 'report' },
     { id: 'report-changes-title', label: '变化', icon: 'retry' },
     { id: 'saved-evidence-title', label: '来源', icon: 'source' },
 ];
@@ -174,20 +195,47 @@ function revealCitation(event: MouseEvent) {
         if (parent instanceof HTMLDetailsElement) parent.open = true;
         parent = parent.parentElement;
     }
+    target.tabIndex = -1;
     target.focus({ preventScroll: true });
     target.scrollIntoView({ block: 'nearest' });
 }
 function onKeydown(event: KeyboardEvent) {
+    if (props.reading && event.key === 'Tab' && !event.defaultPrevented) {
+        const controls = [
+            ...(panel.value?.querySelectorAll<HTMLElement>(
+                'a[href], button, input, textarea, select, summary, [tabindex="0"]',
+            ) ?? []),
+        ].filter(
+            (element) =>
+                element.getClientRects().length &&
+                !element.matches(':disabled') &&
+                !element.closest('details:not([open]) :not(summary)'),
+        );
+        const first = controls[0],
+            last = controls.at(-1);
+        if (
+            first &&
+            last &&
+            (event.shiftKey ? document.activeElement === first : document.activeElement === last)
+        ) {
+            event.preventDefault();
+            (event.shiftKey ? last : first).focus();
+        }
+        return;
+    }
     if (
         event.key !== 'Escape' ||
         event.defaultPrevented ||
         event.isComposing ||
         (event.target instanceof Element &&
-            event.target.closest('input, textarea, select, dialog, [role="dialog"]'))
+            (event.target.closest('input, textarea, select') ||
+                (event.target.closest('dialog, [role="dialog"]') &&
+                    event.target.closest('dialog, [role="dialog"]') !== panel.value)))
     )
         return;
     event.preventDefault();
-    emit('close');
+    if (props.reading) emit('conversation');
+    else emit('close');
 }
 </script>
 
@@ -201,17 +249,26 @@ function onKeydown(event: KeyboardEvent) {
         break-anywhere [overflow:clip] [align-self:start] p-0;
 }
 .report-artifact-panel--reading {
-    @apply w-full max-w-[68rem] justify-self-center [box-shadow:none];
+    @apply w-full justify-self-center [box-shadow:none] max-h-[calc(100dvh_-_6rem)];
+}
+.report-artifact-panel--reading .artifact-scroll {
+    @apply [overflow-y:auto] [overscroll-behavior-block:contain];
+}
+.artifact-document {
+    @apply w-full max-w-[64rem] mx-auto [box-sizing:border-box];
+}
+.report-artifact-panel--comparison .artifact-document {
+    @apply max-w-full;
+}
+.report-artifact-panel--list .artifact-document {
+    @apply max-w-[88rem];
 }
 .artifact-scroll {
     @apply layout-grid [align-content:start] gap-6 min-h-0 [scrollbar-gutter:stable]
         [scroll-behavior:smooth] p-4;
 }
-.report-document {
-    @apply bg-surface [border:0.0625rem_solid_color-mix(in_srgb,_var(--scova-border)_24%,_transparent)]
-        rounded-3.5
-        [box-shadow:0_0.125rem_0.75rem_color-mix(in_srgb,_var(--scova-text)_3%,_transparent)]
-        p-[clamp(1rem,_3vw,_2.5rem)];
+.artifact-document {
+    @apply p-[clamp(0.5rem,_2vw,_1.5rem)];
 }
 .deliverable-heading,
 .artifact-actions,
@@ -224,10 +281,10 @@ function onKeydown(event: KeyboardEvent) {
         [border-bottom:0.0625rem_solid_color-mix(in_srgb,_var(--scova-border)_28%,_transparent)]
         bg-surface;
 }
-.deliverable-heading h2 {
-    @apply flex items-center gap-2 text-[1rem] font-semibold m-0;
+.deliverable-heading .artifact-name {
+    @apply text-[1rem] font-semibold m-0 [text-wrap:balance];
 }
-.deliverable-heading p {
+.deliverable-heading p:not(.artifact-name) {
     @apply flex flex-wrap items-center gap-2.5 mt-1.5 mr-0 mb-0 ml-0 text-[0.875rem] leading-[1.6]
         text-muted;
 }
@@ -276,7 +333,7 @@ function onKeydown(event: KeyboardEvent) {
 .report-sections {
     @apply [flex-basis:100%];
 }
-.report-document,
+.artifact-document,
 .report-baseline {
     @apply min-w-0;
 }
@@ -303,7 +360,7 @@ function onKeydown(event: KeyboardEvent) {
     .deliverable-heading {
         @apply p-3.5;
     }
-    .report-document {
+    .artifact-document {
         @apply pt-4 pr-1 pb-4 pl-1;
     }
     .report-sections :deep(.n-button) {

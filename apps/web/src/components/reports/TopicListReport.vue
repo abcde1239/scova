@@ -1,7 +1,11 @@
 <template>
-    <report-frame :report="report" format="list" class="report-topic-list">
+    <report-frame
+        :report="report"
+        :show-sources="showSources"
+        format="list"
+        class="report-topic-list"
+    >
         <template #format-notice><report-format-banner format="list" :report="report" /></template>
-        <report-changes v-if="showChanges" :report="report" />
         <section
             v-for="section in sections"
             :key="section.kind"
@@ -20,7 +24,10 @@
                 >
             </header>
             <ul
-                class="topic-items layout-stack grid-cols-[repeat(auto-fit,_minmax(min(100%,_20rem),_1fr))] list-none m-0 p-0"
+                class="topic-items layout-stack list-none m-0 p-0"
+                :style="{
+                    gridTemplateColumns: `repeat(auto-fit, minmax(min(100%, ${reportCardWidth(section.claims.map((claim) => claim.text))}rem), 1fr))`,
+                }"
                 role="list"
             >
                 <li
@@ -37,6 +44,7 @@
                 </li>
             </ul>
         </section>
+        <report-changes v-if="showChanges" :report="report" />
     </report-frame>
 </template>
 
@@ -48,8 +56,13 @@ import ReportClaim from '@/components/reports/ReportClaim.vue';
 import ReportChanges from '@/components/reports/ReportChanges.vue';
 import ReportFormatBanner from '@/components/reports/ReportFormatBanner.vue';
 import { reportSections } from '@/composables/useReport';
-const props = withDefaults(defineProps<{ report: Report; showChanges?: boolean }>(), {
-    showChanges: true,
-});
+import { reportCardWidth } from '@/utils/report-layout';
+const props = withDefaults(
+    defineProps<{ report: Report; showChanges?: boolean; showSources?: boolean }>(),
+    {
+        showChanges: true,
+        showSources: true,
+    },
+);
 const sections = computed(() => reportSections(props.report));
 </script>

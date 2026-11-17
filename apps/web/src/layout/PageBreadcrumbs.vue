@@ -14,7 +14,7 @@
             >
                 <app-icon v-if="index" name="chevron" />
                 <router-link
-                    class="[.breadcrumbs_&:is(a)]:(inline-flex items-center min-h-11 text-primary underline-offset-[0.2em]) [.breadcrumbs_&:is(a):focus-visible]:([outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.125rem])"
+                    class="[.breadcrumbs_&:is(a)]:(inline-flex items-center min-h-11 scova-link) [.breadcrumbs_&:is(a):focus-visible]:([outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.125rem])"
                     v-if="item.to"
                     :to="item.to"
                     >{{ item.label }}</router-link
@@ -41,7 +41,14 @@ const sections: Record<string, { label: string; to: string }> = {
 const items = computed(() => {
     const parent = sections[String(route.meta.section)];
     const result: { label: string; to?: string }[] = [];
-    if (parent && route.path !== parent.to) result.push(parent);
+    if (parent && route.path !== parent.to) {
+        const status = route.meta.section === 'tasks' ? route.query.status : undefined;
+        result.push(
+            typeof status === 'string'
+                ? { ...parent, to: `${parent.to}?status=${encodeURIComponent(status)}` }
+                : parent,
+        );
+    }
     if (route.name === 'task-edit' && typeof route.params.taskId === 'string')
         result.push({ label: '任务摘要', to: `/tasks/${route.params.taskId}` });
     result.push({ label: route.meta.title ?? '页面' });

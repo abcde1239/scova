@@ -1,7 +1,7 @@
 <template>
     <section
         ref="panel"
-        class="notes-panel layout-grid gap-6 break-anywhere w-[min(100%,_45rem)] keyboard-focus-wide"
+        class="notes-panel layout-grid gap-6 break-anywhere w-full min-w-0 keyboard-focus-wide"
         :style="reading.variables"
         :aria-labelledby="`${id}-title`"
         tabindex="-1"
@@ -72,13 +72,12 @@
             <p v-if="query.isError.value && items.length" class="scova-interface m-0">
                 以下保留上次读取值，请重新读取以确认。
             </p>
-            <p
+            <state-panel
                 v-if="query.isSuccess.value && !items.length"
-                class="scova-interface empty-copy m-0"
-                role="status"
-            >
-                暂无笔记
-            </p>
+                state="empty"
+                icon="edit"
+                message="暂无笔记"
+            />
             <ul class="notes-list list-none min-w-0 m-0 p-0">
                 <li
                     v-for="note in items"
@@ -119,7 +118,7 @@
                             >编辑笔记</action-button
                         >
                         <router-link
-                            class="inline-flex items-center min-h-11 text-primary cursor-pointer underline-offset-[0.2em] keyboard-focus-wide"
+                            class="inline-flex items-center min-h-11 scova-link cursor-pointer keyboard-focus-wide"
                             v-if="note.target.kind === 'report'"
                             :to="`/reports/${note.target.id}`"
                             >打开关联报告</router-link
@@ -152,6 +151,7 @@
 
 <script setup lang="ts">
 import AppIcon from '@/components/common/AppIcon.vue';
+import StatePanel from '@/components/common/StatePanel.vue';
 import { computed, nextTick, onMounted, onUnmounted, ref, useId, watch } from 'vue';
 import { RouterLink, onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router';
 import type { LibraryTarget } from '@scova/models';

@@ -74,15 +74,6 @@
                 <app-icon name="warning" />{{ registration.fields.value.defaultTimezone }}
             </p>
         </div>
-        <p
-            v-if="registration.message.value"
-            ref="alert"
-            role="alert"
-            tabindex="-1"
-            class="form-error break-anywhere rounded-3 text-danger [background:color-mix(in_srgb,_var(--scova-danger)_7%,_var(--scova-surface))] text-[0.875rem] m-0 py-3 px-3.5 keyboard-focus-wide"
-        >
-            {{ registration.message.value }}
-        </p>
         <action-button
             type="primary"
             attr-type="submit"
@@ -95,7 +86,7 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, onUnmounted, reactive, ref, useId } from 'vue';
+import { nextTick, onUnmounted, reactive, useId } from 'vue';
 import { NInput } from 'naive-ui';
 import type { RegisterInput } from '@scova/models';
 import ActionButton from '@/components/common/ActionButton.vue';
@@ -105,9 +96,11 @@ import AppSelect from '@/components/common/AppSelect.vue';
 import { timezoneOptions } from '@/utils/timezones';
 import { createRegisterController } from '@/composables/useRegister';
 import { useSessionLifecycle } from '@/composables/useSessionQuery';
+import { useActionNotification } from '@/composables/useActionNotification';
 const emit = defineEmits<{ success: [] }>();
 const id = useId();
 const registration = createRegisterController(useSessionLifecycle());
+useActionNotification().watch(registration.message, 'error');
 const input = reactive<RegisterInput>({
     email: '',
     password: '',
@@ -118,7 +111,6 @@ const fieldList = [
     { key: 'password', label: '密码' },
 ] as const;
 const timezones = timezoneOptions(input.defaultTimezone);
-const alert = ref<HTMLParagraphElement>();
 async function submit() {
     const outcome = await registration.submit({ ...input });
     if (outcome === 'success') {
@@ -128,7 +120,6 @@ async function submit() {
         await nextTick();
         const field = registration.firstField.value;
         if (field) document.getElementById(`${id}-${field}`)?.focus();
-        else alert.value?.focus();
     }
 }
 onUnmounted(() => {

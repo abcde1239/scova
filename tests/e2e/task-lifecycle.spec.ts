@@ -134,7 +134,7 @@ const pause = (page: Page) => button(page, '暂停未来计划');
 const resume = (page: Page) => button(page, '恢复未来计划');
 const archive = (page: Page) => button(page, '归档任务');
 const refresh = (page: Page) => button(page, '刷新任务状态');
-const feedback = (page: Page) => section(page).getByRole('status');
+const feedback = (page: Page) => page.locator('.scova-notifications .n-notification').last();
 const confirmation = (page: Page) => page.getByRole('dialog', { name: '归档任务？' });
 const posts = (calls: Awaited<ReturnType<typeof samples>>['calls']) =>
     calls.filter((call) => call.method === 'POST');
@@ -192,7 +192,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         await pause(page).press('Enter');
         await expect(resume(page)).toBeEnabled();
         await expect(feedback(page)).toContainText('在途执行继续');
-        await expect(feedback(page)).toBeFocused();
+        await expect(feedback(page)).not.toBeFocused();
         await expect(section(page)).toContainText('当前状态：已暂停');
         await expect(section(page).locator('time')).toHaveCount(0);
         if (width === 320 || width === 1440) {
@@ -274,7 +274,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         await confirm.press('Enter');
         await expect(section(page)).toContainText('当前状态：已归档');
         await expect(feedback(page)).toContainText('活动执行已请求取消');
-        await expect(feedback(page)).toBeFocused();
+        await expect(feedback(page)).not.toBeFocused();
         await expect(pause(page)).toHaveCount(0);
         await expect(resume(page)).toHaveCount(0);
         await expect(archive(page)).toHaveCount(0);
@@ -319,7 +319,7 @@ for (const status of [409, 428, 503, 0]) {
         await expect(feedback(page)).toContainText(
             status === 409 || status === 428 ? String(status) : '尚不能确认操作结果',
         );
-        await expect(feedback(page)).toBeFocused();
+        await expect(feedback(page)).not.toBeFocused();
         await expect(section(page)).toContainText('当前状态：已启用');
         await expect(pause(page)).toBeDisabled();
         await expect(archive(page)).toBeDisabled();
@@ -344,7 +344,7 @@ for (const status of [409, 428, 503, 0]) {
         await expect(pause(page)).toBeEnabled();
         expect(reads(calls).length).toBeGreaterThan(before);
         await expect(feedback(page)).toContainText('已重新读取任务状态');
-        await expect(feedback(page)).toBeFocused();
+        await expect(feedback(page)).not.toBeFocused();
         expect(posts(calls)).toHaveLength(1);
         await pause(page).click();
         await expect(resume(page)).toBeEnabled();
@@ -418,7 +418,7 @@ test('写成功后重读暂时失败保留上下文并锁定，显式刷新取�
     state.failReadAfterWrite = true;
     await pause(page).click();
     await expect(feedback(page)).toContainText('操作保持锁定');
-    await expect(feedback(page)).toBeFocused();
+    await expect(feedback(page)).not.toBeFocused();
     await expect(
         page.getByText('任务摘要刷新失败，当前显示上次读取的内容', { exact: false }),
     ).toBeVisible();

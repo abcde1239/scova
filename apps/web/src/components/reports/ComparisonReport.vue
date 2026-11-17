@@ -1,8 +1,14 @@
 <template>
-    <report-frame :report="report" format="comparison" class="report-comparison">
+    <report-frame
+        :report="report"
+        :show-sources="showSources"
+        format="comparison"
+        class="report-comparison"
+    >
         <template #format-notice
             ><report-format-banner format="comparison" :report="report"
         /></template>
+        <report-findings-table v-if="!report.coverage.reportValue" :report="report" />
         <section
             v-if="showChanges"
             class="comparison-section scova-interface report-grid"
@@ -26,7 +32,7 @@
             <p class="m-0" v-if="!model.groups.length">本报告没有提供逐项变化记录。</p>
             <template v-else>
                 <p class="m-0" v-if="overflowing" id="comparison-scroll-hint">
-                    对比表可左右滚动；聚焦表格区域后可使用左右方向键，Tab 键可进入双方引用。
+                    对比表可左右滚动；聚焦表格区域后可使用左右方向键。
                 </p>
                 <div
                     ref="scrollArea"
@@ -113,17 +119,6 @@
                                         >
                                             旧值缺少可核对引用，这项比较仍待核验。
                                         </p>
-                                        <div
-                                            v-for="evidence in entry.oldEvidence"
-                                            :id="`comparison-${entry.record.id}-old-${evidence.id}`"
-                                            :key="evidence.id"
-                                            class="table-citation min-w-0 [&.table-citation_*]:[font-family:var(--scova-font-interface)] [&.table-citation_summary]:(min-h-11 box-border pl-3 pr-3) [&.table-citation_a]:(min-h-11 box-border) [&.table-citation_.evidence-body]:(pl-3 pr-3) [&.table-citation_blockquote]:(pl-3 pr-3)"
-                                        >
-                                            <evidence-link :evidence="evidence" />
-                                        </div>
-                                        <p class="m-0" v-if="!entry.oldEvidence.length">
-                                            未提供旧侧引用。
-                                        </p>
                                     </div>
                                 </td>
                                 <td
@@ -133,17 +128,6 @@
                                         <p class="original-text whitespace-pre-wrap m-0">
                                             {{ entry.record.newValue ?? '未提供新值' }}
                                         </p>
-                                        <div
-                                            v-for="evidence in entry.newEvidence"
-                                            :id="`comparison-${entry.record.id}-new-${evidence.id}`"
-                                            :key="evidence.id"
-                                            class="table-citation min-w-0 [&.table-citation_*]:[font-family:var(--scova-font-interface)] [&.table-citation_summary]:(min-h-11 box-border pl-3 pr-3) [&.table-citation_a]:(min-h-11 box-border) [&.table-citation_.evidence-body]:(pl-3 pr-3) [&.table-citation_blockquote]:(pl-3 pr-3)"
-                                        >
-                                            <evidence-link :evidence="evidence" />
-                                        </div>
-                                        <p class="m-0" v-if="!entry.newEvidence.length">
-                                            未提供本次观测引用。
-                                        </p>
                                     </div>
                                 </td>
                             </tr>
@@ -152,7 +136,6 @@
                 </div>
             </template>
         </section>
-        <report-findings-table v-if="!report.coverage.reportValue" :report="report" />
     </report-frame>
 </template>
 
@@ -162,11 +145,14 @@ import type { Report } from '@scova/models';
 import ReportFrame from '@/components/reports/ReportFrame.vue';
 import ReportFindingsTable from '@/components/reports/ReportFindingsTable.vue';
 import ReportFormatBanner from '@/components/reports/ReportFormatBanner.vue';
-import EvidenceLink from '@/components/reports/EvidenceLink.vue';
 import { reportComparison } from '@/utils/report-comparison';
-const props = withDefaults(defineProps<{ report: Report; showChanges?: boolean }>(), {
-    showChanges: true,
-});
+const props = withDefaults(
+    defineProps<{ report: Report; showChanges?: boolean; showSources?: boolean }>(),
+    {
+        showChanges: true,
+        showSources: true,
+    },
+);
 const model = computed(() => reportComparison(props.report));
 const scrollArea = ref<HTMLElement>();
 const table = ref<HTMLTableElement>();

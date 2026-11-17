@@ -16,6 +16,14 @@ export default defineConfig({
         },
     },
     shortcuts: {
+        'report-select':
+            'font-inherit w-full min-w-0 max-w-full min-h-11 border-theme rounded-2 bg-surface text-default cursor-pointer p-2.5 keyboard-focus-wide disabled:cursor-not-allowed',
+        'report-open-button':
+            'font-inherit border-theme rounded-2 min-h-11 bg-surface text-primary px-3 cursor-pointer keyboard-focus-wide',
+        'source-disclosure-control':
+            'cursor-pointer rounded-2 keyboard-focus-inset motion-safe:transition-colors [&:hover:not(:active)]:([background:color-mix(in_srgb,_var(--scova-selected)_60%,_transparent)] text-primary) [&:focus-visible:not(:active)]:([background:color-mix(in_srgb,_var(--scova-selected)_60%,_transparent)] text-primary) active:([background:var(--scova-selected)] text-primary [box-shadow:inset_0_0_0_0.0625rem_color-mix(in_srgb,_var(--scova-primary)_35%,_transparent)])',
+        'source-inline-action':
+            'active:(text-primary underline underline-offset-[0.2em]) motion-safe:transition-colors',
         'report-directory-link': '[flex:1_1_0] min-w-0 max-w-full break-anywhere',
         'danger-action':
             '[&&]:text-danger [&.danger_.n-button\\_\\_content]:text-danger [&.danger_.n-button\\_\\_border]:[border-color:var(--scova-danger)] [&.danger_.n-button\\_\\_state-border]:[border-color:var(--scova-danger)]',
@@ -26,7 +34,18 @@ export default defineConfig({
         'page-container': 'mx-auto w-full max-w-5xl px-6 py-12',
         'theme-surface': 'bg-surface text-default',
         'theme-selected': '[background:var(--scova-selected)] text-primary',
-        'theme-reference': 'text-primary underline underline-offset-[0.2em]',
+        'internal-link':
+            'no-underline rounded-1 [color:color-mix(in_srgb,_var(--scova-primary)_72%,_var(--scova-text))] hover:[color:var(--scova-primary)] keyboard-focus motion-safe:transition-colors',
+        'scova-link': 'internal-link',
+        'external-link':
+            'no-underline rounded-1 text-default hover:text-primary keyboard-focus motion-safe:transition-colors inline-flex items-center gap-1.5 w-fit max-w-full justify-self-start min-h-11 break-anywhere',
+        'navigation-link':
+            'internal-link inline-flex items-center gap-1.5 w-fit max-w-full justify-self-start min-h-11 break-anywhere font-medium',
+        'title-link':
+            'no-underline rounded-1 text-default hover:text-primary keyboard-focus motion-safe:transition-colors',
+        'reference-link':
+            'internal-link inline-flex items-center min-h-11 w-fit max-w-full justify-self-start gap-1.5',
+        'theme-reference': 'scova-link',
         'theme-partial': '[color:var(--scova-partial)]',
         'theme-failure': 'text-danger',
         'text-muted': '[color:var(--scova-muted)]',
@@ -42,6 +61,12 @@ export default defineConfig({
         'font-inherit':
             '[font-family:inherit] [font-size:inherit] [font-weight:inherit] [font-style:inherit] leading-[inherit] [font-variant:inherit]',
         'layout-stack': 'grid gap-4 min-w-0',
+        'segmented-track':
+            'inline-flex flex-wrap gap-1 max-w-full rounded-2.5 p-1 [background:color-mix(in_srgb,_var(--scova-border)_22%,_transparent)]',
+        'segmented-item':
+            'inline-flex items-center justify-center min-h-10 rounded-2 py-1.5 px-3.5 text-muted no-underline cursor-pointer whitespace-nowrap [transition:background-color_150ms,color_150ms,box-shadow_150ms] hover:text-default',
+        'segmented-selected':
+            'bg-surface text-default font-semibold [box-shadow:0_0.0625rem_0.1875rem_color-mix(in_srgb,_var(--scova-text)_14%,_transparent)]',
         'report-grid': 'grid gap-5 min-w-0 break-anywhere',
         'layout-grid': 'grid min-w-0',
         'action-row': 'flex flex-wrap items-center gap-3',
@@ -54,8 +79,7 @@ export default defineConfig({
             'focus-visible:[outline:0.125rem_solid_var(--scova-primary)] focus-visible:[outline-offset:-0.125rem]',
         'scova-surface': '[background:var(--scova-surface)] [color:var(--scova-text)]',
         'scova-selected': '[background:var(--scova-selected)] [color:var(--scova-primary)]',
-        'scova-reference':
-            '[color:var(--scova-primary)] [text-decoration:underline] [text-underline-offset:0.2em]',
+        'scova-reference': 'navigation-link',
         'scova-partial': '[color:var(--scova-partial)]',
         'empty-copy':
             '[margin:0] [padding-block:1.5rem] [color:var(--scova-muted)] [font-size:0.9375rem]',

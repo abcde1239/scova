@@ -7,14 +7,14 @@
         <p v-if="route.name === 'not-found'">此页面不存在。</p>
         <p v-else>{{ route.meta.title }}功能尚未接入。</p>
         <navigation-button
-            class="inline-flex items-center min-h-11 text-primary underline-offset-[0.2em] cursor-pointer keyboard-focus-wide"
+            class="inline-flex items-center min-h-11 scova-link cursor-pointer keyboard-focus-wide"
             v-if="route.name === 'account'"
             to="/account/appearance"
         >
             外观设置
         </navigation-button>
         <navigation-button
-            class="inline-flex items-center min-h-11 text-primary underline-offset-[0.2em] cursor-pointer keyboard-focus-wide"
+            class="inline-flex items-center min-h-11 scova-link cursor-pointer keyboard-focus-wide"
             v-if="route.name === 'not-found'"
             to="/tasks"
             >返回任务</navigation-button

@@ -139,7 +139,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
                 await page.evaluate(() => {
                     document.documentElement.style.fontSize = '200%';
                 });
-            await expect(history.getByText('演示模式 · Demo', { exact: true })).toBeVisible();
+            await expect(history.getByText('演示执行', { exact: true })).toBeVisible();
             await expect(
                 history.getByText(`固定配置版本：${id(211)}`, { exact: true }),
             ).toBeVisible();
@@ -162,7 +162,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
             page.locator('.execution-detail').getByText(id(211), { exact: true }),
         ).toBeVisible();
         await expect(
-            page.locator('.execution-detail').getByText('演示模式 · Demo', { exact: true }),
+            page.locator('.execution-detail').getByText('演示执行', { exact: true }),
         ).toBeVisible();
         await page.goBack();
         await expect(history.locator('.history-entry')).toHaveCount(3);

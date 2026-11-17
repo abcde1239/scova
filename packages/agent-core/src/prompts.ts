@@ -4,6 +4,7 @@ const assets = {
     planning: readFileSync(new URL('./prompts/planning.md', import.meta.url), 'utf8'),
     synthesis: readFileSync(new URL('./prompts/synthesis.md', import.meta.url), 'utf8'),
     assessment: readFileSync(new URL('./prompts/assessment.md', import.meta.url), 'utf8'),
+    gapKind: readFileSync(new URL('./prompts/gap-kind.md', import.meta.url), 'utf8'),
 };
 
 /** Fixed assets load once; substituted task/source text is never interpreted as a template. */
@@ -13,3 +14,4 @@ export function researchPrompt(stage: 'planning' | 'synthesis', input: unknown) 
     return assets[stage].replace('{{input}}', () => json);
 }
 export const assessmentPrompt = assets.assessment;
+export const gapKindPrompt = assets.gapKind;

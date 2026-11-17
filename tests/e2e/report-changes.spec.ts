@@ -206,6 +206,8 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         await expect(panel(page).locator('.comparison-context dd').first()).toHaveText('演示数据');
         await expect(panel(page).locator('.comparison-context dd').last()).toHaveText(id(5));
         await expect(page.locator('.metadata')).toContainText(id(4));
+        await expect(panel(page).locator('.evidence-link')).toHaveCount(0);
+        await page.locator('.change-provenance > summary').press('Enter');
         for (const [n, oldValue, newValue] of [
             [30, '11月1日', '12月1日'],
             [31, '100元', '150元'],
@@ -214,7 +216,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
             await expect(record(page, n).locator('.new-side .change-value')).toHaveText(newValue);
             await expect(record(page, n)).toContainText('重要性标记：重要');
             for (const side of ['old', 'new']) {
-                const section = record(page, n).locator(`.${side}-side`);
+                const section = page.locator(`#change-support-${id(n)} .${side}-side`);
                 const reference = section.locator('.evidence-link');
                 await reference.focus();
                 await reference.press('Enter');
@@ -225,15 +227,10 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
                         ? '截止日期为11月1日，申请费为100元。'
                         : '截止日期为12月1日，申请费为150元。',
                 );
-                await expect(citation.getByRole('link')).toHaveAttribute(
-                    'href',
-                    `https://example.test/${side}`,
-                );
-                await expect(citation.getByRole('link')).toHaveAttribute('target', '_blank');
-                await expect(citation.getByRole('link')).toHaveAttribute(
-                    'rel',
-                    'noopener noreferrer',
-                );
+                const link = page.locator('.evidence-appendix .source-page-link');
+                await expect(link).toHaveAttribute('href', 'https://example.test/admissions');
+                await expect(link).toHaveAttribute('target', '_blank');
+                await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
             }
         }
         expect(
@@ -243,22 +240,32 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
                 .evaluate((element) => getComputedStyle(element).fontFamily),
         ).toContain('Noto Serif SC');
         expect(
-            await record(page)
-                .locator('.evidence-link')
+            await page
+                .locator('.change-provenance .evidence-link')
                 .first()
                 .evaluate((element) => getComputedStyle(element).fontFamily),
         ).toContain('Inter');
+        await expect(page.locator('.evidence-source-group')).toHaveCount(1);
+        await expect(page.locator('.source-page-link')).toHaveCount(1);
+        await expect(page.locator('.source-version')).toHaveCount(2);
         for (const enlarged of [false, true]) {
             if (enlarged)
                 await page.evaluate(() => (document.documentElement.style.fontSize = '200%'));
             await noOverflow(page);
-            const old = (await record(page).locator('.old-side').boundingBox())!;
-            const current = (await record(page).locator('.new-side').boundingBox())!;
-            // The production report keeps the comparison baseline in the right
-            // sidebar and stacks each side vertically, even when the viewport
-            // is wide. This leaves the question/answer area compact while
-            // keeping both citations readable and independently expandable.
-            if (!enlarged) expect(current.y).toBeGreaterThanOrEqual(old.y + old.height - 1);
+            // Read both boxes in one frame: citation navigation may still be smoothly scrolling.
+            const { old, current } = await record(page).evaluate((article) => {
+                const measure = (selector: string) => {
+                    const { x, y, width, height } = article
+                        .querySelector(selector)!
+                        .getBoundingClientRect();
+                    return { x, y, width, height };
+                };
+                return { old: measure('.old-side'), current: measure('.new-side') };
+            });
+            // Compare side by side when there is room; stack without overlap on narrow layouts.
+            if (Math.abs(current.y - old.y) < 1)
+                expect(current.x).toBeGreaterThanOrEqual(old.x + old.width - 1);
+            else expect(current.y).toBeGreaterThanOrEqual(old.y + old.height - 1);
             await panel(page).scrollIntoViewIfNeeded();
             await screenshot(
                 page,
@@ -394,9 +401,11 @@ test('null新值不产生删除撤回断言，长值与普通文本quote安全�
     await page.goto(path);
     await page.evaluate(() => (document.documentElement.style.fontSize = '200%'));
     await expect(record(page).locator('.new-side .change-value')).toHaveText('未提供新值');
-    await expect(record(page).locator('.new-side')).toContainText('未提供本次观测引用');
+    await expect(record(page).locator('.evidence-link')).toHaveCount(0);
     await expect(panel(page)).not.toContainText('资料已撤回。');
-    await record(page).locator('.old-side .evidence-link').press('Enter');
+    await page.locator('.change-provenance > summary').press('Enter');
+    await expect(page.locator('.change-provenance .new-side .evidence-link')).toHaveCount(0);
+    await page.locator('.change-provenance .old-side .evidence-link').press('Enter');
     await expect(page.locator(`#evidence-${state.report.evidence[0]!.id} blockquote`)).toHaveText(
         state.report.evidence[0]!.quote,
     );
@@ -412,7 +421,8 @@ for (const side of ['old', 'new']) {
         await page.setViewportSize({ width: 390, height: 1000 });
         await page.goto(path);
         await expect(panel(page)).toBeVisible();
-        await record(page).locator(`.${side}-side .evidence-link`).click();
+        await page.locator('.change-provenance > summary').press('Enter');
+        await page.locator(`.change-provenance .${side}-side .evidence-link`).first().click();
         await page.getByRole('link', { name: '阅读外观', exact: true }).click();
         await expect(page).toHaveURL(/\/account\/appearance$/);
         state.failure = 409;
@@ -452,8 +462,8 @@ test('live模式与配置、基线标识仍按真实报告展示', async ({ page
     const { state, calls } = await samples(page.context());
     state.report.mode = 'live';
     await page.goto(path);
-    await expect(page.locator('.report-header .mode')).toHaveText('真实查阅报告');
-    await expect(panel(page).locator('.comparison-context dd').first()).toHaveText('真实查阅');
+    await expect(page.locator('.report-header .mode')).toHaveText('简报');
+    await expect(panel(page).locator('.comparison-context dd').first()).toHaveText('任务执行');
     await expect(panel(page).locator('.comparison-context dd').last()).toHaveText(id(5));
     await expect(page.locator('.metadata')).toContainText(id(4));
     expect(calls).toEqual([

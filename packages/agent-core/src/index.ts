@@ -1,4 +1,5 @@
 export * from './types.ts';
+export { searchCheckpointResponse, searchReceiptMatchesOutput } from './search-receipt.ts';
 export { unsupportedReadCandidate } from './read-candidates.ts';
 export {
     comparisonFromExtractions,

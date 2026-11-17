@@ -60,7 +60,7 @@
                     }}
                 </h2>
                 <p class="mode text-primary font-semibold [.execution-overview_&:is(p)]:m-0">
-                    {{ run.mode === 'demo' ? '演示模式 · Demo' : '真实查阅 · Live' }}
+                    {{ run.mode === 'demo' ? '演示执行' : '任务执行' }}
                 </p>
             </div>
             <p class="[.execution-overview_&:is(p)]:m-0">{{ executionStates[run.status][1] }}</p>
@@ -174,6 +174,7 @@
             >
                 <h2 class="text-[1.25rem] leading-[1.5] m-0" id="coverage-title">覆盖与局限</h2>
                 <template v-if="run.coverage">
+                    <research-coverage-summary :metrics="run.coverage.metrics" />
                     <p :class="{ 'scova-partial': run.coverage.completeness === 'partial' }">
                         {{
                             run.coverage.completeness === 'partial'
@@ -324,6 +325,7 @@ import ActionButton from '@/components/common/ActionButton.vue';
 import AppIcon from '@/components/common/AppIcon.vue';
 import RunActions from '@/components/run/RunActions.vue';
 import ExecutionLogs from '@/components/run/ExecutionLogs.vue';
+import ResearchCoverageSummary from '@/components/reports/ResearchCoverageSummary.vue';
 import {
     executionStates,
     executionOutcome,

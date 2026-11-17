@@ -169,6 +169,8 @@ async function samples(context: BrowserContext, initial: Note[] = []) {
             state.switched = true;
             return route.fulfill({ json: account(true) });
         }
+        if (path === `/reports/${id(1)}/conversation`)
+            return route.fulfill({ json: { reportId: id(1), turns: [], hasEarlier: false } });
         if (path === `/reports/${id(1)}`) {
             if (state.switched) return route.fulfill({ status: 404, json: failure() });
             if (state.reportHold) {
@@ -348,7 +350,9 @@ test('HTTP sample: create, edit, explicit delete use actual detail quoted ETags 
         '  原始\t笔记\n<script>window.noteInjected=1</script>\n**Markdown** <img src="https://evil.test/image">  ';
     await newNote(page, body);
     await action(page, '创建笔记').click();
-    await expect(editor(page).getByRole('status').filter({ hasText: '笔记已创建' })).toBeVisible();
+    await expect(
+        page.locator('.scova-notifications .n-notification').filter({ hasText: '笔记已创建' }),
+    ).toBeVisible();
     expect(writes(state, 'POST')).toHaveLength(1);
     expect(JSON.parse(writes(state, 'POST')[0]!.body!)).toEqual({ body, target });
     expect(writes(state)[0]!.key).toMatch(/^[\w-]{16,128}$/);
@@ -363,13 +367,17 @@ test('HTTP sample: create, edit, explicit delete use actual detail quoted ETags 
     await expect(panel(page).locator('script,img,iframe')).toHaveCount(0);
     await draft(page).fill('修改后的正文');
     await action(page, '保存笔记').click();
-    await expect(editor(page).getByRole('status').filter({ hasText: '笔记已保存' })).toBeVisible();
+    await expect(
+        page.locator('.scova-notifications .n-notification').filter({ hasText: '笔记已保存' }),
+    ).toBeVisible();
     expect(writes(state, 'PATCH')[0]!.tag).toBe('"1"');
     expect(JSON.parse(writes(state, 'PATCH')[0]!.body!)).toEqual({ body: '修改后的正文' });
     await confirmClick(page, '删除笔记', false);
     expect(writes(state, 'DELETE')).toHaveLength(0);
     await confirmClick(page, '删除笔记', true);
-    await expect(editor(page).getByRole('status').filter({ hasText: '笔记已删除' })).toBeVisible();
+    await expect(
+        page.locator('.scova-notifications .n-notification').filter({ hasText: '笔记已删除' }),
+    ).toBeVisible();
     expect(writes(state, 'DELETE')[0]!.tag).toBe('"2"');
     expect(await page.locator('.report-brief').textContent()).toBe(brief);
     expect(state.unexpected).toEqual([]);
@@ -390,7 +398,9 @@ test('HTTP sample: two pages conflict preserve the losing draft until explicit r
     await action(page, '保存笔记').click();
     await expect(action(page, '保存笔记')).toBeEnabled();
     await action(other, '保存笔记').click();
-    await expect(editor(other).getByRole('status').filter({ hasText: '修订冲突' })).toBeVisible();
+    await expect(
+        other.locator('.scova-notifications .n-notification').filter({ hasText: '修订冲突' }),
+    ).toBeVisible();
     await expect(draft(other)).toHaveValue('标签页B不应丢失的稿');
     await action(other, '重新读取服务端副本').click();
     await expect(editor(other).locator('.server-copy .note-body')).toHaveText('标签页A的新版本');
@@ -398,7 +408,9 @@ test('HTTP sample: two pages conflict preserve the losing draft until explicit r
     await action(other, '保留本地稿，按此版本整理').click();
     await expect(draft(other)).toHaveValue('标签页B不应丢失的稿');
     await action(other, '保存笔记').click();
-    await expect(editor(other).getByRole('status').filter({ hasText: '笔记已保存' })).toBeVisible();
+    await expect(
+        other.locator('.scova-notifications .n-notification').filter({ hasText: '笔记已保存' }),
+    ).toBeVisible();
     expect(writes(state, 'PATCH').map((req) => req.tag)).toEqual(['"1"', '"1"', '"2"']);
     await draft(page).fill('A仍有本地稿');
     await action(page, '重新读取服务端副本').click();
@@ -437,7 +449,9 @@ test('HTTP sample: unknown create keeps immutable attempt; replay current conten
     expect(writes(state, 'POST')[1]).toEqual(writes(state, 'POST')[0]);
     await action(page, '保留本地稿，按此版本整理').click();
     await action(page, '保存笔记').click();
-    await expect(editor(page).getByRole('status').filter({ hasText: '笔记已保存' })).toBeVisible();
+    await expect(
+        page.locator('.scova-notifications .n-notification').filter({ hasText: '笔记已保存' }),
+    ).toBeVisible();
     expect(writes(state, 'PATCH')[0]!.tag).toBe('"4"');
 });
 
@@ -454,7 +468,7 @@ test('HTTP sample: pending/deleted key cannot silently become a new create', asy
     state.post = 'deleted';
     await action(page, '同键核对并重放创建').click();
     await expect(
-        editor(page).getByRole('status').filter({ hasText: '旧键不能复建' }),
+        page.locator('.scova-notifications .n-notification').filter({ hasText: '旧键不能复建' }),
     ).toBeVisible();
     await expect(action(page, '同键核对并重放创建')).toBeDisabled();
     await confirmClick(page, '结束本次创建尝试', false);
@@ -463,7 +477,9 @@ test('HTTP sample: pending/deleted key cannot silently become a new create', asy
     await expect(draft(page)).toHaveValue('原始本地稿');
     state.post = 'ok';
     await action(page, '创建笔记').click();
-    await expect(editor(page).getByRole('status').filter({ hasText: '笔记已创建' })).toBeVisible();
+    await expect(
+        page.locator('.scova-notifications .n-notification').filter({ hasText: '笔记已创建' }),
+    ).toBeVisible();
     const posts = writes(state, 'POST');
     expect(posts[0]!.key).toBe(posts[1]!.key);
     expect(posts[2]!.key).not.toBe(posts[0]!.key);
@@ -486,7 +502,9 @@ for (const actionName of ['PATCH', 'DELETE'] as const) {
             await confirmClick(page, '删除笔记', true);
         }
         await expect(
-            editor(page).getByRole('status').filter({ hasText: '操作结果尚未确认' }),
+            page
+                .locator('.scova-notifications .n-notification')
+                .filter({ hasText: '操作结果尚未确认' }),
         ).toBeVisible();
         await expect(action(page, '保存笔记')).toBeDisabled();
         await library(page);
@@ -495,7 +513,9 @@ for (const actionName of ['PATCH', 'DELETE'] as const) {
             state.detail = 'error';
             await action(page, '重新读取服务端副本').click();
             await expect(
-                editor(page).getByRole('status').filter({ hasText: '暂时无法读取' }),
+                page
+                    .locator('.scova-notifications .n-notification')
+                    .filter({ hasText: '暂时无法读取' }),
             ).toBeVisible();
             await expect(action(page, '保存笔记')).toBeDisabled();
             state.detail = 'ok';
@@ -506,7 +526,9 @@ for (const actionName of ['PATCH', 'DELETE'] as const) {
         } else {
             await action(page, '重新读取服务端副本').click();
             await expect(
-                editor(page).getByRole('status').filter({ hasText: '不存在或当前账号无法访问' }),
+                page
+                    .locator('.scova-notifications .n-notification')
+                    .filter({ hasText: '不存在或当前账号无法访问' }),
             ).toBeVisible();
             await expect(action(page, '关闭笔记')).toBeVisible();
         }
@@ -527,7 +549,9 @@ for (const revision of ['same', 'skip'] as const) {
         await draft(page).fill('修订必须只增一');
         await action(page, '保存笔记').click();
         await expect(
-            editor(page).getByRole('status').filter({ hasText: '操作结果尚未确认' }),
+            page
+                .locator('.scova-notifications .n-notification')
+                .filter({ hasText: '操作结果尚未确认' }),
         ).toBeVisible();
         await expect(action(page, '保存笔记')).toBeDisabled();
         await expect(draft(page)).toHaveValue('修订必须只增一');
@@ -553,7 +577,9 @@ test('HTTP sample: 429 Retry-After retains raw create attempt without automatic 
     await expect(draft(page)).toHaveValue('限流原稿');
     state.post = 'ok';
     await action(page, '同键核对并重放创建').click();
-    await expect(editor(page).getByRole('status').filter({ hasText: '笔记已创建' })).toBeVisible();
+    await expect(
+        page.locator('.scova-notifications .n-notification').filter({ hasText: '笔记已创建' }),
+    ).toBeVisible();
     expect(writes(state, 'POST')[1]).toEqual(writes(state, 'POST')[0]);
 });
 
@@ -567,7 +593,9 @@ for (const bad of ['no-etag', 'wrong-id', 'wrong-target'] as const) {
         await openReport(page);
         await panel(page).getByRole('button', { name: '编辑笔记', exact: true }).click();
         await expect(
-            editor(page).getByRole('status').filter({ hasText: '数据校验失败' }),
+            page
+                .locator('.scova-notifications .n-notification')
+                .filter({ hasText: '数据校验失败' }),
         ).toBeVisible();
         await expect(action(page, '保存笔记')).toBeDisabled();
         await expect(action(page, '删除笔记')).toBeDisabled();
@@ -595,7 +623,9 @@ test('HTTP sample: source A entry, manual B, bookmarks, A entry again creates on
     await expect(panel(page).getByRole('combobox')).toHaveValue(`source:${sourceA}`);
     await newNote(page, '返回A入口的笔记');
     await action(page, '创建笔记').click();
-    await expect(editor(page).getByRole('status').filter({ hasText: '笔记已创建' })).toBeVisible();
+    await expect(
+        page.locator('.scova-notifications .n-notification').filter({ hasText: '笔记已创建' }),
+    ).toBeVisible();
     expect(JSON.parse(writes(state, 'POST')[0]!.body!).target).toEqual({
         kind: 'source',
         id: sourceA,

@@ -18,6 +18,7 @@ import {
 } from '@/api/runs';
 import { useCommand } from '@/composables/useCommand';
 import { useSessionLifecycle } from '@/composables/useSessionQuery';
+import { isActiveRun } from '@/composables/useLatestTaskRun';
 
 export function useRunActions(
     target: MaybeRefOrGetter<RunActionTarget>,
@@ -34,6 +35,16 @@ export function useRunActions(
             phase.value === 'success' &&
             ['failed', 'canceled'].includes(toValue(target).run?.status ?? ''),
     );
+    const canStartAfterCompletion = computed(() => {
+        const latest = toValue(target).latestRun;
+        return (
+            phase.value === 'success' &&
+            attempt.value?.action === 'start' &&
+            !!latest &&
+            latest.id === result.value?.run.id &&
+            !isActiveRun(latest)
+        );
+    });
     let controller = new AbortController();
     let generation = 0;
     function clear() {
@@ -125,7 +136,9 @@ export function useRunActions(
     }
     async function submit(action: RunAction) {
         if (
-            (attempt.value && !(action === 'retry' && canRetryAfterCancel.value)) ||
+            (attempt.value &&
+                !(action === 'retry' && canRetryAfterCancel.value) &&
+                !(action === 'start' && canStartAfterCompletion.value)) ||
             command.pending.value ||
             !lifecycle.session.user
         )
@@ -134,7 +147,10 @@ export function useRunActions(
         const run = value.run;
         if (
             action === 'start'
-                ? !!run || value.taskStatus === 'archived'
+                ? !!run ||
+                  value.taskStatus === 'archived' ||
+                  value.startBlocked ||
+                  isActiveRun(value.latestRun)
                 : action === 'retry'
                   ? !run || !['failed', 'canceled'].includes(run.status)
                   : !run || !['queued', 'running', 'recovering'].includes(run.status)
@@ -147,6 +163,9 @@ export function useRunActions(
             taskVersionId: run?.taskVersionId,
             budget: run ? Object.freeze({ ...run.budget }) : undefined,
             mode: 'live',
+            ...(action !== 'cancel' && value.searchMode !== undefined
+                ? { searchMode: value.searchMode }
+                : {}),
             ...(action !== 'cancel' && value.outputFormat !== undefined
                 ? { outputFormat: value.outputFormat }
                 : {}),
@@ -170,7 +189,9 @@ export function useRunActions(
         message,
         phase,
         pending: command.pending,
-        locked: computed(() => !!attempt.value && !canRetryAfterCancel.value),
+        locked: computed(
+            () => !!attempt.value && !canRetryAfterCancel.value && !canStartAfterCompletion.value,
+        ),
         submit,
         replay,
     };

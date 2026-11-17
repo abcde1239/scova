@@ -62,7 +62,7 @@
             retryable
             @retry="retry"
         />
-        <state-panel v-else-if="!items.length" state="empty" message="暂无报告" />
+        <state-panel v-else-if="!items.length" state="empty" icon="report" message="暂无报告" />
         <div v-if="items.length" class="history-list min-w-0">
             <report-history-entry
                 v-for="item in items"

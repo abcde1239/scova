@@ -107,6 +107,8 @@ for (const width of [1440, 320]) {
             { body: { revision: 5, template: 'auto' }, csrf: 'balance-csrf' },
         ]);
         await expect(page.locator('.provider-balance time')).toHaveAttribute('datetime', checkedAt);
+        await expect(page.locator('.provider-balance')).not.toContainText('查询结果不保证');
+        await expect(page.locator('.provider-balance')).not.toContainText('Key 限额不代表');
         await page.screenshot({
             path: testInfo.outputPath('provider-official-balance.png'),
             fullPage: true,
@@ -123,6 +125,7 @@ for (const width of [1440, 320]) {
         await expect(page.getByText('Key 未设限额', { exact: true })).toBeVisible();
         await expect(page.getByText('已用 400,000 额度点', { exact: true })).toBeVisible();
         expect(requests.at(-1)?.body).toEqual({ revision: 5, template: 'new_api' });
+        await expect(page.locator('.provider-balance')).not.toContainText('站点换算规则可能不同');
         if (width === 320) {
             await page.evaluate(() => (document.documentElement.style.fontSize = '200%'));
             await expect(page.getByText('Key 未设限额', { exact: true })).toBeVisible();

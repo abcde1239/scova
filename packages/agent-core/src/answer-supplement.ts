@@ -1,7 +1,7 @@
 import type { ReportValue } from '@scova/models';
 import type { AgentContext } from './types.ts';
 
-/** One optional round uses the already-reserved synthesis repair slot, never a third call. */
+/** Legacy repair supplementation or a new evidence set after two coverage passes. */
 export function answerSupplementDecision(
     context: AgentContext,
     input: {
@@ -15,15 +15,16 @@ export function answerSupplementDecision(
         finalInput: number;
         finalOutput: number;
         now: number;
+        coverageDriven?: boolean;
     },
 ) {
-    const target = input.value.questions.find(
-        (q) => q.priority === 'core' && q.status !== 'supported',
-    );
+    const target = [...input.value.questions]
+        .sort((a, b) => Number(b.priority === 'core') - Number(a.priority === 'core'))
+        .find((q) => (input.coverageDriven || q.priority === 'core') && q.status !== 'supported');
     if (!target) return { reason: '核心问题已有材料支持的回答，未发现需要补证的关键缺口' };
     if (input.modelBlocked || input.searchBlocked)
         return { reason: '模型或搜索已受阻，使用已有材料交付' };
-    if (input.synthesisAttempts !== 1)
+    if (input.synthesisAttempts !== (input.coverageDriven ? 2 : 1))
         return { reason: '综合修复次数已使用，不新增第三次模型调用' };
     if (
         input.supplementalSearches >= 2 ||

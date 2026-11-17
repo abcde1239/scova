@@ -8,38 +8,58 @@ const indexes = Type.Array(Type.Integer({ minimum: 0, maximum: 299 }), {
     uniqueItems: true,
 });
 
+const assessmentProperties = {
+    relevance: Type.Union([
+        Type.Literal('direct'),
+        Type.Literal('background'),
+        Type.Literal('unrelated'),
+        Type.Literal('unknown'),
+    ]),
+    support: Type.Union([
+        Type.Literal('direct'),
+        Type.Literal('partial'),
+        Type.Literal('none'),
+        Type.Literal('unknown'),
+    ]),
+    role: Type.Union([
+        Type.Literal('answer'),
+        Type.Literal('comparison'),
+        Type.Literal('condition'),
+        Type.Literal('risk'),
+        Type.Literal('lead'),
+    ]),
+    sourceRelation: Type.Union([
+        Type.Literal('original'),
+        Type.Literal('secondary'),
+        Type.Literal('unknown'),
+    ]),
+    reason: text(500, 1),
+    conditions: text(500),
+    gap: text(500),
+};
+const assessmentOptions = {
+    additionalProperties: false,
+    description: '模型对问题关联和支持关系的自评，不是事实认证',
+};
+/** Legacy synthesis wire schema; kept byte-identical for existing receipts and providers. */
+export const ClaimAssessmentWireSchema = Type.Object(assessmentProperties, assessmentOptions);
+/** Only missing_core blocks support; detail and condition gaps stay visible without vetoing the answer. */
+export const GapKindSchema = Type.Union(
+    [
+        Type.Literal('none'),
+        Type.Literal('missing_core'),
+        Type.Literal('missing_detail'),
+        Type.Literal('condition'),
+    ],
+    {
+        description:
+            '缺口类别：none 无缺口，missing_core 缺主命题，missing_detail 缺次要细节，condition 需保留适用条件',
+    },
+);
 /** A model's assessment of its own answer, never an independent verification. */
 export const ClaimAssessmentSchema = Type.Object(
-    {
-        relevance: Type.Union([
-            Type.Literal('direct'),
-            Type.Literal('background'),
-            Type.Literal('unrelated'),
-            Type.Literal('unknown'),
-        ]),
-        support: Type.Union([
-            Type.Literal('direct'),
-            Type.Literal('partial'),
-            Type.Literal('none'),
-            Type.Literal('unknown'),
-        ]),
-        role: Type.Union([
-            Type.Literal('answer'),
-            Type.Literal('comparison'),
-            Type.Literal('condition'),
-            Type.Literal('risk'),
-            Type.Literal('lead'),
-        ]),
-        sourceRelation: Type.Union([
-            Type.Literal('original'),
-            Type.Literal('secondary'),
-            Type.Literal('unknown'),
-        ]),
-        reason: text(500, 1),
-        conditions: text(500),
-        gap: text(500),
-    },
-    { additionalProperties: false, description: '模型对问题关联和支持关系的自评，不是事实认证' },
+    { ...assessmentProperties, gapKind: Type.Optional(GapKindSchema) },
+    assessmentOptions,
 );
 export type ClaimAssessment = Static<typeof ClaimAssessmentSchema>;
 
@@ -88,6 +108,7 @@ const ReportValueObject = Type.Object(
                     reason: text(500, 1),
                     basis: Type.Union([
                         Type.Literal('model_assessment'),
+                        Type.Literal('model_knowledge'),
                         Type.Literal('unassessed'),
                     ]),
                     timeScope: Type.Union([
@@ -117,10 +138,13 @@ export const ReportValueSchema = refineSchema(ReportValueObject, 'ScovaReportVal
         value.selections.every(
             (s) =>
                 s.questionIds.every((id) => questionIds.has(id)) &&
-                (s.basis === 'model_assessment') === !!s.assessment &&
+                (s.basis !== 'unassessed') === !!s.assessment &&
+                (s.basis !== 'model_knowledge' ||
+                    (s.assessment?.support === 'none' && !s.assessment.gap)) &&
                 (s.placement !== 'main' ||
                     (s.assessment?.relevance === 'direct' &&
-                        ['direct', 'partial'].includes(s.assessment.support) &&
+                        (s.basis === 'model_knowledge' ||
+                            ['direct', 'partial'].includes(s.assessment.support)) &&
                         s.assessment.role !== 'lead' &&
                         s.questionIds.length > 0)),
         ) &&

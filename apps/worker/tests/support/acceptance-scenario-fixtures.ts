@@ -214,6 +214,10 @@ export function scenarioConnectors(
                             questionIds: ['q0'],
                             citations: [{ pageId: page.pageId, quote: entry.quote }],
                             assessment: {
+                                ...((properties.claims as any)?.items?.properties?.assessment
+                                    ?.properties?.gapKind
+                                    ? { gapKind: 'none' as const }
+                                    : {}),
                                 relevance: 'direct' as const,
                                 support: 'direct' as const,
                                 role: 'answer' as const,
@@ -261,7 +265,24 @@ export function scenarioConnectors(
                                 })),
                             })),
                         }
-                      : { claims };
+                      : Object.hasOwn(properties, 'answers')
+                        ? {
+                              answers: (
+                                  properties.answers as {
+                                      items: { properties: { requirementId: { enum: string[] } } };
+                                  }
+                              ).items.properties.requirementId.enum.map((requirementId) => ({
+                                  requirementId,
+                                  canAnswer: false,
+                                  text: '',
+                                  reason: '受控验收夹具没有额外的模型知识答案。',
+                              })),
+                          }
+                        : { claims };
+                if (Object.hasOwn(properties, 'knowledgePlan'))
+                    Object.assign(payload, { knowledgePlan: [] });
+                if (Object.hasOwn(properties, 'evidenceLinks'))
+                    Object.assign(payload, { evidenceLinks: [] });
                 if (Object.hasOwn(properties, 'requirements')) {
                     const frozen = frozenFixtureTask(input);
                     const schema = properties.requirements as {
@@ -275,28 +296,45 @@ export function scenarioConnectors(
                             object: '',
                             field: question.text,
                             required: true,
+                            verification: 'stable',
                         })),
                     );
                     Object.assign(payload, { requirements });
                 }
                 if (Object.hasOwn(properties, 'artifacts')) {
+                    const claimSchema = properties.claims as {
+                        items: {
+                            properties: { outputFormat?: { enum: AgentClaim['outputFormat'][] } };
+                        };
+                    };
+                    const format = claimSchema.items.properties.outputFormat?.enum[0];
+                    if (format) for (const claim of claims) claim.outputFormat = format;
                     // Resume may reuse a committed plan without re-invoking this fixture model.
                     // Read the immutable requirements supplied to synthesis rather than hidden closure state.
                     const marker = 'Frozen artifact requirements (data): ';
                     const start = input.prompt.indexOf(marker);
-                    if (start < 0)
-                        throw new Error(
-                            'Fixture synthesis is missing frozen artifact requirements',
+                    if (start >= 0)
+                        requirements = JSON.parse(
+                            input.prompt.slice(start + marker.length).split('\n')[0]!,
                         );
-                    requirements = JSON.parse(
-                        input.prompt.slice(start + marker.length).split('\n')[0]!,
-                    );
+                    else {
+                        const compactMarker = 'Frozen data: ';
+                        const compactStart = input.prompt.indexOf(compactMarker);
+                        if (compactStart < 0)
+                            throw new Error(
+                                'Fixture synthesis is missing frozen artifact requirements',
+                            );
+                        requirements = JSON.parse(
+                            input.prompt.slice(compactStart + compactMarker.length).split('\n')[0]!,
+                        ).requirements;
+                    }
                     const schema = properties.artifacts as {
                         items: { properties: { format: { enum: string[] } } };
                     };
                     Object.assign(payload, {
                         artifacts: schema.items.properties.format.enum.map((format) => ({
                             format,
+                            document: null,
                             requirements: requirements
                                 .filter((requirement) => requirement.format === format)
                                 .map((requirement) => {
@@ -317,6 +355,29 @@ export function scenarioConnectors(
                                 }),
                         })),
                     });
+                    if (Object.hasOwn(properties, 'fieldChecks')) {
+                        const artifacts = (
+                            payload as unknown as {
+                                artifacts: {
+                                    requirements: { id: string; claimIndexes: number[] }[];
+                                }[];
+                            }
+                        ).artifacts;
+                        Object.assign(payload, {
+                            fieldChecks: artifacts.flatMap((a) =>
+                                a.requirements.map((r) => ({
+                                    requirementId: r.id,
+                                    status: r.claimIndexes.length
+                                        ? 'supported'
+                                        : 'evidence_missing',
+                                    query: r.claimIndexes.length
+                                        ? ''
+                                        : 'original source for missing proposition',
+                                    reason: '受控原文命题评估',
+                                })),
+                            ),
+                        });
+                    }
                 }
                 return {
                     mode: 'live',

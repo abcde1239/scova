@@ -503,6 +503,25 @@ describe('persistent bounded research Agent', () => {
         expect(result.coverage.gaps.join(' ')).toContain(preferred);
     });
 
+    it('lets the remote provider read a preferred document without requiring a search body', async () => {
+        const { context, deps, tools } = fixture();
+        const preferred = 'https://files.example/preferred.pdf';
+        context.config.researchMode = 'collection';
+        context.config.sourcePreferences.preferredUrls = [preferred];
+        context.budget.maxSearches = 1;
+        context.budget.maxPages = 1;
+        tools.providerReads = true;
+        tools.read = vi.fn(async (_key, target) => ({
+            ...page,
+            originalUrl: target,
+            fetchedUrl: target,
+            url: target,
+            extractionVersion: 'search-api/deepseek/fetch-v1',
+        }));
+        const result = await runResearchAgent(context, deps);
+        expect(tools.read).toHaveBeenCalledExactlyOnceWith('read-0', preferred);
+        expect(result.coverage.gaps.join(' ')).not.toContain('不支持的文档或附件');
+    });
     it('retains normalized provider body capability without storing the body in search checkpoints', async () => {
         const { context, deps, tools, searchResponse, saver } = fixture();
         context.config.researchMode = 'collection';
@@ -977,6 +996,45 @@ describe('persistent bounded research Agent', () => {
                 calls.reduce((sum, [, input]) => sum + input.maxOutputTokens, 0),
             ).toBeLessThanOrEqual(maxOutputTokens);
             expect(comparison[1][1].untrustedSources).toEqual(comparison[0][1].untrustedSources);
+        },
+    );
+    it.each(['json', 'schema'] as const)(
+        'repairs %s output once per stage using contract hints inside the original budget',
+        async (reason) => {
+            const { context, deps, tools } = fixture();
+            context.comparisonScopeHash = 'scope';
+            const original = tools.model;
+            tools.model = vi.fn<AgentTools['model']>(async (key, input) => {
+                if (['plan-0', 'compare-facts-v1', 'synthesize-0'].includes(key)) {
+                    const error = new ConnectorError('invalid_response', 'DO_NOT_RENDER sk-secret');
+                    error.modelFailure = reason;
+                    if (reason === 'schema')
+                        error.modelSchemaIssues = [
+                            { schemaPath: '#/required', keyword: 'required' },
+                        ];
+                    throw error;
+                }
+                return original(key, input);
+            });
+            const result = await runResearchAgent(context, deps);
+            const calls = vi.mocked(tools.model).mock.calls;
+            expect(calls.map(([key]) => key)).toEqual([
+                'plan-0',
+                'plan-1',
+                'compare-facts-v1',
+                'compare-facts-repair-v1',
+                'synthesize-0',
+                'synthesize-1',
+            ]);
+            for (const key of ['plan-1', 'compare-facts-repair-v1', 'synthesize-1']) {
+                const prompt = calls.find(([operation]) => operation === key)![1].prompt;
+                expect(prompt).toContain(`failed ${reason} validation`);
+                expect(prompt).not.toMatch(/DO_NOT_RENDER|sk-secret/);
+            }
+            expect(
+                calls.reduce((sum, [, input]) => sum + input.maxOutputTokens, 0),
+            ).toBeLessThanOrEqual(context.budget.maxOutputTokens);
+            expect(result.comparison).toBe('completed');
         },
     );
     it.each(['network', 'output_truncated'] as const)(

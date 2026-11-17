@@ -50,7 +50,9 @@ test('本地注册样本：字段/重复邮箱/限流、原生提交和一次在
     expect(attempts).toBe(1);
     await expect(page.getByLabel('邮箱', { exact: true })).toHaveValue(account.user.email);
     await page.getByRole('button', { name: '注册', exact: true }).click();
-    await expect(page.getByRole('alert')).toContainText('频繁');
+    await expect(
+        page.locator('.scova-notifications .n-notification').last().getByRole('alert'),
+    ).toContainText('频繁');
     await page.getByRole('button', { name: '注册', exact: true }).click();
     await expect(page).toHaveURL(/\/tasks$/);
     expect(attempts).toBe(3);
@@ -82,8 +84,12 @@ test('本地注册样本：关闭注册可返回登录，320宽200%文字可达'
     await chooseTimezone(page, 'UTC');
     await page.getByLabel('密码', { exact: true }).focus();
     await page.keyboard.press('Enter');
-    await expect(page.getByRole('alert')).toHaveText('当前部署已关闭注册，请返回登录');
-    await expect(page.getByRole('alert')).toBeFocused();
+    await expect(
+        page.locator('.scova-notifications .n-notification').last().getByRole('alert'),
+    ).toHaveText('当前部署已关闭注册，请返回登录');
+    await expect(
+        page.locator('.scova-notifications .n-notification').last().getByRole('alert'),
+    ).not.toBeFocused();
     await expect(page.getByRole('button', { name: '注册', exact: true })).toBeDisabled();
     expect(attempts).toBe(1);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(

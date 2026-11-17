@@ -1,19 +1,21 @@
 <template>
     <section class="purpose-section layout-stack" aria-labelledby="agent-purpose-heading">
         <div class="section-heading flex justify-between items-center flex-wrap gap-[0.5rem_1rem]">
-            <h2 class="break-anywhere text-[1.0625rem] m-0" id="agent-purpose-heading">模型选择</h2>
+            <h2 class="break-anywhere text-[1.0625rem] m-0" id="agent-purpose-heading">
+                Agent 分工
+            </h2>
             <info-dialog label="模型分工说明" title="Agent 如何分工">
                 <p class="break-anywhere text-muted text-[0.875rem] leading-[1.65] m-0">
-                    需求整理 Agent 把你的描述转成任务草稿，不执行搜索或研究。
+                    解析 Agent 把你的描述整理为任务配置。
                 </p>
                 <p class="break-anywhere text-muted text-[0.875rem] leading-[1.65] m-0">
-                    研究执行 Agent 负责执行任务；报告问答也使用此模型。
+                    任务执行 Agent 负责研究与报告问答。
                 </p>
                 <p class="break-anywhere text-muted text-[0.875rem] leading-[1.65] m-0">
-                    两种用途独立选择，也可共用一个供应商配置。切换对后续调用、新开始或恢复的研究生效；正在执行的研究保持原配置。
+                    搜索与正文提取独立保存搜索服务与密钥，网页正文由 Reader 读取。
                 </p>
                 <p class="break-anywhere text-muted text-[0.875rem] leading-[1.65] m-0">
-                    未选择个人配置时，各用途使用管理员设置的默认模型。保存供应商不代表连接测试通过。
+                    解析与任务执行可共用供应商；搜索不随模型切换，也不使用服务器环境变量中的默认搜索配置。
                 </p>
             </info-dialog>
         </div>
@@ -45,12 +47,13 @@
                     @update:model-value="emit('select', $event, purpose.value)"
                 />
             </section>
+            <slot />
         </div>
         <p
             v-if="!providers.length"
             class="empty-hint break-anywhere text-muted text-[0.875rem] leading-[1.65] m-0"
         >
-            在下方添加供应商后，即可为两种用途选择模型。
+            在下方添加模型供应商后，即可分别为解析和任务执行选择模型。
         </p>
     </section>
 </template>
@@ -71,13 +74,13 @@ const emit = defineEmits<{ select: [id: string, purpose: AgentProviderPurpose] }
 const purposes = [
     {
         value: 'task_draft',
-        label: '需求整理',
+        label: '解析',
         description: '将需求描述整理为任务配置',
         icon: 'edit',
     },
     {
         value: 'research',
-        label: '研究执行',
+        label: '任务执行',
         description: '执行研究任务与报告问答',
         icon: 'search',
     },

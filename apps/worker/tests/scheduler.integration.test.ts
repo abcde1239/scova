@@ -67,13 +67,14 @@ async function databaseNow() {
     const [row] = await queryRows<{ now: Date }>(db, sql`SELECT clock_timestamp() AS now`);
     return row!.now;
 }
-async function seed(daysAgo = 0) {
+async function seed(daysAgo = 0, searchMode?: 'auto' | 'api' | 'searxng') {
     const now = await databaseNow();
     const today = new Date(now);
     today.setUTCHours(0, 0, 0, 0);
     const firstDue = new Date(today.getTime() - daysAgo * 86_400_000);
     const config = {
         ...runConfig(),
+        ...(searchMode ? { searchMode } : {}),
         schedule: { frequency: 'daily' as const, localTime: '00:00' },
     };
     const email = `${randomUUID()}@example.test`;
@@ -160,7 +161,7 @@ describe('PostgreSQL 周期调度事务', () => {
     });
 
     it('双调度器只创建一个 Occurrence/Run/首事件/Outbox，重复扫描为空', async () => {
-        const s = await seed();
+        const s = await seed(0, 'searxng');
         const results = await Promise.all([repository.scheduleNext([]), second.scheduleNext([])]);
         expect(results.filter(Boolean)).toHaveLength(1);
         const occurrence = await db.query.scheduleOccurrences
@@ -188,6 +189,10 @@ describe('PostgreSQL 周期调度事务', () => {
                 'live',
             ),
         });
+        const saved = await db.query.taskVersions.findFirst({
+            where: eq(dbTaskVersions.id, run.taskVersionId),
+        });
+        expect(saved?.configJson).toMatchObject({ searchMode: 'searxng' });
         expect(
             await db
                 .select({ count: dbCount() })

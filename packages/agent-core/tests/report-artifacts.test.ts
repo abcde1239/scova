@@ -28,6 +28,62 @@ const requirements: PlannedRequirement[] = ['甲', '乙'].flatMap((name, oi) =>
 const context = {
     config: { outputFormat: 'comparison', outputFormats: ['comparison'] },
 } as AgentContext;
+
+describe('coverage plan projection before retrieval', () => {
+    const allQuestions = [...questions, { id: 'q1', text: '补充比较适用条件' }];
+    it('preserves the matrix and combines duplicate cell obligations without changing the receipt', () => {
+        const data = {
+            requirements: [
+                ...requirements,
+                { ...requirements[0]!, id: 'duplicate', questionIds: ['q1'], required: false },
+            ],
+        };
+        const saved = structuredClone(data);
+        expect(plannedRequirements(data, ['comparison'], allQuestions)).toBeNull();
+        const frozen = plannedRequirements(data, ['comparison'], allQuestions, true, true)!;
+        expect(frozen).toHaveLength(4);
+        expect(frozen[0]).toMatchObject({
+            id: 'r00',
+            object: '甲',
+            field: '价格',
+            required: true,
+            questionIds: ['q0', 'q1'],
+        });
+        expect(data).toEqual(saved);
+    });
+    it('adds the omitted original question without discarding any requested object or field', () => {
+        const data = { requirements };
+        const frozen = plannedRequirements(data, ['comparison'], allQuestions, true, true)!;
+        expect(frozen.slice(0, 4)).toEqual(requirements);
+        expect(frozen[4]).toMatchObject({
+            object: '',
+            questionIds: ['q1'],
+            field: allQuestions[1]!.text,
+            required: true,
+        });
+        const optional = {
+            requirements: [
+                ...requirements,
+                { ...frozen[4]!, id: 'explicit-optional', required: false },
+            ],
+        };
+        expect(
+            plannedRequirements(optional, ['comparison'], allQuestions, true, true)!.at(-1),
+        ).toMatchObject({ id: 'explicit-optional', required: true });
+        expect(optional.requirements.at(-1)!.required).toBe(false);
+    });
+    it('does not repair an invalid matrix by dropping a missing cell', () => {
+        expect(
+            plannedRequirements(
+                { requirements: requirements.slice(0, 3) },
+                ['comparison'],
+                questions,
+                true,
+                true,
+            ),
+        ).toBeNull();
+    });
+});
 const assessment = {
     relevance: 'direct',
     support: 'direct',
@@ -99,6 +155,103 @@ const build = (extractions = [synthesis()], source = claims, reportValue = value
     );
 
 describe('frozen artifact structures', () => {
+    it('keeps a detail-qualified supported field when a later core-missing patch arrives', () => {
+        const initial: AgentClaim = {
+            ...claims[0]!,
+            assessment: { ...assessment, gap: '未提供可选编号', gapKind: 'missing_detail' },
+        };
+        const partial: AgentClaim = {
+            ...initial,
+            text: '甲价格仍需确认。',
+            assessment: {
+                ...assessment,
+                support: 'partial',
+                gap: '价格未知',
+                gapKind: 'missing_core',
+            },
+        };
+        const source = [initial, partial];
+        const reportValue: ReportValue = {
+            ...value,
+            selections: source.map((claim, i) => ({
+                ...value.selections[0]!,
+                claimIndex: i,
+                assessment: claim.assessment,
+            })),
+        };
+        const make = (claim: AgentClaim, key: string) =>
+            receipt(key, {
+                claims: [claim],
+                artifacts: [
+                    {
+                        format: 'comparison',
+                        requirements: [{ id: 'r00', text: claim.text, claimIndexes: [0] }],
+                    },
+                ],
+            });
+        const artifact = buildReportArtifacts(
+            context,
+            questions,
+            source,
+            reportValue,
+            plan,
+            [make(initial, 'synthesize-0'), make(partial, 'synthesize-1')],
+            (raw) => raw as AgentClaim,
+            true,
+            true,
+            true,
+            { gapKinds: true },
+        )[0]!;
+        expect(artifact.coverage?.requirements[0]).toMatchObject({
+            status: 'supported',
+            claimIndexes: [0],
+        });
+        expect(source[0]!.assessment?.gap).toBe('未提供可选编号');
+    });
+    it('retains a supported field when a later field patch provides only partial support', () => {
+        const partial = {
+            ...claims[0]!,
+            text: '甲价格可能为100元。',
+            assessment: { ...assessment, support: 'partial' as const, gap: '尚缺月付条件' },
+        };
+        const source = [...claims, partial];
+        const reportValue: ReportValue = {
+            ...value,
+            selections: [
+                ...value.selections,
+                {
+                    ...value.selections[0]!,
+                    claimIndex: 4,
+                    assessment: partial.assessment,
+                },
+            ],
+        };
+        const repair = receipt('synthesize-1', {
+            claims: [partial],
+            artifacts: [
+                {
+                    format: 'comparison',
+                    requirements: [{ id: 'r00', text: partial.text, claimIndexes: [0] }],
+                },
+            ],
+        });
+        const artifact = buildReportArtifacts(
+            context,
+            questions,
+            source,
+            reportValue,
+            plan,
+            [synthesis(), repair],
+            (raw) => raw as AgentClaim,
+            true,
+            true,
+        )[0]!;
+        expect(artifact.coverage?.requirements[0]).toMatchObject({
+            status: 'supported',
+            claimIndexes: [0],
+        });
+        expect(artifact.content?.comparison?.cells[0]?.text).toBe(claims[0]!.text);
+    });
     it('merges disjoint groups of the same format instead of silently dropping later objects', () => {
         const entries = requirements.map((r, index) => ({
             id: r.id,
@@ -693,5 +846,102 @@ describe('frozen artifact structures', () => {
                 [...questions, { id: 'q1', text: '必须回答退款' }],
             ),
         ).toBeNull();
+    });
+});
+
+describe('structured synthesis outline and groups', () => {
+    const synthesisClaim: AgentClaim = {
+        kind: 'inference',
+        text: '乙更便宜，但只有甲支持离线。',
+        questionIds: ['q0'],
+        citations: [{ pageId: 'p0', quote: '甲价格100元。' }],
+        assessment,
+    };
+    const allClaims = [...claims, synthesisClaim];
+    const allValue: ReportValue = {
+        ...value,
+        selections: [...value.selections, { ...value.selections[0]!, claimIndex: 4 }],
+    };
+    const groupedPlan = receipt('plan-0', {
+        requirements: requirements.map((r) => ({
+            ...r,
+            group: r.field === '价格' ? '成本' : '能力',
+        })),
+    });
+    const withOutline = (document: unknown) =>
+        receipt('synthesize-0', {
+            claims: allClaims,
+            artifacts: [
+                {
+                    format: 'comparison',
+                    document,
+                    requirements: requirements.map((r, index) => ({
+                        id: r.id,
+                        text: claims[index]!.text,
+                        claimIndexes: [index],
+                    })),
+                },
+            ],
+        });
+    const run = (extraction: ComparisonExtraction, planned = groupedPlan) =>
+        buildReportArtifacts(
+            context,
+            questions,
+            allClaims,
+            allValue,
+            planned,
+            [extraction],
+            (raw) => raw as AgentClaim,
+        )[0]!;
+
+    it('keeps the synthesis claim in a comparison outline and summarizes from it', () => {
+        const artifact = run(
+            withOutline({
+                version: 1,
+                sections: [{ id: 'core', title: '核心差异', role: 'overview', claimIndexes: [4] }],
+            }),
+        );
+        expect(artifact.content?.comparison?.cells).toHaveLength(4);
+        expect(artifact.content?.document?.sections).toEqual([
+            { id: 'core', title: '核心差异', role: 'overview', claimIndexes: [4] },
+        ]);
+        expect(artifact.summary).toBe(synthesisClaim.text);
+        expect(validReportArtifacts([artifact], allClaims, allValue)).toBe(true);
+        expect(parseContract(ReportArtifactSchema, artifact)).toEqual(artifact);
+    });
+    it('never lets the outline claim a value already bound to a cell', () => {
+        const artifact = run(
+            withOutline({
+                version: 1,
+                sections: [
+                    { id: 'core', title: '核心差异', role: 'overview', claimIndexes: [0, 4] },
+                ],
+            }),
+        );
+        expect(artifact.content?.document?.sections.flatMap((s) => s.claimIndexes)).toEqual([4]);
+        expect(validReportArtifacts([artifact], allClaims, allValue)).toBe(true);
+    });
+    it('falls back to a structural summary instead of gluing cells when no outline exists', () => {
+        const artifact = run(withOutline(null));
+        expect(artifact.content?.document?.sections.flatMap((s) => s.claimIndexes)).toBeUndefined();
+        expect(artifact.summary).toBe('2 个对象 × 2 个维度');
+        expect(validReportArtifacts([artifact], allClaims, allValue)).toBe(true);
+    });
+    it('passes planned groups to dimensions and omits groups when the plan has none', () => {
+        const grouped = run(withOutline(null));
+        expect(grouped.content?.comparison?.dimensions.map((d) => d.group)).toEqual([
+            '成本',
+            '能力',
+        ]);
+        const plain = run(withOutline(null), plan);
+        expect(plain.content?.comparison?.dimensions.every((d) => !('group' in d))).toBe(true);
+    });
+    it('accepts plans with blank or missing groups and rejects overlong groups', () => {
+        const blank = requirements.map((r) => ({ ...r, group: '' }));
+        expect(plannedRequirements({ requirements: blank }, ['comparison'], questions)).toEqual(
+            requirements,
+        );
+        const long = requirements.map((r) => ({ ...r, group: '组'.repeat(41) }));
+        expect(plannedRequirements({ requirements: long }, ['comparison'], questions)).toBeNull();
     });
 });

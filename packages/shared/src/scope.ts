@@ -11,6 +11,7 @@ export interface ResearchScopeConfig {
     outputFormat: string;
     outputFormats?: readonly string[];
     researchMode?: string;
+    searchMode?: string;
 }
 
 function stable(value: unknown): unknown {
@@ -31,7 +32,7 @@ export function researchComparisonScopeHash(config: ResearchScopeConfig): string
         .update(
             JSON.stringify(
                 stable({
-                    retrievalStrategyVersion: 3,
+                    retrievalStrategyVersion: 4,
                     extractionStrategyVersion: 'structured-web-v3',
                     topic: config.topic,
                     goal: config.goal,
@@ -41,6 +42,9 @@ export function researchComparisonScopeHash(config: ResearchScopeConfig): string
                     timeRange: config.timeRange,
                     outputFormats: [...(config.outputFormats ?? [config.outputFormat])].sort(),
                     ...(config.researchMode === 'collection' ? { researchMode: 'collection' } : {}),
+                    ...(config.searchMode && config.searchMode !== 'auto'
+                        ? { searchMode: config.searchMode }
+                        : {}),
                 }),
             ),
         )

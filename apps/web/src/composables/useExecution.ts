@@ -49,6 +49,10 @@ export function executionFailure(run: Run) {
         NO_EVIDENCE: '未取得可用证据，未生成报告。',
         DEADLINE_EXCEEDED: '执行时间预算已耗尽，未完成交付。',
         AGENT_CONFIGURATION_INVALID: '研究服务配置不可用，本次未完成。',
+        SEARCH_API_NOT_CONFIGURED: '请在账号中配置 Search API，或选择内置 SearXNG。',
+        SEARCH_CREDENTIAL_INVALID: '搜索密钥无法读取，请在账号中重新保存 Search API。',
+        SEARCH_API_READING_UNSUPPORTED:
+            '所选 Search API 暂不支持独立网页读取，请改选 DeepSeek 或 Tavily。',
         AGENT_DELIVERY_NOT_CONFIGURED: '报告交付服务不可用，本次未完成。',
         INVALID_DELIVERY_EVIDENCE: '交付证据校验未通过，未发布报告。',
     };
@@ -82,7 +86,13 @@ export function updateTools(items: ToolSummary[], event: RunEvent): ToolSummary[
     return [...items.filter((entry) => entry.id !== item.id), item].slice(-12);
 }
 const fallbackId = '00000000-0000-4000-8000-000000000000';
-export function useExecution(target: MaybeRefOrGetter<string>) {
+export function useExecution(
+    target: MaybeRefOrGetter<string>,
+    options: {
+        onEvent?: (event: RunEvent) => void;
+        onReset?: () => void;
+    } = {},
+) {
     const lifecycle = useSessionLifecycle();
     const id = computed(() => {
         try {
@@ -97,6 +107,7 @@ export function useExecution(target: MaybeRefOrGetter<string>) {
     watch(
         () => [id.value, lifecycle.session.epoch],
         () => {
+            options.onReset?.();
             tools.value = [];
             log.value = emptyExecutionLog();
             published.value = undefined;
@@ -125,12 +136,14 @@ export function useExecution(target: MaybeRefOrGetter<string>) {
     const streamId = computed(() => (run.value?.id === id.value ? id.value : undefined));
     const subscription = useRunEvents(streamId, {
         onReset() {
+            options.onReset?.();
             log.value = emptyExecutionLog(true);
             tools.value = [];
             published.value = undefined;
         },
         onEvent(event) {
             if (event.runId !== id.value || !lifecycle.session.user) return;
+            options.onEvent?.(event);
             tools.value = updateTools(tools.value, event);
             log.value = appendExecutionLog(log.value, event);
             if (event.type === 'report.published' || event.type === 'run.completed')

@@ -32,7 +32,6 @@
         <p class="m-0" v-if="validation" role="status">{{ validation }}</p>
         <p class="m-0" v-if="state.reading.value" role="status">正在读取笔记当前版本。</p>
         <p class="m-0" v-if="state.pending.value" role="status">正在提交笔记操作。</p>
-        <p class="m-0" v-if="state.notice.value" role="status">{{ state.notice.value }}</p>
         <p class="m-0" v-if="state.waiting.value && state.retryAt.value" role="status">
             可重试时间：<time :datetime="new Date(state.retryAt.value).toISOString()">{{
                 new Date(state.retryAt.value).toLocaleString()
@@ -107,11 +106,16 @@ import { computed, useId } from 'vue';
 import ActionButton from '@/components/common/ActionButton.vue';
 import type { useNoteEditor } from '@/composables/useNotes';
 import { noteTextError } from '@/utils/notes';
+import { useActionNotification } from '@/composables/useActionNotification';
 const props = withDefaults(
     defineProps<{ state: ReturnType<typeof useNoteEditor>; available?: boolean }>(),
     { available: true },
 );
 const emit = defineEmits<{ close: [] }>();
+useActionNotification().watch(
+    () => props.state.notice.value,
+    () => (props.state.lock.value ? 'warning' : 'info'),
+);
 const id = useId();
 const validation = computed(() =>
     props.state.draft.value ? noteTextError(props.state.draft.value) : '',

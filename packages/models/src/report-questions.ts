@@ -98,6 +98,21 @@ export const QuestionFollowupInputSchema = Type.Object(
     },
     { additionalProperties: false },
 );
+export const ReportMergeInputSchema = describeProperties(
+    Type.Object(
+        {
+            confirm: Type.Literal(true),
+            reportIds: Type.Array(UuidSchema, {
+                minItems: 1,
+                maxItems: 8,
+                uniqueItems: true,
+                description: '同一原报告对话生成的续作，原报告自动包含',
+            }),
+            outputFormats: Type.Optional(OutputFormatsSchema),
+        },
+        { additionalProperties: false },
+    ),
+);
 for (const schema of [
     ReportQuestionInputSchema,
     QuestionCitationSchema,
@@ -116,6 +131,7 @@ export const ReportConversationSchema = Type.Object(
             Type.Object(
                 {
                     ...ReportQuestionSchema.properties,
+                    round: Type.Optional(Type.Integer({ minimum: 1 })),
                     answer: Type.Union([QuestionAnswerSchema, Type.Null()]),
                 },
                 { additionalProperties: false },
@@ -130,8 +146,13 @@ export const ReportConversationSchema = Type.Object(
                         reportId: UuidSchema,
                         questionId: UuidSchema,
                         runId: UuidSchema,
-                        operation: Type.Union([Type.Literal('research'), Type.Literal('revise')]),
+                        operation: Type.Union([
+                            Type.Literal('research'),
+                            Type.Literal('revise'),
+                            Type.Literal('merge'),
+                        ]),
                         title: Type.String(),
+                        round: Type.Optional(Type.Integer({ minimum: 1 })),
                     },
                     { additionalProperties: false },
                 ),
@@ -139,6 +160,34 @@ export const ReportConversationSchema = Type.Object(
             ),
         ),
         activeRun: Type.Optional(Type.Boolean()),
+        continuations: Type.Optional(
+            Type.Array(
+                Type.Object(
+                    {
+                        runId: UuidSchema,
+                        rootRunId: UuidSchema,
+                        questionId: UuidSchema,
+                        operation: Type.Union([Type.Literal('research'), Type.Literal('revise')]),
+                    },
+                    { additionalProperties: false },
+                ),
+                { maxItems: 200 },
+            ),
+        ),
+        mergeRuns: Type.Optional(
+            Type.Array(
+                Type.Object(
+                    {
+                        runId: UuidSchema,
+                        rootRunId: Type.Optional(UuidSchema),
+                        questionId: UuidSchema,
+                        round: Type.Optional(Type.Integer({ minimum: 1 })),
+                    },
+                    { additionalProperties: false },
+                ),
+                { maxItems: 100 },
+            ),
+        ),
     },
     { additionalProperties: false },
 );

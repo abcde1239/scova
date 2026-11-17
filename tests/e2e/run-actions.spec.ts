@@ -187,7 +187,9 @@ async function samples(context: BrowserContext) {
         }
         if (path.startsWith('/api/v1/runs/')) return route.fulfill({ json: runs.get(targetId) });
         if (path.endsWith('/runs'))
-            return route.fulfill({ json: { items: [...runs.values()], nextCursor: null } });
+            return route.fulfill({
+                json: { items: [...runs.values()].reverse(), nextCursor: null },
+            });
         if (path === '/api/v1/tasks')
             return route.fulfill({ json: { items: [detail.task], nextCursor: null } });
         return route.fulfill({ json: detail, headers: { etag: '"8"' } });
@@ -195,7 +197,7 @@ async function samples(context: BrowserContext) {
     return { calls, state, runs, detail };
 }
 const actions = (page: Page) => page.locator('.run-actions');
-const commandStatus = (page: Page) => actions(page).locator('.command-result[role="status"]');
+const commandStatus = (page: Page) => actions(page).locator('.command-result');
 const posts = (calls: Awaited<ReturnType<typeof samples>>['calls']) =>
     calls.filter((call) => call.method === 'POST');
 async function noOverflow(page: Page) {
@@ -212,6 +214,66 @@ async function noOverflow(page: Page) {
     }
 }
 
+test('离开日志返回任务时活动执行禁止再次启动，刷新及终态更新均从服务端恢复', async ({ page }) => {
+    const { calls, runs } = await samples(page.context());
+    await page.goto(`/tasks/${taskId}`);
+    await actions(page).getByRole('button', { name: '立即执行', exact: true }).click();
+    const open = actions(page).getByRole('link', { name: '打开执行', exact: true });
+    await expect(open).toBeVisible();
+    const href = await open.getAttribute('href');
+    const activeId = href!.split('/').at(-1)!;
+    await open.click();
+    await expect(page).toHaveURL(new RegExp(`/runs/${activeId}$`));
+    await page.goBack();
+    await expect(
+        actions(page).getByRole('button', { name: '执行进行中', exact: true }),
+    ).toBeDisabled();
+    await expect(
+        actions(page).getByRole('link', { name: '查看当前执行', exact: true }),
+    ).toHaveAttribute('href', href!);
+    expect(posts(calls)).toHaveLength(1);
+    for (const status of ['running', 'recovering', 'cancel_requested'] as const) {
+        runs.set(activeId, { ...runs.get(activeId)!, status });
+        await page.reload();
+        await expect(
+            actions(page).getByRole('button', { name: '执行进行中', exact: true }),
+        ).toBeDisabled();
+    }
+    runs.set(activeId, { ...runs.get(activeId)!, status: 'failed', finishedAt: instant });
+    await expect(
+        actions(page).getByRole('button', { name: '立即执行', exact: true }),
+    ).toBeEnabled();
+    await expect(
+        actions(page).getByRole('link', { name: '查看当前执行', exact: true }),
+    ).toHaveCount(0);
+    expect(posts(calls)).toHaveLength(1);
+});
+
+test('执行状态读取中或失败均禁止启动，明确重读后才允许', async ({ page }) => {
+    const { calls } = await samples(page.context());
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    await page.route(`**/api/v1/tasks/${taskId}/runs?limit=1`, async (route) => {
+        await gate;
+        await route.fulfill({
+            status: 503,
+            json: { code: 'TEMPORARY', message: 'sample', requestId: 'sample' },
+        });
+    });
+    await page.goto(`/tasks/${taskId}`);
+    const start = actions(page).getByRole('button', { name: '立即执行', exact: true });
+    await expect(start).toBeDisabled();
+    release();
+    await expect(actions(page).getByText('执行状态暂不可用', { exact: true })).toBeVisible();
+    await expect(start).toBeDisabled();
+    await page.unroute(`**/api/v1/tasks/${taskId}/runs?limit=1`);
+    await actions(page).getByRole('button', { name: '重新读取执行状态', exact: true }).click();
+    await expect(start).toBeEnabled();
+    expect(posts(calls)).toHaveLength(0);
+});
+
 for (const width of [320, 390, 768, 1024, 1440, 1920]) {
     test(`本地命令样本${width}：明确live重试、固定旧版本、取消与200%文字`, async ({
         page,
@@ -223,8 +285,19 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         await page.setViewportSize({ width, height: 1000 });
         await page.goto(`/runs/${sourceId}`);
         await expect(actions(page).getByRole('radio')).toHaveCount(0);
-        await expect(actions(page)).toContainText('原任务版本与预算');
-        await expect(actions(page)).toContainText('服务费用');
+        await expect(actions(page)).toContainText('任务版本与预算沿用原执行');
+        await expect(actions(page).locator('.execution-settings-footer p')).toHaveCount(1);
+        expect(
+            await actions(page)
+                .locator('.task-execution-settings')
+                .evaluate((group) => {
+                    const search = group.querySelector('[aria-label="本次搜索方式"]')!;
+                    const footer = group.querySelector('.execution-settings-footer')!;
+                    return (
+                        footer.getBoundingClientRect().top >= search.getBoundingClientRect().bottom
+                    );
+                }),
+        ).toBe(true);
         expect(posts(calls)).toHaveLength(0);
         for (const doubled of [false, true]) {
             if (doubled)
@@ -245,8 +318,10 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         const retry = actions(page).getByRole('button', { name: '重试并创建新执行', exact: true });
         await retry.focus();
         await retry.press('Enter');
-        await expect(commandStatus(page)).toContainText('关联的新执行');
-        await expect(commandStatus(page)).toContainText('真实 live');
+        await expect(page.locator('.scova-notifications .n-notification').last()).toContainText(
+            '关联的新执行',
+        );
+        await expect(commandStatus(page)).toContainText('任务执行');
         await expect(commandStatus(page)).toContainText('等待执行');
         await expect(commandStatus(page)).toBeFocused();
         await info.attach(`${width}-retry-result-text-200`, {
@@ -295,7 +370,9 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         await expect(retryCanceled).toBeEnabled();
         await expect(actions(page).getByRole('radio')).toHaveCount(0);
         await retryCanceled.click();
-        await expect(commandStatus(page)).toContainText('关联的新执行');
+        await expect(page.locator('.scova-notifications .n-notification').last()).toContainText(
+            '关联的新执行',
+        );
         const afterCancel = [...runs.values()].find((item) => item.parentRunId === created.id)!;
         expect(afterCancel.taskVersionId).toBe(created.taskVersionId);
         expect(afterCancel.mode).toBe('live');
@@ -310,7 +387,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
 }
 
 for (const trigger of ['double', 'Enter', 'Space'] as const) {
-    test(`统一真实研究、${trigger}重复激活仅一个在途命令`, async ({ page }) => {
+    test(`统一真实研究、${trigger}重复激活仅一个在途命令`, async ({ page }, info) => {
         const { calls, state } = await samples(page.context());
         let release!: () => void;
         state.wait = new Promise<void>((resolve) => {
@@ -318,6 +395,9 @@ for (const trigger of ['double', 'Enter', 'Space'] as const) {
         });
         await page.goto(`/tasks/${taskId}`);
         const button = actions(page).getByRole('button', { name: '立即执行', exact: true });
+        await expect(button).toBeVisible();
+        if (trigger === 'double')
+            await actions(page).screenshot({ path: info.outputPath('start-settings.png') });
         expect(posts(calls)).toHaveLength(0);
         if (trigger === 'double') await button.dblclick();
         else {
@@ -328,7 +408,7 @@ for (const trigger of ['double', 'Enter', 'Space'] as const) {
         await expect(button).toHaveAttribute('aria-busy', 'true');
         expect(posts(calls)).toHaveLength(1);
         release();
-        await expect(commandStatus(page)).toContainText('真实 live');
+        await expect(commandStatus(page)).toContainText('任务执行');
         await expect(commandStatus(page)).toContainText('等待执行');
         expect(posts(calls)[0]!.body).toEqual({ mode: 'live' });
         expect(posts(calls)[0]!.key).toMatch(/^[\da-f-]{36}$/);
@@ -342,7 +422,9 @@ test('未知结果显式重发冻结key/body，终态幂等命中按实际状态
     await page.goto(`/tasks/${taskId}`);
     await page.evaluate(() => (document.documentElement.style.fontSize = '200%'));
     await actions(page).getByRole('button', { name: '立即执行', exact: true }).click();
-    await expect(commandStatus(page)).toContainText('尚不能确认');
+    await expect(page.locator('.scova-notifications .n-notification').last()).toContainText(
+        '尚不能确认',
+    );
     await expect(commandStatus(page)).toBeFocused();
     await noOverflow(page);
     await info.attach('uncertain-live-320-text-200', {
@@ -363,7 +445,7 @@ test('未知结果显式重发冻结key/body，终态幂等命中按实际状态
     await replay.focus();
     await replay.press('Space');
     await expect(commandStatus(page)).toContainText('执行失败');
-    await expect(commandStatus(page)).toContainText('真实 live');
+    await expect(commandStatus(page)).toContainText('任务执行');
     await expect(commandStatus(page)).not.toContainText('已有活动执行');
     await expect(commandStatus(page)).toBeFocused();
     await noOverflow(page);
@@ -387,10 +469,14 @@ test('IDEMPOTENCY_PENDING可同key重发，payload mismatch停止且不换key', 
     state.code = 'IDEMPOTENCY_PENDING';
     await page.goto(`/tasks/${taskId}`);
     await actions(page).getByRole('button', { name: '立即执行', exact: true }).click();
-    await expect(commandStatus(page)).toContainText('仍在处理');
+    await expect(page.locator('.scova-notifications .n-notification').last()).toContainText(
+        '仍在处理',
+    );
     state.code = 'IDEMPOTENCY_PAYLOAD_MISMATCH';
     await actions(page).getByRole('button', { name: '使用同一命令重发', exact: true }).click();
-    await expect(commandStatus(page)).toContainText('不会更换');
+    await expect(page.locator('.scova-notifications .n-notification').last()).toContainText(
+        '不会更换',
+    );
     await expect(
         actions(page).getByRole('button', { name: '使用同一命令重发', exact: true }),
     ).toHaveCount(0);
@@ -408,7 +494,9 @@ test('取消结果未知时重发不提交mode或key，也不暗示选择执行�
     state.failure = 503;
     await page.goto(`/runs/${sourceId}`);
     await actions(page).getByRole('button', { name: '请求取消', exact: true }).click();
-    await expect(commandStatus(page)).toContainText('尚不能确认取消结果');
+    await expect(page.locator('.scova-notifications .n-notification').last()).toContainText(
+        '尚不能确认取消结果',
+    );
     await expect(commandStatus(page)).not.toContainText('模式');
     await expect(commandStatus(page)).not.toContainText('key');
     await expect(commandStatus(page)).toBeFocused();
@@ -435,8 +523,10 @@ test('重试复用不同mode/version/parent的活动执行，按返回事实打�
     };
     await page.goto(`/runs/${sourceId}`);
     await actions(page).getByRole('button', { name: '重试并创建新执行', exact: true }).click();
-    await expect(commandStatus(page)).toContainText('已有活动执行');
-    await expect(commandStatus(page)).toContainText('演示 demo');
+    await expect(page.locator('.scova-notifications .n-notification').last()).toContainText(
+        '已有活动执行',
+    );
+    await expect(commandStatus(page)).toContainText('演示执行');
     await expect(commandStatus(page)).toContainText('正在取消');
     await expect(commandStatus(page)).not.toContainText('已创建关联');
     await actions(page).getByRole('link', { name: '打开执行', exact: true }).click();

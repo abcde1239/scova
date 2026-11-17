@@ -90,9 +90,8 @@ for (const width of [1440, 320]) {
         state.offline = true;
         await save(page).click();
         await expect(notices).toContainText('默认偏好未保存');
-        await expect(page.locator('.preferences-form').getByRole('alert')).toContainText(
-            '暂时无法连接',
-        );
+        await expect(notices).toContainText('暂时无法连接');
+        await expect(page.locator('.preferences-form').getByRole('alert')).toHaveCount(0);
         await expect(page.getByLabel('默认时区', { exact: true })).toContainText('Europe/London');
         await page.screenshot({
             path: info.outputPath(`notice-error-${width}.png`),
@@ -182,7 +181,7 @@ test('本地 HTTP 样本：保存偏好刷新保留，本机外观与阅读不�
     await save(page).focus();
     await page.keyboard.press('Enter');
     await expect(
-        page.locator('.preferences-form').getByRole('status').filter({ hasText: '默认偏好已保存' }),
+        page.locator('.scova-notifications .n-notification').filter({ hasText: '默认偏好已保存' }),
     ).toBeVisible();
     expect(state.patches).toBe(1);
     await page.reload();
@@ -222,21 +221,31 @@ test('本地 HTTP 样本：非法时区、字段错误、限流、拒绝与断�
     ] as const) {
         state.status = status;
         await save(page).click();
-        await expect(page.getByRole('alert')).toHaveText(text);
+        if (status === 422)
+            await expect(page.locator('.preferences-form').getByRole('alert')).toHaveText(text);
+        else
+            await expect(page.locator('.scova-notifications .n-notification').last()).toContainText(
+                text,
+            );
         await expect(timezone).toContainText('Europe/London');
         if (status === 422) await expect(timezone).toBeFocused();
-        else await expect(page.getByRole('alert')).toBeFocused();
+        else
+            await expect(
+                page.locator('.scova-notifications .n-notification').last(),
+            ).not.toBeFocused();
     }
     state.offline = true;
     await save(page).click();
-    await expect(page.getByRole('alert')).toHaveText('暂时无法连接，请检查网络后重试');
+    await expect(page.locator('.scova-notifications .n-notification').last()).toContainText(
+        '暂时无法连接，请检查网络后重试',
+    );
     await expect(timezone).toContainText('Europe/London');
     expect(state.patches).toBe(4);
     state.offline = false;
     state.status = 200;
     await save(page).press('Enter');
     await expect(
-        page.locator('.preferences-form').getByRole('status').filter({ hasText: '默认偏好已保存' }),
+        page.locator('.scova-notifications .n-notification').filter({ hasText: '默认偏好已保存' }),
     ).toBeVisible();
     expect(state.patches).toBe(5);
 });
@@ -273,7 +282,7 @@ test('本地 HTTP 样本：延迟读取不覆盖编辑、保存期间锁定、�
     await page.locator('form.preferences-form').dispatchEvent('submit');
     releaseSave();
     await expect(
-        page.locator('.preferences-form').getByRole('status').filter({ hasText: '默认偏好已保存' }),
+        page.locator('.scova-notifications .n-notification').filter({ hasText: '默认偏好已保存' }),
     ).toBeVisible();
     expect(state.patches).toBe(1);
     await page.unroute('**/api/v1/me');

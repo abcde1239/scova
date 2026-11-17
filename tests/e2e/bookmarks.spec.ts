@@ -266,7 +266,9 @@ test('HTTP sample: report create201, library context, delete204 and original cit
     const original = await page.locator('.report-brief').innerText();
     await expect(action(page)).not.toContainText('未收藏');
     await create(page).press('Enter');
-    await expect(action(page)).toContainText('已收藏来源');
+    await expect(page.locator('.scova-notifications .n-notification').last()).toContainText(
+        '已收藏来源',
+    );
     expect(state.writes).toEqual([
         {
             method: 'POST',
@@ -321,7 +323,9 @@ test('HTTP sample: existing source on a later page is not absent and POST200 reu
     await expect(create(page)).toBeEnabled();
     await expect(action(page)).not.toContainText('未收藏');
     await create(page).click();
-    await expect(action(page)).toContainText('复用现有收藏');
+    await expect(page.locator('.scova-notifications .n-notification').last()).toContainText(
+        '复用现有收藏',
+    );
     expect(state.rows).toHaveLength(2);
     expect(state.writes).toHaveLength(1);
 });
@@ -337,7 +341,9 @@ test('HTTP sample: unknown POST scans three pages to find target, never replays 
     await expect(action(page)).toContainText('结果尚待核对');
     await expect(create(page)).toBeDisabled();
     await verify(page).press('Enter');
-    await expect(action(page)).toContainText('已核对：来源已收藏');
+    await expect(page.locator('.scova-notifications .n-notification').last()).toContainText(
+        '已核对：来源已收藏',
+    );
     expect(state.reads.filter((read) => read.limit === 100)).toEqual([
         { limit: 100, cursor: null },
         { limit: 100, cursor: 'scan:1' },
@@ -357,13 +363,17 @@ test('HTTP sample: DELETE404 stays locked until real terminal page confirms abse
     await expect(remove).toBeEnabled();
     state.deleteStatus = 404;
     await remove.click();
-    await expect(action(page)).toContainText('请核对收藏状态');
+    await expect(page.locator('.scova-notifications .n-notification').last()).toContainText(
+        '请核对收藏状态',
+    );
     await expect(remove).toBeDisabled();
     state.rows = [];
     state.scanPages = 3;
     state.reads = [];
     await verify(page).click();
-    await expect(action(page)).toContainText('已核对完整收藏列表：来源当前未收藏');
+    await expect(page.locator('.scova-notifications .n-notification').last()).toContainText(
+        '已核对完整收藏列表：来源当前未收藏',
+    );
     await expect(create(page)).toBeEnabled();
     expect(state.reads.filter((read) => read.limit === 100)).toHaveLength(3);
 });
@@ -384,7 +394,9 @@ for (const mode of ['fail', 'loop', 'duplicate'] as const) {
         expect(state.writes).toHaveLength(1);
         state.scanMode = 'normal';
         await verify(page).click();
-        await expect(action(page)).toContainText('已核对：来源已收藏');
+        await expect(page.locator('.scova-notifications .n-notification').last()).toContainText(
+            '已核对：来源已收藏',
+        );
         await expect(
             action(page).getByRole('button', { name: '取消收藏', exact: true }),
         ).toBeEnabled();
@@ -428,7 +440,9 @@ test('HTTP sample: canceled verification and ordinary list seed cannot unlock af
         action(page).getByRole('button', { name: '取消收藏', exact: true }),
     ).toBeDisabled();
     await verify(page).click();
-    await expect(action(page)).toContainText('已核对：来源已收藏');
+    await expect(page.locator('.scova-notifications .n-notification').last()).toContainText(
+        '已核对：来源已收藏',
+    );
     expect(state.writes).toHaveLength(1);
 });
 
@@ -460,7 +474,9 @@ test('HTTP sample: pending command blocks duplicate mouse/key and all source act
     await expect(verify(page)).toBeDisabled();
     expect(posted).toBe(1);
     release();
-    await expect(action(page)).toContainText('已收藏来源');
+    await expect(page.locator('.scova-notifications .n-notification').last()).toContainText(
+        '已收藏来源',
+    );
     expect(state.writes).toHaveLength(1);
 });
 
@@ -494,7 +510,9 @@ test('HTTP sample: unknown pending write survives unmount; late result does not 
     await expect(action(page)).toContainText('结果尚待核对');
     await expect(create(page)).toBeDisabled();
     await verify(page).click();
-    await expect(action(page)).toContainText('已核对：来源已收藏');
+    await expect(page.locator('.scova-notifications .n-notification').last()).toContainText(
+        '已核对：来源已收藏',
+    );
 });
 
 test('HTTP sample: opaque pagination retry/back and deleting later page resets home/focus', async ({
@@ -562,7 +580,7 @@ for (const old of ['null', 'old-id'] as const) {
         const state = await samples(page, old === 'old-id' ? [bookmark(45)] : []);
         await openReport(page);
         await verify(page).click();
-        await expect(action(page)).toContainText(
+        await expect(page.locator('.scova-notifications .n-notification').last()).toContainText(
             old === 'old-id' ? '来源已收藏' : '来源当前未收藏',
         );
         state.rows = [bookmark(46)];

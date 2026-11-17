@@ -104,7 +104,9 @@ test('本地类型/大小校验不发上传请求', async ({ page }) => {
     await select(page, Buffer.from('<svg/>'), 'image/svg+xml');
     await expect(page.getByRole('alert')).toContainText('请选择JPEG');
     await select(page, Buffer.alloc(5 * 1024 * 1024 + 1));
-    await expect(page.getByRole('alert')).toContainText('5 MiB');
+    await expect(page.locator('.scova-notifications .n-notification').last()).toContainText(
+        '5 MiB',
+    );
     expect(state.writes).toBe(0);
 });
 test('上传失败保留旧头像与已选预览，可取消后再次操作', async ({ page }) => {

@@ -19,187 +19,91 @@ const page = (text: string, extractionVersion = 'search-api/deepseek/v1'): ReadP
     untrusted: true,
 });
 
-describe('verify provider excerpts at their original HTML source', () => {
-    it('stops an already cancelled request before reading or charging a saved excerpt', async () => {
-        const controller = new AbortController();
-        controller.abort();
+describe('selected provider reading', () => {
+    it('reuses the saved API body without origin verification or another request', async () => {
         const reader = { read: vi.fn() };
         const charge = vi.fn();
-        await expect(
-            readSource(url, page('excerpt'), reader, {
-                signal: controller.signal,
-                beforeAttempt: charge,
-            }),
-        ).rejects.toMatchObject({ code: 'aborted' });
+        const saved = page('Provider body');
+        expect(await readSource(url, saved, reader, { beforeAttempt: charge })).toEqual(saved);
         expect(reader.read).not.toHaveBeenCalled();
-        expect(charge).not.toHaveBeenCalled();
+        expect(charge).toHaveBeenCalledExactlyOnceWith('read');
+        expect(saved.collection).toBeUndefined();
     });
-    it('passes an ordinary source without API content through the same bounded Reader', async () => {
-        const complete = page('Origin content', 'scova-text-v5');
-        const context = { timeoutMs: 15000 };
-        const reader = { read: vi.fn().mockResolvedValue(complete) };
-        expect(await readSource(url, undefined, reader, context)).toBe(complete);
-        expect(reader.read).toHaveBeenCalledWith(url, context);
-    });
-    it('gets the complete source when a nonempty API prefix omits the requested method and tail', async () => {
-        const prefix = page('Introduction. date._');
-        const complete = {
-            ...page(
-                'Introduction. datetime.now() returns the current time. Footnote end.',
-                'scova-text-v5',
-            ),
-            collection: {
-                version: 1 as const,
-                method: 'html' as const,
-                complete: true,
-                limitations: [],
-            },
-        };
-        const charge = vi.fn();
-        const reader: PageReader = {
-            async read(target, options) {
-                expect(target).toBe(url);
-                expect(options?.timeoutMs).toBe(15000);
-                await options?.beforeAttempt?.('read');
-                return complete;
-            },
-        };
-        expect(
-            await readSource(url, prefix, reader, { timeoutMs: 15000, beforeAttempt: charge }),
-        ).toEqual(complete);
-        expect(charge).toHaveBeenCalledTimes(1);
-        expect(prefix.text).toBe('Introduction. date._');
-    });
-    it.each(['network', 'timeout', 'http', 'response_too_large', 'extraction_failed'] as const)(
-        'preserves the unchanged provider excerpt as unknown coverage after %s',
-        async (code) => {
-            const excerpt = page('A useful partial paragraph.');
-            const charge = vi.fn();
-            const reader: PageReader = {
-                async read(_target, options) {
-                    await options?.beforeAttempt?.('read');
-                    throw new ConnectorError(code, 'bounded failure');
-                },
-            };
-            expect(await readSource(url, excerpt, reader, { beforeAttempt: charge })).toEqual(
-                excerpt,
-            );
-            expect(charge).toHaveBeenCalledTimes(1);
-            expect(excerpt.collection).toBeUndefined();
+    it.each([undefined, page(''), { ...page('Locally clipped'), truncated: true }])(
+        'delegates missing or clipped body to the configured adapter',
+        async (saved) => {
+            const fetched = page('Fetched by provider');
+            const reader = { read: vi.fn().mockResolvedValue(fetched) };
+            const context = { timeoutMs: 15000 };
+            expect(await readSource(url, saved, reader, context)).toBe(fetched);
+            expect(reader.read).toHaveBeenCalledExactlyOnceWith(url, context);
         },
     );
-    it.each([
-        'unsafe_url',
-        'aborted',
-        'configuration',
-        'budget_exceeded',
-        'model_quota_exceeded',
-    ] as const)('never falls back after %s', async (code) => {
-        const error = new ConnectorError(code, 'must stop');
-        await expect(
-            readSource(
-                url,
-                page('excerpt'),
-                {
-                    async read() {
-                        throw error;
-                    },
-                },
-                {},
-            ),
-        ).rejects.toBe(error);
+    it('retains provider documents without invoking the local HTML Reader', async () => {
+        const target = 'https://docs.example/manual.pdf';
+        const saved = {
+            ...page('Document body'),
+            url: target,
+            originalUrl: target,
+            fetchedUrl: target,
+        };
+        const reader = { read: vi.fn() };
+        expect(await readSource(target, saved, reader, {})).toEqual(saved);
+        expect(reader.read).not.toHaveBeenCalled();
     });
-    it('propagates lease/persistence errors without accepting a stale excerpt', async () => {
+    it.each(['network', 'unsafe_url', 'aborted', 'budget_exceeded', 'extraction_failed'] as const)(
+        'propagates %s from the selected reader without using another service',
+        async (code) => {
+            const error = new ConnectorError(code, 'failed');
+            const reader: PageReader = {
+                async read() {
+                    throw error;
+                },
+            };
+            await expect(readSource(url, undefined, reader, {})).rejects.toBe(error);
+        },
+    );
+    it('rejects another URL before charging or reading', async () => {
+        const reader = { read: vi.fn() },
+            charge = vi.fn();
+        await expect(
+            readSource('https://docs.example/other', page('body'), reader, {
+                beforeAttempt: charge,
+            }),
+        ).rejects.toMatchObject({ code: 'configuration' });
+        expect(charge).not.toHaveBeenCalled();
+        expect(reader.read).not.toHaveBeenCalled();
+    });
+    it('propagates a lease or budget rejection when accepting saved evidence', async () => {
         const error = new Error('lease lost');
         await expect(
             readSource(
                 url,
-                page('excerpt'),
+                page('body'),
+                { read: vi.fn() },
                 {
-                    async read() {
+                    beforeAttempt: () => {
                         throw error;
                     },
                 },
-                {},
             ),
         ).rejects.toBe(error);
     });
-    it('propagates abort even if a Reader reports a network error after cancellation', async () => {
-        const controller = new AbortController();
-        const error = new ConnectorError('network', 'socket closed');
-        await expect(
-            readSource(
-                url,
-                page('excerpt'),
-                {
-                    async read() {
-                        controller.abort();
-                        throw error;
-                    },
-                },
-                { signal: controller.signal },
-            ),
-        ).rejects.toBe(error);
-    });
-    it('retains honest partial origin coverage without merging different page snapshots', async () => {
-        const partial = {
-            ...page('Visible origin preview.', 'scova-text-v5'),
-            collection: {
-                version: 1 as const,
-                method: 'html' as const,
-                complete: false,
-                limitations: ['content_restricted' as const],
-            },
-        };
-        expect(
-            await readSource(
-                url,
-                page('Other provider extraction.'),
-                {
-                    async read() {
-                        return partial;
-                    },
-                },
-                {},
-            ),
-        ).toEqual(partial);
-    });
-    it('preserves paid or failed Reader attempt accounting without an extra fallback charge', async () => {
-        const charge = vi.fn();
-        const failure = new ConnectorError('network', 'first');
-        await readSource(
-            url,
-            page('excerpt'),
-            {
-                async read(_target, options) {
-                    await options?.beforeAttempt?.('read');
-                    await options?.beforeAttempt?.('read', failure);
-                    throw failure;
-                },
-            },
-            { beforeAttempt: charge },
-        );
-        expect(charge).toHaveBeenCalledTimes(2);
-    });
-    it('retains provider-only document extraction without sending a PDF to HTML Reader', async () => {
-        const documentUrl = 'https://docs.example/manual.pdf';
-        const excerpt = {
-            ...page('PDF excerpt'),
-            url: documentUrl,
-            originalUrl: documentUrl,
-            fetchedUrl: documentUrl,
-        };
-        const reader = { read: vi.fn() };
-        const charge = vi.fn();
-        expect(await readSource(documentUrl, excerpt, reader, { beforeAttempt: charge })).toEqual(
-            excerpt,
-        );
-        expect(reader.read).not.toHaveBeenCalled();
-        expect(charge).toHaveBeenCalledTimes(1);
-    });
-    it('does not borrow an excerpt from another URL', async () => {
-        await expect(
-            readSource('https://docs.example/other', page('excerpt'), { read: vi.fn() }, {}),
-        ).rejects.toMatchObject({ code: 'configuration' });
-    });
+    it.each([false, true])(
+        'honors cancellation before or during reservation (%s)',
+        async (during) => {
+            const controller = new AbortController(),
+                charge = vi.fn(() => controller.abort());
+            if (!during) controller.abort();
+            const reader = { read: vi.fn() };
+            await expect(
+                readSource(url, page('body'), reader, {
+                    signal: controller.signal,
+                    beforeAttempt: charge,
+                }),
+            ).rejects.toMatchObject({ code: 'aborted' });
+            expect(reader.read).not.toHaveBeenCalled();
+            expect(charge).toHaveBeenCalledTimes(during ? 1 : 0);
+        },
+    );
 });

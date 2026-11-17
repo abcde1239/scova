@@ -1,6 +1,6 @@
 <template>
     <div class="format-banner scova-interface" :class="`format-banner--${format}`">
-        <div>
+        <div v-if="formats[format].description">
             <p class="format-name">{{ formats[format].name }}</p>
             <p>{{ formats[format].description }}</p>
         </div>
@@ -14,15 +14,14 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { Report } from '@scova/models';
+import { groupEvidence } from '@/utils/evidence-groups';
 const props = defineProps<{ report: Report; format: Report['format'] }>();
-const sourceCount = computed(
-    () => new Set(props.report.evidence.map((entry) => entry.sourceId.toLowerCase())).size,
-);
+const sourceCount = computed(() => groupEvidence(props.report.evidence).length);
 const formats = {
-    brief: { name: '简报', description: '集中阅读主要发现。' },
-    list: { name: '主题清单', description: '按主题逐项浏览，展开卡片中的来源核对信息。' },
-    comparison: { name: '信息对照表', description: '逐行对照问题、收集内容与来源依据。' },
-    research_report: { name: '研究报告', description: '通过目录阅读各章节，沿引用追溯研究材料。' },
+    brief: { name: '简报', description: '' },
+    list: { name: '主题清单', description: '' },
+    comparison: { name: '对比表', description: '' },
+    research_report: { name: '研究报告', description: '' },
 };
 </script>
 
@@ -48,8 +47,10 @@ p {
 .format-banner--comparison {
     @apply border-theme rounded-1;
 }
-.format-banner--research_report {
-    @apply bg-transparent pl-0 pr-0 [border-inline:0]
-        [border-block:0.1875rem_double_var(--scova-border)];
+.format-banner--research_report,
+.format-banner--brief,
+.format-banner--list,
+.format-banner--comparison {
+    @apply bg-transparent p-0 [border:0];
 }
 </style>

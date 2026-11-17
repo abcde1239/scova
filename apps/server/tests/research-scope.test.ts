@@ -8,6 +8,29 @@ import { draftConfig } from './support/task-drafts.ts';
 const config = (): TaskConfig => draftConfig();
 
 describe('research collection scope', () => {
+    it('search overrides reset comparison scope while legacy defaults and unchanged retries remain stable', () => {
+        const original = config();
+        const inherited = { config: original, scope: 'f'.repeat(64) };
+        expect(comparisonScopeHash({ ...original, searchMode: 'auto' })).toBe(
+            comparisonScopeHash(original),
+        );
+        expect(runComparisonScopeHash({ ...original, searchMode: 'auto' }, 'live', inherited)).toBe(
+            inherited.scope,
+        );
+        for (const searchMode of ['api', 'searxng'] as const) {
+            const chosen = { ...original, searchMode };
+            expect(comparisonScopeHash(chosen)).not.toBe(comparisonScopeHash(original));
+            expect(runComparisonScopeHash(chosen, 'live', inherited)).toBe(
+                runComparisonScopeHash(chosen, 'live'),
+            );
+            expect(runComparisonScopeHash(chosen, 'live', { ...inherited, config: chosen })).toBe(
+                inherited.scope,
+            );
+        }
+        expect(comparisonScopeHash({ ...original, searchMode: 'api' })).not.toBe(
+            comparisonScopeHash({ ...original, searchMode: 'searxng' }),
+        );
+    });
     it('isolates collection targets while preserving non-research edits', () => {
         const original = config();
         const scope = comparisonScopeHash(original);

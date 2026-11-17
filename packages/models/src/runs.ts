@@ -11,10 +11,11 @@ import {
     refineSchema,
     describeProperties,
 } from './common.ts';
-import { BudgetSchema } from './tasks.ts';
+import { BudgetSchema, SearchModeSchema } from './tasks.ts';
 import { ReportValueSchema } from './report-value.ts';
 import { ReportDeliverySchema } from './report-delivery.ts';
 import { ReportArtifactSchema } from './report-artifacts.ts';
+import { ResearchMetricsSchema, PropositionEvidenceSchema } from './research-coverage.ts';
 
 const CountSchema = Type.Integer({
     minimum: 0,
@@ -42,6 +43,8 @@ export const CoverageSchema = Type.Object(
         ),
         reportValue: Type.Optional(ReportValueSchema),
         delivery: Type.Optional(ReportDeliverySchema),
+        metrics: Type.Optional(ResearchMetricsSchema),
+        propositions: Type.Optional(PropositionEvidenceSchema),
         notes: Type.Optional(
             Type.Array(NonEmptyTextSchema, {
                 maxItems: 1200,
@@ -143,6 +146,7 @@ export const RunCommandResponseSchema = Type.Object(
 const RunCommandInputObject = Type.Object(
     {
         mode: Type.Optional(Type.Literal('live')),
+        searchMode: Type.Optional(SearchModeSchema),
         outputFormat: Type.Optional(OutputFormatSchema),
         outputFormats: Type.Optional(OutputFormatsSchema),
         agentProviderId: Type.Optional(

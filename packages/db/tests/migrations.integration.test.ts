@@ -358,6 +358,10 @@ describe('Drizzle SQL 迁移与旧库无损接管', () => {
                     table: 'agent_providers',
                     data: { count: 0, hash: createHash('md5').update('[]').digest('hex') },
                 },
+                {
+                    table: 'search_configurations',
+                    data: { count: 0, hash: createHash('md5').update('[]').digest('hex') },
+                },
             ]);
             expect(
                 (

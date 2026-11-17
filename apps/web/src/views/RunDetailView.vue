@@ -16,9 +16,14 @@ import { useRoute, useRouter } from 'vue-router';
 import StatePanel from '@/components/common/StatePanel.vue';
 import ExecutionDetail from '@/components/run/ExecutionDetail.vue';
 import { useExecution } from '@/composables/useExecution';
+import { useSearchApiSuggestion } from '@/composables/useSearchApiSuggestion';
 const route = useRoute();
 const router = useRouter();
-const execution = useExecution(() => String(route.params.runId ?? ''));
+const searchSuggestion = useSearchApiSuggestion();
+const execution = useExecution(() => String(route.params.runId ?? ''), {
+    onEvent: searchSuggestion.onEvent,
+    onReset: searchSuggestion.reset,
+});
 let watchedRun: string | undefined;
 // Only follow an execution observed in progress. Opening its history remains an explicit detail view.
 watch(

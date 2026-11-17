@@ -50,6 +50,20 @@
             "when": 1794298969096,
             "tag": "0006_harsh_forge",
             "breakpoints": true
+        },
+        {
+            "idx": 7,
+            "version": "7",
+            "when": 1794410696854,
+            "tag": "0007_known_stick",
+            "breakpoints": true
+        },
+        {
+            "idx": 8,
+            "version": "7",
+            "when": 1794633633574,
+            "tag": "0008_illegal_iceman",
+            "breakpoints": true
         }
     ]
 }

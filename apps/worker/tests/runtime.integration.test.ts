@@ -103,88 +103,88 @@ describe('Worker Bun/Node 真实进程', () => {
             .then((rows) => ({ count: rows.length })),
     );
 
-    it.each(['bun', 'node'] as const)('%s 启动后实际投递，IPC 停止并释放连接', async (runtime) => {
-        const { outbox: item } = await seedRun(fixture.db);
-        const queueName = `scova-runtime-${runtime}-${randomUUID()}`;
-        const connection = new Redis(fixture.redisUrl, {
-            lazyConnect: true,
-            enableOfflineQueue: false,
-            maxRetriesPerRequest: 1,
-        });
-        connection.on('error', () => undefined);
-        await connection.connect();
-        const publisher = createOutboxQueue(connection, queueName);
-        const process = launch(runtime, {
-            DATABASE_URL: fixture.databaseUrl,
-            AGENT_CHECKPOINT_SCHEMA: fixture.checkpointSchema,
-            REDIS_URL: fixture.redisUrl,
-            WORKER_QUEUE_NAME: queueName,
-            WORKER_POLL_INTERVAL_MS: '20',
-        });
-        try {
-            await waitUntil(
-                async () =>
-                    (
-                        await fixture.db.query.outbox
-                            .findFirst({ where: eq(dbOutbox.id, item.id) })
-                            .then((row) => requiredDatabaseValue(row))
-                    ).sentAt !== null,
-                process,
-            );
-            expect(process.output).toContain('Outbox dispatcher running');
-            expect((await publisher.queue.getJob(`run-${item.aggregateId}`))?.data).toEqual({
-                runId: item.aggregateId,
+    it.each(['bun', 'node'] as const)(
+        '%s 实际投递并拒绝未配置演示执行，IPC 停止并释放连接',
+        async (runtime) => {
+            const { outbox: item } = await seedRun(fixture.db);
+            const queueName = `scova-runtime-${runtime}-${randomUUID()}`;
+            const connection = new Redis(fixture.redisUrl, {
+                lazyConnect: true,
+                enableOfflineQueue: false,
+                maxRetriesPerRequest: 1,
             });
-            await waitUntil(
-                async () =>
-                    (
-                        await fixture.db.query.runs
-                            .findFirst({ where: eq(dbRuns.id, item.aggregateId) })
-                            .then((row) => requiredDatabaseValue(row))
-                    ).status === 'partial',
-                process,
-            );
-            expect(
-                await fixture.db.query.runs
-                    .findFirst({ where: eq(dbRuns.id, item.aggregateId) })
-                    .then((row) => requiredDatabaseValue(row)),
-            ).toMatchObject({
-                status: 'partial',
-                failureCode: null,
+            connection.on('error', () => undefined);
+            await connection.connect();
+            const publisher = createOutboxQueue(connection, queueName);
+            const process = launch(runtime, {
+                DATABASE_URL: fixture.databaseUrl,
+                AGENT_CHECKPOINT_SCHEMA: fixture.checkpointSchema,
+                REDIS_URL: fixture.redisUrl,
+                WORKER_QUEUE_NAME: queueName,
+                WORKER_POLL_INTERVAL_MS: '20',
             });
-            expect(
-                await fixture.db
-                    .select({ count: dbCount() })
-                    .from(dbReports)
-                    .where(eq(dbReports.runId, item.aggregateId))
-                    .then((rows) => rows[0]!.count),
-            ).toBe(1);
-            expect(
-                await fixture.db
-                    .select({ count: dbCount() })
-                    .from(dbInboxItems)
-                    .where(
-                        sql`EXISTS (SELECT 1 FROM ${dbReports} WHERE ${and(eq(dbInboxItems.userId, dbReports.userId), eq(dbInboxItems.reportId, dbReports.id), eq(dbReports.runId, item.aggregateId))})`,
-                    )
-                    .then((rows) => rows[0]!.count),
-            ).toBe(1);
-            process.child.send('scova:shutdown');
-            await ended(process);
-            expect(process.exit?.code).toBe(0);
-        } finally {
-            if (!process.exit) {
-                if (process.child.connected) process.child.send('scova:shutdown');
-                try {
-                    await ended(process);
-                } catch {
-                    process.child.kill();
+            try {
+                await waitUntil(
+                    async () =>
+                        (
+                            await fixture.db.query.outbox
+                                .findFirst({ where: eq(dbOutbox.id, item.id) })
+                                .then((row) => requiredDatabaseValue(row))
+                        ).sentAt !== null,
+                    process,
+                );
+                expect(process.output).toContain('Outbox dispatcher running');
+                expect((await publisher.queue.getJob(`run-${item.aggregateId}`))?.data).toEqual({
+                    runId: item.aggregateId,
+                });
+                await waitUntil(async () => {
+                    const run = await fixture.db.query.runs
+                        .findFirst({ where: eq(dbRuns.id, item.aggregateId) })
+                        .then((row) => requiredDatabaseValue(row));
+                    return run.status === 'failed';
+                }, process);
+                expect(
+                    await fixture.db.query.runs
+                        .findFirst({ where: eq(dbRuns.id, item.aggregateId) })
+                        .then((row) => requiredDatabaseValue(row)),
+                ).toMatchObject({
+                    status: 'failed',
+                    failureCode: 'AGENT_CONFIGURATION_INVALID',
+                });
+                expect(
+                    await fixture.db
+                        .select({ count: dbCount() })
+                        .from(dbReports)
+                        .where(eq(dbReports.runId, item.aggregateId))
+                        .then((rows) => rows[0]!.count),
+                ).toBe(0);
+                expect(
+                    await fixture.db
+                        .select({ count: dbCount() })
+                        .from(dbInboxItems)
+                        .where(
+                            sql`EXISTS (SELECT 1 FROM ${dbReports} WHERE ${and(eq(dbInboxItems.userId, dbReports.userId), eq(dbInboxItems.reportId, dbReports.id), eq(dbReports.runId, item.aggregateId))})`,
+                        )
+                        .then((rows) => rows[0]!.count),
+                ).toBe(0);
+                process.child.send('scova:shutdown');
+                await ended(process);
+                expect(process.exit?.code).toBe(0);
+            } finally {
+                if (!process.exit) {
+                    if (process.child.connected) process.child.send('scova:shutdown');
+                    try {
+                        await ended(process);
+                    } catch {
+                        process.child.kill();
+                    }
                 }
+                await publisher.queue.obliterate({ force: true });
+                await publisher.close();
+                connection.disconnect();
             }
-            await publisher.queue.obliterate({ force: true });
-            await publisher.close();
-            connection.disconnect();
-        }
-    });
+        },
+    );
 
     it.each(['bun', 'node'] as const)('%s 缺少配置明确失败且不输出凭据', async (runtime) => {
         const process = launch(runtime, {

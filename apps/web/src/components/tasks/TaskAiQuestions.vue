@@ -45,7 +45,6 @@
                 :disabled="disabled || busy"
             />
         </fieldset>
-        <p class="break-anywhere m-0" v-if="message" role="status">{{ message }}</p>
         <state-panel
             v-if="busy"
             state="loading"
@@ -77,7 +76,6 @@ defineProps<{
     transcript: TaskClarifications;
     busy: boolean;
     disabled: boolean;
-    message: string;
 }>();
 const emit = defineEmits<{ answer: [answers: Record<string, string>]; cancel: []; manual: [] }>();
 const answers = reactive<Record<string, string>>({});

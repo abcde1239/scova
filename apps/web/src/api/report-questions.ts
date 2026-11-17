@@ -7,6 +7,10 @@ import {
     ReportConversationSchema,
     ReportConversationQuerySchema,
     type ReportConversation,
+    ReportMergeInputSchema,
+    RunCommandResponseSchema,
+    type OutputFormat,
+    type RunCommandResponse,
 } from '@scova/models';
 import { defineApiEndpoint } from '@/api/endpoints';
 import { modelValidator } from '@/api/validator';
@@ -56,4 +60,15 @@ export const reportConversationEndpoint = defineApiEndpoint<{
     path: '/reports/:reportId/conversation',
     inputValidators: { params: reportParams, query: modelValidator(ReportConversationQuerySchema) },
     validator: modelValidator(ReportConversationSchema),
+});
+
+export const mergeReportEndpoint = defineApiEndpoint<{
+    params: { reportId: string };
+    body: { confirm: true; reportIds: string[]; outputFormats?: OutputFormat[] };
+    data: RunCommandResponse;
+}>({
+    method: 'POST',
+    path: '/reports/:reportId/merge',
+    inputValidators: { params: reportParams, body: modelValidator(ReportMergeInputSchema) },
+    validator: modelValidator(RunCommandResponseSchema),
 });

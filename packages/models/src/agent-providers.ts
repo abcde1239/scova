@@ -2,16 +2,6 @@ import { Type, type Static } from '@sinclair/typebox';
 import { InstantSchema, UuidSchema } from './common.ts';
 
 const ProviderFields = {
-    webSearch: Type.Optional(
-        Type.Union(
-            [
-                Type.Literal('disabled'),
-                Type.Literal('openai_responses'),
-                Type.Literal('anthropic_web_search'),
-            ],
-            { description: '研究搜索授权；省略时创建默认关闭，更新保留原值' },
-        ),
-    ),
     protocol: Type.Union(
         [
             Type.Literal('openai_chat_completions'),
@@ -52,17 +42,9 @@ const SearchApiFields = {
     ),
     baseUrl: ProviderFields.baseUrl,
     contentMode: Type.Union([Type.Literal('prefer_api'), Type.Literal('reader')], {
-        description: '优先采用 API 正文，缺失时 Reader 补读；或始终使用 Reader',
+        description: '兼容历史字段；迁入后搜索和读取均由 Search API 完成',
     }),
 };
-const SearchApiInput = Type.Object(
-    { ...SearchApiFields, apiKey: Secret },
-    { additionalProperties: false, description: '独立搜索配置；密钥与模型密钥分开保存' },
-);
-const SearchApiUpdate = Type.Object(
-    { ...SearchApiFields, apiKey: Type.Optional(Secret) },
-    { additionalProperties: false, description: '编辑搜索配置；地址与协议未改变时可保留密钥' },
-);
 const SearchApiPublic = Type.Object(
     { ...SearchApiFields, hasApiKey: Type.Boolean({ description: '已保存独立搜索密钥' }) },
     { additionalProperties: false, description: '脱敏搜索配置' },
@@ -71,22 +53,12 @@ export const AgentProviderInputSchema = Type.Object(
     {
         ...ProviderFields,
         apiKey: Secret,
-        searchApi: Type.Optional(
-            Type.Union([SearchApiInput, Type.Null()], {
-                description: '账号独立搜索配置，省略或空值使用部署默认搜索',
-            }),
-        ),
     },
     { additionalProperties: false, description: '当前账号的供应商配置' },
 );
 export const AgentProviderUpdateSchema = Type.Object(
     {
         ...ProviderFields,
-        searchApi: Type.Optional(
-            Type.Union([SearchApiUpdate, Type.Null()], {
-                description: '独立搜索配置；省略保留，空值移除',
-            }),
-        ),
         apiKey: Type.Optional(Secret),
         revision: Type.Integer({ minimum: 1, description: '编辑时读取的修订号' }),
     },
@@ -96,9 +68,19 @@ export const AgentProviderSchema = Type.Object(
     {
         id: UuidSchema,
         ...ProviderFields,
+        webSearch: Type.Optional(
+            Type.Union(
+                [
+                    Type.Literal('disabled'),
+                    Type.Literal('openai_responses'),
+                    Type.Literal('anthropic_web_search'),
+                ],
+                { description: '历史内置搜索授权，仅供旧配置识别，不再用于搜索执行' },
+            ),
+        ),
         searchApi: Type.Optional(
             Type.Union([SearchApiPublic, Type.Null()], {
-                description: '脱敏的独立搜索配置；空值表示未配置，无法解密时省略',
+                description: '历史搜索配置，仅供显式迁入独立搜索配置；不再用于模型执行',
             }),
         ),
         hasApiKey: Type.Boolean({ description: '是否保存密钥，不返回密钥内容或片段' }),

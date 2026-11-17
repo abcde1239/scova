@@ -5,8 +5,12 @@
         :class="`answers--${format}`"
         aria-labelledby="answers-title"
     >
-        <h3 id="answers-title" class="scova-content-title m-0">{{ presentation.title }}</h3>
-        <p class="scova-interface m-0 [.assessment_&:is(p)]:mt-2">{{ presentation.description }}</p>
+        <h3 v-if="!document" id="answers-title" class="scova-content-title m-0">
+            {{ presentation.title }}
+        </h3>
+        <p v-if="!document" class="scova-interface m-0 [.assessment_&:is(p)]:mt-2">
+            {{ readingDescription }}
+        </p>
         <report-structured-content
             v-if="structured"
             :report="report"
@@ -19,12 +23,13 @@
         >
             这份报告未保存对象与字段结构，以下保留原有问题与回答。
         </p>
-        <component :is="structured ? 'details' : 'div'" class="answer-support">
+        <component :is="structured || document ? 'details' : 'div'" class="answer-support">
             <summary
-                v-if="structured"
+                v-if="structured || document"
+                :id="document ? 'answers-title' : undefined"
                 class="scova-interface min-h-11 pt-2 pb-2 cursor-pointer keyboard-focus-wide"
             >
-                查看完整依据与问题覆盖
+                查看问题覆盖
             </summary>
             <div class="answer-rows report-grid max-w-full">
                 <section
@@ -62,7 +67,9 @@
                         >
                             <template v-for="index in group.indexes" :key="index">
                                 <template v-if="report.claims[index]">
-                                    <template v-if="firstQuestion(index) === question.id">
+                                    <template
+                                        v-if="!document && firstQuestion(index) === question.id"
+                                    >
                                         <report-claim
                                             :report="report"
                                             :claim="report.claims[index]!"
@@ -74,7 +81,10 @@
                                             适用条件：{{ selection(index)?.assessment?.conditions }}
                                         </p>
                                         <details
-                                            v-if="selection(index)?.assessment"
+                                            v-if="
+                                                selection(index)?.assessment &&
+                                                report.claims[index]?.kind !== 'model_answer'
+                                            "
                                             class="assessment scova-interface text-muted"
                                         >
                                             <summary
@@ -98,7 +108,7 @@
                                         class="shared-answer scova-interface m-0 [.assessment_&:is(p)]:mt-2"
                                     >
                                         <a
-                                            class="inline-flex min-h-11 items-center text-primary underline-offset-[0.2em] keyboard-focus-wide"
+                                            class="inline-flex min-h-11 items-center scova-link keyboard-focus-wide"
                                             :href="`#claim-${report.claims[index]!.id}`"
                                             >查看前文相关结论</a
                                         >
@@ -173,16 +183,29 @@
 </template>
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { Report, ReportValue } from '@scova/models';
+import type { ArtifactDocument, Report, ReportValue } from '@scova/models';
 import ReportClaim from '@/components/reports/ReportClaim.vue';
 import ReportStructuredContent from '@/components/reports/ReportStructuredContent.vue';
-const props = withDefaults(defineProps<{ report: Report; format?: Report['format'] }>(), {
-    format: 'brief',
-});
-const value = computed(() => props.report.coverage.reportValue);
-const structured = computed(
-    () => props.report.coverage.artifacts?.find((entry) => entry.format === props.format)?.content,
+const props = withDefaults(
+    defineProps<{
+        report: Report;
+        format?: Report['format'];
+        document?: ArtifactDocument;
+    }>(),
+    {
+        format: 'brief',
+    },
 );
+const value = computed(() => props.report.coverage.reportValue);
+const structured = computed(() => {
+    const content = props.report.coverage.artifacts?.find(
+        (entry) => entry.format === props.format,
+    )?.content;
+    return (props.format === 'list' && content?.list) ||
+        (props.format === 'comparison' && content?.comparison)
+        ? content
+        : undefined;
+});
 const pending = computed(() =>
     props.report.claims.filter((claim) => claim.kind === 'insufficient'),
 );
@@ -204,6 +227,15 @@ const presentation = computed(
             },
         })[props.format],
 );
+const readingDescription = computed(() => {
+    if (props.format === 'list' && structured.value?.list)
+        return `本清单整理了 ${structured.value.list.entries.length} 个条目，按所需字段逐项展示。`;
+    if (props.format === 'comparison' && structured.value?.comparison) {
+        const matrix = structured.value.comparison;
+        return `本表比较 ${matrix.objects.length} 个对象、${matrix.dimensions.length} 个共同维度；按列查看对象，按行比较同一项。`;
+    }
+    return presentation.value.description;
+});
 const questions = computed(() =>
     [...(value.value?.questions ?? [])].sort(
         (a, b) => Number(b.priority === 'core') - Number(a.priority === 'core'),
@@ -216,7 +248,8 @@ const groupedQuestions = computed(() =>
             .filter(
                 (index) =>
                     props.report.claims[index] &&
-                    props.report.claims[index]!.kind !== 'insufficient',
+                    props.report.claims[index]!.kind !== 'insufficient' &&
+                    (!props.document || selection(index)?.placement === 'main'),
             )
             .map((index) => ({ key: `claim:${index}`, indexes: [index] })),
     })),

@@ -75,6 +75,59 @@ const failure = (status: number, code = 'LOCAL_FAILURE') =>
 afterEach(() => cleanups.splice(0).forEach((cleanup) => cleanup()));
 
 describe('显式 Run 命令与冻结重发', () => {
+    it.each(['queued', 'running', 'recovering', 'cancel_requested'] as const)(
+        '最新执行为%s时不发送启动命令',
+        async (status) => {
+            const fetcher = vi.fn<typeof fetch>(async () => success());
+            const { actions } = setup(fetcher, { taskId, latestRun: { ...run, status } });
+            await actions.submit('start');
+            expect(fetcher).not.toHaveBeenCalled();
+        },
+    );
+    it('状态未读完禁止启动，已确认的执行结束后可再次启动', async () => {
+        const fetcher = vi.fn<typeof fetch>(async () => success());
+        const { actions, target } = setup(fetcher, { taskId, startBlocked: true });
+        await actions.submit('start');
+        expect(fetcher).not.toHaveBeenCalled();
+        target.value.startBlocked = false;
+        await actions.submit('start');
+        expect(fetcher).toHaveBeenCalledTimes(1);
+        target.value.latestRun = { ...queued, status: 'running' };
+        await nextTick();
+        expect(actions.locked.value).toBe(true);
+        target.value.latestRun = { ...queued, status: 'failed', finishedAt: instant };
+        await nextTick();
+        expect(actions.locked.value).toBe(false);
+        expect(actions.phase.value).toBe('success');
+        expect(actions.result.value?.run.id).toBe(queued.id);
+        await actions.submit('start');
+        expect(fetcher).toHaveBeenCalledTimes(2);
+    });
+    it('freezes search override for uncertain replay and never sends it on cancellation', async () => {
+        const bodies: string[] = [];
+        const { actions, target } = setup(
+            async (_url, init) => {
+                bodies.push(init?.body as string);
+                if (bodies.length === 1) throw new TypeError('network');
+                return success();
+            },
+            { taskId, searchMode: 'searxng' },
+        );
+        await actions.submit('start');
+        target.value.searchMode = 'api';
+        await actions.replay();
+        expect(bodies[1]).toBe(bodies[0]);
+        expect(JSON.parse(bodies[1]!)).toEqual({ mode: 'live', searchMode: 'searxng' });
+        const canceled = setup(
+            async (_url, init) => {
+                expect(init?.body).toBeUndefined();
+                return success({ ...run, status: 'cancel_requested' });
+            },
+            { taskId, run: { ...run, status: 'running' }, searchMode: 'api' },
+        );
+        await canceled.actions.submit('cancel');
+        expect(canceled.actions.phase.value).toBe('success');
+    });
     it('未知结果重发保留提交时的多选数组，页面修改不能改写原命令', async () => {
         const bodies: string[] = [];
         const { actions, target } = setup(

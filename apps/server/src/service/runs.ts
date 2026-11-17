@@ -64,6 +64,7 @@ function commandBody(input: RunCommandInput | undefined) {
     const parsed = parseContract(RunCommandInputSchema, input ?? {});
     return {
         mode: parsed.mode ?? 'live',
+        ...(parsed.searchMode !== undefined ? { searchMode: parsed.searchMode } : {}),
         ...(parsed.outputFormat !== undefined ? { outputFormat: parsed.outputFormat } : {}),
         ...(parsed.outputFormats !== undefined ? { outputFormats: parsed.outputFormats } : {}),
         ...(parsed.agentProviderId !== undefined
@@ -78,10 +79,11 @@ export function runComparisonScopeHash(
     mode: 'live' | 'demo',
     inherited: { config?: TaskConfig; scope?: string; questionId?: string } = {},
 ): string {
-    const formatsKey = (value: TaskConfig) => JSON.stringify(selectedOutputFormats(value).sort());
+    const collectionKey = (value: TaskConfig) =>
+        JSON.stringify([selectedOutputFormats(value).sort(), value.searchMode ?? 'auto']);
     if (
         inherited.scope &&
-        (!inherited.config || formatsKey(config) === formatsKey(inherited.config))
+        (!inherited.config || collectionKey(config) === collectionKey(inherited.config))
     )
         return inherited.scope;
     const scope = comparisonScopeHash(config);
@@ -121,18 +123,22 @@ export function createRunService(services: ApiServices) {
         inheritedConfig?: TaskConfig,
         inheritedScope?: string,
         inheritedContext?: ReportConversationContext,
+        merge?: { reportId: string; reportIds: string[] },
     ) {
         if (!UUID.test(taskId)) throw new ApiError(404, 'NOT_FOUND', '资源不存在');
         const command = commandBody(input);
-        const scope = followup
-            ? `question:${followup.questionId}:${followup.context?.operation === 'revise' ? 'revision' : 'followup'}`
-            : `run:${taskId}:${parentRunId ? 'retry' : 'create'}`;
+        const scope = merge
+            ? `report:${merge.reportId}:merge`
+            : followup
+              ? `question:${followup.questionId}:${followup.context?.operation === 'revise' ? 'revision' : 'followup'}`
+              : `run:${taskId}:${parentRunId ? 'retry' : 'create'}`;
         const keyHash = sha256(idempotencyKey);
         const payloadHash = sha256(
             JSON.stringify({
                 taskId,
                 parentRunId,
                 ...command,
+                ...(merge ? { merge } : {}),
                 ...(followup
                     ? {
                           questionId: followup.questionId,
@@ -198,14 +204,17 @@ export function createRunService(services: ApiServices) {
                     TaskConfigSchema,
                     inheritedConfig ?? version.configJson,
                 );
-                let config = question
-                    ? parseContract(TaskConfigSchema, {
-                          ...baseConfig,
-                          goal: question.question,
-                          focusPoints: [],
-                          schedule: { frequency: 'manual' },
-                      })
-                    : baseConfig;
+                let config =
+                    question || merge
+                        ? parseContract(TaskConfigSchema, {
+                              ...baseConfig,
+                              goal: merge
+                                  ? '合并原报告与选定续作，基于保存证据生成完整的中文报告，合并重复内容，保留条件、真实分歧和未解决的问题。'
+                                  : question!.question,
+                              focusPoints: [],
+                              schedule: { frequency: 'manual' },
+                          })
+                        : baseConfig;
                 if (command.outputFormats !== undefined)
                     config = {
                         ...config,
@@ -223,6 +232,8 @@ export function createRunService(services: ApiServices) {
                             ? rest
                             : { ...rest, agentProviderId: command.agentProviderId };
                 }
+                if (command.searchMode !== undefined)
+                    config = { ...config, searchMode: command.searchMode };
                 if (
                     config.agentProviderId &&
                     !(await store.findAgentProvider(userId, config.agentProviderId))
@@ -241,7 +252,7 @@ export function createRunService(services: ApiServices) {
                 });
                 const active = await store.findActiveRun(task.id, userId);
                 if (active) {
-                    if (followup)
+                    if (followup || merge)
                         throw new ApiError(
                             409,
                             'RUN_ALREADY_ACTIVE',
@@ -260,10 +271,12 @@ export function createRunService(services: ApiServices) {
                         questionId: question?.id,
                     }),
                     mode: command.mode,
-                    trigger: followup ? 'followup' : parentRunId ? 'retry' : 'manual',
+                    trigger: followup || merge ? 'followup' : parentRunId ? 'retry' : 'manual',
                     ...(question ||
+                    merge ||
                     inheritedConfig ||
                     command.agentProviderId !== undefined ||
+                    command.searchMode !== undefined ||
                     command.outputFormat !== undefined ||
                     command.outputFormats !== undefined
                         ? { followupConfigJson: config }
@@ -412,6 +425,39 @@ export function createRunService(services: ApiServices) {
         },
         async get(userId: string, runId: string) {
             return toRun(await requireRun(userId, runId));
+        },
+        async merge(
+            userId: string,
+            reportRunId: string,
+            key: string,
+            context: ReportConversationContext,
+            outputFormats?: OutputFormat[],
+        ) {
+            const parent = await requireRun(userId, reportRunId);
+            if (parent.mode !== 'live')
+                throw new ApiError(409, 'LEGACY_DEMO_RUN', '演示报告不能合并成果');
+            const frozen = parseContract(ReportConversationContextSchema, context);
+            if (!frozen.merge || frozen.operation !== 'revise')
+                throw new ApiError(422, 'INVALID_MERGE', '合并上下文无效');
+            const result = await createRun(
+                parent.taskId,
+                userId,
+                { mode: 'live', ...(outputFormats ? { outputFormats } : {}) },
+                key,
+                parent.id,
+                parent.taskVersionId,
+                undefined,
+                parent.followupConfigJson
+                    ? parseContract(TaskConfigSchema, parent.followupConfigJson)
+                    : undefined,
+                effectiveRunScopeHash(
+                    sha256(`report-merge:${frozen.reportId}:${frozen.merge.reportIds.join(',')}`),
+                    'live',
+                ),
+                frozen,
+                { reportId: frozen.reportId, reportIds: frozen.merge.reportIds },
+            );
+            return { run: toRun(result.run), reused: result.reused };
         },
         async cancel(userId: string, runId: string) {
             if (!UUID.test(runId)) throw new ApiError(404, 'NOT_FOUND', '资源不存在');

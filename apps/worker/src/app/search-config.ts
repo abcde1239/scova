@@ -1,51 +1,95 @@
 import { ConnectorError, type SearchApiOptions } from '@scova/connectors';
-import type { ProviderCredentials } from '@scova/shared/credentials';
+import type { SearchMode } from '@scova/models';
+import type { searchConfigurations } from '@scova/db';
+import { openCredential } from '@scova/shared/credentials';
+
+export interface AccountSearchConfig {
+    defaultMode: 'api' | 'searxng';
+    searchApi?: SearchApiOptions;
+}
+
+export class SearchConfigurationError extends ConnectorError {
+    constructor(
+        readonly failureCode:
+            | 'SEARCH_API_NOT_CONFIGURED'
+            | 'SEARCH_CREDENTIAL_INVALID'
+            | 'SEARCH_API_READING_UNSUPPORTED',
+    ) {
+        super(
+            'configuration',
+            failureCode === 'SEARCH_API_NOT_CONFIGURED'
+                ? '请在账号中配置 Search API，或选择内置 SearXNG'
+                : failureCode === 'SEARCH_API_READING_UNSUPPORTED'
+                  ? 'Perplexity Search 暂不支持独立网页读取，请在账号中改选 DeepSeek 或 Tavily'
+                  : '搜索密钥无法读取，请在账号中重新保存 Search API',
+        );
+    }
+}
+
+function searchCredential(value: string, userId: string, id: string, key?: string) {
+    try {
+        return openCredential(value, userId, id, key);
+    } catch {
+        throw new SearchConfigurationError('SEARCH_CREDENTIAL_INVALID');
+    }
+}
+
+type SearchRecord = Pick<
+    typeof searchConfigurations.$inferSelect,
+    'id' | 'defaultMode' | 'protocol' | 'baseUrl' | 'contentMode' | 'encryptedApiKey'
+>;
+
+export function accountSearchConfig(
+    env: NodeJS.ProcessEnv,
+    account: SearchRecord | null,
+    userId: string,
+    mode: SearchMode = 'auto',
+) {
+    const selected = mode === 'auto' ? (account?.defaultMode ?? 'searxng') : mode;
+    const searchApi =
+        selected === 'api' &&
+        account?.encryptedApiKey &&
+        account.protocol &&
+        account.baseUrl &&
+        account.contentMode
+            ? {
+                  protocol: account.protocol,
+                  baseUrl: account.baseUrl,
+                  contentMode: 'prefer_api' as const,
+                  apiKey: searchCredential(
+                      account.encryptedApiKey,
+                      userId,
+                      account.id,
+                      env.AGENT_CREDENTIAL_KEY,
+                  ),
+              }
+            : undefined;
+    return effectiveSearchConfig(
+        env,
+        account ? { defaultMode: account.defaultMode, searchApi } : null,
+        mode,
+    );
+}
 
 export function effectiveSearchConfig(
     env: NodeJS.ProcessEnv,
-    account: { webSearch?: string; searchApi?: ProviderCredentials['searchApi'] },
+    account: AccountSearchConfig | null,
+    mode: SearchMode = 'auto',
 ) {
-    if (account.webSearch && account.webSearch !== 'disabled') {
-        if (account.searchApi) throw new ConnectorError('configuration', '账号搜索配置冲突');
-        return {};
-    }
-    if (account.searchApi) return { searchProvider: 'api' as const, searchApi: account.searchApi };
-    return readSearchConfig(env);
-}
-
-/** Deployment fallback; search credentials never inherit a model key. */
-export function readSearchConfig(env: NodeJS.ProcessEnv): {
-    searchProvider: 'searxng' | 'tavily' | 'api';
-    searxngBaseUrl?: string;
-    tavilyApiKey?: string;
-    searchApi?: SearchApiOptions;
-} {
-    const provider = env.SEARCH_PROVIDER ?? 'searxng';
-    if (provider !== 'searxng' && provider !== 'tavily' && provider !== 'api')
-        throw new ConnectorError('configuration', '搜索服务选项无效');
-    if (provider !== 'api')
+    const selected = mode === 'auto' ? (account?.defaultMode ?? 'searxng') : mode;
+    if (selected === 'searxng')
         return {
-            searchProvider: provider,
+            searchProvider: 'searxng' as const,
             searxngBaseUrl: env.SEARXNG_BASE_URL,
-            tavilyApiKey: env.TAVILY_API_KEY,
+            modelSearch: 'disabled' as const,
         };
-    const protocol = env.SEARCH_API_PROTOCOL;
-    if (protocol !== 'deepseek' && protocol !== 'perplexity' && protocol !== 'tavily')
-        throw new ConnectorError('configuration', 'SEARCH_API_PROTOCOL 配置无效');
-    const searchType = env.SEARCH_API_SEARCH_TYPE || undefined;
-    if (searchType !== undefined && searchType !== 'web' && searchType !== 'fast')
-        throw new ConnectorError('configuration', 'SEARCH_API_SEARCH_TYPE 配置无效');
-    const contentMode = env.SEARCH_API_CONTENT_MODE ?? 'reader';
-    if (contentMode !== 'reader' && contentMode !== 'prefer_api')
-        throw new ConnectorError('configuration', 'SEARCH_API_CONTENT_MODE 配置无效');
+    if (selected !== 'api' || !account?.searchApi?.apiKey.trim())
+        throw new SearchConfigurationError('SEARCH_API_NOT_CONFIGURED');
+    if (account.searchApi.protocol === 'perplexity')
+        throw new SearchConfigurationError('SEARCH_API_READING_UNSUPPORTED');
     return {
-        searchProvider: 'api',
-        searchApi: {
-            protocol,
-            apiKey: env.SEARCH_API_KEY ?? '',
-            baseUrl: env.SEARCH_API_BASE_URL || undefined,
-            searchType,
-            contentMode,
-        },
+        searchProvider: 'api' as const,
+        searchApi: account.searchApi,
+        modelSearch: 'disabled' as const,
     };
 }

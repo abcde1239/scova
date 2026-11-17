@@ -1,4 +1,26 @@
 import { ConnectorError } from '@scova/connectors';
+import { ModelDiagnosticSchema, parseContract } from '@scova/models';
+
+export function modelFailureDiagnostic(error: unknown, operation: string) {
+    if (!(error instanceof ConnectorError) || !error.modelDiagnostic) return {};
+    const stage = operation.startsWith('plan-')
+        ? 'planning'
+        : operation.startsWith('compare-facts')
+          ? 'comparison'
+          : operation.startsWith('synthesize-')
+            ? 'synthesis'
+            : 'other';
+    try {
+        return {
+            modelDiagnostic: parseContract(ModelDiagnosticSchema, {
+                ...error.modelDiagnostic,
+                stage,
+            }),
+        };
+    } catch {
+        return {};
+    }
+}
 
 /** 固定公开诊断；异常原文可能携带请求、供应商响应或凭据。 */
 export const toolFailures = {
@@ -15,6 +37,10 @@ export const toolFailures = {
     TOOL_RATE_LIMITED: ['目标服务限流（HTTP 429）', true],
     TOOL_HTTP_ERROR: ['目标服务返回 HTTP 错误', true],
     TOOL_INVALID_RESPONSE: ['响应内容类型不支持或内容无法解码', false],
+    TOOL_MODEL_INVALID_JSON: ['模型生成内容不是有效 JSON', false],
+    TOOL_MODEL_SCHEMA_MISMATCH: ['模型生成内容不符合报告结构要求', false],
+    TOOL_MODEL_INVALID_RESPONSE: ['模型响应结构或完成状态无效', false],
+    TOOL_MODEL_REFUSED: ['模型拒绝生成本次内容', false],
     TOOL_OUTPUT_TRUNCATED: ['模型输出达到长度上限，未完成生成', false],
     TOOL_MODEL_QUOTA_EXCEEDED: ['模型服务额度不足，请补充额度后新建执行', false],
     TOOL_BUDGET_EXCEEDED: ['剩余调用预算不足', false],
@@ -23,6 +49,15 @@ export const toolFailures = {
 export type ToolFailureCode = keyof typeof toolFailures;
 export function classifyToolFailure(error: unknown): ToolFailureCode | undefined {
     if (!(error instanceof ConnectorError)) return undefined;
+    if (error.code === 'invalid_response' && error.modelFailure) {
+        const codes = {
+            json: 'TOOL_MODEL_INVALID_JSON',
+            schema: 'TOOL_MODEL_SCHEMA_MISMATCH',
+            envelope: 'TOOL_MODEL_INVALID_RESPONSE',
+            refusal: 'TOOL_MODEL_REFUSED',
+        } as const;
+        return codes[error.modelFailure];
+    }
     if (error.code === 'http') {
         if (error.status === 401) return 'TOOL_HTTP_UNAUTHORIZED';
         if (error.status === 404) return 'TOOL_HTTP_NOT_FOUND';

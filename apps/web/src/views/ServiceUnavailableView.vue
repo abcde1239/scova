@@ -9,7 +9,7 @@
             :state="pending ? 'loading' : 'error'"
             :message="pending ? '正在恢复账号会话' : '账号服务暂不可达，请重试'"
             retryable
-            centered
+            alert
             @retry="retry"
         />
     </section>

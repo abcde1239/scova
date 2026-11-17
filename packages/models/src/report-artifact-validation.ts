@@ -26,6 +26,11 @@ export function validReportArtifacts(
             if (!value.text.trim() || !usable(value.claimIndexes)) return false;
             if (!value.claimIndexes.some((index) => claims[index]!.text.includes(value.text)))
                 return false;
+            const model = value.claimIndexes.some(
+                (index) => claims[index]?.kind === 'model_answer',
+            );
+            if (value.status === 'model_answered') return model && !value.gap;
+            if (value.status === 'supported' && model) return false;
             return value.status === 'supported' || !!value.gap.trim();
         };
         const requirements = artifact.coverage?.requirements;
@@ -39,11 +44,60 @@ export function validReportArtifacts(
                     return false;
                 if (requirement.status === 'supported' && !usable(requirement.claimIndexes))
                     return false;
-                if (requirement.status !== 'supported' && !requirement.gap.trim()) return false;
+                const model = requirement.claimIndexes.some(
+                    (index) => claims[index]?.kind === 'model_answer',
+                );
+                if (requirement.status === 'supported' && model) return false;
+                if (
+                    requirement.status === 'model_answered' &&
+                    (!usable(requirement.claimIndexes) || !model || requirement.gap)
+                )
+                    return false;
+                if (
+                    !['supported', 'model_answered'].includes(requirement.status) &&
+                    !requirement.gap.trim()
+                )
+                    return false;
             }
         }
         const content = artifact.content;
         if (!content) continue;
+        if (content.document) {
+            if (!reportValue) return false;
+            // Structured formats outline only synthesis claims that no field or cell displays.
+            const bound = new Set(
+                [
+                    ...(content.list?.entries.flatMap((entry) => entry.fields) ?? []),
+                    ...(content.comparison?.cells ?? []),
+                ].flatMap((value) => value.claimIndexes),
+            );
+            const sections = content.document.sections;
+            const allMain = artifact.claimIndexes.filter(
+                (index) =>
+                    claims[index]?.kind !== 'insufficient' &&
+                    reportValue.selections.some(
+                        (selection) =>
+                            selection.claimIndex === index && selection.placement === 'main',
+                    ),
+            );
+            const main = allMain.filter((index) => !bound.has(index));
+            const indexes = sections.flatMap((section) => section.claimIndexes);
+            const covers = (expected: number[]) =>
+                indexes.length === expected.length &&
+                indexes.every((index) => expected.includes(index));
+            // Historical structured outlines covered every main claim, including cells.
+            // Accept that exact saved shape as well as the newer unbound-only outline.
+            const historical = (content.list || content.comparison) && covers(allMain);
+            if (
+                !unique(sections.map((section) => section.id)) ||
+                new Set(indexes).size !== indexes.length ||
+                (!covers(main) && !historical) ||
+                sections.some(
+                    (section) => !within(section.claimIndexes) || !usable(section.claimIndexes),
+                )
+            )
+                return false;
+        }
         if (content.list) {
             if (artifact.format !== 'list' || !unique(content.list.entries.map((e) => e.id)))
                 return false;

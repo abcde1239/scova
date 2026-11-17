@@ -40,16 +40,18 @@
                 >
             </div>
             <p v-if="query.isPending.value" role="status">正在读取收藏。</p>
-            <p v-if="notice" role="status">{{ notice }}</p>
             <p v-if="query.isError.value" role="alert">
                 {{ bookmarkReadError(query.error.value) }}
             </p>
             <p v-if="query.isError.value && items.length">
                 以下保留上次读取值，请重新读取以确认当前状态。
             </p>
-            <p v-if="query.isSuccess.value && !items.length" class="empty-copy" role="status">
-                暂无收藏
-            </p>
+            <state-panel
+                v-if="query.isSuccess.value && !items.length"
+                state="empty"
+                icon="bookmark"
+                message="暂无收藏"
+            />
             <p v-if="paginationError" role="alert">{{ paginationError }}</p>
             <ul class="bookmark-list">
                 <li v-for="item in items" :key="item.id" class="bookmark-entry">
@@ -90,9 +92,10 @@
                             :href="sourceLink(item.source.canonicalUrl)"
                             target="_blank"
                             rel="noopener noreferrer"
-                            class="scova-interface"
-                            ><app-icon name="source" />打开原始来源（新窗口）</a
+                            class="scova-interface external-link"
                         >
+                            打开原始来源（新窗口）<app-icon name="source" />
+                        </a>
                         <navigation-button :to="historyLink(item.sourceId)" class="scova-interface"
                             >查看来源历史</navigation-button
                         >
@@ -148,6 +151,7 @@
 
 <script setup lang="ts">
 import NavigationButton from '@/components/common/NavigationButton.vue';
+import StatePanel from '@/components/common/StatePanel.vue';
 import { computed, nextTick, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import BookmarkAction from '@/components/library/BookmarkAction.vue';
@@ -183,19 +187,8 @@ function shortDate(value: string) {
 }
 const notes = ref<InstanceType<typeof NotesPanel>>();
 const noteTarget = ref<NoteTarget>();
-const {
-    query,
-    items,
-    previous,
-    paginationError,
-    pending,
-    notice,
-    canPage,
-    next,
-    back,
-    first,
-    reload,
-} = useBookmarks(lifecycle);
+const { query, items, previous, paginationError, pending, canPage, next, back, first, reload } =
+    useBookmarks(lifecycle);
 const noteTargets = computed(() => [
     ...new Map(
         [
@@ -288,6 +281,9 @@ header,
 .library-view {
     @apply gap-8;
 }
+.library-view :deep(.state-panel--empty) {
+    @apply box-border w-full min-h-[clamp(14rem,_30dvh,_20rem)] [align-content:center];
+}
 h2,
 p {
     @apply m-0;
@@ -349,8 +345,8 @@ dd {
     @apply flex flex-wrap gap-4;
 }
 a {
-    @apply inline-flex items-center justify-self-start gap-2 min-h-11 max-w-full text-primary
-        cursor-pointer underline-offset-[0.2em];
+    @apply inline-flex items-center justify-self-start gap-2 min-h-11 max-w-full
+        cursor-pointer;
 }
 a:focus-visible,
 #library-content:focus-visible {

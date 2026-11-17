@@ -14,6 +14,7 @@ import {
     ReportConversationSchema,
     ReportConversationContextSchema,
     type OutputFormat,
+    ReportMergeInputSchema,
 } from '@scova/models';
 import type { ApiServices } from '@/app/services';
 import { createReportService } from '@/service/reports.ts';
@@ -29,6 +30,7 @@ import {
     conversationAnswer,
     conversationContext,
     questionContextInput,
+    mergeContext,
 } from '@/utils/report-conversation.ts';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 function dto(row: StoredQuestion) {
@@ -239,7 +241,19 @@ export function createReportQuestionService(services: ApiServices) {
                 ? await owned(userId, reportId, beforeQuestionId)
                 : undefined;
             const rows = await repo.list(userId, reportId, 101, before);
-            const associations = rows.slice(-100).flatMap((row) => [
+            const page = rows.slice(-100);
+            const firstRound = page[0] ? await repo.round(userId, reportId, page[0]) : 1;
+            const rounds = new Map(page.map((row, index) => [row.id, firstRound + index]));
+            const savedRuns = await repo.conversationRuns(
+                userId,
+                reportId,
+                page.map((row) => row.id),
+            );
+            const associations: {
+                runId: string;
+                questionId: string;
+                operation: 'research' | 'revise' | 'merge';
+            }[] = page.flatMap((row) => [
                 ...(row.followupRunId
                     ? [
                           {
@@ -259,6 +273,18 @@ export function createReportQuestionService(services: ApiServices) {
                       ]
                     : []),
             ]);
+            for (const run of savedRuns) {
+                const context = parseContract(
+                    ReportConversationContextSchema,
+                    run.conversationContextJson,
+                );
+                if (!associations.some((item) => item.runId === run.id))
+                    associations.push({
+                        runId: run.id,
+                        questionId: context.questionId,
+                        operation: context.merge ? 'merge' : context.operation,
+                    });
+            }
             const runIds = associations.map((item) => item.runId);
             const artifacts = (await repo.artifacts(userId, runIds)).map((report) => ({
                 reportId: report.id,
@@ -266,14 +292,62 @@ export function createReportQuestionService(services: ApiServices) {
                 title: report.title,
                 questionId: associations.find((item) => item.runId === report.runId)!.questionId,
                 operation: associations.find((item) => item.runId === report.runId)!.operation,
+                round: rounds.get(
+                    associations.find((item) => item.runId === report.runId)!.questionId,
+                ),
             }));
             return parseContract(ReportConversationSchema, {
                 reportId,
                 artifacts,
                 activeRun: await repo.activeRun(userId, runIds),
+                continuations: page.flatMap((row) =>
+                    (['research', 'revise'] as const).flatMap((operation) => {
+                        const rootRunId =
+                            operation === 'research' ? row.followupRunId : row.revisionRunId;
+                        if (!rootRunId) return [];
+                        let latest = rootRunId;
+                        const visited = new Set<string>([latest]);
+                        for (;;) {
+                            const child = savedRuns.find(
+                                (run) => run.parentRunId === latest && run.trigger === 'retry',
+                            );
+                            if (!child || visited.has(child.id)) break;
+                            visited.add(child.id);
+                            latest = child.id;
+                        }
+                        return [{ questionId: row.id, operation, rootRunId, runId: latest }];
+                    }),
+                ),
+                mergeRuns: associations
+                    .filter(
+                        (item) =>
+                            item.operation === 'merge' &&
+                            !savedRuns.some((run) => run.parentRunId === item.runId),
+                    )
+                    .slice(-100)
+                    .map((item) => {
+                        let root = savedRuns.find((run) => run.id === item.runId);
+                        const visited = new Set<string>();
+                        while (
+                            root?.trigger === 'retry' &&
+                            root.parentRunId &&
+                            !visited.has(root.id)
+                        ) {
+                            visited.add(root.id);
+                            const parent = savedRuns.find((run) => run.id === root!.parentRunId);
+                            if (!parent) break;
+                            root = parent;
+                        }
+                        return {
+                            runId: item.runId,
+                            rootRunId: root?.id ?? item.runId,
+                            questionId: item.questionId,
+                            round: rounds.get(item.questionId),
+                        };
+                    }),
                 hasEarlier: rows.length > 100,
-                turns: rows.slice(-100).map((row) =>
-                    row.answerJson
+                turns: page.map((row) => ({
+                    ...(row.answerJson
                         ? dto(row)
                         : {
                               id: row.id,
@@ -283,8 +357,9 @@ export function createReportQuestionService(services: ApiServices) {
                               followupRunId: row.followupRunId,
                               revisionRunId: row.revisionRunId,
                               createdAt: row.createdAt.toISOString(),
-                          },
-                ),
+                          }),
+                    round: rounds.get(row.id),
+                })),
             });
         },
         async followup(
@@ -323,6 +398,38 @@ export function createReportQuestionService(services: ApiServices) {
                     ],
                 },
                 outputFormats,
+            );
+        },
+        async merge(userId: string, reportId: string, body: unknown, key: string) {
+            const input = parseContract(ReportMergeInputSchema, body);
+            const original = await reports.get(userId, reportId);
+            if (original.mode !== 'live')
+                throw new ApiError(409, 'LEGACY_DEMO_RUN', '演示报告不能合并成果');
+            const selected = await Promise.all(
+                [...input.reportIds].sort().map((id) => reports.get(userId, id)),
+            );
+            if (
+                selected.some(
+                    (report) =>
+                        report.id === original.id ||
+                        report.taskId !== original.taskId ||
+                        report.mode !== 'live' ||
+                        report.conversation?.reportId !== original.id,
+                )
+            )
+                throw new ApiError(404, 'NOT_FOUND', '成果不属于当前报告对话');
+            // Require a real saved turn and its server-owned execution context, never client prose.
+            for (const report of selected)
+                await owned(userId, reportId, report.conversation!.questionId);
+            const context = mergeContext(original, selected);
+            if (!context.sources.length)
+                throw new ApiError(422, 'INVALID_MERGE', '选定报告没有可用的保存证据');
+            return createRunService(services).merge(
+                userId,
+                original.runId,
+                key,
+                context,
+                input.outputFormats,
             );
         },
     };

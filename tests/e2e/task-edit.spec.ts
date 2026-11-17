@@ -1,6 +1,7 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import type { taskInput } from '../../apps/web/src/composables/useCreateTask.ts';
 import { fillList } from './support/list-input.ts';
+import { chooseOption, chooseOutputFormats } from './support/select.ts';
 
 test.use({ timezoneId: 'Asia/Tokyo' });
 
@@ -130,6 +131,31 @@ async function samples(context: BrowserContext) {
     });
     return { calls, state };
 }
+test('任务编辑保存输出形式与搜索方式，重新读取后保持选择', async ({ page }) => {
+    const { calls } = await samples(page.context());
+    await page.goto(editPath);
+    await expect(reload(page)).toHaveCount(0);
+    await expect(page.getByText(/配置版本 \d|查阅范围变化后，下次完整执行/)).toHaveCount(0);
+    await chooseOption(page, '搜索方式', '内置 SearXNG＋网页读取工具');
+    await chooseOutputFormats(page, '输出形式', ['简报', '研究报告']);
+    await page.getByRole('button', { name: '确认保存修改', exact: true }).click();
+    await expect(
+        page.locator('.scova-notifications .n-notification').filter({ hasText: '任务修改已保存' }),
+    ).toContainText('修改已保存');
+    expect(calls.find((call) => call.method === 'PATCH')?.config).toMatchObject({
+        searchMode: 'searxng',
+        outputFormat: 'brief',
+        outputFormats: ['brief', 'research_report'],
+    });
+    await page.reload();
+    await expect(page.getByLabel('搜索方式', { exact: true })).toContainText(
+        '内置 SearXNG＋网页读取工具',
+    );
+    const forms = page.getByRole('group', { name: '输出形式', exact: true });
+    await expect(forms.getByRole('checkbox', { name: /^简报/ })).toBeChecked();
+    await expect(forms.getByRole('checkbox', { name: /^研究报告/ })).toBeChecked();
+});
+
 test('编辑任务的列表逐项保真：只修改一个关注点和链接', async ({ page }) => {
     const { calls, state } = await samples(page.context());
     await page.goto(editPath);
@@ -142,9 +168,9 @@ test('编辑任务的列表逐项保真：只修改一个关注点和链接', as
         'https://example.test/new',
     ]);
     await page.getByRole('button', { name: '确认保存修改', exact: true }).click();
-    await expect(page.locator('.task-config-form .save-success[role="status"]')).toContainText(
-        '已保存',
-    );
+    await expect(
+        page.locator('.scova-notifications .n-notification').filter({ hasText: '任务修改已保存' }),
+    ).toContainText('已保存');
     expect(state.config).toEqual({
         ...original,
         focusPoints: [original.focusPoints[0], '申请流程，时间节点\n保留为一项'],
@@ -220,12 +246,14 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         state.failure = 409;
         await save(page).focus();
         await save(page).press('Enter');
-        await expect(page.getByRole('alert')).toContainText('当前草稿已保留且可复制');
-        await expect(page.getByRole('alert')).toBeFocused();
+        await expect(page.locator('.scova-notifications .n-notification').last()).toContainText(
+            '当前草稿已保留且可复制',
+        );
+        await expect(reload(page)).toBeFocused();
         await expect(title).toHaveValue('我的本地修改草稿');
         await expect(title).toBeEditable();
         await expect(save(page)).toBeDisabled();
-        await page.getByRole('alert').scrollIntoViewIfNeeded();
+        await page.locator('.scova-notifications .n-notification').last().scrollIntoViewIfNeeded();
         await info.attach(`${width}-conflict-alert-text-200`, {
             body: await page.screenshot({ path: info.outputPath('conflict-alert-text-200.png') }),
             contentType: 'image/png',
@@ -264,11 +292,10 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         await title.fill('手动合并后的标题');
         await save(page).click();
         const success = page
-            .locator('.task-config-form')
-            .getByRole('status')
-            .filter({ hasText: '修改已保存' });
+            .locator('.scova-notifications .n-notification')
+            .filter({ hasText: '任务修改已保存' });
         await expect(success).toContainText('下一次完整执行将建立新基线');
-        await expect(success).toBeFocused();
+        await expect(success).not.toBeFocused();
         await expect(page).toHaveURL(new RegExp(`${editPath}$`));
         const attempts = patches(calls);
         expect(attempts.map((call) => call.etag)).toEqual(['"1"', '"2"']);
@@ -288,11 +315,13 @@ test('两个标签页同读一版本：B冲突不覆盖A且可复制草稿', asy
     await page.getByLabel('任务标题', { exact: true }).fill('标签页A已保存');
     await other.getByLabel('任务标题', { exact: true }).fill('标签页B未保存');
     await save(page).click();
-    await expect(page.locator('.task-config-form .save-success[role="status"]')).toContainText(
-        '修改已保存',
-    );
+    await expect(
+        page.locator('.scova-notifications .n-notification').filter({ hasText: '任务修改已保存' }),
+    ).toContainText('修改已保存');
     await save(other).click();
-    await expect(other.getByRole('alert')).toContainText('其他页面修改');
+    await expect(other.locator('.scova-notifications .n-notification').last()).toContainText(
+        '其他页面修改',
+    );
     await expect(other.getByLabel('任务标题', { exact: true })).toHaveValue('标签页B未保存');
     await other.getByLabel('任务标题', { exact: true }).selectText();
     expect(state.config.title).toBe('标签页A已保存');
@@ -313,9 +342,9 @@ test('摘要缓存不能替代编辑初读，进入编辑取得最新配置和ET
     expect(reads(calls).length).toBeGreaterThan(before);
     await title.fill('基于最新版本的修改');
     await save(page).click();
-    await expect(page.locator('.task-config-form .save-success[role="status"]')).toContainText(
-        '修改已保存',
-    );
+    await expect(
+        page.locator('.scova-notifications .n-notification').filter({ hasText: '任务修改已保存' }),
+    ).toContainText('修改已保存');
     expect(patches(calls).map((call) => call.etag)).toEqual(['"3"']);
 });
 
@@ -343,11 +372,15 @@ test('412保留草稿，重读失败与取消不丢内容或修订依据', async
     const title = page.getByLabel('任务标题', { exact: true });
     await title.fill('412待合并草稿');
     await save(page).click();
-    await expect(page.getByRole('alert')).toContainText('草稿已保留');
+    await expect(page.locator('.scova-notifications .n-notification').last()).toContainText(
+        '草稿已保留',
+    );
     state.getFailure = true;
     await reload(page).click();
     await confirmReload(page).click();
-    await expect(page.getByRole('alert')).toContainText('原草稿和修订依据仍保留');
+    await expect(page.locator('.scova-notifications .n-notification').last()).toContainText(
+        '原草稿和修订依据仍保留',
+    );
     await expect(title).toHaveValue('412待合并草稿');
     await cancelReload(page).click();
     await expect(save(page)).toBeDisabled();
@@ -359,15 +392,19 @@ test('412保留草稿，重读失败与取消不丢内容或修订依据', async
     await expect(title).toHaveValue(original.title);
     await title.fill('重读后的修改');
     await save(page).click();
-    await expect(page.locator('.task-config-form .save-success[role="status"]')).toContainText(
-        '修改已保存',
-    );
+    await expect(
+        page.locator('.scova-notifications .n-notification').filter({ hasText: '任务修改已保存' }),
+    ).toContainText('修改已保存');
     expect(patches(calls).map((call) => call.etag)).toEqual(['"1"', '"1"']);
 });
 
 test('键盘重读确认和取消后焦点保持在有效操作', async ({ page }) => {
-    await samples(page.context());
+    const { state } = await samples(page.context());
+    state.failure = 409;
     await page.goto(editPath);
+    await expect(reload(page)).toHaveCount(0);
+    await page.getByLabel('任务标题', { exact: true }).fill('需要合并的草稿');
+    await save(page).click();
     await reload(page).focus();
     await reload(page).press('Enter');
     await expect(confirmReload(page)).toBeFocused();
@@ -396,8 +433,10 @@ test('在途双击仅一次，503不确定结果阻止直接重发且保留草�
     );
     expect(patches(calls)).toHaveLength(1);
     release();
-    await expect(page.getByRole('alert')).toContainText('保存结果未确认');
-    await expect(page.getByRole('alert')).toBeFocused();
+    await expect(page.locator('.scova-notifications .n-notification').last()).toContainText(
+        '保存结果未确认',
+    );
+    await expect(reload(page)).toBeFocused();
     await expect(title).toHaveValue('保存结果尚未确认');
     await expect(save(page)).toBeDisabled();
     expect(patches(calls)).toHaveLength(1);

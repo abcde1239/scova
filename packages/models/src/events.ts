@@ -8,6 +8,7 @@ import {
 } from './common.ts';
 import { CoverageSchema, RunSchema, UsageSchema } from './runs.ts';
 import { BudgetSchema } from './tasks.ts';
+import { ModelDiagnosticSchema } from './model-diagnostics.ts';
 
 const CountSchema = Type.Integer({
     minimum: 0,
@@ -24,6 +25,11 @@ export const StepNameSchema = Type.Union(
         Type.Literal('verify'),
         Type.Literal('compare'),
         Type.Literal('synthesize'),
+        Type.Literal('answer_supplement'),
+        Type.Literal('model_answer'),
+        Type.Literal('model_draft'),
+        Type.Literal('gap_loop'),
+        Type.Literal('conflict_review'),
         Type.Literal('validate'),
         Type.Literal('ready_for_delivery'),
     ],
@@ -112,7 +118,15 @@ export const RunEventSchema = Type.Union(
         eventSchema(
             'tool.started',
             Type.Object(
-                { ...ToolCallProperties, summary: NonEmptyTextSchema },
+                {
+                    ...ToolCallProperties,
+                    summary: NonEmptyTextSchema,
+                    searchProvider: Type.Optional(
+                        Type.Union([Type.Literal('searxng'), Type.Literal('api')], {
+                            description: '本次搜索实际使用的方式，仅搜索工具提供',
+                        }),
+                    ),
+                },
                 { additionalProperties: false },
             ),
             '工具调用开始，只展示脱敏摘要',
@@ -139,6 +153,7 @@ export const RunEventSchema = Type.Union(
                         }),
                     ),
                     retryable: Type.Boolean({ description: '是否允许在剩余预算内按策略重试' }),
+                    modelDiagnostic: Type.Optional(ModelDiagnosticSchema),
                 },
                 { additionalProperties: false },
             ),

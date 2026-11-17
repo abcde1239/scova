@@ -1,0 +1,1 @@
+ALTER TYPE "public"."ClaimKind" ADD VALUE 'model_answer';

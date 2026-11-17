@@ -58,6 +58,69 @@ function setup(protocol: ModelProtocol, data: unknown) {
     return { request, model };
 }
 describe('native model protocols', () => {
+    it.each([
+        ['not JSON DO_NOT_RENDER', 'json', undefined],
+        ['{"answer":42}', 'schema', [{ schemaPath: '#/properties/answer/type', keyword: 'type' }]],
+        [
+            '{"answer":"ok","DO_NOT_RENDER":"sk-secret"}',
+            'schema',
+            [
+                {
+                    schemaPath: '#/additionalProperties',
+                    keyword: 'additionalProperties',
+                    allowedProperties: ['answer'],
+                },
+            ],
+        ],
+    ] as const)(
+        'keeps safe content diagnostics and confirmed usage for %s',
+        async (content, failure, issues) => {
+            const data = structuredClone(native.openai_json);
+            data.choices[0]!.message.content = content;
+            const { model, request } = setup('openai_json', data);
+            const error = await model.generateStructured(input).catch((error: unknown) => error);
+            expect(error).toMatchObject({
+                code: 'invalid_response',
+                modelFailure: failure,
+                modelUsage: { inputTokens: 20, outputTokens: 8, estimated: false },
+            });
+            expect((error as { modelSchemaIssues?: unknown }).modelSchemaIssues).toEqual(issues);
+            expect(JSON.stringify(error)).not.toMatch(/DO_NOT_RENDER|sk-secret/);
+            expect(request).toHaveBeenCalledTimes(1);
+        },
+    );
+
+    it.each(Object.keys(native) as ModelProtocol[])(
+        'retains usage when rejecting %s schema content',
+        async (protocol) => {
+            const data = structuredClone(native[protocol]);
+            if ('choices' in data) data.choices[0]!.message.content = '{"answer":42}';
+            else if ('content' in data)
+                data.content[0]!.input = { answer: 42 as unknown as string };
+            else data.candidates[0]!.content.parts[0]!.text = '{"answer":42}';
+            await expect(
+                setup(protocol, data).model.generateStructured(input),
+            ).rejects.toMatchObject({
+                modelFailure: 'schema',
+                modelUsage: { inputTokens: 20, outputTokens: 8, estimated: false },
+            });
+        },
+    );
+
+    it('does not trust malformed or over-budget usage on a failed response', async () => {
+        for (const prompt_tokens of [-1, 5000, '20', Number.MAX_SAFE_INTEGER + 1]) {
+            const data = {
+                ...native.openai_json,
+                choices: [{ finish_reason: 'stop', message: { content: 'bad JSON' } }],
+                usage: { prompt_tokens, completion_tokens: 8 },
+            };
+            const error = await setup('openai_json', data)
+                .model.generateStructured(input)
+                .catch((error: unknown) => error);
+            expect(error).not.toHaveProperty('modelUsage');
+        }
+    });
+
     it.each(['deepseek-flash', 'deepseek-v4-pro'])(
         'uses the bounded JSON output allowance for content on official %s',
         (model) => {

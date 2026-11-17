@@ -1,5 +1,7 @@
 <template>
     <section
+        ref="root"
+        tabindex="-1"
         class="task-lifecycle scova-surface layout-stack rounded-3 break-anywhere p-[clamp(1rem,_3%,_2rem)] [&.task-lifecycle_>_.scova-action-button]:justify-self-start"
         aria-labelledby="task-lifecycle-title"
     >
@@ -43,58 +45,57 @@
                 >
                     该任务仅手动执行，没有周期计划。
                 </p>
-                <div class="lifecycle-buttons action-group">
-                    <action-button
-                        v-if="actions.snapshot.value.data.task.status === 'active'"
-                        :disabled="actions.disabled.value && !actions.pending.value"
-                        :busy="actions.pending.value"
-                        @click="actions.submit('pause')"
-                        ><app-icon name="pause" />暂停未来计划</action-button
-                    >
-                    <action-button
-                        v-else
-                        :disabled="actions.disabled.value && !actions.pending.value"
-                        :busy="actions.pending.value"
-                        @click="actions.submit('resume')"
-                        ><app-icon name="run" />恢复未来计划</action-button
-                    >
-                    <action-button
-                        ref="archiveTrigger"
-                        class="danger danger-action"
-                        :disabled="actions.disabled.value"
-                        @click="openArchive"
-                        ><app-icon name="archive" />归档任务</action-button
-                    >
-                </div>
             </template>
-            <action-button
-                ref="deleteTrigger"
-                class="danger danger-action"
-                :disabled="actions.disabled.value"
-                @click="openDelete"
-            >
-                <app-icon name="delete" />清除任务
-            </action-button>
         </template>
         <p class="[dialog_&:is(p)]:m-0" v-else>
             {{ actions.refreshing.value ? '正在读取任务状态' : '任务状态暂不可用' }}
         </p>
-        <div
-            v-if="actions.message.value"
-            ref="feedback"
-            class="lifecycle-feedback keyboard-focus-wide"
-            role="status"
-            aria-live="polite"
-            tabindex="-1"
-        >
-            <p class="[dialog_&:is(p)]:m-0">{{ actions.message.value }}</p>
+        <div class="lifecycle-buttons action-group items-center">
+            <template
+                v-if="
+                    actions.snapshot.value && actions.snapshot.value.data.task.status !== 'archived'
+                "
+            >
+                <action-button
+                    v-if="actions.snapshot.value.data.task.status === 'active'"
+                    :disabled="actions.disabled.value && !actions.pending.value"
+                    :busy="actions.pending.value"
+                    @click="submit('pause')"
+                    ><app-icon name="pause" />暂停未来计划</action-button
+                >
+                <action-button
+                    v-else
+                    :disabled="actions.disabled.value && !actions.pending.value"
+                    :busy="actions.pending.value"
+                    @click="submit('resume')"
+                    ><app-icon name="run" />恢复未来计划</action-button
+                >
+            </template>
+            <action-button
+                :disabled="actions.pending.value"
+                :busy="actions.refreshing.value"
+                @click="actions.refresh()"
+                ><app-icon name="retry" />刷新任务状态</action-button
+            >
+            <div v-if="actions.snapshot.value" class="action-group ml-auto">
+                <action-button
+                    v-if="actions.snapshot.value.data.task.status !== 'archived'"
+                    ref="archiveTrigger"
+                    class="danger danger-action"
+                    :disabled="actions.disabled.value"
+                    @click="openArchive"
+                    ><app-icon name="archive" />归档任务</action-button
+                >
+                <action-button
+                    ref="deleteTrigger"
+                    class="danger danger-action"
+                    :disabled="actions.disabled.value"
+                    @click="openDelete"
+                >
+                    <app-icon name="delete" />清除任务
+                </action-button>
+            </div>
         </div>
-        <action-button
-            :disabled="actions.pending.value"
-            :busy="actions.refreshing.value"
-            @click="actions.refresh()"
-            ><app-icon name="retry" />刷新任务状态</action-button
-        >
         <dialog
             class="box-border w-[min(34rem,_calc(100%_-_2rem))] max-h-[calc(100dvh_-_2rem)] border-theme rounded-3 text-default bg-surface overflow-hidden p-[clamp(1rem,_4%,_2rem)] [&:is(dialog)[open]]:(grid grid-rows-[auto_minmax(0,_1fr)_auto] gap-6) [&:is(dialog)::backdrop]:[background:rgb(0_0_0_/_45%)]"
             ref="confirmationDialog"
@@ -167,11 +168,23 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
+import type { TaskLifecycleAction } from '@/api/task-lifecycle';
 import ActionButton from '@/components/common/ActionButton.vue';
 import AppIcon from '@/components/common/AppIcon.vue';
 import { useTaskLifecycle } from '@/composables/useTaskLifecycle';
+import { useActionNotification } from '@/composables/useActionNotification';
 const props = defineProps<{ taskId: string }>();
 const actions = useTaskLifecycle(() => props.taskId);
+const root = ref<HTMLElement>();
+async function submit(action: TaskLifecycleAction) {
+    const hadFocus = root.value?.contains(document.activeElement);
+    await actions.submit(action);
+    await nextTick();
+    if (hadFocus && document.activeElement === document.body && root.value?.isConnected) {
+        (root.value.querySelector<HTMLElement>('button:not(:disabled)') ?? root.value).focus();
+    }
+}
+useActionNotification().watch(actions.message, () => (actions.blocked.value ? 'warning' : 'info'));
 const router = useRouter();
 const deleteDialog = ref<HTMLDialogElement>();
 const deleteTrigger = ref<{ $el: HTMLButtonElement }>();
@@ -196,7 +209,6 @@ const statusLabels = { active: '已启用', paused: '已暂停', archived: '已�
 const confirmationDialog = ref<HTMLDialogElement>();
 const archiveTrigger = ref<{ $el: HTMLButtonElement }>();
 const cancelTrigger = ref<{ $el: HTMLButtonElement }>();
-const feedback = ref<HTMLElement>();
 function time(instant: string) {
     return new Intl.DateTimeFormat('zh-CN', {
         dateStyle: 'medium',
@@ -219,17 +231,12 @@ async function cancelArchive() {
 }
 async function confirmArchive() {
     confirmationDialog.value?.close();
-    await actions.submit('archive');
+    await submit('archive');
 }
 watch(actions.confirmation, (value) => {
     if (!value) {
         confirmationDialog.value?.close();
         deleteDialog.value?.close();
     }
-});
-watch([actions.message, actions.pending, actions.refreshing], async () => {
-    if (!actions.message.value || actions.pending.value || actions.refreshing.value) return;
-    await nextTick();
-    feedback.value?.focus();
 });
 </script>

@@ -63,21 +63,25 @@ async function claims(page: Page) {
     return article(page)
         .locator('.claim')
         .evaluateAll((elements) =>
-            elements.map((element) => ({
-                id: element.id.slice('claim-'.length),
-                text: element.querySelector('.claim-text')!.textContent,
-                confidence: element.querySelector('.confidence')!.textContent,
-                evidenceIds: [...element.querySelectorAll('.citation')].map(
-                    (citation) => citation.id.split('-evidence-')[1],
-                ),
-                quotes: [...element.querySelectorAll('.citation')].map(
-                    (link) =>
-                        document
-                            .getElementById(link.getAttribute('href')!.slice(1))!
-                            .closest('.source-quote')!
-                            .querySelector('blockquote')!.textContent,
-                ),
-            })),
+            elements.map((element) => {
+                const attribution = document
+                    .querySelector(`.claim-provenance a[href="#${element.id}"]`)!
+                    .closest('li')!;
+                const citations = [...attribution.querySelectorAll('a[href^="#evidence-"]')];
+                return {
+                    id: element.id.slice('claim-'.length),
+                    text: element.querySelector('.claim-text')!.textContent,
+                    confidence: attribution.querySelector('p')!.textContent,
+                    evidenceIds: citations.map((citation) => citation.id.split('-evidence-')[1]),
+                    quotes: citations.map(
+                        (link) =>
+                            document
+                                .getElementById(link.getAttribute('href')!.slice(1))!
+                                .closest('.source-quote')!
+                                .querySelector('blockquote')!.textContent,
+                    ),
+                };
+            }),
         );
 }
 function expectedClaims(report: Report) {
@@ -86,7 +90,7 @@ function expectedClaims(report: Report) {
         .map((entry) => ({
             id: entry.id,
             text: entry.text,
-            confidence: `证据说明：${entry.confidenceLabel}`,
+            confidence: `${['来源事实', 'Agent 推断', '冲突证据', '证据不足'][claimKinds.indexOf(entry.kind)]} · ${entry.confidenceLabel}`,
             evidenceIds: entry.evidenceIds,
             quotes: entry.evidenceIds.map(
                 (id) => report.evidence.find((evidence) => evidence.id === id)!.quote,
@@ -108,6 +112,18 @@ async function quoteWidths(page: Page) {
         );
     expect(widths.length).toBeGreaterThan(0);
     expect(widths.every((width) => width >= 4)).toBe(true);
+}
+async function openQuote(page: Page, evidenceId: string) {
+    const quote = page
+        .locator(`#evidence-${evidenceId}`)
+        .locator('xpath=ancestor-or-self::*[contains(@class,"source-quote")]');
+    const group = quote.locator(
+        'xpath=ancestor::details[contains(@class,"evidence-source-group")]',
+    );
+    if ((await group.getAttribute('open')) === null)
+        await group.locator(':scope > summary').press('Enter');
+    await expect(quote.locator('blockquote')).toBeVisible();
+    return { quote, group };
 }
 async function overflowSemantics(page: Page) {
     const overflow = await scroll(page).evaluate(
@@ -159,6 +175,15 @@ test('real SFC: complete claims and ordered old/new citation union survive Brief
     for (const view of ['brief', 'comparison', 'brief', 'comparison'] as const) {
         await setView(page, view);
         expect(await claims(page)).toEqual(expectedClaims(report));
+        await expect(article(page).locator('.claim a,.claim details')).toHaveCount(0);
+        await expect(article(page).locator('.report-changes .evidence-link')).toHaveCount(0);
+        expect(
+            await article(page)
+                .locator('a[href^="#evidence-"]')
+                .evaluateAll((links) =>
+                    links.every((link) => !!link.closest('.evidence-appendix')),
+                ),
+        ).toBe(true);
         await uniqueIds(page);
         await expect(page.locator('#report-title')).toHaveText(report.title);
         expect(await page.evaluate(() => window.scovaComparisonFixture.getReport())).toEqual(
@@ -191,15 +216,19 @@ test('real SFC: complete claims and ordered old/new citation union survive Brief
                 for (const side of ['old', 'new'] as const) {
                     const ids = side === 'old' ? change.oldEvidenceIds : change.newEvidenceIds;
                     const cell = entry.locator(`.${side}-side`);
+                    await expect(cell.locator('.table-citation,.evidence-link')).toHaveCount(0);
+                    const attribution = article(page).locator(
+                        `.change-provenance [data-change-id="${change.id}"] .${side}-side`,
+                    );
                     expect(
-                        await cell
-                            .locator('.table-citation')
+                        await attribution
+                            .locator('.evidence-link')
                             .evaluateAll((elements) =>
                                 elements.map((element) => element.id.split(/-(?:old|new)-/)[1]),
                             ),
                     ).toEqual(ids);
                     expect(
-                        await cell
+                        await attribution
                             .locator('.evidence-link')
                             .evaluateAll((links) => links.map((link) => link.getAttribute('href'))),
                     ).toEqual(ids.map((id) => `#evidence-${id}`));
@@ -212,7 +241,9 @@ test('real SFC: complete claims and ordered old/new citation union survive Brief
             }
             const visible = new Set(
                 await article(page)
-                    .locator('.citation,.table-citation')
+                    .locator(
+                        '.claim-provenance a[href^="#evidence-"],.change-provenance .evidence-link',
+                    )
                     .evaluateAll((elements) =>
                         elements.map((element) =>
                             element.id.split(/-evidence-|-(?:old|new)-/).at(-1),
@@ -258,14 +289,12 @@ test('real SFC: semantic caption/headers and missing sides do not borrow opposit
             ),
     ).toBe(true);
     for (const entry of report.changes) {
-        if (!entry.oldEvidenceIds.length)
-            await expect(row(page, entry.id).locator('.old-side')).toContainText(
-                '未提供旧侧引用。',
-            );
-        if (!entry.newEvidenceIds.length)
-            await expect(row(page, entry.id).locator('.new-side')).toContainText(
-                '未提供本次观测引用。',
-            );
+        for (const side of ['old', 'new'] as const)
+            await expect(
+                article(page).locator(
+                    `.change-provenance [data-change-id="${entry.id}"] .${side}-side a`,
+                ),
+            ).toHaveCount((side === 'old' ? entry.oldEvidenceIds : entry.newEvidenceIds).length);
         if (entry.oldValue !== null && !entry.oldEvidenceIds.length)
             await expect(row(page, entry.id)).toContainText('旧值缺少可核对引用');
     }
@@ -349,7 +378,7 @@ test('real SFC: raw HTML/Markdown/whitespace stay inert in values, reasons and s
     const changed = row(page, entry.id);
     expect(await changed.getByRole('rowheader').textContent()).toBe(raw);
     expect(await changed.locator('td .original-text').allTextContents()).toEqual([raw, raw, raw]);
-    await changed.locator('.old-side .evidence-link').first().press('Enter');
+    await openQuote(page, report.evidence[0]!.id);
     const citation = page.locator(`#evidence-${report.evidence[0]!.id}`);
     expect(await citation.locator('blockquote').textContent()).toBe(raw);
     await expect(article(page).locator('script,img,iframe')).toHaveCount(0);
@@ -359,16 +388,15 @@ test('real SFC: raw HTML/Markdown/whitespace stay inert in values, reasons and s
     expect(external).toEqual([]);
 });
 
-test('real SFC: each old/new citation opens by keyboard and Tab reaches its safe original link', async ({
+test('real SFC: end appendix preserves old/new ownership and keyboard reaches safe page link', async ({
     page,
 }) => {
     const report = await open(page);
+    await article(page).locator('.change-provenance > summary').press('Enter');
     for (const change of report.changes)
         for (const side of ['old', 'new'] as const) {
             for (const id of side === 'old' ? change.oldEvidenceIds : change.newEvidenceIds) {
-                const reference = page.locator(
-                    `#comparison-${change.id}-${side}-${id} .evidence-link`,
-                );
+                const reference = page.locator(`#comparison-${change.id}-${side}-${id}`);
                 await reference.focus();
                 expect(
                     await reference.evaluate((element) => getComputedStyle(element).outlineStyle),
@@ -388,9 +416,9 @@ test('real SFC: each old/new citation opens by keyboard and Tab reaches its safe
                     'datetime',
                     evidence.observedAt,
                 );
-                const link = citation.getByRole('link', { name: '打开原始来源（新窗口）' });
-                await citation.focus();
-                await citation.press('Tab');
+                const link = group.locator('.source-page-link');
+                await summary.focus();
+                await summary.press('Tab');
                 await expect(link).toBeFocused();
                 await expect(link).toHaveAttribute('href', evidence.url);
                 await expect(link).toHaveAttribute('target', '_blank');
@@ -487,10 +515,8 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         await page.setViewportSize({ width, height: 1000 });
         const report = await open(page);
         const changed = report.changes.find((change) => change.kind === 'changed')!;
-        const changedRow = row(page, changed.id);
-        for (const side of ['old', 'new'])
-            await changedRow.locator(`.${side}-side .evidence-link`).first().press('Enter');
-        await article(page).locator('.claim summary').first().press('Enter');
+        for (const evidenceId of [...changed.oldEvidenceIds, ...changed.newEvidenceIds])
+            await openQuote(page, evidenceId);
         await page.evaluate(() => document.fonts.ready);
         for (const scheme of ['light', 'dark']) {
             await page.locator('#sample-scheme').selectOption(scheme);
@@ -519,13 +545,13 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
                     await overflowSemantics(page);
                     await quoteWidths(page);
                     const fonts = await table(page)
-                        .locator('th,td,.table-citation .evidence-link')
+                        .locator('th,td')
                         .evaluateAll((elements) =>
                             elements.map((element) => getComputedStyle(element).fontFamily),
                         );
                     expect(fonts.every((font) => font.includes('Inter'))).toBe(true);
-                    const controls = await changedRow
-                        .locator('.evidence-link')
+                    const controls = await article(page)
+                        .locator('.evidence-source-group[open] .source-page-link')
                         .evaluateAll((elements) =>
                             elements.map((element) => element.getBoundingClientRect().height),
                         );
@@ -533,8 +559,8 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
                     expect(controls.every((height) => height >= (enlarged ? 88 : 44) - 1)).toBe(
                         true,
                     );
-                    await changedRow
-                        .locator('.old-side .evidence-link')
+                    await article(page)
+                        .locator('.evidence-source-group[open] .source-page-link')
                         .first()
                         .scrollIntoViewIfNeeded();
                     await page.screenshot({

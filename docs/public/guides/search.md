@@ -1,51 +1,39 @@
 # 搜索服务配置
 
-Scova 默认通过自部署 SearxNG 聚合网络搜索，不需要搜索 API 密钥。模型可使用独立的远程服务。搜索摘要只代表候选资料；正文可来自搜索 API 的页面提取，或由安全 Reader 采集。
+Scova 的搜索与正文提取由账号独立配置，与解析、任务执行模型分开保存。账号可选择 Search API 或自部署 SearXNG：Search API 负责搜索与网页读取，SearXNG 配合本地 Reader 读取来源正文。服务器不提供默认搜索 Agent 或搜索 API 密钥。
 
 ## 独立搜索 API
 
-在「账号 → Agent 配置」添加或编辑供应商，选择「研究搜索方式 → 独立搜索 API」，填写协议、HTTPS API 根地址和独立密钥。支持 DeepSeek、Perplexity、Tavily，默认「API 正文优先，Reader 补读」，也可选择始终使用 Reader。配置随研究执行所选的供应商生效，优先于部署默认搜索；任务固定供应商时使用该供应商。保存不会调用搜索或模型接口，需求整理与报告问答不会因此自动联网。
+在「账号 → Agent 配置 → 搜索与正文提取」选择 Search API，填写协议、HTTPS API 根地址和独立密钥。支持 DeepSeek Search / Fetch 与 Tavily Search / Extract，搜索与正文均由同一 API 服务提供。Perplexity Search 暂无独立网页读取接口，当前不可选；旧配置须改选支持搜索与读取的协议。切换、编辑或删除模型供应商不会改变搜索配置。保存不会调用搜索或模型接口，解析与报告问答不会因此自动联网。
 
-搜索密钥与模型密钥分别保存并一起加密，接口只返回 hasApiKey。同协议、同地址编辑时可留空保留；更改搜索协议或地址必须重新填写搜索密钥。选择「部署默认搜索」并保存会移除个人搜索配置。独立 API 与模型内置搜索只能选一种，失败不会切换到其他供应商。
+任务可选择「Search API（搜索与网页读取）」或「内置 SearXNG＋网页读取工具」。前者由配置的 API 搜索并提取正文，后者使用聚合搜索与本地 Reader。API 模式不会调用本地网页读取工具，API 提取失败也不切换读取方式。报告的“待补充”还可能来自查询未命中目标、原站不可读、模型输入只覆盖部分正文，或生成答案没有覆盖所需字段，不能仅据此判断搜索引擎好坏。
 
-管理员也可配置 Worker 的部署默认值，修改后重启 Worker：
+搜索配置保存在独立账号记录中，搜索密钥单独加密，接口只返回 hasApiKey。同协议、同地址编辑时可留空保留；更改搜索协议或地址必须重新填写搜索密钥。切换到 SearXNG 会保留 API 配置，方便任务显式使用 API。
 
-```dotenv
-SEARCH_PROVIDER=api
-SEARCH_API_PROTOCOL=deepseek
-SEARCH_API_KEY=your_search_api_key
-SEARCH_API_CONTENT_MODE=prefer_api
-```
+任务的「沿用账号搜索配置」读取此处默认方式，账号未设置时默认使用内置 SearXNG，立即执行可临时覆盖。Search API 按需配置；显式选择 API 却未保存密钥时，会提示配置 API 或选择内置搜索，不使用模型密钥、旧模型内嵌搜索或环境变量兜底。
 
-| 协议       | API 根地址                  | 正文来源                                  |
-| ---------- | --------------------------- | ----------------------------------------- |
-| deepseek   | https://api.deepseek.com/v1 | need_content=true 时的 content            |
-| perplexity | https://api.perplexity.ai   | 当前协议返回摘要，由 Reader 补读          |
-| tavily     | https://api.tavily.com      | include_raw_content=true 时的 raw_content |
+查看执行时，内置搜索等待超过15秒或出现搜索 warning/error，会显示可关闭的提示并提供 Search API 配置入口。同次查看仅提示一次，不自动切换服务，也不阻止继续使用 SearXNG；历史日志回放不重复提醒。
 
-DeepSeek 搜索词最多128个 Unicode 码点，其余最多2,000个，过长明确失败。Perplexity 可设置 SEARCH_API_SEARCH_TYPE=web（默认）或 fast，其他协议留空。接口可能另行计费，搜索密钥不会继承 MODEL_API_KEY。
+升级须执行增量数据库迁移。旧模型中保存的独立搜索 API 可在该区域点击「迁入」复制为新账号配置；迁入后与原模型无关联。旧模型内置搜索授权不再用于任务搜索。原有 SEARCH_PROVIDER、SEARCH_API_* 和 TAVILY_API_KEY 不再作为服务器搜索配置读取，应从部署文件移除。
 
-SEARCH_API_BASE_URL 可指定兼容服务的 HTTPS API 根地址（含版本或路径前缀，省略具体接口），必须实现所选协议。SEARCH_API_DNS_RESOLVER=auto 保留公网校验与 Fake-IP 可信解析，可选 system、alidns、cloudflare、google。禁止请求重定向，默认不重试或切换渠道。Worker 每次物理请求计一次搜索，最多保留10条候选。
+| 协议     | API 根地址                  | 搜索与读取接口              |
+| -------- | --------------------------- | --------------------------- |
+| deepseek | https://api.deepseek.com/v1 | tools/search 与 tools/fetch |
+| tavily   | https://api.tavily.com      | search 与 extract           |
 
-### 正文优先与补读
+DeepSeek 搜索词最多128个 Unicode 码点，Tavily 最多2,000个，过长明确失败。接口可能另行计费，搜索密钥不会继承 MODEL_API_KEY。
 
-SEARCH_API_CONTENT_MODE 支持 prefer_api 和 reader，环境变量省略时保留旧的 reader 行为。正文优先时，DeepSeek 请求 need_content=true，只采用 content；Tavily 请求 include_raw_content=true、include_answer=false，只采用 raw_content。snippet、summary、Tavily 的 content 和生成答案均不作为正文。API 的非空正文也可能只是局部片段，HTML 来源会在同一读取预算内由 Reader 核实原站正文；Perplexity 当前没有对应的正文返回字段。
+账号 API 地址可指定兼容服务的 HTTPS 根地址（含版本或路径前缀，省略具体接口），必须同时实现所选协议的搜索和读取接口。部署的 SEARCH_DNS_RESOLVER=auto 仅管理 API 网络解析，保留公网校验与 Fake-IP 可信解析，可选 system、alidns、cloudflare、google；它不选择搜索服务或保存凭据。禁止请求重定向，默认不重试或切换渠道。Worker 每次搜索请求计一次搜索，最多保留10条候选；远程提取请求计入读取预算。
 
-成功搜索的正文从当前账号、当前执行的持久账本恢复，读取成功时保存原站快照；网络、HTTP、容量或提取失败时可保留原 API 片段，其整页覆盖继续标记未知。取消、URL 安全、租约和预算错误会停止，不以片段掩盖。Reader 不支持的 PDF 等附件只保留已有 API 提取，不声称已读取整篇。不同快照不会拼接成全文，API日期也不当作页面已核实的发布时间。
+### API 网页读取
 
-原站读取沿用15秒整体时限及页面/尝试预算，复用已提交的读取结果不会再次联网。API片段回退不额外发起请求或重复计页。每次HTTP响应上限2 MiB；搜索账本保留正文每页最多100,000个Unicode码点、合计最多800,000 UTF-8字节，局部裁剪另有标记。Reader另有独立的整页正文上限与覆盖校验。
+DeepSeek 搜索始终请求 need_content=true，只采用 content；Tavily 始终请求 include_raw_content=true、include_answer=false，只采用 raw_content。snippet、summary、Tavily 搜索的 content 和生成答案均不作为正文。已有非空、未被本地裁剪的 API 正文通过读取阶段校验后保存；正文缺失或已被本地裁剪时，使用同一 API 的 Fetch / Extract 读取指定 URL。显式优先来源也可直接调用远程读取，不依赖先前搜索命中。
 
-原有 Tavily 部署方式 SEARCH_PROVIDER=tavily 和 TAVILY_API_KEY 继续可用，只返回候选摘要；需要正文优先时使用上面的 api 协议配置。默认仍为 SEARCH_PROVIDER=searxng。
+正文从当前账号、当前执行的持久搜索账本恢复，成功读取后保存独立快照，跨执行租约恢复不依赖内存缓存。API 模式不访问原站核实、不调用本地 Reader，也不因网络、HTTP 或提取失败回退本地工具。取消、URL 安全、租约与预算错误继续传播。API 提取保留 search-api 来源标识；非空、哈希匹配或未本地裁剪均不代表已经证明整页覆盖。不同快照不会拼接成全文，API 日期也不当作已核实的页面发布时间。
 
-## 模型内置搜索
+远程读取沿用15秒整体时限及页面/尝试预算，复用已提交的读取结果不会再次联网或重复计页。每次 HTTP 响应上限2 MiB；搜索账本保留正文每页最多100,000个 Unicode 码点、合计最多800,000 UTF-8字节，远程单页读取最多保留1,000,000个正文字符；局部裁剪另有标记。历史 contentMode 的 reader / prefer_api 两值均兼容为 API 读取，新写入统一保存 prefer_api，不再提供本地读取策略选项。
 
-在[账号 Agent 配置](agent-configuration.md)中编辑供应商的「研究搜索方式」，选择内置搜索。默认使用部署搜索；允许后，该供应商用于研究执行时，其内置搜索优先于部署搜索渠道。首批支持 OpenAI Responses Web Search 与 Anthropic Web Search；普通 OpenAI Chat Completions 兼容并不表示该地址实现 Responses 搜索。Gemini 等其他内置协议尚未接入。保存不调用搜索 API，也不会改变需求整理和报告问答的调用方式。
-
-每次请求限制最多 1 次搜索工具调用，预留 1 次搜索、16,384 输入 Token 和 1,024 输出 Token；成功后按供应商报告的实际 Token 结算（含 Anthropic 缓存输入），失败或用量未知保留预留，不自动重试或回退。预算不足不会发起请求。内置搜索也受 Run 截止时间和取消控制，单次最多 120 秒。上游不能硬限制搜索带入的输入 Token；若返回用量超出预留，Worker 将停止后续调用，预留额度并非供应商收费上限。
-
-只提取工具来源链接与标题，不使用模型生成答案、加密内容作为证据；来源正文仍由阅读器单独采集。升级需先执行新增数据库迁移，旧供应商保持内置搜索关闭。
-
-协议参考：[Tavily Search](https://docs.tavily.com/documentation/api-reference/endpoint/search)、[DeepSeek Search](https://api-docs.deepseek.com/api/search)、[Perplexity Search](https://docs.perplexity.ai/api-reference/search-post)、[OpenAI Web Search](https://developers.openai.com/api/docs/guides/tools-web-search)、[Anthropic Web Search](https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool)。
+协议参考：[DeepSeek Search](https://api-docs.deepseek.com/api/search)、[DeepSeek Fetch](https://api-docs.deepseek.com/api/fetch)、[Tavily Search](https://docs.tavily.com/documentation/api-reference/endpoint/search)、[Tavily Extract](https://docs.tavily.com/documentation/api-reference/endpoint/extract)。Perplexity 的 [Fetch URL 工具](https://docs.perplexity.ai/docs/agent-api/tools/fetch-url-content)属于另行计费的生成式 Agent API，当前不作为独立 Search API 读取使用。
 
 完整本地开发使用 `vp run local:up` 将 PostgreSQL、Redis、SearXNG 一起启动，搜索地址为 `http://127.0.0.1:18080`，配置统一在根 `.env.local`，见[本地开发环境](local-development.md)。下面的 `search:up` 是仅启动搜索的独立方案，使用自己的配置、端口和 Compose 项目。
 
@@ -104,7 +92,7 @@ vp run test:connectors:live    # 搜索、阅读、远程模型原文引用校�
 
 搜索烟测输出 `search_passed` 或带缺口的 `search_partial`。上游验证码、超时、被过滤结果与截断分别记录；全失败明确报错。`read_passed` 才代表采集了正文；搜索摘要不能作为已读原文。上游状态会随出口和时间变化；若全部引擎失败且无可用来源，连接器返回 `search_unavailable`，Worker日志显示 `TOOL_SEARCH_UNAVAILABLE`，不能将其解释为互联网没有相关信息。
 
-HTML 读取候选会跳过 URL 已明确标识的 PDF、办公文档、纯文本及论坛附件，继续选择可读取网页，不为这些候选消耗读取尝试；显式优先来源或冻结基线不支持时仍记录覆盖缺口。搜索供应商已经提供正文时，仅保留其 URL 能力提示供选择，正文继续经读取阶段和工具账本核验，不把摘要升级为证据。网页支持字符集解码；格式错误不等于仅支持 UTF-8，超限也可能来自主文档、DOM 或资源数量/大小。网页 403 应选择公开替代来源，超时还可能发生在渲染或提取阶段。
+SearXNG 配合本地 Reader 时，HTML 读取候选会跳过 URL 已明确标识的 PDF、办公文档、纯文本及论坛附件，继续选择可读取网页，不为这些候选消耗读取尝试；显式优先来源或冻结基线不支持时仍记录覆盖缺口。Search API 模式由服务商判断文档提取能力，不套用本地 HTML Reader 的格式筛选；正文继续经读取阶段和工具账本核验，不把摘要升级为证据。网页支持字符集解码；格式错误不等于仅支持 UTF-8，超限也可能来自主文档、DOM 或资源数量/大小。网页 403 应选择公开替代来源，超时还可能发生在渲染或提取阶段。
 
 Reader 优先提取主 HTML 中已有正文，缺少正文时再进行有界浏览器渲染。保存文本保留段落、代码换行与缩进、列表和表格行列分隔。已识别的验证码、登录门和加载提示不计为成功正文；附属资源受限、仅有公开摘要/订阅预览、仍需分页或交互时保留可核验正文，并将覆盖标为不完整。提取使用可终止的独立进程；字符数、下载大小和执行时间分别受限，增加正文字符上限不会放开网络预算。
 

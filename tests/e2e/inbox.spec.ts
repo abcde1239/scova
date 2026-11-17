@@ -135,6 +135,10 @@ async function samples(context: BrowserContext) {
                 json: { code: 'LOCAL_FAILURE', message: 'local sample', requestId: 'sample' },
             });
         if (path.startsWith('/api/v1/reports/')) {
+            if (path.endsWith('/conversation'))
+                return route.fulfill({
+                    json: { reportId: path.split('/').at(-2), turns: [], hasEarlier: false },
+                });
             const entry = state.items.find((value) => value.reportId === path.split('/').at(-1))!;
             return route.fulfill({ json: fullReport(entry) });
         }
@@ -249,7 +253,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         await expect(entries(page)).toHaveCount(3);
         await expect(entry(page, 1)).toContainText('结果已生成，未覆盖项目见报告详情。');
         await expect(entry(page, 1)).toContainText('演示报告');
-        await expect(entry(page, 2)).toContainText('真实查阅');
+        await expect(entry(page, 2)).toContainText('研究报告');
         expect(
             await entry(page, 1)
                 .locator('h2')
@@ -326,11 +330,16 @@ test('已读在途保原状态、重复激活不重写；成功后刷新仍已�
     release();
     await expect(entry(page, 1).locator('strong')).toHaveText('已读');
     await expect(
+        page.locator('.scova-notifications .n-notification').filter({ hasText: '已标记为已读。' }),
+    ).toHaveCount(1);
+    await expect(inbox(page)).not.toContainText('已标记为已读。');
+    await expect(
         entry(page, 1).getByRole('button', { name: '恢复未读', exact: true }),
     ).toBeEnabled();
     await page.reload();
     await page.evaluate(() => (document.documentElement.style.fontSize = '200%'));
     await expect(entry(page, 1).locator('strong')).toHaveText('已读');
+    await expect(page.locator('.scova-notifications .n-notification')).toHaveCount(0);
     await noOverflow(page);
     await entry(page, 1).scrollIntoViewIfNeeded();
     await info.attach('390-confirmed-read-text-200', {
@@ -343,6 +352,13 @@ test('已读在途保原状态、重复激活不重写；成功后刷新仍已�
     state.patchWait = undefined;
     await entry(page, 1).getByRole('button', { name: '恢复未读', exact: true }).click();
     await expect(entry(page, 1).locator('strong')).toHaveText('未读');
+    await expect(
+        page.locator('.scova-notifications .n-notification').filter({ hasText: '已恢复为未读。' }),
+    ).toHaveCount(1);
+    await expect(inbox(page)).not.toContainText('已恢复为未读。');
+    await expect(
+        entry(page, 1).getByRole('button', { name: '标记已读', exact: true }),
+    ).toBeFocused();
     expect(patches(calls).map((call) => call.body)).toEqual([{ read: true }, { read: false }]);
 });
 
@@ -353,13 +369,15 @@ test('写失败保留未读和可重试按钮，320/200%错误可读', async ({ 
     await page.goto('/inbox');
     await page.evaluate(() => (document.documentElement.style.fontSize = '200%'));
     await entry(page, 1).getByRole('button', { name: '标记已读', exact: true }).click();
-    await expect(inbox(page).getByRole('alert')).toContainText('原状态已保留');
+    await expect(page.locator('.scova-notifications .n-notification')).toContainText(
+        '原状态已保留',
+    );
     await expect(entry(page, 1).locator('strong')).toHaveText('未读');
     await expect(
         entry(page, 1).getByRole('button', { name: '标记已读', exact: true }),
     ).toBeEnabled();
     await noOverflow(page);
-    await inbox(page).getByRole('alert').scrollIntoViewIfNeeded();
+    await page.locator('.scova-notifications .n-notification').last().scrollIntoViewIfNeeded();
     await info.attach('320-write-failure-text-200', {
         body: await page.screenshot({ path: info.outputPath('write-failure-text-200.png') }),
         contentType: 'image/png',

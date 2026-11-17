@@ -1,6 +1,6 @@
 # @scova/connectors
 
-Scova 的搜索、远程模型与安全网页阅读适配器。默认使用自部署 SearxNG；支持显式配置 Tavily、DeepSeek/Perplexity 独立 API，以及授权的 OpenAI Responses/Anthropic 内置搜索。[部署与计费边界](../../docs/public/guides/search.md)。
+Scova 的搜索、远程模型与安全网页阅读适配器。默认使用自部署 SearxNG；支持显式配置 DeepSeek Search / Fetch、Tavily Search / Extract，以及授权的 OpenAI Responses/Anthropic 内置搜索。独立 API 模式的搜索与网页读取均由服务商提供，不调用本地 Reader。Perplexity Search 保留搜索适配兼容，但缺少独立读取接口，不可用于 API 模式管线。[部署与计费边界](../../docs/public/guides/search.md)。
 
 `createSearchApi({ protocol, apiKey, baseUrl? })` 接入独立服务；`createModelSearch({ protocol, apiKey, model, baseUrl })` 接入模型搜索，通过 `tokenReservation` 与返回的 `usage` 供调用方预留、结算。调用方必须在 `beforeAttempt` 中先持久预留预算；候选不能直接充当正文证据。
 
@@ -49,6 +49,8 @@ const connectors = createConnectorBundle({
 ```
 
 `createModelProvider({ protocol, ... })` 和 bundle 的 `modelProtocol` 支持 `openai_chat_completions`（默认严格 JSON Schema）、`openai_json`（JSON 模式）、`anthropic_messages` 与 `gemini`。`generateStructured` 接收 JSON Schema、输入/输出 token 上限与独立 `untrustedSources`，所有协议均校验输出和 usage；缺 usage 时保守估算。模型地址仅允许 HTTPS。密钥由 Server/Worker 从账号加密配置或部署默认值传入，不输出日志。完整 bundle 缺必要配置时固定为明确带原因的全 `demo`；独立 `createSearxngSearch()` 仍可真实搜索。已选 `live` 的任何调用失败均不切换演示或其他供应商。显式设置 `searchProvider: "tavily"` 并传入 `tavilyApiKey` 才调用 Tavily。
+
+结构失败通过 `ConnectorError.modelDiagnostic` 返回 schema SHA-256 指纹、失败类别与最多 6 条预期约束；枚举、数量限制和必填字段只从可信 schema 提取，literal union 的重复分支合并。诊断不含响应值、AJV 原始消息或无效输出正文；已确认的失败调用 usage 独立保留，供调用方结算。
 
 `listProviderModels({ baseUrl, protocol, apiKey, signal })` 仅查询模型目录，返回 `items` 与 `truncated`，不生成内容或验证研究能力。支持上述协议，Gemini 过滤非 `generateContent` 模型；最多五页、1000项、每页1 MiB，总超时12秒。复用公网DNS固定连接保护，凭据请求不重定向、不自动重试。
 

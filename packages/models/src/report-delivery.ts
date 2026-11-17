@@ -53,9 +53,10 @@ export function classifyReportDelivery(
                 claims[index].kind !== 'insufficient' &&
                 selection?.placement === 'main' &&
                 selection.questionIds.includes(q.id) &&
-                selection.assessment?.relevance === 'direct' &&
-                ['direct', 'partial'].includes(selection.assessment.support) &&
-                selection.assessment.role !== 'lead'
+                (claims[index].kind === 'model_answer' ||
+                    (selection.assessment?.relevance === 'direct' &&
+                        ['direct', 'partial'].includes(selection.assessment.support) &&
+                        selection.assessment.role !== 'lead'))
             );
         });
     const required =
@@ -65,7 +66,7 @@ export function classifyReportDelivery(
         const requirements = required.filter((r) => r.questionIds.includes(q.id));
         return requirements.every(
             (r) =>
-                r.status === 'supported' &&
+                ['supported', 'model_answered'].includes(r.status) &&
                 r.claimIndexes.length > 0 &&
                 r.claimIndexes.every(
                     (index) => claims[index] && claims[index].kind !== 'insufficient',

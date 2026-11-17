@@ -5,7 +5,7 @@
         :class="{ 'evidence--embedded': embedded }"
     >
         <summary
-            class="[.citation-metadata_&:is(summary)]:(min-h-11 font-normal) min-h-11 cursor-pointer font-medium py-2 px-0 keyboard-focus-wide"
+            class="source-disclosure-control [.citation-metadata_&:is(summary)]:(min-h-11 font-normal) min-h-11 font-medium py-2 px-2"
             v-if="!embedded"
         >
             {{ evidence.title }} · 查看原文引用
@@ -20,17 +20,18 @@
                 采集正文曾截断，引用仅代表已保存片段。
             </p>
             <a
-                class="justify-self-start min-h-11 inline-flex items-center text-primary underline-offset-[0.2em] cursor-pointer keyboard-focus-wide"
-                v-if="link"
+                class="external-link source-inline-action cursor-pointer keyboard-focus-wide"
+                v-if="!hideSourceLink && link"
                 :href="link"
                 target="_blank"
                 rel="noopener noreferrer"
-                >打开原始来源（新窗口）</a
             >
-            <p class="m-0" v-else>原始来源链接不可用。</p>
+                打开原始来源（新窗口）<app-icon name="source" />
+            </a>
+            <p class="m-0" v-else-if="!hideSourceLink">原始来源链接不可用。</p>
             <details class="citation-metadata text-muted text-[0.8125rem]">
                 <summary
-                    class="[.citation-metadata_&:is(summary)]:(min-h-11 font-normal) min-h-11 cursor-pointer font-medium py-2 px-0 keyboard-focus-wide"
+                    class="source-disclosure-control [.citation-metadata_&:is(summary)]:(min-h-11 font-normal) min-h-11 font-medium py-2 px-2"
                 >
                     采集与定位信息
                 </summary>
@@ -79,7 +80,10 @@
                     </div>
                 </dl>
             </details>
-            <p class="citation-history leading-[1.7] text-muted text-[0.875rem] m-0">
+            <p
+                v-if="!embedded"
+                class="citation-history leading-[1.7] text-muted text-[0.875rem] m-0"
+            >
                 这里展示已保存的引用；来源网页的当前内容可能变化，完整采集正文过期后引用仍保留。
             </p>
         </div>
@@ -90,7 +94,8 @@
 import { computed } from 'vue';
 import type { Evidence } from '@scova/models';
 import { sourceLink } from '@/composables/useReport';
-const props = defineProps<{ evidence: Evidence; embedded?: boolean }>();
+import AppIcon from '@/components/common/AppIcon.vue';
+const props = defineProps<{ evidence: Evidence; embedded?: boolean; hideSourceLink?: boolean }>();
 const link = computed(() => sourceLink(props.evidence.snapshot?.originalUrl ?? props.evidence.url));
 function sourceDate(
     date: NonNullable<NonNullable<Evidence['snapshot']>['sourceDates']>['published'] | undefined,

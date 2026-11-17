@@ -11,7 +11,11 @@ import {
     eq,
 } from '@scova/db';
 import { migrateDatabase } from '@scova/db/migrate';
-import { openCredential, openProviderCredentials } from '@scova/shared/credentials';
+import {
+    openCredential,
+    openProviderCredentials,
+    sealProviderCredentials,
+} from '@scova/shared/credentials';
 import type { AgentProvider } from '@scova/models';
 import type { readProviderBalance } from '@scova/connectors';
 import { createDefaultServices } from '../src/app/services';
@@ -56,7 +60,9 @@ const services = createDefaultServices({
     providerBalance,
 });
 const service = createAgentProviderService(services);
-const app = new Elysia().use(createApiErrorPlugin()).use(createAgentProviderPlugin(services));
+const app = new Elysia({ normalize: false })
+    .use(createApiErrorPlugin())
+    .use(createAgentProviderPlugin(services));
 type Account = { id: string; token: string; csrf: string };
 let owner: Account, other: Account;
 async function account(): Promise<Account> {
@@ -103,21 +109,39 @@ async function create(overrides = {}) {
     return (await response.json()) as AgentProvider;
 }
 describe('账号供应商的 HTTP、数据库与模型选择', () => {
-    it('独立搜索配置脱敏、独立加密、密钥保留与账号隔离，拒绝向新地址复用密钥', async () => {
+    it('历史搜索只供显式迁入，更新模型保留旧搜索密钥且不限制模型协议', async () => {
         const searchApi = {
             protocol: 'deepseek',
             baseUrl: 'https://api.deepseek.com/v1',
             apiKey: 'search-private-key',
             contentMode: 'prefer_api',
         };
-        const p = await create({ searchApi });
-        expect(p.searchApi).toEqual({
+        const p = await create();
+        await db
+            .update(agentProviders)
+            .set({
+                encryptedApiKey: sealProviderCredentials(
+                    {
+                        modelApiKey: input.apiKey,
+                        searchApi: {
+                            ...searchApi,
+                            protocol: 'deepseek',
+                            contentMode: 'prefer_api',
+                        },
+                    },
+                    owner.id,
+                    p.id,
+                ),
+            })
+            .where(eq(agentProviders.id, p.id));
+        const legacy = (await service.list(owner.id)).items.find((item) => item.id === p.id)!;
+        expect(legacy.searchApi).toEqual({
             protocol: searchApi.protocol,
             baseUrl: searchApi.baseUrl,
             contentMode: 'prefer_api',
             hasApiKey: true,
         });
-        expect(JSON.stringify(p)).not.toContain(searchApi.apiKey);
+        expect(JSON.stringify(legacy)).not.toContain(searchApi.apiKey);
         const row = (await db.select().from(agentProviders).where(eq(agentProviders.id, p.id)))[0]!;
         expect(row.encryptedApiKey).not.toContain(searchApi.apiKey);
         expect(openProviderCredentials(row.encryptedApiKey, owner.id, p.id)).toEqual({
@@ -135,12 +159,13 @@ describe('账号供应商的 HTTP、数据库与模型选择', () => {
         ).not.toContain(p.id);
         const preserved = await request('PATCH', `/${p.id}`, {
             ...input,
+            protocol: 'gemini',
             apiKey: 'rotated-model-key',
             revision: p.revision,
         });
         expect(preserved.status).toBe(200);
         const saved = (await preserved.json()) as AgentProvider;
-        expect(saved.searchApi).toEqual(p.searchApi);
+        expect(saved.searchApi).toEqual(legacy.searchApi);
         const changed = await request('PATCH', `/${p.id}`, {
             ...input,
             revision: saved.revision,
@@ -163,9 +188,7 @@ describe('账号供应商的 HTTP、数据库与模型选择', () => {
             revision: saved.revision,
             searchApi: { protocol: 'deepseek', baseUrl: searchApi.baseUrl, contentMode: 'reader' },
         });
-        expect(edit.status).toBe(200);
-        const edited = (await edit.json()) as AgentProvider;
-        expect(edited.searchApi?.contentMode).toBe('reader');
+        expect(edit.status).toBe(422);
         const updated = (
             await db.select().from(agentProviders).where(eq(agentProviders.id, p.id))
         )[0]!;
@@ -174,16 +197,15 @@ describe('账号供应商的 HTTP、数据库与模型选择', () => {
         ).toBe(searchApi.apiKey);
         const removed = await request('PATCH', `/${p.id}`, {
             ...input,
-            revision: edited.revision,
+            revision: saved.revision,
             searchApi: null,
         });
-        expect(removed.status).toBe(200);
-        expect(((await removed.json()) as AgentProvider).searchApi).toBeNull();
+        expect(removed.status).toBe(422);
         expect(JSON.stringify(await (await request('GET')).json())).not.toContain(
             'search-private-key',
         );
     });
-    it('内置搜索默认关闭、显式授权、旧客户端保留，协议变更需匹配且账号隔离', async () => {
+    it('模型接口拒绝搜索授权和搜索配置写入，模型更新清除历史搜索授权', async () => {
         const p = await create();
         expect(p.webSearch).toBe('disabled');
         const enabled = await request('PATCH', `/${p.id}`, {
@@ -191,15 +213,17 @@ describe('账号供应商的 HTTP、数据库与模型选择', () => {
             revision: p.revision,
             webSearch: 'openai_responses',
         });
-        expect(enabled.status).toBe(200);
-        const saved = (await enabled.json()) as AgentProvider;
-        expect(saved.webSearch).toBe('openai_responses');
+        expect(enabled.status).toBe(422);
+        await db
+            .update(agentProviders)
+            .set({ webSearch: 'openai_responses' })
+            .where(eq(agentProviders.id, p.id));
         expect((await activeAgentProvider(db, owner.id, p.id))?.webSearch).toBe('openai_responses');
         expect(await activeAgentProvider(db, other.id, p.id)).toBeNull();
-        const legacy = await request('PATCH', `/${p.id}`, { ...input, revision: saved.revision });
+        const legacy = await request('PATCH', `/${p.id}`, { ...input, revision: p.revision });
         expect(legacy.status).toBe(200);
         const kept = (await legacy.json()) as AgentProvider;
-        expect(kept.webSearch).toBe('openai_responses');
+        expect(kept.webSearch).toBe('disabled');
         expect(
             (
                 await request('PATCH', `/${p.id}`, {
@@ -208,16 +232,10 @@ describe('账号供应商的 HTTP、数据库与模型选择', () => {
                     revision: kept.revision,
                 })
             ).status,
-        ).toBe(422);
+        ).toBe(200);
         expect(
-            (
-                await request(
-                    'PATCH',
-                    `/${p.id}`,
-                    { ...input, revision: kept.revision, webSearch: 'disabled' },
-                    other,
-                )
-            ).status,
+            (await request('PATCH', `/${p.id}`, { ...input, revision: kept.revision }, other))
+                .status,
         ).toBe(404);
         const disabled = await request('PATCH', `/${p.id}`, {
             ...input,
@@ -225,15 +243,11 @@ describe('账号供应商的 HTTP、数据库与模型选择', () => {
             revision: kept.revision,
             webSearch: 'disabled',
         });
-        expect(disabled.status).toBe(200);
-        expect((await disabled.json()).webSearch).toBe('disabled');
+        expect(disabled.status).toBe(422);
         expect(
             (await request('POST', '', { ...input, webSearch: 'anthropic_web_search' })).status,
         ).toBe(422);
-        expect(
-            (await create({ protocol: 'anthropic_messages', webSearch: 'anthropic_web_search' }))
-                .webSearch,
-        ).toBe('anthropic_web_search');
+        expect((await request('POST', '', { ...input, searchApi: null })).status).toBe(422);
         expect(providerModels).not.toHaveBeenCalled();
     });
     beforeAll(async () => {

@@ -1,4 +1,5 @@
 import { Ajv } from 'ajv';
+import { modelSchemaHash, modelSchemaIssues } from './model-diagnostics.ts';
 import { modelRequest, normalizeModelResponse, type ModelProtocol } from './model-protocol.ts';
 import { createModelHttpClient } from './model-http.ts';
 import {
@@ -320,56 +321,125 @@ export function createModelProvider(
                     maxRedirects: 0,
                 }),
             );
-            const parsed = normalizeModelResponse(protocol, parseJson(response.body));
-            if (
-                !record(parsed) ||
-                !Array.isArray(parsed.choices) ||
-                parsed.choices.length !== 1 ||
-                !record(parsed.choices[0])
-            ) {
-                throw new ConnectorError('invalid_response', '模型响应结构无效');
-            }
-            const choice = parsed.choices[0];
-            if (choice.finish_reason === 'length')
-                throw new ConnectorError('output_truncated', '模型输出达到长度上限，未完成生成');
-            if (
-                choice.finish_reason !== 'stop' ||
-                !record(choice.message) ||
-                typeof choice.message.content !== 'string' ||
-                choice.message.refusal
-            ) {
-                throw new ConnectorError('invalid_response', '模型输出被截断、拒绝或缺失');
-            }
-            const data = parseJson(choice.message.content);
-            if (!validate(data))
-                throw new ConnectorError('invalid_response', '模型输出不符合 schema');
-            let usage = {
-                inputTokens: reservedInput,
-                outputTokens: input.maxOutputTokens,
-                estimated: true,
-            };
-            if (parsed.usage !== undefined) {
-                if (
-                    !record(parsed.usage) ||
-                    !Number.isSafeInteger(parsed.usage.prompt_tokens) ||
-                    !Number.isSafeInteger(parsed.usage.completion_tokens) ||
-                    (parsed.usage.prompt_tokens as number) < 0 ||
-                    (parsed.usage.completion_tokens as number) < 0
-                ) {
-                    throw new ConnectorError('invalid_response', '模型 usage 无效');
+            let confirmedUsage: import('./types.ts').ModelResponse['usage'] | undefined;
+            try {
+                let parsed: unknown;
+                try {
+                    parsed = parseJson(response.body);
+                } catch {
+                    const error = new ConnectorError('invalid_response', '模型响应不是有效 JSON');
+                    error.modelFailure = 'envelope';
+                    throw error;
                 }
-                usage = {
-                    inputTokens: parsed.usage.prompt_tokens as number,
-                    outputTokens: parsed.usage.completion_tokens as number,
-                    estimated: false,
+                parsed = normalizeModelResponse(protocol, parsed);
+                // Usage is independent of whether generated JSON satisfies the content contract.
+                if (
+                    record(parsed) &&
+                    record(parsed.usage) &&
+                    Number.isSafeInteger(parsed.usage.prompt_tokens) &&
+                    Number.isSafeInteger(parsed.usage.completion_tokens) &&
+                    (parsed.usage.prompt_tokens as number) >= 0 &&
+                    (parsed.usage.completion_tokens as number) >= 0 &&
+                    (parsed.usage.prompt_tokens as number) <= input.maxInputTokens &&
+                    (parsed.usage.completion_tokens as number) <= input.maxOutputTokens
+                ) {
+                    confirmedUsage = {
+                        inputTokens: parsed.usage.prompt_tokens as number,
+                        outputTokens: parsed.usage.completion_tokens as number,
+                        estimated: false,
+                    };
+                }
+                if (
+                    !record(parsed) ||
+                    !Array.isArray(parsed.choices) ||
+                    parsed.choices.length !== 1 ||
+                    !record(parsed.choices[0])
+                ) {
+                    const error = new ConnectorError('invalid_response', '模型响应结构无效');
+                    error.modelFailure = 'envelope';
+                    throw error;
+                }
+                const choice = parsed.choices[0];
+                if (choice.finish_reason === 'length')
+                    throw new ConnectorError(
+                        'output_truncated',
+                        '模型输出达到长度上限，未完成生成',
+                    );
+                if (
+                    choice.finish_reason !== 'stop' ||
+                    !record(choice.message) ||
+                    typeof choice.message.content !== 'string' ||
+                    choice.message.refusal
+                ) {
+                    const error = new ConnectorError(
+                        'invalid_response',
+                        '模型输出被拒绝、缺失或未正常完成',
+                    );
+                    error.modelFailure =
+                        record(choice.message) && choice.message.refusal ? 'refusal' : 'envelope';
+                    throw error;
+                }
+                let data: unknown;
+                try {
+                    data = parseJson(choice.message.content);
+                } catch {
+                    const error = new ConnectorError(
+                        'invalid_response',
+                        '模型生成内容不是有效 JSON',
+                    );
+                    error.modelFailure = 'json';
+                    throw error;
+                }
+                if (!validate(data)) {
+                    const error = new ConnectorError('invalid_response', '模型输出不符合 schema');
+                    error.modelFailure = 'schema';
+                    // schemaPath names the trusted contract, never the rejected response value.
+                    error.modelSchemaIssues = modelSchemaIssues(
+                        input.schema,
+                        validate.errors ?? [],
+                    );
+                    throw error;
+                }
+                let usage = {
+                    inputTokens: reservedInput,
+                    outputTokens: input.maxOutputTokens,
+                    estimated: true,
                 };
+                if (parsed.usage !== undefined) {
+                    if (
+                        !record(parsed.usage) ||
+                        !Number.isSafeInteger(parsed.usage.prompt_tokens) ||
+                        !Number.isSafeInteger(parsed.usage.completion_tokens) ||
+                        (parsed.usage.prompt_tokens as number) < 0 ||
+                        (parsed.usage.completion_tokens as number) < 0
+                    ) {
+                        throw new ConnectorError('invalid_response', '模型 usage 无效');
+                    }
+                    usage = {
+                        inputTokens: parsed.usage.prompt_tokens as number,
+                        outputTokens: parsed.usage.completion_tokens as number,
+                        estimated: false,
+                    };
+                }
+                if (
+                    usage.inputTokens > input.maxInputTokens ||
+                    usage.outputTokens > input.maxOutputTokens
+                )
+                    throw new ConnectorError('budget_exceeded', '模型返回用量超过调用预算');
+                return { data: data as T, mode: 'live', usage };
+            } catch (error) {
+                if (error instanceof ConnectorError) {
+                    if (error.code === 'invalid_response') error.modelFailure ??= 'envelope';
+                    if (error.modelFailure)
+                        error.modelDiagnostic = {
+                            schemaHash: modelSchemaHash(input.schema),
+                            failure: error.modelFailure,
+                            issues: error.modelSchemaIssues ?? [],
+                        };
+                    if (confirmedUsage) error.modelUsage = confirmedUsage;
+                }
+                throw error;
             }
-            if (
-                usage.inputTokens > input.maxInputTokens ||
-                usage.outputTokens > input.maxOutputTokens
-            )
-                throw new ConnectorError('budget_exceeded', '模型返回用量超过调用预算');
-            return { data: data as T, mode: 'live', usage };
         },
     };
 }

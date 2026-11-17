@@ -2,7 +2,7 @@
     <div class="agent-settings layout-grid gap-6">
         <div class="settings-intro flex items-center justify-between gap-4 flex-wrap">
             <p class="leading-[1.65] break-anywhere m-0 [.settings-intro_&:is(p)]:text-muted">
-                分别为需求整理和研究执行选择模型，可共用同一供应商。
+                分别配置解析、任务执行、搜索与正文提取。
             </p>
         </div>
         <state-panel v-if="query.isPending.value" state="loading" message="正在读取模型配置" />
@@ -19,7 +19,13 @@
                 :system-configured="data.systemConfigured"
                 :disabled="pending || editing || !data.storageReady"
                 @select="chooseProvider"
-            />
+            >
+                <search-configuration-form
+                    ref="searchEditor"
+                    :providers="data.items"
+                    :disabled="pending || editing"
+                />
+            </agent-purpose-select>
             <p
                 v-if="!data.storageReady"
                 class="storage-warning leading-[1.65] break-anywhere text-[0.9375rem] m-0"
@@ -42,7 +48,7 @@
                         <p
                             class="leading-[1.65] break-anywhere m-0 [.management-heading_&:is(p)]:(mt-[0.3rem] text-[0.875rem] text-muted)"
                         >
-                            管理模型连接与独立搜索 API，分别保存密钥和正文读取方式。
+                            管理解析和任务执行使用的模型连接。
                         </p>
                     </div>
                     <action-button
@@ -82,12 +88,12 @@
                                 <span
                                     v-if="provider.active"
                                     class="active-badge inline-flex items-center gap-[0.3rem] text-primary text-[0.8125rem]"
-                                    ><app-icon name="confirm" />研究执行</span
+                                    ><app-icon name="confirm" />任务执行</span
                                 >
                                 <span
                                     v-if="provider.draftActive"
                                     class="active-badge inline-flex items-center gap-[0.3rem] text-primary text-[0.8125rem]"
-                                    ><app-icon name="confirm" />需求整理</span
+                                    ><app-icon name="confirm" />解析</span
                                 >
                             </div>
                             <p
@@ -115,18 +121,8 @@
                                 >
                                 <span
                                     class="[.provider-meta_&:is(span)]:(inline-flex items-center gap-[0.3rem])"
-                                    v-if="provider.webSearch && provider.webSearch !== 'disabled'"
-                                    >内置搜索已允许</span
-                                >
-                                <span
-                                    class="[.provider-meta_&:is(span)]:(inline-flex items-center gap-[0.3rem])"
                                     v-if="provider.searchApi"
-                                    >{{ provider.searchApi.protocol }} 搜索 ·
-                                    {{
-                                        provider.searchApi.contentMode === 'prefer_api'
-                                            ? 'API 正文优先'
-                                            : 'Reader 读取'
-                                    }}</span
+                                    >含旧搜索配置 · 可在上方迁入</span
                                 >
                             </div>
                             <provider-balance
@@ -171,13 +167,6 @@
                 </div>
             </section>
         </template>
-        <p
-            v-if="message"
-            role="status"
-            class="action-message leading-[1.65] break-anywhere text-[0.9375rem] m-0"
-        >
-            {{ message }}
-        </p>
     </div>
 </template>
 
@@ -197,6 +186,7 @@ import AppIcon from '@/components/common/AppIcon.vue';
 import StatePanel from '@/components/common/StatePanel.vue';
 import AgentProviderForm from '@/components/account/AgentProviderForm.vue';
 import AgentPurposeSelect from '@/components/account/AgentPurposeSelect.vue';
+import SearchConfigurationForm from '@/components/account/SearchConfigurationForm.vue';
 import ProviderBalance from '@/components/account/ProviderBalance.vue';
 import { useActionNotification } from '@/composables/useActionNotification';
 const notice = useActionNotification();
@@ -210,6 +200,7 @@ const editing = ref(false),
     pending = ref(false),
     message = ref('');
 const providerEditor = ref<InstanceType<typeof AgentProviderForm>>();
+const searchEditor = ref<InstanceType<typeof SearchConfigurationForm>>();
 const protocolLabel = (protocol: AgentProvider['protocol']) =>
     ({
         openai_chat_completions: 'OpenAI · JSON Schema',
@@ -259,7 +250,7 @@ async function activate(provider: AgentProvider, purpose: AgentProviderPurpose) 
         });
         await query.refetch();
         if (!scope.isCurrent()) return;
-        message.value = `${purpose === 'task_draft' ? '需求整理' : '研究执行'}已切换至 ${provider.name}。`;
+        message.value = `${purpose === 'task_draft' ? '解析' : '任务执行'}已切换至 ${provider.name}。`;
         notice.success('模型用途已更新', message.value);
     } catch (cause) {
         if (scope.isCurrent() && toApiError(cause).kind !== 'cancelled') {
@@ -307,5 +298,9 @@ async function remove(provider: AgentProvider) {
         pending.value = false;
     }
 }
-onBeforeRouteLeave(() => !editing.value || providerEditor.value?.canLeave() === true);
+onBeforeRouteLeave(
+    () =>
+        (!editing.value || providerEditor.value?.canLeave() === true) &&
+        searchEditor.value?.canLeave() !== false,
+);
 </script>

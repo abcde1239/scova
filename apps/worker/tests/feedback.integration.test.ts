@@ -25,7 +25,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import pg from 'pg';
 import { beforeAll, afterAll, describe, it, expect } from 'vite-plus/test';
-import { effectiveRunScopeHash } from '@scova/shared';
+import { effectiveRunScopeHash, researchComparisonScopeHash } from '@scova/shared';
 import { readFeedbackSnapshot, type Feedback, type FeedbackEffect } from '@scova/models';
 import type { ConnectorBundle, ReadPage, StructuredInput, CallContext } from '@scova/connectors';
 
@@ -41,6 +41,7 @@ import { RunService } from '../src/service/runs.ts';
 import { createDeliveryService } from '../src/service/delivery.ts';
 import { outboxDatabase } from './support/outbox-database.ts';
 import { seedRun, emptyUsage } from './support/run-database.ts';
+import { completeModelFixture } from './support/complete-model-fixture.ts';
 
 const fixture = outboxDatabase(),
     db = fixture.db;
@@ -122,6 +123,7 @@ function bundle(
     options: { urls?: string[]; body?: string; reads?: string[]; queries?: string[] } = {},
 ): ConnectorBundle {
     const resultUrls = options.urls ?? [primary];
+    const complete = completeModelFixture();
     return {
         mode: 'live',
         search: {
@@ -222,7 +224,7 @@ function bundle(
                 return {
                     mode: 'live',
                     usage: { inputTokens: 1, outputTokens: 1, estimated: false },
-                    data: data as T,
+                    data: complete(input, data) as T,
                 };
             },
         },
@@ -261,20 +263,29 @@ async function initial(options: { scheduled?: boolean; searchBudget?: number } =
     if (options.searchBudget) seed.config.budget.maxSearches = options.searchBudget;
     await db
         .update(dbTaskVersions)
-        .set({ configJson: seed.config })
+        .set({
+            configJson: seed.config,
+            comparisonScopeHash: researchComparisonScopeHash(seed.config),
+        })
         .where(eq(dbTaskVersions.id, seed.version.id))
         .returning()
         .then((rows) => requiredDatabaseValue(rows[0]));
     seed.run = await db
         .update(dbRuns)
         .set({
-            comparisonScopeHash: effectiveRunScopeHash(seed.version.comparisonScopeHash, 'live'),
+            comparisonScopeHash: effectiveRunScopeHash(
+                researchComparisonScopeHash(seed.config),
+                'live',
+            ),
             budgetJson: seed.config.budget,
         })
         .where(eq(dbRuns.id, seed.run.id))
         .returning()
         .then((rows) => requiredDatabaseValue(rows[0]));
     const result = await execute(seed.run);
+    expect(result.candidate.coverage.completeness, JSON.stringify(result.candidate.coverage)).toBe(
+        'complete',
+    );
     const delivered = await delivery.deliver(result.claimed.token, result.candidate);
     const source = await db.query.sources
         .findFirst({

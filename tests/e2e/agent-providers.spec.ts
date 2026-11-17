@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import type { AgentProvider, AgentProviderInput } from '@scova/models';
+import type { AgentProvider, AgentProviderInput, SearchConfiguration } from '@scova/models';
 import { chooseOption } from './support/select.ts';
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -37,6 +37,40 @@ async function samples(
     let items = structuredClone(initial);
     const writes: { method: string; path: string; body: Record<string, unknown> }[] = [];
     await page.route('**/api/v1/me', (route) => route.fulfill({ json: account }));
+    let searchConfiguration: SearchConfiguration | null = null;
+    await page.route('**/api/v1/me/search-configuration**', async (route) => {
+        const request = route.request();
+        if (request.method() === 'GET')
+            return route.fulfill({ json: { configuration: searchConfiguration, storageReady } });
+        const body = request.postDataJSON();
+        const path = new URL(request.url()).pathname;
+        writes.push({ method: request.method(), path, body });
+        expect((await request.allHeaders())['x-csrf-token']).toBe('sample-csrf');
+        if (path.includes('/import/')) {
+            const source = items.find((item) => path.endsWith(item.id))!;
+            searchConfiguration = {
+                revision: (searchConfiguration?.revision ?? 0) + 1,
+                defaultMode: 'api',
+                api: { ...source.searchApi!, hasApiKey: true },
+                updatedAt: '2026-11-11T00:00:00Z',
+            };
+        } else {
+            searchConfiguration = {
+                revision: (searchConfiguration?.revision ?? 0) + 1,
+                defaultMode: body.defaultMode,
+                api: body.api
+                    ? {
+                          protocol: body.api.protocol,
+                          baseUrl: body.api.baseUrl,
+                          contentMode: body.api.contentMode,
+                          hasApiKey: true,
+                      }
+                    : (searchConfiguration?.api ?? null),
+                updatedAt: '2026-11-11T00:00:00Z',
+            };
+        }
+        return route.fulfill({ json: searchConfiguration });
+    });
     await page.route('**/api/v1/me/agent-providers**', async (route) => {
         const request = route.request(),
             path = new URL(request.url()).pathname;
@@ -64,15 +98,6 @@ async function samples(
                 model: input.model,
                 baseUrl: input.baseUrl,
                 protocol: input.protocol,
-                webSearch: input.webSearch,
-                searchApi: input.searchApi
-                    ? {
-                          protocol: input.searchApi.protocol,
-                          baseUrl: input.searchApi.baseUrl,
-                          contentMode: input.searchApi.contentMode,
-                          hasApiKey: true,
-                      }
-                    : null,
             };
             items.push(entry);
             return route.fulfill({ status: 201, json: entry });
@@ -90,15 +115,6 @@ async function samples(
                 model: body.model,
                 baseUrl: body.baseUrl,
                 protocol: body.protocol,
-                webSearch: body.webSearch,
-                searchApi: body.searchApi
-                    ? {
-                          protocol: body.searchApi.protocol,
-                          baseUrl: body.searchApi.baseUrl,
-                          contentMode: body.searchApi.contentMode,
-                          hasApiKey: true,
-                      }
-                    : null,
                 revision: entry.revision + 1,
             });
         } else {
@@ -110,102 +126,116 @@ async function samples(
     return writes;
 }
 for (const width of [1440, 320]) {
-    test(`独立搜索API${width}：正文优先、独立密钥、保存回显与Reader选择`, async ({
-        page,
-    }, info) => {
+    test(`独立搜索配置${width}：账号保存、密钥保留、模型切换互不影响`, async ({ page }, info) => {
         const writes = await samples(page);
-        const external: string[] = [];
-        page.on('request', (request) => {
-            if (!request.url().startsWith('http://127.0.0.1:4189')) external.push(request.url());
-        });
         await page.setViewportSize({ width, height: 1100 });
         await page.emulateMedia({
             colorScheme: width === 320 ? 'dark' : 'light',
             reducedMotion: 'reduce',
         });
         await page.goto('/account/agent');
-        const card = page
-            .getByRole('listitem')
-            .filter({ has: page.getByRole('heading', { name: '日常研究', exact: true }) });
-        await card.getByRole('button', { name: '编辑', exact: true }).click();
-        if (width === 320)
-            await page.evaluate(() => {
-                document.documentElement.style.fontSize = '200%';
-            });
-        await chooseOption(page, '研究搜索方式', '独立搜索 API');
-        await expect(page.getByLabel('网页正文读取', { exact: true })).toContainText(
-            'API 正文优先，Reader 补读',
-        );
+        await expect(page.getByRole('region', { name: '解析模型', exact: true })).toBeVisible();
+        await expect(page.getByRole('region', { name: '任务执行模型', exact: true })).toBeVisible();
+        const search = page.getByRole('region', { name: '搜索与正文提取', exact: true });
+        await expect(search).toContainText('内置 SearXNG＋网页读取工具（默认）');
+        await search.getByRole('button', { name: '配置搜索', exact: true }).click();
+        await chooseOption(page, '账号搜索方式', 'Search API（搜索与网页读取）');
         await expect(page.getByLabel('搜索 API 地址', { exact: true })).toHaveValue(
             'https://api.deepseek.com/v1',
         );
         await page.getByLabel('搜索 API Key', { exact: true }).fill('fixture-search-secret');
-        await expect(page.getByLabel('API Key（留空保留）', { exact: true })).toHaveValue('');
+        await expect(page.getByLabel('网页正文读取', { exact: true })).toHaveCount(0);
+        await expect(search).toContainText('搜索与网页正文均由所选 API 提供');
         expect(await page.getByLabel('搜索 API Key', { exact: true }).getAttribute('type')).toBe(
             'password',
         );
+        if (width === 320)
+            await page.evaluate(() => {
+                document.documentElement.style.fontSize = '200%';
+            });
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
             true,
         );
-        await page.screenshot({ path: info.outputPath('search-api-config.png'), fullPage: true });
-        await page.getByRole('button', { name: '保存配置', exact: true }).click();
-        await expect(card).toContainText('deepseek 搜索 · API 正文优先');
-        expect(writes[0]?.body).toMatchObject({
-            webSearch: 'disabled',
-            searchApi: {
-                protocol: 'deepseek',
-                apiKey: 'fixture-search-secret',
-                contentMode: 'prefer_api',
+        await page.screenshot({
+            path: info.outputPath('independent-search-form.png'),
+            fullPage: true,
+        });
+        await search.getByRole('button', { name: '保存搜索配置', exact: true }).click();
+        await expect(search).toContainText('DeepSeek Search');
+        expect(writes[0]).toMatchObject({
+            method: 'PUT',
+            path: '/api/v1/me/search-configuration',
+            body: {
+                defaultMode: 'api',
+                api: {
+                    protocol: 'deepseek',
+                    apiKey: 'fixture-search-secret',
+                    contentMode: 'prefer_api',
+                },
             },
         });
         expect(writes[0]?.body).not.toHaveProperty('apiKey');
-        await card.getByRole('button', { name: '编辑', exact: true }).click();
+        await chooseOption(page, '任务执行使用的配置', '备用模型');
+        await expect(search).toContainText('DeepSeek Search');
+        expect(writes[1]?.path).toContain('/agent-providers/');
+        await search.getByRole('button', { name: '编辑搜索配置', exact: true }).click();
         await expect(
             page.getByLabel('搜索 API Key（地址与协议不变时留空保留）', { exact: true }),
         ).toHaveValue('');
-        await chooseOption(page, '网页正文读取', '始终使用 Reader 读取网页');
-        await page.getByRole('button', { name: '保存配置', exact: true }).click();
-        expect(writes[1]?.body.searchApi).not.toHaveProperty('apiKey');
-        await expect(card).toContainText('Reader 读取');
-        await card.getByRole('button', { name: '编辑', exact: true }).click();
-        await chooseOption(page, '研究搜索方式', '部署默认搜索');
-        await page.getByRole('button', { name: '保存配置', exact: true }).click();
-        expect(writes[2]?.body.searchApi).toBeNull();
-        expect(external).toEqual([]);
+        await expect(page.getByLabel('网页正文读取', { exact: true })).toHaveCount(0);
+        await search.getByRole('button', { name: '保存搜索配置', exact: true }).click();
+        expect(writes[2]?.body.api).not.toHaveProperty('apiKey');
+        await search.getByRole('button', { name: '编辑搜索配置', exact: true }).click();
+        await chooseOption(page, '账号搜索方式', '内置 SearXNG＋网页读取工具');
+        await search.getByRole('button', { name: '保存搜索配置', exact: true }).click();
+        expect(writes[3]?.body).toEqual({ revision: 2, defaultMode: 'searxng' });
+        await expect(search).toContainText('内置 SearXNG＋网页读取工具');
+        await page.screenshot({
+            path: info.outputPath('three-independent-groups.png'),
+            fullPage: true,
+        });
     });
-}
-for (const width of [1440, 320]) {
-    test(`内置搜索授权${width}：默认关闭、显式保存、编辑回显和协议切换撤权`, async ({
-        page,
-    }, info) => {
-        await page.setViewportSize({ width, height: 960 });
-        const writes = await samples(page);
+    test(`旧搜索迁入${width}：迁入后模型编辑不写搜索，删除模型保留搜索`, async ({ page }, info) => {
+        const old = provider(2, true);
+        old.searchApi = {
+            protocol: 'tavily',
+            baseUrl: 'https://api.tavily.com',
+            contentMode: 'reader',
+            hasApiKey: true,
+        };
+        const writes = await samples(page, [old, provider(3)]);
+        await page.setViewportSize({ width, height: 1100 });
         await page.goto('/account/agent');
+        const search = page.getByRole('region', { name: '搜索与正文提取', exact: true });
+        await chooseOption(page, '迁入搜索配置的供应商', '日常研究');
+        await search.getByRole('button', { name: '迁入搜索配置', exact: true }).click();
+        await expect(search).toContainText('Tavily Search');
+        expect(writes[0]).toMatchObject({
+            method: 'POST',
+            path: '/api/v1/me/search-configuration/import/' + old.id,
+            body: { providerRevision: 1 },
+        });
         const card = page
             .getByRole('listitem')
             .filter({ has: page.getByRole('heading', { name: '日常研究', exact: true }) });
         await card.getByRole('button', { name: '编辑', exact: true }).click();
-        await expect(page.getByLabel('研究搜索方式', { exact: true })).toContainText(
-            '部署默认搜索',
-        );
-        await chooseOption(page, '研究搜索方式', '允许 OpenAI Responses Web Search');
-        await expect(page.locator('.provider-form')).toContainText('可能产生额外费用');
-        await page.screenshot({ path: info.outputPath('search-permission.png'), fullPage: true });
+        await expect(
+            page.locator('.provider-form').getByLabel('研究搜索方式', { exact: true }),
+        ).toHaveCount(0);
+        await expect(
+            page.locator('.provider-form').getByLabel('搜索 API 地址', { exact: true }),
+        ).toHaveCount(0);
         await page.getByRole('button', { name: '保存配置', exact: true }).click();
-        await expect(card).toContainText('内置搜索已允许');
-        expect(writes[0]?.body.webSearch).toBe('openai_responses');
-        expect(writes[0]?.body).not.toHaveProperty('apiKey');
-        await card.getByRole('button', { name: '编辑', exact: true }).click();
-        await expect(page.getByLabel('研究搜索方式', { exact: true })).toContainText(
-            '允许 OpenAI Responses Web Search',
-        );
-        await chooseOption(page, '接口协议', 'Gemini generateContent');
-        await expect(page.getByLabel('研究搜索方式', { exact: true })).toContainText(
-            '部署默认搜索',
-        );
-        await page.getByRole('button', { name: '保存配置', exact: true }).click();
-        await expect(card).not.toContainText('内置搜索已允许');
-        expect(writes[1]?.body.webSearch).toBe('disabled');
+        expect(writes[1]?.body).not.toHaveProperty('searchApi');
+        expect(writes[1]?.body).not.toHaveProperty('webSearch');
+        await expect(search).toContainText('Tavily Search');
+        page.once('dialog', (dialog) => dialog.accept());
+        await card.getByRole('button', { name: '删除', exact: true }).click();
+        await expect(search).toContainText('Tavily Search');
+        await page.screenshot({
+            path: info.outputPath('search-independent-after-delete.png'),
+            fullPage: true,
+        });
     });
 }
 for (const width of [1440, 320]) {
@@ -402,12 +432,12 @@ test('账号入口唯一；供应商切换、编辑不回显密钥、删除当�
     await page.goto('/account');
     await page.getByRole('main').getByRole('link', { name: 'Agent 配置', exact: true }).click();
     await expect(page).toHaveURL(/\/account\/agent$/);
-    await expect(page.getByRole('region', { name: '研究执行模型' })).toContainText('日常研究');
+    await expect(page.getByRole('region', { name: '任务执行模型' })).toContainText('日常研究');
     const spare = page
         .getByRole('listitem')
         .filter({ has: page.getByRole('heading', { name: '备用模型' }) });
-    await chooseOption(page, '研究执行使用的配置', '备用模型');
-    await expect(page.getByRole('region', { name: '研究执行模型' })).toContainText('备用模型');
+    await chooseOption(page, '任务执行使用的配置', '备用模型');
+    await expect(page.getByRole('region', { name: '任务执行模型' })).toContainText('备用模型');
     await spare.getByRole('button', { name: '编辑', exact: true }).click();
     await expect(page.getByLabel('API Key（留空保留）', { exact: true })).toHaveValue('');
     await expect(page.locator('.provider-models')).toContainText('已读取 3 个模型');
@@ -417,7 +447,7 @@ test('账号入口唯一；供应商切换、编辑不回显密钥、删除当�
     await expect(spare).toContainText('updated-model');
     page.once('dialog', (d) => d.accept());
     await spare.getByRole('button', { name: '删除', exact: true }).click();
-    await expect(page.getByRole('region', { name: '研究执行模型' })).toContainText('尚未配置模型');
+    await expect(page.getByRole('region', { name: '任务执行模型' })).toContainText('尚未配置模型');
     expect(writes.map((w) => w.method)).toEqual(['POST', 'PATCH', 'DELETE']);
 });
 for (const width of [1440, 390, 320]) {
@@ -484,9 +514,11 @@ test('未保存离开可取消；切换预设清除未保存密钥，重新打�
 test('加密未启用时禁止添加与切换', async ({ page }) => {
     await samples(page, [provider(2)], false);
     await page.goto('/account/agent');
-    await expect(page.getByText('管理员尚未启用密钥加密', { exact: false })).toBeVisible();
+    await expect(
+        page.getByText('管理员尚未启用密钥加密，暂时无法添加或切换供应商。', { exact: true }),
+    ).toBeVisible();
     await expect(page.getByRole('button', { name: '添加供应商', exact: true })).toBeDisabled();
-    await expect(page.getByLabel('研究执行使用的配置', { exact: true })).toBeDisabled();
+    await expect(page.getByLabel('任务执行使用的配置', { exact: true })).toBeDisabled();
 });
 
 test('模型选择与管理分区；切换失败保留原选择，在途及编辑时禁止再次切换', async ({ page }) => {
@@ -506,26 +538,28 @@ test('模型选择与管理分区；切换失败保留原选择，在途及编�
         });
     });
     await page.goto('/account/agent');
-    const selection = page.getByRole('region', { name: '模型选择', exact: true });
+    const selection = page.getByRole('region', { name: 'Agent 分工', exact: true });
     const management = page.getByRole('region', { name: '供应商管理', exact: true });
     await expect(selection.getByRole('button', { name: '编辑', exact: true })).toHaveCount(0);
-    await expect(management.getByLabel('研究执行使用的配置', { exact: true })).toHaveCount(0);
-    await expect(management.getByLabel('需求整理使用的配置', { exact: true })).toHaveCount(0);
+    await expect(management.getByLabel('任务执行使用的配置', { exact: true })).toHaveCount(0);
+    await expect(management.getByLabel('解析使用的配置', { exact: true })).toHaveCount(0);
     await expect(management.getByLabel('额度查询方式', { exact: true })).toHaveCount(2);
-    await chooseOption(page, '研究执行使用的配置', '备用模型');
-    const research = page.getByLabel('研究执行使用的配置', { exact: true });
-    const draft = page.getByLabel('需求整理使用的配置', { exact: true });
+    await chooseOption(page, '任务执行使用的配置', '备用模型');
+    const research = page.getByLabel('任务执行使用的配置', { exact: true });
+    const draft = page.getByLabel('解析使用的配置', { exact: true });
     await expect(research).toBeDisabled();
     await expect(draft).toBeDisabled();
     await expect(management.getByRole('button', { name: '编辑', exact: true })).toHaveCount(2);
     for (const button of await management.getByRole('button', { name: '编辑', exact: true }).all())
         await expect(button).toBeDisabled();
     release();
-    await expect(page.locator('.action-message')).toContainText('切换未确认');
+    await expect(page.locator('.scova-notifications .n-notification').last()).toContainText(
+        '切换未确认',
+    );
     await expect(research).toBeEnabled();
     await expect(research).toContainText('日常研究');
     await expect(draft).toContainText('日常研究');
-    await chooseOption(page, '研究执行使用的配置', '备用模型');
+    await chooseOption(page, '任务执行使用的配置', '备用模型');
     await expect(research).toContainText('备用模型');
     await expect(draft).toContainText('日常研究');
     expect(writes).toHaveLength(1);
@@ -559,7 +593,9 @@ test('保存结果未知时保留填写并禁止重复提交', async ({ page }) 
     await page.getByLabel('模型 ID', { exact: true }).fill('model');
     await page.getByLabel('API Key', { exact: true }).fill('fixture-secret');
     await page.getByRole('button', { name: '保存配置' }).click();
-    await expect(page.getByRole('alert')).toContainText('保存结果尚未确认');
+    await expect(page.locator('.scova-notifications .n-notification').last()).toContainText(
+        '保存结果尚未确认',
+    );
     await expect(page.getByRole('button', { name: '保存配置' })).toBeDisabled();
     await expect(page.getByLabel('模型 ID', { exact: true })).toHaveValue('model');
     expect(calls).toBe(1);
@@ -573,14 +609,14 @@ for (const width of [1440, 320]) {
         const spare = page
             .getByRole('listitem')
             .filter({ has: page.getByRole('heading', { name: '备用模型' }) });
-        await chooseOption(page, '需求整理使用的配置', '备用模型');
-        await expect(page.getByRole('region', { name: '需求整理模型' })).toContainText('备用模型');
-        await expect(page.getByRole('region', { name: '研究执行模型' })).toContainText('日常研究');
+        await chooseOption(page, '解析使用的配置', '备用模型');
+        await expect(page.getByRole('region', { name: '解析模型' })).toContainText('备用模型');
+        await expect(page.getByRole('region', { name: '任务执行模型' })).toContainText('日常研究');
         expect(writes[0]?.body.purpose).toBe('task_draft');
-        await chooseOption(page, '研究执行使用的配置', '备用模型');
+        await chooseOption(page, '任务执行使用的配置', '备用模型');
         await expect(spare.getByRole('button', { name: /^用于/ })).toHaveCount(0);
-        await expect(page.getByRole('region', { name: '需求整理模型' })).toContainText('备用模型');
-        await expect(page.getByRole('region', { name: '研究执行模型' })).toContainText('备用模型');
+        await expect(page.getByRole('region', { name: '解析模型' })).toContainText('备用模型');
+        await expect(page.getByRole('region', { name: '任务执行模型' })).toContainText('备用模型');
         await page.screenshot({ path: info.outputPath('purpose-summary.png'), fullPage: true });
         if (width === 320)
             await page.evaluate(() => {
@@ -589,7 +625,7 @@ for (const width of [1440, 320]) {
         const help = page.getByRole('button', { name: '模型分工说明' });
         await help.click();
         const modal = page.getByRole('dialog');
-        await expect(modal).toContainText('需求整理 Agent');
+        await expect(modal).toContainText('解析 Agent');
         await expect(modal).toContainText('报告问答');
         await expect
             .poll(() => modal.evaluate((el) => el.contains(document.activeElement)))

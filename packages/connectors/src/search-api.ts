@@ -2,7 +2,14 @@ import { createSafeHttpClient, normalizeUrl, positiveLimit, validatePublicUrl } 
 import { createHash } from 'node:crypto';
 import { createPublicDnsResolver } from './public-dns.ts';
 import { prepareProvider, type ProviderOptions } from './providers.ts';
-import { ConnectorError, type SearchProvider, type SearchResult } from './types.ts';
+import {
+    ConnectorError,
+    PAGE_TEXT_CHAR_LIMIT,
+    type SearchProvider,
+    type SearchResult,
+    type PageReader,
+    type ReadPage,
+} from './types.ts';
 
 export type SearchApiProtocol = 'deepseek' | 'perplexity' | 'tavily';
 
@@ -12,13 +19,14 @@ export interface SearchApiOptions extends ProviderOptions {
     baseUrl?: string;
     maxResults?: number;
     searchType?: 'web' | 'fast';
+    /** Legacy wire values, both now use provider reading exclusively. */
     contentMode?: 'prefer_api' | 'reader';
 }
 
 const record = (value: unknown): value is Record<string, unknown> =>
     !!value && typeof value === 'object' && !Array.isArray(value);
 
-function searchEndpoint(protocol: SearchApiProtocol, baseUrl?: string): string {
+function searchEndpoint(protocol: SearchApiProtocol, baseUrl?: string, read = false): string {
     try {
         const base = validatePublicUrl(
             baseUrl ??
@@ -31,7 +39,14 @@ function searchEndpoint(protocol: SearchApiProtocol, baseUrl?: string): string {
         // validatePublicUrl removes fragments, so inspect the original as well.
         if (base.protocol !== 'https:' || base.search || new URL(baseUrl ?? base).hash)
             throw new Error();
-        base.pathname = `${base.pathname.replace(/\/+$/, '')}/${protocol === 'deepseek' ? 'tools/search' : 'search'}`;
+        const action = read
+            ? protocol === 'deepseek'
+                ? 'tools/fetch'
+                : 'extract'
+            : protocol === 'deepseek'
+              ? 'tools/search'
+              : 'search';
+        base.pathname = `${base.pathname.replace(/\/+$/, '')}/${action}`;
         return base.toString();
     } catch {
         throw new ConnectorError(
@@ -42,7 +57,7 @@ function searchEndpoint(protocol: SearchApiProtocol, baseUrl?: string): string {
 }
 
 /** Generated answers/snippets never become page bodies; provider bodies still pass read validation. */
-export function createSearchApi(options: SearchApiOptions): SearchProvider {
+export function createSearchApi(options: SearchApiOptions): SearchProvider & PageReader {
     if (!['deepseek', 'perplexity', 'tavily'].includes(options.protocol))
         throw new ConnectorError('configuration', '搜索 API 协议不受支持');
     if (!options.apiKey?.trim() || /[\r\n]/.test(options.apiKey) || options.apiKey.length > 8192)
@@ -53,6 +68,7 @@ export function createSearchApi(options: SearchApiOptions): SearchProvider {
     )
         throw new ConnectorError('configuration', '搜索 API 搜索类型不受支持');
     const endpoint = searchEndpoint(options.protocol, options.baseUrl);
+    const readEndpoint = searchEndpoint(options.protocol, options.baseUrl, true);
     if (
         options.contentMode !== undefined &&
         !['prefer_api', 'reader'].includes(options.contentMode)
@@ -67,12 +83,91 @@ export function createSearchApi(options: SearchApiOptions): SearchProvider {
             options.http ??
             createSafeHttpClient({
                 resolve: createPublicDnsResolver({
-                    mode: process.env.SEARCH_API_DNS_RESOLVER ?? 'auto',
-                    configName: 'SEARCH_API_DNS_RESOLVER',
+                    mode: process.env.SEARCH_DNS_RESOLVER ?? 'auto',
+                    configName: 'SEARCH_DNS_RESOLVER',
                 }),
             }),
     });
     return {
+        async read(originalUrl, context = {}) {
+            const url = normalizeUrl(originalUrl);
+            if (context.signal?.aborted) throw new ConnectorError('aborted', '网页读取已停止');
+            if (options.protocol === 'perplexity')
+                throw new ConnectorError(
+                    'configuration',
+                    'Perplexity Search 尚不支持独立网页读取，请选择 DeepSeek 或 Tavily',
+                );
+            const response = await provider.call('read', context, (signal) =>
+                provider.http.request(readEndpoint, {
+                    method: 'POST',
+                    headers: {
+                        'content-type': 'application/json',
+                        authorization: `Bearer ${options.apiKey.trim()}`,
+                    },
+                    body: JSON.stringify(
+                        options.protocol === 'deepseek'
+                            ? { url }
+                            : { urls: [url], extract_depth: 'advanced', format: 'markdown' },
+                    ),
+                    signal,
+                    maxRedirects: 0,
+                }),
+            );
+            let parsed: unknown;
+            try {
+                parsed = JSON.parse(response.body);
+            } catch {
+                throw new ConnectorError('invalid_response', '网页读取 API 响应不是有效 JSON');
+            }
+            if (!record(parsed))
+                throw new ConnectorError('invalid_response', '网页读取 API 结果结构无效');
+            let body: unknown;
+            let title: unknown;
+            if (options.protocol === 'deepseek') {
+                body = parsed.content;
+                title = parsed.title;
+            } else {
+                if (
+                    !Array.isArray(parsed.results) ||
+                    parsed.results.length > 20 ||
+                    !Array.isArray(parsed.failed_results) ||
+                    parsed.failed_results.length > 20
+                )
+                    throw new ConnectorError('invalid_response', '网页读取 API 结果结构无效');
+                const matches = (item: unknown) => {
+                    if (!record(item) || typeof item.url !== 'string') return false;
+                    try {
+                        return normalizeUrl(item.url) === url;
+                    } catch {
+                        return false;
+                    }
+                };
+                if (parsed.failed_results.some(matches))
+                    throw new ConnectorError('extraction_failed', '网页读取 API 未能提取指定页面');
+                const item = parsed.results.find(matches);
+                if (!record(item))
+                    throw new ConnectorError('invalid_response', '网页读取 API 未返回指定页面');
+                body = item.raw_content;
+                title = item.title;
+            }
+            if (typeof body !== 'string' || !body.trim())
+                throw new ConnectorError('extraction_failed', '网页读取 API 未返回正文');
+            const text = body.slice(0, PAGE_TEXT_CHAR_LIMIT).replace(/[\uD800-\uDBFF]$/, '');
+            return {
+                kind: 'read_page',
+                mode: 'live',
+                originalUrl,
+                fetchedUrl: url,
+                url,
+                title: typeof title === 'string' ? title.slice(0, 2000) : url,
+                text,
+                contentHash: createHash('sha256').update(text, 'utf8').digest('hex'),
+                extractionVersion: `search-api/${options.protocol}/fetch-v1`,
+                collectedAt: new Date().toISOString(),
+                truncated: text.length < body.length,
+                untrusted: true,
+            } satisfies ReadPage;
+        },
         async search(query, context = {}) {
             const queryLength = Array.from(query).length;
             if (!query.trim() || queryLength > (options.protocol === 'deepseek' ? 128 : 2000))
@@ -89,13 +184,13 @@ export function createSearchApi(options: SearchApiOptions): SearchProvider {
                             ? {
                                   query,
                                   count: maxResults,
-                                  need_content: options.contentMode === 'prefer_api',
+                                  need_content: true,
                               }
                             : options.protocol === 'tavily'
                               ? {
                                     query,
                                     max_results: maxResults,
-                                    include_raw_content: options.contentMode === 'prefer_api',
+                                    include_raw_content: true,
                                     include_answer: false,
                                 }
                               : {
@@ -165,7 +260,6 @@ export function createSearchApi(options: SearchApiOptions): SearchProvider {
                           ? item.raw_content
                           : undefined;
                 if (
-                    options.contentMode === 'prefer_api' &&
                     results.length < maxResults &&
                     typeof body === 'string' &&
                     body.trim() &&

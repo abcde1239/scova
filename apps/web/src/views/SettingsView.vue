@@ -27,7 +27,7 @@
             </h2>
             <p class="break-anywhere m-0">管理自己的供应商、API 连接与默认模型。</p>
             <navigation-button
-                class="inline-flex items-center justify-self-start gap-[0.5em] min-h-11 text-primary underline-offset-[0.2em] cursor-pointer keyboard-focus-wide"
+                class="inline-flex items-center justify-self-start gap-[0.5em] min-h-11 scova-link cursor-pointer keyboard-focus-wide"
                 to="/account/agent"
                 icon="settings"
                 >Agent 配置</navigation-button
@@ -42,7 +42,7 @@
             </h2>
             <p class="break-anywhere m-0">主题、字体与阅读字号只保存在当前浏览器。</p>
             <navigation-button
-                class="inline-flex items-center justify-self-start gap-[0.5em] min-h-11 text-primary underline-offset-[0.2em] cursor-pointer keyboard-focus-wide"
+                class="inline-flex items-center justify-self-start gap-[0.5em] min-h-11 scova-link cursor-pointer keyboard-focus-wide"
                 to="/account/appearance"
                 ><app-icon name="appearance" />外观与阅读设置</navigation-button
             >

@@ -32,10 +32,6 @@
                 ><app-icon name="retry" />刷新</action-button
             >
         </div>
-        <p class="break-anywhere m-0" v-if="actionError" role="alert">{{ actionError }}</p>
-        <p class="break-anywhere m-0" v-if="announcement" role="status" aria-live="polite">
-            {{ announcement }}
-        </p>
         <state-panel v-if="query.isPending.value" state="loading" message="正在读取通知" />
         <state-panel
             v-else-if="query.isError.value"
@@ -44,7 +40,12 @@
             retryable
             @retry="retry"
         />
-        <state-panel v-else-if="!items.length" state="empty" message="暂无通知" />
+        <state-panel
+            v-else-if="!items.length"
+            state="empty"
+            icon="notifications"
+            message="暂无通知"
+        />
         <div v-if="items.length" class="notification-list min-w-0">
             <notification-entry
                 v-for="item in items"
@@ -79,6 +80,7 @@ import ActionButton from '@/components/common/ActionButton.vue';
 import AppIcon from '@/components/common/AppIcon.vue';
 import StatePanel from '@/components/common/StatePanel.vue';
 import NotificationEntry from '@/components/notifications/NotificationEntry.vue';
+import { useActionNotification } from '@/composables/useActionNotification';
 import {
     notificationKinds,
     readNotificationFilters,
@@ -89,6 +91,9 @@ const router = useRouter();
 const filters = computed(() => readNotificationFilters(route.query.kind, route.query.read));
 const { query, items, error, pendingId, actionError, announcement, setRead } =
     useNotifications(filters);
+const notification = useActionNotification();
+notification.watch(announcement, 'success');
+notification.watch(actionError, 'error');
 const container = ref<HTMLElement>();
 let filterRevision = 0;
 async function change(key: 'kind' | 'read', event: Event) {

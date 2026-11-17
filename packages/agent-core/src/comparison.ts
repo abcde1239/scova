@@ -1,3 +1,4 @@
+import { object } from './guards.ts';
 import { normalizeUrl } from '@scova/connectors';
 import {
     AgentError,
@@ -9,8 +10,6 @@ import {
 } from './types.ts';
 
 export const COMPARISON_VERSION = 'scova-comparison-v1';
-const object = (v: unknown): v is Record<string, unknown> =>
-    !!v && typeof v === 'object' && !Array.isArray(v);
 const text = (v: unknown, max = 1000): v is string =>
     typeof v === 'string' && !!v.trim() && v.length <= max;
 const key = (fact: ComparisonFact) =>

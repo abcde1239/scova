@@ -85,6 +85,16 @@ const failure = (
         { status },
     );
 const cleanups: (() => void)[] = [];
+it('round-trips saved search modes without changing legacy configs on unrelated edits', () => {
+    const legacy = detail().version.config;
+    expect(taskInput(taskDraftFromConfig(legacy), legacy).config.searchMode).toBeUndefined();
+    for (const searchMode of ['auto', 'api', 'searxng'] as const) {
+        const original = { ...legacy, searchMode };
+        expect(taskInput(taskDraftFromConfig(original), original).config.searchMode).toBe(
+            searchMode,
+        );
+    }
+});
 afterEach(() => cleanups.splice(0).forEach((cleanup) => cleanup()));
 function setup(fetcher: typeof fetch = async () => http(detail(2)), initial = api()) {
     const lifecycle = createSessionLifecycle({ fetcher });

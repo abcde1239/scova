@@ -30,9 +30,6 @@
             v-if="manualMode"
             class="draft-result layout-stack [border-top:0.0625rem_solid_var(--scova-border)] pt-5 [&.draft-result_>_.scova-action-button]:justify-self-start"
         >
-            <p class="m-0" role="status">
-                已进入手工配置。直接填写下方标题、目标、范围和输出形式，再保存任务。
-            </p>
             <action-button
                 @click="
                     manualMode = false;
@@ -48,7 +45,6 @@
             :transcript="draft.clarifications.value"
             :busy="draft.pending.value"
             :disabled="draft.unavailable.value"
-            :message="draft.message.value"
             @answer="continueQuestions"
             @cancel="cancelQuestions"
             @manual="enterManual"
@@ -111,22 +107,12 @@
                         : '正在整理需求与生成建议配置，可随时停止解析。'
                 "
             />
-            <div
-                v-if="draft.message.value"
-                ref="feedback"
-                class="draft-feedback keyboard-focus-wide"
-                role="status"
-                aria-live="polite"
-                tabindex="-1"
-            >
-                <p class="m-0">{{ draft.message.value }}</p>
-            </div>
             <section
                 v-if="draft.result.value"
                 class="draft-result layout-stack [border-top:0.0625rem_solid_var(--scova-border)] pt-5 [&.draft-result_>_.scova-action-button]:justify-self-start"
                 aria-labelledby="draft-result-title"
             >
-                <h3 class="text-[1.125rem] leading-[1.5] m-0" id="draft-result-title">
+                <h3 class="text-[1.125rem] leading-[1.5] m-0" id="draft-result-title" tabindex="-1">
                     {{ draft.result.value.mode === 'model' ? '建议配置' : '待完善的配置' }}
                 </h3>
                 <p class="m-0" v-if="draft.result.value.manualReason">
@@ -207,6 +193,7 @@ import { computed, nextTick, ref } from 'vue';
 import type { createTaskController } from '@/composables/useCreateTask';
 import { taskScheduleDescription } from '@/composables/useCreateTask';
 import { useNaturalLanguageDraft } from '@/composables/useNaturalLanguageDraft';
+import { useActionNotification } from '@/composables/useActionNotification';
 import TaskConfigField from '@/components/tasks/TaskConfigField.vue';
 import ActionButton from '@/components/common/ActionButton.vue';
 import AppIcon from '@/components/common/AppIcon.vue';
@@ -220,9 +207,9 @@ import { timezoneOptions } from '@/utils/timezones';
 const props = defineProps<{ task: ReturnType<typeof createTaskController> }>();
 const emit = defineEmits<{ applied: []; manual: [] }>();
 const draft = useNaturalLanguageDraft(props.task);
+useActionNotification().watch(draft.message);
 const timezones = computed(() => timezoneOptions(draft.timezone.value));
 const panel = ref<HTMLElement>();
-const feedback = ref<HTMLElement>();
 const questionsVisible = ref(false);
 const manualMode = ref(false);
 const manualReasons = {
@@ -269,7 +256,6 @@ async function openQuestions() {
     await nextTick();
     if (questionsVisible.value)
         panel.value?.querySelector<HTMLElement>('.scope-questions h3')?.focus();
-    else if (!draft.clarificationResult.value) feedback.value?.focus();
 }
 async function continueQuestions(answers: Record<string, string>) {
     await draft.clarify(answers);
@@ -290,6 +276,7 @@ async function confirmScope(scope: TaskDraftScope) {
 }
 function enterManual() {
     draft.cancel();
+    draft.message.value = '已进入手工配置。直接填写下方标题、目标、范围和输出形式，再保存任务。';
     questionsVisible.value = false;
     manualMode.value = true;
     emit('manual');
@@ -305,7 +292,7 @@ async function parse() {
         return;
     const invalid = panel.value?.querySelector<HTMLElement>('[aria-invalid="true"]');
     if (invalid) invalid.focus();
-    else feedback.value?.focus();
+    else panel.value?.querySelector<HTMLElement>('#draft-result-title')?.focus();
 }
 function apply() {
     if (draft.apply()) emit('applied');
@@ -313,6 +300,6 @@ function apply() {
 async function cancel() {
     draft.cancel();
     await nextTick();
-    feedback.value?.focus();
+    panel.value?.querySelector<HTMLElement>('textarea')?.focus();
 }
 </script>

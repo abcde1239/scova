@@ -8,13 +8,37 @@ import { createSSRApp, h, type Component } from 'vue';
 import { renderToString } from 'vue/server-renderer';
 import { createPinia } from 'pinia';
 import { createMemoryHistory, createRouter } from 'vue-router';
-import { ReportSchema, parseContract, type Report, type SessionResponse } from '@scova/models';
+import {
+    ReportSchema,
+    parseContract,
+    researchCoverageMetrics,
+    type Report,
+    type SessionResponse,
+} from '@scova/models';
 import type { SessionLifecycle } from '@/api/session';
-import { artifactReport, savedArtifactFormats } from '@/utils/report-artifacts';
+import {
+    artifactReport,
+    savedArtifactDocument,
+    savedArtifactFormats,
+} from '@/utils/report-artifacts';
 import { groupEvidence } from '@/utils/evidence-groups';
+import {
+    reportFormatSample,
+    reportLongFormatSample,
+} from './fixtures/reports/report-format-sample';
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const formats = ['brief', 'list', 'comparison', 'research_report'] as const;
+it('switches repeatedly between long and standard samples without mutating shared content', () => {
+    for (const format of [...formats, ...formats]) {
+        const standard = reportFormatSample(format);
+        const before = JSON.stringify(standard);
+        const long = reportLongFormatSample(format);
+        expect(long.claims[1]!.text.length).toBeGreaterThan(standard.claims[1]!.text.length);
+        expect(JSON.stringify(reportFormatSample(format))).toBe(before);
+        expect(JSON.stringify(standard)).toBe(before);
+    }
+});
 const kinds = [
     'baseline',
     'new',
@@ -24,6 +48,93 @@ const kinds = [
     'non_material',
     'uncertain',
 ] as const;
+function documentFixture(format: 'brief' | 'research_report'): Report {
+    const report = fixture();
+    report.format = format;
+    report.coverage.reportValue = {
+        version: 1,
+        questions: [
+            {
+                id: 'q0',
+                text: '使用安排',
+                priority: 'core',
+                status: 'supported',
+                claimIndexes: [0, 1],
+                gap: '',
+            },
+            {
+                id: 'q1',
+                text: '适用限制',
+                priority: 'core',
+                status: 'disputed',
+                claimIndexes: [0, 3],
+                gap: '范围仍有分歧',
+            },
+        ],
+        selections: report.claims.map((_, claimIndex) => ({
+            claimIndex,
+            placement: claimIndex === 2 ? 'omitted' : claimIndex === 4 ? 'reference' : 'main',
+            questionIds:
+                claimIndex === 0
+                    ? ['q0', 'q1']
+                    : claimIndex === 1
+                      ? ['q0']
+                      : claimIndex === 3
+                        ? ['q1']
+                        : [],
+            reason: '保存的判断',
+            basis: 'unassessed',
+            timeScope: 'unknown',
+            ...(claimIndex === 0
+                ? {
+                      assessment: {
+                          relevance: 'direct',
+                          support: 'partial',
+                          role: 'condition',
+                          sourceRelation: 'original',
+                          reason: '受开放日期限制',
+                          conditions: '仅限工作日 09:00–18:00',
+                          gap: '未取得节假日安排',
+                      },
+                  }
+                : {}),
+        })),
+    };
+    report.coverage.artifacts = [
+        {
+            format,
+            claimIndexes: [3, 1, 0, 4, 2],
+            summary: '旧摘要不能作为正文的完整副本重复显示。',
+            content: {
+                version: 1,
+                document: {
+                    version: 1,
+                    sections: [
+                        {
+                            id: 'scope',
+                            title: '安排 <script>仅作标题</script>',
+                            role: 'context',
+                            claimIndexes: [1],
+                        },
+                        {
+                            id: 'findings',
+                            title: '主要发现',
+                            role: 'key_findings',
+                            claimIndexes: [0],
+                        },
+                        {
+                            id: 'limits',
+                            title: '不同来源与限制',
+                            role: 'limitations',
+                            claimIndexes: [3],
+                        },
+                    ],
+                },
+            },
+        },
+    ];
+    return report;
+}
 function fixture(): Report {
     const evidence = (n: number) => ({
         id: id(n),
@@ -169,6 +280,20 @@ describe('saved report artifacts', () => {
                 },
             })),
         };
+        report.coverage.metrics = researchCoverageMetrics(
+            report.coverage.reportValue,
+            report.claims,
+            report.coverage.artifacts,
+        );
+        report.coverage.propositions = [
+            {
+                claimIndex: 1,
+                requirementIds: [],
+                conditions: '限制条件',
+                support: 'partial',
+                passages: [],
+            },
+        ];
         const brief = artifactReport(report, 'brief');
         const list = artifactReport(report, 'list');
         expect(brief.coverage.reportValue?.questions[0]?.status).toBe('unresolved');
@@ -177,17 +302,24 @@ describe('saved report artifacts', () => {
         expect(list.coverage.reportValue?.selections[0]?.claimIndex).toBe(0);
         expect(list.coverage.delivery?.answeredCoreQuestions).toBe(1);
         expect(list.coverage.reportValue?.selections[0]?.assessment?.conditions).toBe('限制条件');
+        expect(brief.coverage.metrics?.answeredQuestions).toBe(0);
+        expect(list.coverage.metrics?.answeredQuestions).toBe(1);
+        expect(brief.coverage.propositions).toEqual([]);
+        expect(list.coverage.propositions?.[0]?.claimIndex).toBe(0);
     });
 
-    it('groups a source snapshot once and keeps different saved versions distinct', () => {
+    it('groups one webpage once while retaining evidence from different saved versions', () => {
         const report = fixture();
         const original = report.evidence[0]!;
         const copy = { ...original, id: id(90), quote: '同页第二条逐字引用' };
         const differentVersion = { ...original, id: id(91), snapshotId: id(92) };
         const groups = groupEvidence([original, copy, differentVersion]);
-        expect(groups).toHaveLength(2);
-        expect(groups[0]?.evidence.map((entry) => entry.id)).toEqual([original.id, copy.id]);
-        expect(groups[1]?.evidence).toEqual([differentVersion]);
+        expect(groups).toHaveLength(1);
+        expect(groups[0]?.evidence.map((entry) => entry.id)).toEqual([
+            original.id,
+            copy.id,
+            differentVersion.id,
+        ]);
     });
 
     it('preserves the saved single-format summary and does not replace a covered subquestion', () => {
@@ -391,6 +523,7 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
     let server: ViteDevServer;
     const components = {} as Record<Report['format'], Component>;
     let detail: Component;
+    let themeProvider: Component;
     let structuredValue: Component;
     let sessionModule: typeof import('@/api/session');
     let reportModule: typeof import('@/api/reports');
@@ -413,6 +546,8 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
             components[format as Report['format']] = (
                 await server.ssrLoadModule(`/src/components/reports/${name}.vue`)
             ).default as Component;
+        themeProvider = (await server.ssrLoadModule('/src/theme/AppThemeProvider.vue'))
+            .default as Component;
         detail = (await server.ssrLoadModule('/src/views/ReportDetailView.vue'))
             .default as Component;
         structuredValue = (
@@ -431,6 +566,233 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
     function text(node: ParentNode, selector: string) {
         return node.querySelector(selector)?.textContent ?? '';
     }
+
+    it('renders model answers with a tag and no provenance fine print in body and cells', async () => {
+        const report = fixture();
+        report.claims = [
+            {
+                id: id(77),
+                kind: 'model_answer',
+                text: '循环先观察工具结果，再决定下一步。',
+                confidenceLabel: '模型自回答',
+                evidenceIds: [],
+            },
+        ];
+        report.evidence = [];
+        report.changes = [];
+        report.coverage.artifacts = [
+            {
+                format: 'brief',
+                claimIndexes: [0],
+                coverage: {
+                    version: 1,
+                    requirements: [
+                        {
+                            id: 'r0',
+                            questionIds: ['q0'],
+                            object: '',
+                            field: '循环',
+                            required: true,
+                            status: 'model_answered',
+                            claimIndexes: [0],
+                            gap: '',
+                        },
+                    ],
+                },
+            },
+        ];
+        const document = await render('brief', parseContract(ReportSchema, report));
+        expect(text(document, '.claim .model-answer-tag')).toBe('模型自回答');
+        expect(document.querySelector('.claim .confidence')).toBeNull();
+        expect(text(document, '.report-delivery')).not.toContain('部分内容待补充');
+        expect(text(document, '.answer-gaps')).not.toContain('循环');
+        for (const compact of [false, true]) {
+            const output = await renderToString(
+                createSSRApp({
+                    render: () =>
+                        h(structuredValue, {
+                            report,
+                            compact,
+                            value: {
+                                status: 'model_answered',
+                                text: report.claims[0]!.text,
+                                claimIndexes: [0],
+                                gap: '',
+                            },
+                        }),
+                }),
+            );
+            const cell = new DOMParser().parseFromString(output, 'text/html');
+            expect(text(cell, '.model-answer-tag')).toBe('模型自回答');
+            expect(cell.body.textContent).not.toContain('部分');
+            expect(cell.querySelector('.structured-notice, .structured-gap')).toBeNull();
+        }
+    });
+
+    it.each(formats)(
+        '%s displays independent answer, external support and unresolved counts',
+        async (format) => {
+            const report = artifactReport(reportFormatSample(format), format);
+            const expected = report.coverage.metrics!;
+            const document = await render(format, report);
+            const metrics = document.querySelector('[aria-label="研究覆盖统计"]')!;
+            expect([...metrics.querySelectorAll('dt')].map((node) => node.textContent)).toEqual([
+                '回答完成',
+                '外部证据支持',
+                '仍未解决',
+            ]);
+            expect([...metrics.querySelectorAll('dd')].map((node) => node.textContent)).toEqual([
+                `${expected.answeredQuestions}/${expected.questionCount}`,
+                `${expected.externallySupportedQuestions}/${expected.questionCount}`,
+                `${expected.unresolvedQuestionIds.length}`,
+            ]);
+            expect(() =>
+                parseContract(ReportSchema, {
+                    ...report,
+                    coverage: {
+                        ...report.coverage,
+                        metrics: { ...expected, answeredQuestions: expected.questionCount + 1 },
+                    },
+                }),
+            ).toThrow();
+        },
+    );
+
+    it.each(formats)(
+        '%s showcase is a real validated artifact, with only owned claims',
+        async (format) => {
+            const original = reportFormatSample(format);
+            const projected = artifactReport(original, format);
+            expect(parseContract(ReportSchema, projected)).toEqual(projected);
+            const document = await render(format, projected);
+            expect(document.querySelector('.legacy-notice')).toBeNull();
+            expect(
+                document.querySelectorAll(
+                    format === 'brief' || format === 'research_report'
+                        ? '.report-document'
+                        : '.structured-content',
+                ),
+            ).toHaveLength(1);
+        },
+    );
+
+    it.each(['brief', 'research_report'] as const)(
+        '%s reads saved document sections, with link-only audit and no repeated summary',
+        async (format) => {
+            const report = documentFixture(format);
+            const before = structuredClone(report);
+            const document = await render(format, report);
+            expect(
+                [...document.querySelectorAll('.document-section h3')].map((node) => {
+                    const copy = node.cloneNode(true) as HTMLElement;
+                    copy.querySelector('.section-number')?.remove();
+                    return copy.textContent?.trim();
+                }),
+            ).toEqual(['安排 <script>仅作标题</script>', '主要发现', '不同来源与限制']);
+            expect(document.querySelector('.report-document script')).toBeNull();
+            // Brief findings are an ordered list; research chapters stay continuous prose.
+            expect(document.querySelectorAll('.document-paragraphs:is(ol)')).toHaveLength(
+                format === 'brief' ? 1 : 0,
+            );
+            expect(document.querySelectorAll('.report-document .claim-text')).toHaveLength(3);
+            expect(document.querySelector('.answer-support')?.tagName).toBe('DETAILS');
+            expect(document.querySelector('.answer-support')?.hasAttribute('open')).toBe(false);
+            expect(document.querySelectorAll('.answer-support .claim-text')).toHaveLength(0);
+            expect(
+                document.querySelectorAll(`.answer-support a[href="#claim-${id(10)}"]`),
+            ).toHaveLength(2);
+            expect(document.querySelector('.document-condition')?.textContent).toContain(
+                '仅限工作日 09:00–18:00',
+            );
+            expect(document.querySelector('.document-condition')?.closest('details')).toBeNull();
+            expect(document.querySelectorAll('.report-delivery a')).toHaveLength(1);
+            expect(text(document, '.report-delivery')).toBe('部分交付 · 查看详情');
+            expect(document.querySelector('.report-delivery a')?.getAttribute('href')).toBe(
+                '#coverage-title',
+            );
+            expect(
+                document.querySelector('#summary-title, .answer-gap-overview, .report-warning'),
+            ).toBeNull();
+            expect(text(document, '.coverage')).toContain('范围仍有分歧');
+            expect(document.querySelector('.coverage details')?.hasAttribute('open')).toBe(false);
+            expect(
+                document.querySelector(
+                    '.document-claim .confidence-details, .document-claim .citation',
+                ),
+            ).toBeNull();
+            expect(text(document, '.evidence-appendix .claim-provenance')).toContain('来源事实');
+            expect(document.body.textContent).not.toContain(
+                '旧摘要不能作为正文的完整副本重复显示。',
+            );
+            for (const claim of report.claims)
+                expect(document.querySelectorAll(`[id="claim-${claim.id}"]`)).toHaveLength(1);
+            const ids = [...document.querySelectorAll('[id]')].map((node) => node.id);
+            expect(new Set(ids).size).toBe(ids.length);
+            expect(
+                document
+                    .querySelector('.report-document')!
+                    .compareDocumentPosition(document.querySelector('#report-changes-title')!) &
+                    Node.DOCUMENT_POSITION_FOLLOWING,
+            ).toBeTruthy();
+            if (format === 'research_report') {
+                const links = [...document.querySelectorAll('.report-directory a')];
+                expect(links.slice(0, 3).map((link) => link.getAttribute('href'))).toEqual([
+                    '#document-scope',
+                    '#document-findings',
+                    '#document-limits',
+                ]);
+                expect(links.some((link) => link.getAttribute('href') === '#summary-title')).toBe(
+                    false,
+                );
+            }
+            expect(report).toEqual(before);
+        },
+    );
+
+    it.each(['brief', 'research_report'] as const)(
+        '%s preserves authored paragraphs and saved evidence',
+        async (format) => {
+            const report = documentFixture(format);
+            report.claims[1]!.text = '第一段说明具体安排。\n\n第二段解释使用条件。';
+            const before = structuredClone(report);
+            const document = await render(format, report);
+            const paragraphs = document.querySelectorAll(
+                `#claim-${report.claims[1]!.id} .claim-text`,
+            );
+            expect([...paragraphs].map((paragraph) => paragraph.textContent?.trim())).toEqual([
+                '第一段说明具体安排。',
+                '第二段解释使用条件。',
+            ]);
+            expect(document.querySelector('.document-condition')?.textContent).not.toContain(
+                '适用条件：',
+            );
+            expect(report).toEqual(before);
+        },
+    );
+
+    it('remaps nonsequential document claim indexes when selecting an artifact', () => {
+        const report = documentFixture('research_report');
+        const before = structuredClone(report);
+        const projected = artifactReport(report, 'research_report');
+        expect(
+            savedArtifactDocument(projected)?.sections.map((section) => section.claimIndexes),
+        ).toEqual([[1], [2], [0]]);
+        expect(projected.claims[2]!.id).toBe(id(10));
+        expect(report).toEqual(before);
+    });
+
+    it('falls back to the original question view for an incomplete saved document', async () => {
+        const report = documentFixture('research_report');
+        report.coverage.artifacts![0]!.content!.document!.sections.pop();
+        const document = await render('research_report', report);
+        expect(savedArtifactDocument(report)).toBeUndefined();
+        expect(document.querySelector('.report-document')).toBeNull();
+        expect(document.querySelector('.answer-support')?.tagName).toBe('DIV');
+        expect(document.querySelector(`#claim-${id(13)}`)).not.toBeNull();
+        expect(text(document, '.report-summary')).toContain(
+            '旧摘要不能作为正文的完整副本重复显示。',
+        );
+    });
 
     it.each(['list', 'comparison'] as const)(
         '%s renders saved objects and fields without parsing claim text',
@@ -569,14 +931,22 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
             expect(
                 document.querySelector('.answer-gaps')?.closest('details')?.hasAttribute('open'),
             ).toBe(false);
-            expect(text(document, '.report-delivery')).toContain('部分内容待补充');
+            expect(text(document, '.report-delivery')).toContain('部分交付 · 查看详情');
+            expect(document.querySelector('.report-delivery a')?.getAttribute('href')).toBe(
+                '#coverage-title',
+            );
+            expect(document.querySelector('.answer-gap-overview, .report-warning')).toBeNull();
             expect(text(document, '.report-summary')).toContain('独立安全摘要');
             expect(text(document, '.structured-content')).toContain(unknown.gap);
-            expect(text(document, '.structured-condition')).toContain(
+            // Matrix cells stay short; conditions and gaps move to numbered notes under the table.
+            expect(text(document, '.structured-notes')).toContain(
                 'getter 默认浅层；直接 reactive 对象隐式 deep',
             );
-            expect(text(document, '.structured-gap')).toContain('未取得其它版本的行为');
-            expect(document.querySelector('.structured-condition')?.closest('details')).toBeNull();
+            expect(text(document, '.structured-notes')).toContain('补充说明：未取得其它版本的行为');
+            expect(
+                document.querySelector('.structured-table .value-note a')?.getAttribute('href'),
+            ).toMatch(/^#structured-note-.+-1$/);
+            expect(document.querySelector('.structured-notes')?.closest('details')).toBeNull();
             expect(document.querySelector('.legacy-notice')).toBeNull();
             if (format === 'list') {
                 expect(
@@ -590,14 +960,12 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
                     [...document.querySelectorAll('.object-matrix thead th')].map((entry) =>
                         entry.textContent?.trim(),
                     ),
-                ).toEqual(['共同维度', '模块 A', '模块 B']);
+                ).toEqual(['维度', '模块 A', '模块 B']);
                 expect(text(document, '.object-matrix tbody th')).toBe('入口');
                 expect(document.querySelectorAll('.object-matrix tbody td')).toHaveLength(2);
             }
-            const claimLink = document.querySelector('.structured-links a')!;
-            expect(
-                document.getElementById(claimLink.getAttribute('href')!.slice(1)),
-            ).not.toBeNull();
+            expect(document.querySelector('.structured-links')).toBeNull();
+            expect(document.querySelector('.evidence-appendix .claim-provenance')).not.toBeNull();
             expect(document.querySelectorAll('blockquote')).toHaveLength(report.evidence.length);
             expect(report).toEqual(before);
         },
@@ -668,7 +1036,7 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
         expect(text(document, '.structured-value')).toContain(
             '关联内容待核实，尚不能作为已确认结论',
         );
-        expect(document.querySelectorAll('.structured-links a')).toHaveLength(3);
+        expect(document.querySelectorAll('.structured-links a')).toHaveLength(0);
         const unknown = await renderToString(
             createSSRApp({
                 render: () =>
@@ -961,9 +1329,11 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
                     [...group.querySelectorAll('blockquote')].map((node) => node.textContent),
                 ),
             ).toEqual([[], [], [], []]);
-            expect(groups[0]!.querySelectorAll('.citation')).toHaveLength(1);
+            expect(groups[0]!.querySelectorAll('.citation')).toHaveLength(0);
             expect(document.querySelector(`#claim-${id(12)} .evidence`)).toBeNull();
-            for (const link of document.querySelectorAll('.citation')) {
+            for (const link of document.querySelectorAll(
+                '.claim-provenance a[href^="#evidence-"]',
+            )) {
                 expect(document.getElementById(link.getAttribute('href')!.slice(1))).not.toBeNull();
             }
             const other = document.querySelector('#question-q1')!;
@@ -979,7 +1349,7 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
     );
 
     it.each(formats)(
-        '%s retains every claim, original text/confidence and ordered claim citations',
+        '%s retains every claim and moves confidence and ordered evidence ownership to the appendix',
         async (format) => {
             const report = fixture();
             const before = structuredClone(report);
@@ -991,12 +1361,16 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
             for (const claim of report.claims) {
                 const node = document.getElementById(`claim-${claim.id}`)!;
                 expect(text(node, '.claim-text')).toBe(claim.text);
-                expect(text(node, '.confidence')).toBe(`证据说明：${claim.confidenceLabel}`);
-                expect([...node.querySelectorAll('.citation')].map((entry) => entry.id)).toEqual(
-                    claim.evidenceIds.map((value) => `claim-${claim.id}-evidence-${value}`),
-                );
+                const provenance = document.getElementById(`claim-support-${claim.id}`)!;
+                expect(provenance.textContent).toContain(claim.confidenceLabel);
+                expect(node.querySelectorAll('.citation')).toHaveLength(0);
                 expect(
-                    [...node.querySelectorAll('.citation')].map((entry) =>
+                    [...provenance.querySelectorAll('a[href^="#evidence-"]')].map(
+                        (entry) => entry.id,
+                    ),
+                ).toEqual(claim.evidenceIds.map((value) => `claim-${claim.id}-evidence-${value}`));
+                expect(
+                    [...provenance.querySelectorAll('a[href^="#evidence-"]')].map((entry) =>
                         entry.getAttribute('href'),
                     ),
                 ).toEqual(claim.evidenceIds.map((value) => `#evidence-${value}`));
@@ -1036,15 +1410,16 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
                     ),
                 ).toContain(change.newValue ?? '未提供新值');
                 expect(
-                    [...row.querySelectorAll('.old-side .evidence-link')].map((entry) =>
-                        entry.getAttribute('href'),
+                    [...document.querySelectorAll(`#change-support-${change.id} .old-side a`)].map(
+                        (entry) => entry.getAttribute('href'),
                     ),
                 ).toEqual(change.oldEvidenceIds.map((value) => `#evidence-${value}`));
                 expect(
-                    [...row.querySelectorAll('.new-side .evidence-link')].map((entry) =>
-                        entry.getAttribute('href'),
+                    [...document.querySelectorAll(`#change-support-${change.id} .new-side a`)].map(
+                        (entry) => entry.getAttribute('href'),
                     ),
                 ).toEqual(change.newEvidenceIds.map((value) => `#evidence-${value}`));
+                expect(row.querySelector('.evidence-link')).toBeNull();
                 if (change.important) expect(row.textContent).toContain('重要性标记：重要');
             }
         },
@@ -1068,7 +1443,13 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
                 expect(text(node, 'blockquote')).toBe(entry.quote);
                 expect(node.textContent).toContain(entry.location);
                 expect(node.querySelector('time')?.getAttribute('datetime')).toBe(entry.observedAt);
-                expect(node.querySelector('a')?.getAttribute('href')).toBe(entry.url);
+                expect(node.querySelector('a[target="_blank"]')).toBeNull();
+                expect(
+                    node
+                        .closest('.evidence-source-group')
+                        ?.querySelector('.source-page-link')
+                        ?.getAttribute('href'),
+                ).toBe(entry.url);
             }
             expect(document.querySelectorAll('#saved-evidence-title')).toHaveLength(1);
             const ids = [...document.querySelectorAll('[id]')].map((node) => node.id);
@@ -1148,7 +1529,14 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
                         document.querySelectorAll('.change-record, .comparison-table tbody > tr'),
                     ).toHaveLength(0);
                     expect(document.querySelector('.report-warning')).toBeNull();
-                    expect(text(document, '.mode')).toBe('真实查阅报告');
+                    expect(text(document, '.mode')).toBe(
+                        {
+                            brief: '简报',
+                            list: '主题清单',
+                            comparison: '对比表',
+                            research_report: '研究报告',
+                        }[format],
+                    );
                 }
             }
             const partial = parseContract(ReportSchema, {
@@ -1203,7 +1591,9 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
             });
             try {
                 const output = await renderToString(
-                    createSSRApp({ render: () => h(detail) })
+                    createSSRApp({
+                        render: () => h(themeProvider, null, { default: () => h(detail) }),
+                    })
                         .use(lifecycle.pinia)
                         .use(router)
                         .provide(sessionModule.sessionLifecycleKey, lifecycle),

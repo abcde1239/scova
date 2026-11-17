@@ -59,15 +59,6 @@
                 {{ login.fields.value.password }}
             </p>
         </div>
-        <p
-            v-if="login.message.value"
-            ref="errorMessage"
-            role="alert"
-            tabindex="-1"
-            class="form-error rounded-3 text-danger [background:color-mix(in_srgb,_var(--scova-danger)_7%,_var(--scova-surface))] text-[0.875rem] break-anywhere m-0 py-3 px-3.5 keyboard-focus-wide"
-        >
-            {{ login.message.value }}
-        </p>
         <action-button type="primary" attr-type="submit" :busy="login.pending.value">{{
             login.pending.value ? '正在登录' : '登录'
         }}</action-button>
@@ -82,14 +73,15 @@ import ActionButton from '@/components/common/ActionButton.vue';
 import AppIcon from '@/components/common/AppIcon.vue';
 import { useSessionLifecycle } from '@/composables/useSessionQuery';
 import { createLoginController } from '@/composables/useLogin';
+import { useActionNotification } from '@/composables/useActionNotification';
 const emit = defineEmits<{ success: [] }>();
 const id = useId();
 const email = ref('');
 const password = ref('');
 const emailInput = ref<InputInst>();
 const passwordInput = ref<InputInst>();
-const errorMessage = ref<HTMLParagraphElement>();
 const login = createLoginController(useSessionLifecycle());
+useActionNotification().watch(login.message, 'error');
 async function submit() {
     const result = await login.submit({ email: email.value, password: password.value });
     if (result === 'success') {
@@ -99,7 +91,6 @@ async function submit() {
         await nextTick();
         if (login.firstField.value === 'email') emailInput.value?.focus();
         else if (login.firstField.value === 'password') passwordInput.value?.focus();
-        else errorMessage.value?.focus();
     }
 }
 onUnmounted(() => {

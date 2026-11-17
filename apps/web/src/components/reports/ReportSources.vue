@@ -10,14 +10,76 @@
         >
             来源与保存引用
         </h3>
-        <p class="scova-interface m-0">
-            每份来源集中保存引用，展开即可核对原文；不同保存版本分别列出。
-        </p>
         <evidence-source-group
             v-for="group in groups"
             :key="group.key"
             :evidence="group.evidence"
         />
+        <details v-if="report.claims.length" class="claim-provenance scova-interface">
+            <summary class="source-disclosure-control min-h-11 py-2 px-2">结论依据</summary>
+            <ol class="layout-grid gap-4 m-0 pl-5">
+                <li
+                    :id="`claim-support-${claim.id}`"
+                    v-for="(claim, index) in report.claims"
+                    :key="claim.id"
+                    class="layout-grid gap-1.5"
+                >
+                    <a
+                        v-if="claimVisible(index)"
+                        class="reference-link source-inline-action justify-self-start"
+                        :href="`#claim-${claim.id}`"
+                        >结论 {{ index + 1 }}</a
+                    >
+                    <span v-else>材料 {{ index + 1 }}</span>
+                    <model-answer-tag v-if="claim.kind === 'model_answer'" />
+                    <p v-else class="m-0">
+                        {{ claimLabels[claim.kind] }} · {{ claim.confidenceLabel }}
+                    </p>
+                    <div class="flex flex-wrap gap-3">
+                        <a
+                            v-for="evidenceId in claim.evidenceIds"
+                            :id="`claim-${claim.id}-evidence-${evidenceId}`"
+                            :key="evidenceId"
+                            :href="`#evidence-${evidenceId}`"
+                            class="reference-link source-inline-action"
+                            >来源 {{ sourceNumber(evidenceId) }}</a
+                        >
+                    </div>
+                </li>
+            </ol>
+        </details>
+        <details v-if="report.changes.length" class="change-provenance scova-interface">
+            <summary class="source-disclosure-control min-h-11 py-2 px-2">变化依据</summary>
+            <ol class="layout-grid gap-4 m-0 pl-5">
+                <li
+                    v-for="change in report.changes"
+                    :id="`change-support-${change.id}`"
+                    :key="change.id"
+                    v-bind="{ 'data-change-id': change.id }"
+                    class="layout-grid gap-2"
+                >
+                    <p class="font-medium m-0">{{ change.factKey }}</p>
+                    <div
+                        v-for="side in ['old', 'new'] as const"
+                        :key="side"
+                        :class="`${side}-side`"
+                        class="flex flex-wrap gap-3 items-baseline"
+                    >
+                        <span>{{ side === 'old' ? '旧值 · 基线' : '本次观测 · 新值' }}</span>
+                        <a
+                            v-for="id in side === 'old'
+                                ? change.oldEvidenceIds
+                                : change.newEvidenceIds"
+                            :id="`comparison-${change.id}-${side}-${id}`"
+                            :key="id"
+                            :href="`#evidence-${id}`"
+                            class="evidence-link reference-link source-inline-action"
+                            >来源 {{ sourceNumber(id) }}</a
+                        >
+                    </div>
+                </li>
+            </ol>
+        </details>
     </section>
 </template>
 
@@ -26,6 +88,15 @@ import type { Report } from '@scova/models';
 import { computed } from 'vue';
 import EvidenceSourceGroup from '@/components/reports/EvidenceSourceGroup.vue';
 import { groupEvidence } from '@/utils/evidence-groups';
+import ModelAnswerTag from '@/components/reports/ModelAnswerTag.vue';
+import { claimLabels } from '@/composables/useReport';
 const props = defineProps<{ report: Report }>();
 const groups = computed(() => groupEvidence(props.report.evidence));
+const sourceNumber = (id: string) =>
+    groups.value.findIndex((group) => group.evidence.some((entry) => entry.id === id)) + 1;
+const claimVisible = (index: number) =>
+    props.report.claims[index]?.kind === 'insufficient' ||
+    !props.report.coverage.reportValue ||
+    props.report.coverage.reportValue.selections.find((entry) => entry.claimIndex === index)
+        ?.placement !== 'omitted';
 </script>

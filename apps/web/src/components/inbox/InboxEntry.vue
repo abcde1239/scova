@@ -6,7 +6,7 @@
         <div class="entry-content layout-grid gap-2 [flex:1_1_30rem] break-anywhere">
             <h2 :id="`inbox-title-${item.id}`" class="scova-content-title m-0">
                 <router-link
-                    class="text-default cursor-pointer no-underline keyboard-focus-wide hover:(text-primary underline underline-offset-[0.2em])"
+                    class="title-link cursor-pointer keyboard-focus-wide"
                     :id="`inbox-report-${item.id}`"
                     :to="{ name: 'report-detail', params: { reportId: item.reportId } }"
                     @click="emit('open', $event)"
@@ -18,7 +18,7 @@
                 <strong class="[.entry-metadata_&:is(strong)]:(text-default font-medium)">{{
                     item.readAt ? '已读' : '未读'
                 }}</strong>
-                <span>{{ item.report.mode === 'demo' ? '演示报告' : '真实查阅' }}</span>
+                <span>{{ item.report.mode === 'demo' ? '演示报告' : '研究报告' }}</span>
                 <time :datetime="item.report.publishedAt">{{ published }}</time>
             </p>
             <p

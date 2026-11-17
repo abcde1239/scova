@@ -1,4 +1,5 @@
 import { requiredDatabaseValue } from '@/utils/database.ts';
+import { selectedOutputFormats } from '@scova/models';
 import {
     createDatabaseClient,
     connectDatabase,
@@ -82,10 +83,20 @@ const bundle: ConnectorBundle = {
         async generateStructured<T>(input: StructuredInput, context?: CallContext) {
             await context?.beforeAttempt?.('model');
             prompts.push(input.prompt);
-            const properties = input.schema.properties ?? {};
+            const properties = (input.schema.properties ?? {}) as Record<string, any>;
             const pages = input.untrustedSources as { pageId: string; text: string }[] | undefined;
             const data = Object.hasOwn(properties, 'queries')
-                ? { queries: [{ query: observed!.config.goal, questionIds: ['q0'] }] }
+                ? {
+                      queries: [{ query: observed!.config.goal, questionIds: ['q0'] }],
+                      requirements: selectedOutputFormats(observed!.config).map((format) => ({
+                          id: `${format}-date`,
+                          format,
+                          object: '',
+                          field: '申请截止日期',
+                          required: true,
+                          questionIds: ['q0'],
+                      })),
+                  }
                 : Object.hasOwn(properties, 'pages')
                   ? {
                         pages: pages!.map((page) => ({
@@ -107,6 +118,10 @@ const bundle: ConnectorBundle = {
                             {
                                 kind: 'fact',
                                 assessment: {
+                                    ...((properties.claims as any)?.items.properties.assessment
+                                        ?.properties.gapKind
+                                        ? { gapKind: 'none' }
+                                        : {}),
                                     relevance: 'direct',
                                     support: 'direct',
                                     role: 'answer',
@@ -120,6 +135,12 @@ const bundle: ConnectorBundle = {
                                 citations: [{ pageId: pages![0]!.pageId, quote: pages![0]!.text }],
                             },
                         ],
+                        artifacts: selectedOutputFormats(observed!.config).map((format) => ({
+                            format,
+                            requirements: [
+                                { id: `${format}-date`, text: pages![0]!.text, claimIndexes: [0] },
+                            ],
+                        })),
                     };
             return {
                 data: data as T,

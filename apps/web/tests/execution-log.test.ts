@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vite-plus/test';
-import type { RunEvent } from '@scova/models';
+import { parseContract, RunEventSchema, type RunEvent } from '@scova/models';
 import { appendExecutionLog, emptyExecutionLog } from '@/utils/execution-log';
 
 const common = {
@@ -15,6 +15,55 @@ const start = (seq: number): RunEvent => ({
     payload: { step: 'read' },
 });
 describe('执行日志安全投影', () => {
+    it('accepts and renders the persisted coverage supplementation stage', () => {
+        const event = parseContract(RunEventSchema, {
+            ...common,
+            seq: 1,
+            type: 'step.started',
+            payload: { step: 'answer_supplement' },
+        });
+        const state = appendExecutionLog(emptyExecutionLog(), event);
+        expect(state.entries[0]!.text).toBe('按问题缺口补证 · 开始');
+    });
+    it('labels conservative token reservations and distinguishes model structure errors', () => {
+        const state = appendExecutionLog(emptyExecutionLog(), {
+            ...common,
+            seq: 1,
+            type: 'budget.updated',
+            payload: {
+                budget: {
+                    maxSearches: 10,
+                    maxPages: 20,
+                    maxInputTokens: 1000000,
+                    maxOutputTokens: 128000,
+                    maxDurationSeconds: 600,
+                },
+                usage: {
+                    searches: 10,
+                    pages: 20,
+                    inputTokens: 479122,
+                    outputTokens: 69211,
+                    estimated: true,
+                },
+            },
+        });
+        expect(state.entries[0].text).toContain('保守估算');
+        const failed = appendExecutionLog(state, {
+            ...common,
+            seq: 2,
+            type: 'tool.failed',
+            payload: {
+                toolCallId: common.eventId,
+                tool: 'model',
+                code: 'TOOL_MODEL_SCHEMA_MISMATCH',
+                message: 'DO_NOT_RENDER',
+                retryable: false,
+            },
+        });
+        expect(failed.entries[1].text).toContain('报告结构要求');
+        expect(failed.entries[1].code).toBe('TOOL_MODEL_SCHEMA_MISMATCH');
+        expect(JSON.stringify(failed)).not.toContain('DO_NOT_RENDER');
+    });
     it('keeps page warnings distinct from a later terminal error, including old events', () => {
         const warning = appendExecutionLog(emptyExecutionLog(), {
             ...common,
@@ -46,7 +95,7 @@ describe('执行日志安全投影', () => {
             type: 'research.updated',
             payload: { state: 'claims_repair' },
         });
-        expect(state.entries[0].text).toContain('已保留合法结论');
+        expect(state.entries[0].text).toContain('正在修复结构或引用失败项');
         expect(state.entries[0].level).toBe('info');
         const waiting = appendExecutionLog(state, {
             ...common,

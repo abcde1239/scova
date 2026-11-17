@@ -59,7 +59,10 @@ export type RunActionTarget = {
     taskId: string;
     run?: Run;
     taskStatus?: Task['status'];
+    latestRun?: Run;
+    startBlocked?: boolean;
     agentProviderId?: string | null;
+    searchMode?: RunCommandInput['searchMode'];
     outputFormat?: RunCommandInput['outputFormat'];
     outputFormats?: RunCommandInput['outputFormats'];
 };
@@ -73,6 +76,7 @@ export interface RunAttempt {
     mode: 'live';
     key: string;
     agentProviderId?: string | null;
+    searchMode?: RunCommandInput['searchMode'];
     outputFormat?: RunCommandInput['outputFormat'];
     outputFormats?: RunCommandInput['outputFormats'];
 }
@@ -88,6 +92,7 @@ export async function requestRunAction(
     };
     const body: RunCommandInput = {
         mode: attempt.mode,
+        ...(attempt.searchMode !== undefined ? { searchMode: attempt.searchMode } : {}),
         ...(attempt.outputFormat !== undefined ? { outputFormat: attempt.outputFormat } : {}),
         ...(attempt.outputFormats !== undefined
             ? { outputFormats: [...attempt.outputFormats] }

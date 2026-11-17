@@ -6,56 +6,6 @@
         :aria-busy="task.pending.value"
         @submit.prevent="save"
     >
-        <template v-if="editor">
-            <p class="text-muted break-anywhere m-0 [details_>_&:is(p)]:mt-4">
-                配置版本 {{ editor.revision.value }}。保存创建新版本，不开始执行，历史保持原样。
-            </p>
-            <p class="text-muted break-anywhere m-0 [details_>_&:is(p)]:mt-4">
-                查阅范围变化后，下次完整执行将建立新基线，以保存结果为准。
-            </p>
-            <p
-                v-if="editor.result.value && task.saved.value"
-                role="status"
-                class="save-success text-default break-anywhere [border-left:0.25rem_solid_var(--scova-primary)] bg-surface m-0 p-4 keyboard-focus [details_>_&:is(p)]:mt-4"
-                tabindex="-1"
-                ref="successMessage"
-            >
-                修改已保存。{{
-                    editor.result.value.baselineResetRequired
-                        ? '语义查阅范围已变化，下一次完整执行将建立新基线。'
-                        : '本次保存无需重置比较基线。'
-                }}历史执行与报告保持原样。
-            </p>
-            <section
-                class="reload-panel layout-stack [&.reload-panel--confirm]:(border-theme rounded-1.5 bg-surface p-5) [&.reload-panel_>_button]:justify-self-start"
-                :class="{ 'reload-panel--confirm': editor.reloadRequested.value }"
-                aria-label="重新读取任务"
-            >
-                <template v-if="editor.reloadRequested.value">
-                    <p class="text-muted break-anywhere m-0 [details_>_&:is(p)]:mt-4">
-                        确认后会丢弃当前未保存草稿，读取服务器最新配置与修订依据。可以先复制需要手动合并的内容。
-                    </p>
-                    <div class="save-actions flex items-center flex-wrap gap-[1rem_2rem]">
-                        <action-button
-                            ref="reloadConfirm"
-                            :busy="task.pending.value"
-                            @click="reload"
-                            >确认丢弃草稿并重新读取</action-button
-                        >
-                        <action-button :disabled="task.pending.value" @click="cancelReload"
-                            >取消重新读取</action-button
-                        >
-                    </div>
-                </template>
-                <action-button
-                    v-else
-                    ref="reloadStart"
-                    :disabled="task.pending.value || task.expired.value"
-                    @click="requestReload"
-                    >重新读取最新版本</action-button
-                >
-            </section>
-        </template>
         <natural-language-draft
             v-if="creator"
             :task="creator"
@@ -64,14 +14,6 @@
         />
         <fieldset class="layout-grid gap-6 [border:0] m-0 p-0" :disabled="locked">
             <legend class="text-[1.25rem] font-semibold mb-6 p-0">查阅任务</legend>
-            <p
-                class="text-muted break-anywhere m-0 [details_>_&:is(p)]:mt-4"
-                v-if="manualConfiguration"
-                role="status"
-            >
-                手工配置已就绪：填写任务内容和范围后，点击“确认保存任务”。此过程不调用需求整理
-                Agent。
-            </p>
             <task-config-field
                 v-for="field in mainFields"
                 :key="field.key"
@@ -84,7 +26,11 @@
         </fieldset>
         <fieldset class="layout-grid gap-6 [border:0] m-0 p-0" :disabled="locked">
             <legend class="text-[1.25rem] font-semibold mb-6 p-0">时间与输出</legend>
-            <execution-agent-select v-model="task.draft.agentProviderId" :disabled="locked" />
+            <task-execution-settings
+                v-model:agent="task.draft.agentProviderId"
+                v-model:search="task.draft.searchMode"
+                :disabled="locked"
+            />
             <task-config-field
                 v-model="task.draft.researchMode"
                 label="任务方式"
@@ -241,8 +187,7 @@
             />
         </fieldset>
         <p
-            v-if="task.message.value"
-            ref="errorMessage"
+            v-if="task.message.value && Object.keys(task.fields.value).length"
             class="save-error text-danger break-anywhere m-0 keyboard-focus [details_>_&:is(p)]:mt-4 [&.edit-warning]:([border:0.0625rem_solid_var(--scova-danger)] [border-left:0.25rem_solid_var(--scova-danger)] rounded-1.5 [background:var(--scova-selected)] p-5)"
             :class="{ 'edit-warning': !!editor }"
             role="alert"
@@ -250,8 +195,38 @@
         >
             {{ task.message.value }}
         </p>
+        <section
+            v-if="
+                editor &&
+                (editor.conflict.value || task.uncertain.value || editor.reloadRequested.value)
+            "
+            class="reload-panel layout-stack border-theme rounded-1.5 bg-surface p-5 [&.reload-panel_>_button]:justify-self-start"
+            aria-label="重新读取任务"
+        >
+            <template v-if="editor.reloadRequested.value">
+                <p class="text-muted break-anywhere m-0 [details_>_&:is(p)]:mt-4">
+                    确认后会丢弃当前未保存草稿并读取最新配置。
+                </p>
+                <div class="save-actions flex items-center flex-wrap gap-[1rem_2rem]">
+                    <action-button ref="reloadConfirm" :busy="task.pending.value" @click="reload"
+                        >确认丢弃草稿并重新读取</action-button
+                    >
+                    <action-button :disabled="task.pending.value" @click="cancelReload"
+                        >取消重新读取</action-button
+                    >
+                </div>
+            </template>
+            <action-button
+                v-else
+                ref="reloadStart"
+                :disabled="task.pending.value || task.expired.value"
+                @click="requestReload"
+                >重新读取最新版本</action-button
+            >
+        </section>
         <div class="save-actions flex items-center flex-wrap gap-[1rem_2rem]">
             <action-button
+                type="primary"
                 attr-type="submit"
                 :busy="task.pending.value"
                 :disabled="
@@ -268,13 +243,13 @@
                 }}</action-button
             >
             <router-link
-                class="min-h-11 inline-flex items-center text-primary cursor-pointer underline-offset-[0.2em] keyboard-focus"
+                class="min-h-11 inline-flex items-center scova-link cursor-pointer keyboard-focus"
                 v-if="initialResponse"
                 :to="{ name: 'task-summary', params: { taskId: initialResponse.data.task.id } }"
                 >返回任务摘要</router-link
             >
             <router-link
-                class="min-h-11 inline-flex items-center text-primary cursor-pointer underline-offset-[0.2em] keyboard-focus"
+                class="min-h-11 inline-flex items-center scova-link cursor-pointer keyboard-focus"
                 :to="{ name: 'tasks' }"
                 >返回任务列表</router-link
             >
@@ -313,7 +288,7 @@ const notice = useActionNotification();
 import type { ApiResponse } from '@/api/client';
 const props = defineProps<{ initialResponse?: ApiResponse<TaskDetailResponse> }>();
 import NaturalLanguageDraft from '@/components/tasks/NaturalLanguageDraft.vue';
-import ExecutionAgentSelect from '@/components/tasks/ExecutionAgentSelect.vue';
+import TaskExecutionSettings from '@/components/tasks/TaskExecutionSettings.vue';
 const emit = defineEmits<{ saved: [result: TaskDetailResponse] }>();
 const lifecycle = useSessionLifecycle();
 const editor = props.initialResponse
@@ -321,6 +296,10 @@ const editor = props.initialResponse
     : undefined;
 const creator = editor ? undefined : createTaskController(lifecycle);
 const task = editor ?? creator!;
+notice.watch(
+    () => (Object.keys(task.fields.value).length ? '' : task.message.value),
+    () => (task.uncertain.value || task.expired.value ? 'warning' : 'error'),
+);
 const selectedFormats = computed({
     get: () =>
         task.draft.outputFormats.length
@@ -339,8 +318,6 @@ const legacyBudget = computed(
 );
 const locked = computed(() => task.pending.value || task.uncertain.value || task.expired.value);
 const form = ref<HTMLFormElement>();
-const errorMessage = ref<HTMLParagraphElement>();
-const successMessage = ref<HTMLParagraphElement>();
 const reloadStart = ref<InstanceType<typeof ActionButton>>();
 const reloadConfirm = ref<InstanceType<typeof ActionButton>>();
 function focusButton(button: InstanceType<typeof ActionButton> | undefined) {
@@ -362,7 +339,7 @@ async function reload() {
     if (!editor) return;
     await editor.reload();
     await nextTick();
-    if (editor.reloadRequested.value) errorMessage.value?.focus();
+    if (editor.reloadRequested.value) focusButton(reloadConfirm.value);
     else form.value?.querySelector<HTMLElement>('fieldset input')?.focus();
 }
 const sources = ref<HTMLDetailsElement>();
@@ -420,9 +397,7 @@ const notifications = [
     { value: 'off', label: '关闭结果提醒' },
 ];
 const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-const manualConfiguration = ref(false);
 async function enterManualConfiguration() {
-    manualConfiguration.value = true;
     await focusConfiguration();
 }
 async function focusConfiguration() {
@@ -434,18 +409,17 @@ async function focusConfiguration() {
 async function save() {
     const result = await task.submit();
     if (result) {
-        notice.success(editor ? '任务修改已保存' : '任务已创建', '保存不会开始执行研究。');
+        notice.success(
+            editor ? '任务修改已保存' : '任务已创建',
+            editor?.result.value?.baselineResetRequired
+                ? '语义查阅范围已变化，下一次完整执行将建立新基线。历史执行与报告保持原样。'
+                : editor
+                  ? '本次保存无需重置比较基线，历史执行与报告保持原样。保存不会开始执行研究。'
+                  : '保存不会开始执行研究。',
+        );
         emit('saved', result);
-        if (editor) {
-            await nextTick();
-            successMessage.value?.focus();
-        }
     } else if (task.message.value) {
         const invalid = Object.keys(task.fields.value) as TaskDraftField[];
-        if (!invalid.length && !task.expired.value) {
-            if (task.uncertain.value) notice.warning('保存结果未确认', task.message.value);
-            else notice.error('任务未保存', task.message.value);
-        }
         if (invalid.some((key) => sourceFields.some((field) => field.key === key)) && sources.value)
             sources.value.open = true;
         if (invalid.some((key) => budgetFields.some((field) => field.key === key)) && budget.value)
@@ -454,7 +428,7 @@ async function save() {
         // 按页面顺序找第一个错误，不依赖服务端错误数组的顺序。
         const first = form.value?.querySelector<HTMLElement>('[aria-invalid="true"]');
         if (first) first.focus();
-        else errorMessage.value?.focus();
+        else if (editor && !task.expired.value) focusButton(reloadStart.value);
     }
 }
 onBeforeRouteLeave(() =>

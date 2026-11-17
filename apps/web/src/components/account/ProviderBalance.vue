@@ -67,12 +67,9 @@
                 {{ query.isError.value ? '上次成功查询' : '查询时间' }}：<time
                     :datetime="query.data.value.data.checkedAt"
                     >{{ checkedAt }}</time
-                >。Key 限额不代表账号余额；查询结果不保证后续执行可用。
+                >
             </p>
         </template>
-        <p v-if="template === 'new_api'" class="balance-hint break-anywhere text-muted m-0">
-            New API 返回原始额度点，站点换算规则可能不同；Key 未设限额仍受账号余额约束。
-        </p>
     </div>
 </template>
 

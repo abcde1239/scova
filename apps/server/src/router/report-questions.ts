@@ -7,6 +7,7 @@ import {
     RunCommandResponseSchema,
     ReportConversationSchema,
     ReportConversationQuerySchema,
+    ReportMergeInputSchema,
 } from '@scova/models';
 import type { ApiServices } from '@/app/services';
 import { createReportQuestionHandlers } from '@/handler/report-questions.ts';
@@ -25,6 +26,17 @@ export function createReportQuestionPlugin(services: ApiServices) {
         503: ApiErrorSchema,
     };
     return new Elysia({ name: 'scova-report-questions', prefix: '/api/v1', normalize: false })
+        .post('/reports/:reportId/merge', handlers.merge, {
+            body: ReportMergeInputSchema,
+            response: { 202: RunCommandResponseSchema, ...errors },
+            detail: {
+                operationId: 'mergeReportArtifacts',
+                tags: ['报告问答'],
+                summary: '合并原报告与选定续作',
+                description:
+                    '接受当前账号同一对话的1至8份续作，冻结保存证据并创建新的资料内改写执行。原报告和续作保留，禁止联网；需要CSRF和稳定的Idempotency-Key，活动执行冲突返回409。',
+            },
+        })
         .get('/reports/:reportId/conversation', handlers.conversation, {
             query: ReportConversationQuerySchema,
             response: { 200: ReportConversationSchema, ...errors },

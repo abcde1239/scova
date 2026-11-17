@@ -17,6 +17,19 @@ function key(request: Request) {
 export function createReportQuestionHandlers(services: ApiServices) {
     const questions = createReportQuestionService(services);
     return {
+        async merge(this: void, { request, set, params, body }: Http & { body: unknown }) {
+            const session = await requireSession(request, services);
+            requireCsrf(request, session, services);
+            const result = await questions.merge(
+                session.userId,
+                params.reportId,
+                body,
+                key(request),
+            );
+            set.status = 202;
+            set.headers['cache-control'] = 'no-store';
+            return result;
+        },
         async create(this: void, { request, set, params, body }: Http & { body: unknown }) {
             const session = await requireSession(request, services);
             requireCsrf(request, session, services);
