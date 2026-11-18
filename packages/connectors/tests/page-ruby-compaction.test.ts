@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vite-plus/test';
 import { JSDOM } from 'jsdom';
-import { extractPage, pageFingerprint } from '../src/page-extraction.ts';
-import { compactRubyMarkup } from '../src/page-ruby-compaction.ts';
+import { extractPage, pageFingerprint } from '../src/reader/extraction/extract.ts';
+import { compactRubyMarkup } from '../src/reader/extraction/ruby-compaction.ts';
 
 const url = 'https://public.example/novel';
 const ruby = '<ruby><rb>私</rb><rp>（</rp><rt>わたくし</rt><rp>）</rp></ruby>';

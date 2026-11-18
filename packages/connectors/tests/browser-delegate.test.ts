@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vite-plus/test';
-import { createDelegatedReader } from '../src/browser-delegate.ts';
+import { createDelegatedReader } from '../src/reader/runtime/delegate.ts';
 
 afterEach(() => vi.unstubAllEnvs());
 

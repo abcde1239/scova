@@ -2,9 +2,9 @@ import { EventEmitter } from 'node:events';
 import { PassThrough, Writable } from 'node:stream';
 import { spawn } from 'node:child_process';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
-import { createDelegatedReader } from '../src/browser-delegate.ts';
+import { createDelegatedReader } from '../src/reader/runtime/delegate.ts';
 import { ConnectorError, type PageReader, type ReadPage } from '../src/types.ts';
-import type { SafeHttpClient } from '../src/http.ts';
+import type { SafeHttpClient } from '../src/http/index.ts';
 
 vi.mock('node:child_process', () => ({ spawn: vi.fn() }));
 

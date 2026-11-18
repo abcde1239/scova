@@ -13,6 +13,8 @@ export interface ModelOutputDiagnostic {
     issues: ModelSchemaIssue[];
 }
 export const MODEL_CALL_TIMEOUT_MS = 120_000;
+/** Remote Search API extraction may fetch and process the target before responding. */
+export const READ_CALL_TIMEOUT_MS = 45_000;
 export const MODEL_INPUT_TOKEN_LIMIT = 256_000;
 export const MODEL_OUTPUT_TOKEN_LIMIT = 64_000;
 /** Bounded independently from per-model input budgets; retain ordinary long articles in full. */
@@ -180,6 +182,8 @@ export interface ReadPage {
     collection?: PageCollection;
     /** Page-authored publication metadata, parsed independently of body extraction. */
     publication?: ReadPublication;
+    /** Observed navigation targets only; links are untrusted and never claim evidence. */
+    links?: { url: string; text: string }[];
     untrusted: true;
 }
 

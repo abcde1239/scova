@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vite-plus/test';
 import { createModelProvider, createSafeHttpClient, type HttpTransport } from '../src/index.ts';
 import { ConnectorError } from '../src/types.ts';
-import { prepareProvider } from '../src/providers.ts';
+import { prepareProvider } from '../src/http/provider.ts';
 
 const input = {
     prompt: 'bounded fixture',

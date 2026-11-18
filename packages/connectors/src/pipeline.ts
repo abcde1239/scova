@@ -1,13 +1,14 @@
 import { Ajv } from 'ajv';
-import type { SafeHttpClient } from './http.ts';
-import { createTavilySearch, createModelProvider } from './providers.ts';
-import { pageFingerprint } from './reader.ts';
-import { createPageReader } from './browser-reader.ts';
-import { createSearxngSearch } from './searxng.ts';
-import { createSearchApi, type SearchApiOptions } from './search-api.ts';
-import { createModelSearch, type ModelSearchProtocol } from './model-search.ts';
+import type { SafeHttpClient } from './http/index.ts';
+import { createTavilySearch } from './search/tavily.ts';
+import { createModelProvider } from './model/provider.ts';
+import { pageFingerprint } from './reader/http-reader.ts';
+import { createPageReader } from './reader/browser.ts';
+import { createSearxngSearch } from './search/searxng.ts';
+import { createSearchApi, type SearchApiOptions } from './search/api.ts';
+import { createModelSearch, type ModelSearchProtocol } from './search/model.ts';
 import { ConnectorError } from './types.ts';
-import type { ModelProtocol } from './model-protocol.ts';
+import type { ModelProtocol } from './model/protocol.ts';
 import type {
     CallContext,
     ModelProvider,

@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vite-plus/test';
 import { readFile } from 'node:fs/promises';
-import { extractPageIsolated } from '../src/page-extraction-process.ts';
-import { pageFingerprint } from '../src/page-extraction.ts';
-import type { HttpResponse } from '../src/http.ts';
-import { isExtractionCapacityError } from '../src/page-extraction-capacity.ts';
+import { extractPageIsolated } from '../src/reader/extraction/process.ts';
+import { pageFingerprint, extractPage } from '../src/reader/extraction/extract.ts';
+import { validPageLinks } from '../src/reader/collection.ts';
+import type { HttpResponse } from '../src/http/index.ts';
+import { isExtractionCapacityError } from '../src/reader/extraction/capacity.ts';
+import { ConnectorError } from '../src/types.ts';
 
 const url = 'https://public.example/article';
 const response: HttpResponse = {
@@ -14,6 +16,26 @@ const response: HttpResponse = {
 };
 
 describe('isolated synchronous article extraction', () => {
+    it('preserves bounded navigation targets separately from evidence text and rejects invalid metadata', () => {
+        const page = extractPage(
+            url,
+            {
+                ...response,
+                body: '<nav><a href="/unrelated">Navigation</a></nav><main><p>Evidence.</p><a href="/release#date">Release</a><a href="/release">Duplicate</a><a href="javascript:alert(1)">Bad</a><a href="#local">Same page</a><a href="https://name:secret@example.com/">Credentials</a></main>',
+            },
+            10000,
+        );
+        expect(page.links).toEqual([{ url: 'https://public.example/release', text: 'Release' }]);
+        expect(page.contentHash).toBe(pageFingerprint(page.text));
+        expect(validPageLinks(page.links)).toBe(true);
+        for (const invalid of [
+            [{ url: 'javascript:alert(1)', text: 'Bad' }],
+            [{ url: 'https://example.com/', text: '' }],
+            Array.from({ length: 81 }, () => ({ url: 'https://example.com/', text: 'Too many' })),
+        ])
+            expect(validPageLinks(invalid)).toBe(false);
+        expect(validPageLinks(undefined)).toBe(true);
+    });
     it('keeps readiness capacity failures typed so browser retry cannot repeat them', async () => {
         const result = await extractPageIsolated(
             url,
@@ -98,5 +120,24 @@ describe('isolated synchronous article extraction', () => {
                 signal: controller.signal,
             }),
         ).rejects.toMatchObject({ code: 'aborted' });
+    });
+});
+
+describe('unrecoverable extraction capacity classification', () => {
+    it.each(['网页节点数超过提取限制', '表格展开结构超过提取限制'])(
+        'recognizes only an exact owned capacity failure: %s',
+        (message) => {
+            expect(
+                isExtractionCapacityError(new ConnectorError('extraction_failed', message)),
+            ).toBe(true);
+        },
+    );
+    it.each([
+        new ConnectorError('extraction_failed', '页面主正文仍在加载'),
+        new ConnectorError('extraction_failed', 'article mentions 网页节点数超过提取限制'),
+        new ConnectorError('network', '网页节点数超过提取限制'),
+        new Error('网页节点数超过提取限制'),
+    ])('does not broaden non-capacity failures: %s', (error) => {
+        expect(isExtractionCapacityError(error)).toBe(false);
     });
 });

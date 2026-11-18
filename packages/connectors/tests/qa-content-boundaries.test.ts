@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vite-plus/test';
-import { extractPage } from '../src/page-extraction.ts';
+import { extractPage } from '../src/reader/extraction/extract.ts';
 
 const extract = (body: string) =>
     extractPage(

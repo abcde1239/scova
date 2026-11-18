@@ -1,6 +1,6 @@
 import { Ajv } from 'ajv';
 import { describe, expect, it } from 'vite-plus/test';
-import { modelSchemaHash, modelSchemaIssues } from '../src/model-diagnostics.ts';
+import { modelSchemaHash, modelSchemaIssues } from '../src/model/diagnostics.ts';
 
 describe('trusted model contract diagnostics', () => {
     it('groups literal unions and preserves independent required and array limits', () => {

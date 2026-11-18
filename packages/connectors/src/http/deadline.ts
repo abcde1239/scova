@@ -27,7 +27,9 @@ export async function withDeadline<T>(
         timer = setTimeout(() => stop(new ConnectorError('timeout', '调用超时', true)), timeoutMs);
     });
     try {
-        return await Promise.race([operation(controller.signal), stopped]);
+        // Subscribe to cancellation even when starting the operation throws synchronously.
+        const work = (async () => operation(controller.signal))();
+        return await Promise.race([work, stopped]);
     } finally {
         clearTimeout(timer);
         if (onAbort) signal?.removeEventListener('abort', onAbort);

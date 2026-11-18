@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { gzipSync, brotliCompressSync } from 'node:zlib';
 import { describe, expect, it } from 'vite-plus/test';
-import { nodeHttpTransport } from '../src/http.ts';
+import { nodeHttpTransport } from '../src/http/index.ts';
 
 describe('web text over the real pinned Node transport (privileged local fixture)', () => {
     it('signals response headers before the complete bounded body has arrived', async () => {

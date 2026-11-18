@@ -1,7 +1,7 @@
 import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import { ConnectorError } from '../types.ts';
-import { decodeWebText } from '../web-text.ts';
+import { decodeWebText } from '../reader/extraction/web-text.ts';
 import { type HttpTransport } from './types.ts';
 
 export const nodeHttpTransport: HttpTransport = (url, options) =>

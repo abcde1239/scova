@@ -29,7 +29,7 @@ vi.mock('node:child_process', async (importOriginal) => {
         },
     };
 });
-import { extractPageIsolated } from '../src/page-extraction-process.ts';
+import { extractPageIsolated } from '../src/reader/extraction/process.ts';
 
 afterEach(() => {
     state.cpu = false;

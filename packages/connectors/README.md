@@ -2,6 +2,20 @@
 
 Scova 的搜索、远程模型与安全网页阅读适配器。默认使用自部署 SearxNG；支持显式配置 DeepSeek Search / Fetch、Tavily Search / Extract，以及授权的 OpenAI Responses/Anthropic 内置搜索。独立 API 模式的搜索与网页读取均由服务商提供，不调用本地 Reader。Perplexity Search 保留搜索适配兼容，但缺少独立读取接口，不可用于 API 模式管线。[部署与计费边界](../../docs/public/guides/search.md)。
 
+源码按职责组织，`src/index.ts` 统一导出，`src/types.ts` 保存公共契约，`src/pipeline.ts` 装配连接器：
+
+| 目录                 | 职责                                               |
+| -------------------- | -------------------------------------------------- |
+| `http/`              | 安全地址与 DNS、固定 IP 传输、期限和供应商调用重试 |
+| `model/`             | 结构化生成、协议转换、诊断、模型目录和余额查询     |
+| `search/`            | SearxNG、搜索 API、模型内置搜索、Tavily 和结果排序 |
+| `reader/`            | HTTP/浏览器阅读入口、采集快照、诊断及来源时间      |
+| `reader/browser/`    | 浏览器渲染、资源路由与限制                         |
+| `reader/extraction/` | 正文提取、质量/就绪判定与隔离提取进程              |
+| `reader/runtime/`    | Bun 到 Node 的 Reader 委托、宿主和私有行协议       |
+
+包内使用相对导入，消费方通过 `@scova/connectors` 使用；子进程入口随实现保存，不属于公开 API。
+
 `createSearchApi({ protocol, apiKey, baseUrl? })` 接入独立服务；`createModelSearch({ protocol, apiKey, model, baseUrl })` 接入模型搜索，通过 `tokenReservation` 与返回的 `usage` 供调用方预留、结算。调用方必须在 `beforeAttempt` 中先持久预留预算；候选不能直接充当正文证据。
 
 搜索与阅读可以独立于模型使用：
@@ -73,6 +87,6 @@ vp run test:connectors:tavily  # 显式 Tavily + 阅读 + 模型，有外部费�
 
 真实烟测仅发送固定公开查询，搜索、读取、模型各最多尝试一次。模型输出最多 256 token，引用必须确实存在于采集正文；缺凭据输出 `NOT RUN`，不算真实通过。普通测试使用固定响应与本地 socket，不消耗真实密钥。
 
-网页读取通过独立 `READER_DNS_RESOLVER=auto` 兼容全Fake-IP解析：先使用系统解析，仅当全部答案为Fake-IP时，经 Cloudflare 官方公网引导地址连接其 HTTPS DNS，保留原服务域名的 TLS 校验。可显式选择 `system|alidns|cloudflare|google`，不继承 `MODEL_DNS_RESOLVER`，模型默认回退仍为 AliDNS；固定公网IP、逐跳校验和私网拦截继续生效。公开 GET 在已验证地址间按地址族交错、有界切换，POST 不重放。模型生成单次总预算最多120秒（含重试），搜索和网页读取最多15秒；调用方更短的超时和整次执行剩余时间始终优先。单次模型输入最多256,000、输出最多64,000 token，累计预算由调用方控制，供应商自身能力也会限制可用上下文和输出。供应商明确返回输出长度耗尽时抛出 `output_truncated`，即使残留 JSON 可解析也不交付为完整输出。模型目录仍保持原有短超时，不受生成上限影响。
+网页读取通过独立 `READER_DNS_RESOLVER=auto` 兼容全Fake-IP解析：先使用系统解析，仅当全部答案为Fake-IP时，经 Cloudflare 官方公网引导地址连接其 HTTPS DNS，保留原服务域名的 TLS 校验。可显式选择 `system|alidns|cloudflare|google`，不继承 `MODEL_DNS_RESOLVER`，模型默认回退仍为 AliDNS；固定公网IP、逐跳校验和私网拦截继续生效。公开 GET 在已验证地址间按地址族交错、有界切换，POST 不重放。模型生成单次总预算最多120秒（含重试），搜索与本地网页读取最多15秒，Search API远程正文抓取最多45秒；调用方更短的超时和整次执行剩余时间始终优先。单次模型输入最多256,000、输出最多64,000 token，累计预算由调用方控制，供应商自身能力也会限制可用上下文和输出。供应商明确返回输出长度耗尽时抛出 `output_truncated`，即使残留 JSON 可解析也不交付为完整输出。模型目录仍保持原有短超时，不受生成上限影响。
 
 模型 HTTP 402 或精确白名单额度错误码返回不可重试的 `model_quota_exceeded`，普通 429 仍按限流处理；不从任意错误消息推断余额。重试遵守有效的 `Retry-After`，等待超过当前调用期限时直接结束，不提前发起请求。

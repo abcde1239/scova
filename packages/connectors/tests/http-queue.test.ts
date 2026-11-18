@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vite-plus/test';
-import { createSafeHttpClient, type HttpTransport } from '../src/http.ts';
+import { createSafeHttpClient, type HttpTransport } from '../src/http/index.ts';
 import { ConnectorError } from '../src/types.ts';
 
 const addresses = [

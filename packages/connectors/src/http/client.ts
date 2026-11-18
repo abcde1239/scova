@@ -1,7 +1,7 @@
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import { ConnectorError } from '../types.ts';
-import { readDiagnostics } from '../read-diagnostics.ts';
+import { readDiagnostics } from '../reader/diagnostics.ts';
 import {
     type ResolvedAddress,
     validatePublicUrl,
@@ -46,6 +46,7 @@ export function createSafeHttpClient(
         options: TransportOptions,
         attemptTimeoutMs?: number,
         diagnostics = readDiagnostics(undefined, 15_000),
+        beforeDispatch?: () => Promise<void>,
     ) => {
         const origin = url.origin;
         const previous = originTails.get(origin) ?? Promise.resolve();
@@ -69,6 +70,8 @@ export function createSafeHttpClient(
                     }),
                 ]),
             );
+            if (options.signal.aborted) throw options.signal.reason;
+            if (beforeDispatch) await diagnostics.stage('dispatch', () => beforeDispatch());
             if (options.signal.aborted) throw options.signal.reason;
             const headersDone = diagnostics.begin('headers');
             let bodyDone: ((error?: unknown) => void) | undefined;
@@ -204,6 +207,7 @@ export function createSafeHttpClient(
                                         ? addressTimeoutMs
                                         : undefined,
                                     diagnostics,
+                                    options.beforeDispatch,
                                 );
                                 break;
                             } catch (error) {

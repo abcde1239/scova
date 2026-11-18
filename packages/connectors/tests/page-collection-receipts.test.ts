@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vite-plus/test';
-import { pageCollectionGaps, validPageCollection } from '../src/page-collection.ts';
+import { pageCollectionGaps, validPageCollection } from '../src/reader/collection.ts';
 import type { PageCollection } from '../src/types.ts';
 
 describe('content acquisition limitations', () => {

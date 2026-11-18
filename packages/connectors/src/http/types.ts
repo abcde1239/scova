@@ -9,6 +9,8 @@ export interface HttpResponse {
 }
 
 export interface HttpOptions {
+    /** Trusted guard immediately before dispatch, after any origin queue wait. */
+    beforeDispatch?: () => Promise<void>;
     onReadDiagnostic?: (event: ReadDiagnostic) => void;
     responseEncoding?: 'web-text';
     method?: 'GET' | 'POST';

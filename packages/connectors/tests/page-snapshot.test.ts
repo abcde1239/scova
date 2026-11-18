@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 import { JSDOM } from 'jsdom';
-import { pageSnapshot } from '../src/page-snapshot.ts';
-import { pageIsLoading } from '../src/page-readiness.ts';
+import { pageSnapshot } from '../src/reader/snapshot.ts';
+import { pageIsLoading } from '../src/reader/extraction/readiness.ts';
 
 const documents: JSDOM[] = [];
 afterEach(() => {

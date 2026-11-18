@@ -5,7 +5,7 @@ import {
     type SafeHttpClient,
     type HttpTransport,
 } from '../src/index.ts';
-import { createModelDnsResolver } from '../src/model-http.ts';
+import { createModelDnsResolver } from '../src/model/http.ts';
 
 const real = { address: '104.21.71.78', family: 4 };
 const fake = { address: '198.18.0.126', family: 4 };

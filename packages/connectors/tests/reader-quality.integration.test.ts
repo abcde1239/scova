@@ -7,7 +7,7 @@ import {
     type HttpTransport,
     type PageReader,
 } from '../src/index.ts';
-import { createDelegatedReader } from '../src/browser-delegate.ts';
+import { createDelegatedReader } from '../src/reader/runtime/delegate.ts';
 
 const url = 'https://fixture.example/article';
 const paragraphs = Array.from(

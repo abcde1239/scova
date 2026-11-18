@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
-import { createPageReader } from '../src/browser-reader.ts';
-import { createSafeHttpClient } from '../src/http.ts';
+import { createPageReader } from '../src/reader/browser.ts';
+import { createSafeHttpClient } from '../src/http/index.ts';
 import { ConnectorError, type PageReader } from '../src/types.ts';
 
 const url = 'https://fixture.example/article';

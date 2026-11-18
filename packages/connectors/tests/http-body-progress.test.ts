@@ -1,8 +1,8 @@
 import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { describe, expect, it, vi } from 'vite-plus/test';
-import { nodeHttpTransport, createSafeHttpClient } from '../src/http.ts';
-import { createPageReader } from '../src/browser-reader.ts';
+import { nodeHttpTransport, createSafeHttpClient } from '../src/http/index.ts';
+import { createPageReader } from '../src/reader/browser.ts';
 
 describe('Reader body inactivity budget over real sockets', () => {
     it('times out a stalled body and preserves a longer continuously progressing body', async () => {

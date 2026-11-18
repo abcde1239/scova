@@ -1,6 +1,11 @@
 import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vite-plus/test';
-import { extractPublication, describePublication, assessPublication } from '../src/index.ts';
+import {
+    extractPublication,
+    describePublication,
+    assessPublication,
+    publicationDateSource,
+} from '../src/index.ts';
 
 function read(head = '', article = '') {
     const dom = new JSDOM(
@@ -15,6 +20,31 @@ function read(head = '', article = '') {
 }
 const dates = (head = '', body = '') => describePublication(read(head, body));
 describe('source publication precision and independent modification', () => {
+    it('derives date-source labels from validated observations and refuses fabricated summaries', () => {
+        const metadata = read(
+            '<meta name="publishdate" content="2026年11月08日"><meta property="article:modified_time" content="2026-11-09T09:30+0800">',
+        );
+        expect(publicationDateSource(metadata)).toBe('meta:published');
+        expect(publicationDateSource(metadata, 'modified')).toBe('meta:modified');
+        expect(publicationDateSource({ ...metadata, observations: [] })).toBeNull();
+        expect(
+            publicationDateSource({
+                ...metadata,
+                observations: [{ field: 'model_date', rawValue: '2026-11-08', locator: 'model' }],
+            }),
+        ).toBeNull();
+        expect(publicationDateSource(null)).toBeNull();
+        const legacy = {
+            parserVersion: 'scova-publication-v1',
+            status: 'unknown',
+            instant: null,
+            observations: [
+                { field: 'datePublished', rawValue: '2026-11-08T00:00:00Z', locator: 'jsonld' },
+            ],
+        };
+        expect(publicationDateSource(legacy)).toBe('datePublished');
+        expect(publicationDateSource(legacy, 'modified')).toBeNull();
+    });
     it('extracts common meta fields and preserves day precision instead of inventing UTC midnight', () => {
         const metadata = read(
             '<meta name="publishdate" content="2026年11月08日"><meta property="article:modified_time" content="2026-11-09T09:30+0800">',

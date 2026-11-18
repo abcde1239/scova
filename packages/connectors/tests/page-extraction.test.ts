@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vite-plus/test';
-import { extractPage, pageFingerprint } from '../src/page-extraction.ts';
+import { extractPage, pageFingerprint } from '../src/reader/extraction/extract.ts';
 
 const url = 'https://public.example/article';
 const extract = (body: string, maxText = 1_000_000) =>

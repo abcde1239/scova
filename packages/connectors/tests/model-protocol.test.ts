@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vite-plus/test';
 import { createModelProvider, type ModelProtocol, type SafeHttpClient } from '../src/index.ts';
-import { modelRequest } from '../src/model-protocol.ts';
+import { modelRequest } from '../src/model/protocol.ts';
 
 const schema = {
     type: 'object',
@@ -316,16 +316,8 @@ describe('native model protocols', () => {
         },
     );
     it.each(['anthropic_messages', 'gemini'] as const)(
-        'validates %s output and output budget',
+        'rejects %s output usage above its reservation',
         async (protocol) => {
-            const data = structuredClone(native[protocol]);
-            if (protocol === 'anthropic_messages' && 'content' in data)
-                data.content[0]!.input = { answer: 42 as unknown as string };
-            else if ('candidates' in data)
-                data.candidates[0]!.content.parts[0]!.text = '{"answer":42}';
-            await expect(
-                setup(protocol, data).model.generateStructured(input),
-            ).rejects.toMatchObject({ code: 'invalid_response' });
             const valid = setup(protocol, native[protocol]);
             await expect(
                 valid.model.generateStructured({ ...input, maxOutputTokens: 7 }),

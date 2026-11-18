@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vite-plus/test';
-import { createDelegatedReader } from '../src/browser-delegate.ts';
-import { pageFingerprint } from '../src/page-extraction.ts';
-import { privateJsonLine } from '../src/private-json.ts';
+import { createDelegatedReader } from '../src/reader/runtime/delegate.ts';
+import { pageFingerprint } from '../src/reader/extraction/extract.ts';
+import { privateJsonLine } from '../src/reader/runtime/json.ts';
 
 describe('private Reader JSONL frames', () => {
     it('escapes framing characters without changing decoded evidence', () => {

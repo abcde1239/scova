@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vite-plus/test';
-import { readDiagnostics } from '../src/read-diagnostics.ts';
+import { readDiagnostics } from '../src/reader/diagnostics.ts';
 import { ConnectorError, type ReadDiagnostic } from '../src/types.ts';
 
 describe('bounded internal Reader diagnostics', () => {

@@ -3,7 +3,7 @@ const { request, factory } = vi.hoisted(() => {
     const request = vi.fn();
     return { request, factory: vi.fn(() => ({ request })) };
 });
-vi.mock('../src/model-http.ts', () => ({ createModelHttpClient: factory }));
+vi.mock('../src/model/http.ts', () => ({ createModelHttpClient: factory }));
 import { listProviderModels, createModelProvider } from '../src/index.ts';
 
 describe('模型目录与实际调用共用模型网络通道', () => {

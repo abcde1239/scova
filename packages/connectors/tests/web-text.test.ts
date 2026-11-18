@@ -1,6 +1,6 @@
 import { gzipSync, brotliCompressSync, deflateSync } from 'node:zlib';
 import { describe, expect, it } from 'vite-plus/test';
-import { decodeWebText } from '../src/web-text.ts';
+import { decodeWebText } from '../src/reader/extraction/web-text.ts';
 
 describe('bounded browser text decoding', () => {
     it.each([
