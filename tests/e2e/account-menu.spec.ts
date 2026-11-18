@@ -20,11 +20,26 @@ for (const { width, scale } of [
         const trigger = page.getByRole('button', { name: '打开个人侧栏', exact: true });
         const brand = page.getByRole('banner').getByRole('link', { name: 'Scova，任务首页' });
         await expect(trigger).toBeVisible();
-        expect((await trigger.boundingBox())!.x).toBeLessThan((await brand.boundingBox())!.x);
+        await expect(brand).toBeVisible();
+        const triggerBox = (await trigger.boundingBox())!;
+        const brandBox = (await brand.boundingBox())!;
+        expect(
+            triggerBox.y + triggerBox.height <= brandBox.y + 1 ||
+                triggerBox.x + triggerBox.width <= brandBox.x + 1,
+        ).toBe(true);
+        expect(
+            await trigger.evaluate(
+                (element) =>
+                    !!(
+                        element.compareDocumentPosition(document.querySelector('.brand')!) &
+                        Node.DOCUMENT_POSITION_FOLLOWING
+                    ),
+            ),
+        ).toBe(true);
         await expect(page.getByRole('button', { name: '菜单', exact: true })).toHaveCount(0);
         const drawer = page.getByRole('dialog', { name: '工作台侧边栏' });
         for (const target of ['avatar', 'identity']) {
-            await trigger.locator('.avatar').click();
+            await trigger.locator('.trigger-avatar').click();
             await expect(drawer).toBeVisible();
             await expect(drawer).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 0)');
             await expect(drawer.getByRole('navigation').getByRole('link')).toHaveText([

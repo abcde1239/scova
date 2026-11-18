@@ -1,9 +1,5 @@
 <template>
-    <navigation-button
-        v-if="taskId"
-        class="keyboard-focus-wide [&&]:(inline-flex items-center min-h-11 scova-link cursor-pointer)"
-        icon="edit"
-        :to="{ name: 'task-edit', params: { taskId } }"
+    <navigation-button v-if="taskId" icon="edit" :to="{ name: 'task-edit', params: { taskId } }"
         >编辑任务配置</navigation-button
     >
 </template>

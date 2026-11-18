@@ -101,9 +101,7 @@
             class="snapshot-actions scova-interface flex flex-wrap gap-4"
             aria-label="快照关联入口"
         >
-            <router-link
-                class="inline-flex items-center min-h-11 max-w-full scova-link cursor-pointer keyboard-focus-wide"
-                :to="`/runs/${detail.snapshot.runId}`"
+            <router-link class="navigation-link" :to="`/runs/${detail.snapshot.runId}`"
                 >查看该次执行</router-link
             >
             <a
@@ -161,11 +159,9 @@
                         <dd class="m-0">{{ quote.selector.extractorVersion }}</dd>
                     </div>
                 </dl>
-                <router-link
-                    class="inline-flex items-center min-h-11 max-w-full scova-link cursor-pointer keyboard-focus-wide"
-                    :to="`/runs/${quote.runId}`"
-                    >查看片段对应执行</router-link
-                >
+                <router-link class="navigation-link" :to="`/runs/${quote.runId}`"
+                    >查看执行<app-icon name="chevron"
+                /></router-link>
             </details>
         </section>
     </article>

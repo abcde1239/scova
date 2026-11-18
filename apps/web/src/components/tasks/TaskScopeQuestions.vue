@@ -51,6 +51,9 @@
                 :options="[
                     { value: 'rolling', label: '最近一段时间' },
                     { value: 'fixed', label: '指定时间段' },
+                    ...(researchMode === 'analysis'
+                        ? [{ value: 'unbounded', label: '不限日期' }]
+                        : []),
                 ]"
                 :disabled="disabled"
             />
@@ -61,7 +64,7 @@
                 kind="number"
                 :disabled="disabled"
             />
-            <template v-else>
+            <template v-else-if="rangeKind === 'fixed'">
                 <p class="break-anywhere m-0">
                     以下日期按浏览器当地时间 {{ browserTimezone }} 填写。
                 </p>
@@ -106,14 +109,25 @@
                 label="此次需要的工作"
                 kind="select"
                 :options="[
-                    { value: 'collection', label: '资料收集' },
+                    { value: 'collection', label: '资料采集' },
                     { value: 'analysis', label: '分析研究' },
                 ]"
                 :disabled="disabled"
             />
             <p class="break-anywhere m-0">
-                资料收集整理当前可读信息；分析研究还会核对时间适用性、依据与推论。
+                资料采集只收录窗口内、有直接原文出处的值，不接受模型补答；分析研究允许带标记的模型回答，日期窗口可选。
             </p>
+            <task-config-field
+                v-if="researchMode === 'collection'"
+                v-model="collectionDateUnknown"
+                label="日期未确认的条目"
+                kind="select"
+                :options="[
+                    { value: 'separate', label: '单列展示，不计入采集结果' },
+                    { value: 'discard', label: '直接剔除' },
+                ]"
+                :disabled="disabled"
+            />
             <output-format-select
                 v-model="outputFormats"
                 label="希望得到的形式"
@@ -126,7 +140,13 @@
                 <dd class="break-anywhere m-0">{{ focusPoints.join('、') || '围绕核心问题' }}</dd>
                 <dt class="text-muted">时间范围</dt>
                 <dd class="break-anywhere m-0">
-                    {{ rangeKind === 'rolling' ? `最近 ${days} 天` : `${start} 至 ${end}` }}
+                    {{
+                        rangeKind === 'rolling'
+                            ? `最近 ${days} 天`
+                            : rangeKind === 'unbounded'
+                              ? '不限日期'
+                              : `${start} 至 ${end}`
+                    }}
                 </dd>
                 <dt class="text-muted">优先来源</dt>
                 <dd class="break-anywhere m-0">{{ preferredUrls.join('、') || '公开网页' }}</dd>
@@ -152,7 +172,7 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, ref } from 'vue';
+import { nextTick, ref, watch } from 'vue';
 import {
     parseContract,
     TaskDraftScopeSchema,
@@ -197,6 +217,7 @@ const end = ref(
     props.initial?.timeRange.kind === 'fixed' ? localTime(props.initial.timeRange.end) : '',
 );
 const researchMode = ref(props.initial?.researchMode ?? props.mode);
+const collectionDateUnknown = ref<string>(props.initial?.collectionDateUnknown ?? 'separate');
 const outputFormats = ref<import('@scova/models').OutputFormat[]>(
     props.initial?.outputFormats ?? [
         parseContract(
@@ -205,6 +226,14 @@ const outputFormats = ref<import('@scova/models').OutputFormat[]>(
         ),
     ],
 );
+watch(researchMode, (mode) => {
+    if (mode !== 'collection') return;
+    if (rangeKind.value === 'unbounded') {
+        rangeKind.value = 'rolling';
+        days.value = '7';
+    }
+    outputFormats.value = ['list'];
+});
 const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 function fixedInstant(value: string, key: 'start' | 'end') {
     const initial = props.initial?.timeRange;
@@ -231,12 +260,17 @@ function scope(validateStep = 3) {
                 ? { kind: 'rolling', days: 7 }
                 : rangeKind.value === 'rolling'
                   ? { kind: 'rolling', days: Number(days.value) }
-                  : {
-                        kind: 'fixed',
-                        start: fixedInstant(start.value, 'start'),
-                        end: fixedInstant(end.value, 'end'),
-                    },
+                  : rangeKind.value === 'unbounded'
+                    ? { kind: 'unbounded' }
+                    : {
+                          kind: 'fixed',
+                          start: fixedInstant(start.value, 'start'),
+                          end: fixedInstant(end.value, 'end'),
+                      },
         researchMode: researchMode.value,
+        ...(researchMode.value === 'collection'
+            ? { collectionDateUnknown: collectionDateUnknown.value }
+            : {}),
         outputFormat: outputFormats.value[0],
         ...(outputFormats.value.length > 1 ? { outputFormats: outputFormats.value } : {}),
     });

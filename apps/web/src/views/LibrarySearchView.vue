@@ -8,11 +8,7 @@
             class="search-actions scova-interface flex flex-wrap items-center gap-4 min-w-0"
             aria-label="资料库分区"
         >
-            <navigation-button
-                class="inline-flex items-center min-h-11 scova-link cursor-pointer keyboard-focus-wide"
-                to="/library"
-                >收藏</navigation-button
-            >
+            <navigation-button to="/library">收藏</navigation-button>
             <span aria-current="page">搜索已存资料</span>
         </nav>
         <p class="m-0">只检索当前账号已保存的来源快照与纯文本笔记，不进行联网搜索。</p>

@@ -67,6 +67,10 @@
                             }}
                         </dd>
                     </div>
+                    <div v-if="evidence.snapshot?.dateSource">
+                        <dt class="text-muted font-medium">日期来源</dt>
+                        <dd class="m-0">{{ dateSourceLabel(evidence.snapshot.dateSource) }}</dd>
+                    </div>
                     <div
                         v-if="
                             evidence.snapshot?.sourceDates &&
@@ -93,6 +97,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { Evidence } from '@scova/models';
+import { dateSourceLabel } from '@/utils/source-dates';
 import { sourceLink } from '@/composables/useReport';
 import AppIcon from '@/components/common/AppIcon.vue';
 const props = defineProps<{ evidence: Evidence; embedded?: boolean; hideSourceLink?: boolean }>();

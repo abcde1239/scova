@@ -20,13 +20,13 @@
             </p>
             <p class="m-0">{{ notificationMessage(item) }}</p>
             <router-link
-                class="inline-flex items-center gap-2 justify-self-start min-h-11 max-w-full scova-link cursor-pointer keyboard-focus-wide"
+                class="navigation-link"
                 :id="`notification-target-${item.id}`"
                 :to="notificationTarget(item)"
             >
                 <app-icon :name="item.reportId ? 'report' : 'run'" />{{
                     item.reportId ? '阅读报告' : '查看执行'
-                }}
+                }}<app-icon name="chevron" />
             </router-link>
         </div>
         <action-button :busy="pending" :disabled="disabled" @click="emit('read', !item.readAt)">

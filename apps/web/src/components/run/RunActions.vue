@@ -95,9 +95,9 @@
                     · {{ executionStates[actions.result.value.run.status][0] }}
                 </p>
                 <router-link
-                    class="open-run scova-reference keyboard-focus-wide [&&]:(inline-flex items-center gap-2 justify-self-start min-h-11 cursor-pointer)"
+                    class="open-run navigation-link"
                     :to="`/runs/${actions.result.value.run.id}`"
-                    >打开执行<app-icon name="run"
+                    >查看执行<app-icon name="chevron"
                 /></router-link>
             </template>
         </div>

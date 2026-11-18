@@ -4,11 +4,9 @@
             <strong
                 >{{ title }} · {{ run ? executionStates[run.status][0] : '正在读取执行' }}</strong
             >
-            <router-link
-                class="scova-link min-h-11 inline-flex items-center"
-                :to="`/runs/${targetId}`"
-                >执行详情</router-link
-            >
+            <router-link class="navigation-link" :to="`/runs/${targetId}`"
+                >执行详情<app-icon name="chevron"
+            /></router-link>
         </header>
         <p v-if="execution.query.isError.value" role="alert">
             执行暂时无法读取。<button type="button" @click="execution.query.refetch()">

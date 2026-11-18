@@ -68,6 +68,7 @@
                     </n-button>
                 </nav>
             </div>
+            <report-changes v-if="report" :report="report" />
             <div v-if="report && projected" class="artifact-document">
                 <keep-alive>
                     <component
@@ -86,9 +87,6 @@
                 :retryable="retryable"
                 @retry="emit('retry')"
             />
-            <section v-if="report" class="report-baseline" aria-label="历史变化与比较基线">
-                <report-changes :report="report" />
-            </section>
             <report-sources v-if="appendixReport" :report="appendixReport" />
         </div>
     </section>
@@ -186,6 +184,15 @@ function revealCitation(event: MouseEvent) {
     if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     const link = event.target instanceof Element ? event.target.closest('a[href^="#"]') : null;
     const href = link?.getAttribute('href');
+    if (href === '#coverage-title') {
+        const details = panel.value?.querySelector<HTMLDetailsElement>('.coverage details');
+        if (!details) return;
+        event.preventDefault();
+        details.open = true;
+        details.querySelector('summary')?.focus();
+        details.scrollIntoView({ block: 'nearest' });
+        return;
+    }
     if (!href || !/^#(?:evidence-|answer-|claim-|question-)/.test(href)) return;
     const target = panel.value?.querySelector<HTMLElement>(`#${CSS.escape(href.slice(1))}`);
     if (!target) return;
@@ -333,25 +340,8 @@ function onKeydown(event: KeyboardEvent) {
 .report-sections {
     @apply [flex-basis:100%];
 }
-.artifact-document,
-.report-baseline {
+.artifact-document {
     @apply min-w-0;
-}
-.report-baseline {
-    @apply [border-top:0.0625rem_solid_color-mix(in_srgb,_var(--scova-border)_30%,_transparent)] pt-4
-        pl-2 pr-2;
-}
-.report-baseline :deep(.report-changes) {
-    @apply [border:0] p-0;
-}
-.report-baseline :deep(.change-sides) {
-    @apply grid-cols-[minmax(0,_1fr)];
-}
-.report-artifact-panel--reading .report-baseline :deep(.change-sides) {
-    @apply grid-cols-[repeat(auto-fit,_minmax(min(100%,_18rem),_1fr))];
-}
-.report-baseline :deep(.comparison-summary) {
-    @apply p-3;
 }
 @media (max-width: 39.999rem) {
     .artifact-scroll {

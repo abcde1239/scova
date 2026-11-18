@@ -296,7 +296,11 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
             expect(command.key).toBeUndefined();
             expect(command.body).toBeNull();
         }
-        await page.getByRole('link', { name: '返回任务', exact: true }).click();
+        const back = page
+            .getByRole('navigation', { name: '面包屑导航' })
+            .getByRole('link', { name: '任务', exact: true });
+        await expect(back).toHaveAttribute('href', '/tasks');
+        await back.click();
         await page.getByRole('radio', { name: '归档', exact: true }).check();
         await expect(page.getByRole('article')).toContainText('归档');
         await expect(page.getByRole('link', { name: config.title, exact: true })).toBeVisible();
@@ -385,8 +389,12 @@ test('离开页面后迟到命令不把旧成功带回当前页面', async ({ pa
     await expect(pause(page)).toBeEnabled();
     await pause(page).click();
     await expect(pause(page)).toHaveAttribute('aria-busy', 'true');
-    await page.getByRole('link', { name: '返回任务', exact: true }).click();
-    await expect(page).toHaveURL(/\/tasks\?status=active$/);
+    const back = page
+        .getByRole('navigation', { name: '面包屑导航' })
+        .getByRole('link', { name: '任务', exact: true });
+    await expect(back).toHaveAttribute('href', '/tasks');
+    await back.click();
+    await expect(page).toHaveURL(/\/tasks$/);
     release();
     await expect(page.getByRole('link', { name: config.title, exact: true })).toBeVisible();
     await expect(page.getByText('未来计划已暂停；在途执行继续，仍可显式手动执行。')).toHaveCount(0);

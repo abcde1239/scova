@@ -62,7 +62,6 @@
         </dl>
         <navigation-button
             v-if="link"
-            class="task-history-link scova-link cursor-pointer keyboard-focus-wide [.task-row_&.task-history-link]:m-0 [@media(max-width:_29.999rem)]:[.task-row_&.task-history-link]:justify-self-start [&&]:(inline-flex items-center min-h-11 max-w-full mt-4)"
             icon="report"
             :to="{ name: 'report-history', query: { taskId: task.id } }"
             >报告历史</navigation-button

@@ -11,13 +11,16 @@ for (const width of [1440, 1024, 768, 390, 360, 320]) {
             await page.evaluate((value) => {
                 document.documentElement.style.fontSize = `${value}%`;
             }, scale);
+            await expect(page.getByRole('heading', { name: '任务', exact: true })).toBeVisible();
+            const mobile = await page.evaluate(() => matchMedia('(max-width: 53.999rem)').matches);
             for (const name of ['收件箱', '资料库', '通知', '账号', '外观', '任务']) {
                 const trigger = page.getByRole('button', {
                     name: /^打开(个人侧栏|导航菜单)$/,
                     exact: true,
                 });
                 let link;
-                if (await trigger.isVisible()) {
+                if (mobile) {
+                    await expect(trigger).toBeVisible();
                     await trigger.focus();
                     await page.keyboard.press('Enter');
                     await expect(trigger).toHaveAttribute('aria-expanded', 'true');
@@ -63,7 +66,7 @@ for (const width of [1440, 1024, 768, 390, 360, 320]) {
                 await page.keyboard.press('Enter');
                 await expect(page.getByRole('main')).toBeFocused();
                 await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
-                if (await trigger.isVisible()) {
+                if (mobile) {
                     await expect(trigger).toHaveAttribute('aria-expanded', 'false');
                     await expect(page.getByRole('navigation', { name: '工作台菜单' })).toHaveCount(
                         0,

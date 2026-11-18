@@ -199,9 +199,9 @@ describe('ResearchReport empty changes outcome rendering', () => {
         );
     }
     it.each([
-        ['baseline', '本次建立比较基线', '建立基线本身不代表已经比较出重要变化。'],
-        ['no_important_change', '本次范围内未发现重要变化', '不表示所有内容完全相同。'],
-        ['inconclusive', '变化结论仍不确定', '不能据此认定没有重要变化。'],
+        ['baseline', '已设为比较起点', '下次执行将与本次对比'],
+        ['no_important_change', '无重要变化', '无重要变化'],
+        ['inconclusive', '变化未定', '尚不足以形成确定的比较结论'],
     ] as const)(
         'retains %s with no changes or baseline ID in the actual SFC',
         async (outcome, title, caveat) => {
@@ -220,12 +220,7 @@ describe('ResearchReport empty changes outcome rendering', () => {
             const briefOutput = await render(brief, report);
             expect(output).toContain('href="#report-changes-title"');
             expect(output).toContain('id="report-changes-title"');
-            for (const text of [
-                title,
-                caveat,
-                '本报告没有提供逐项变化记录。',
-                '报告未提供关联的基线执行。',
-            ]) {
+            for (const text of [title, caveat]) {
                 expect(output).toContain(text);
                 expect(briefOutput).toContain(text);
             }

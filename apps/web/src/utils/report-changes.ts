@@ -41,60 +41,73 @@ export function mapReportChanges(report: Report) {
         .filter((group) => group.entries.length > 0);
 }
 
+/** Share the baseline reason between execution and report views. */
+export function baselineReason(coverage: Report['coverage']) {
+    const baseline = coverage.baseline;
+    if (!baseline) return '本次查阅不完整';
+    if (baseline.modelOnlyFields) return `${baseline.modelOnlyFields} 个字段仅有模型回答`;
+    return {
+        eligible: '已满足比较条件',
+        external_incomplete: '部分必答字段缺少外部证据',
+        date_unconfirmed: '部分条目的日期尚未确认',
+        incomplete: '部分必答字段尚未完成',
+        comparison_incomplete: '比较所需的证据尚不完整',
+    }[baseline.reason];
+}
+
 export function changeSummary(report: Report) {
-    const incomplete = report.coverage.completeness === 'partial';
-    const unknown =
-        report.outcome === 'inconclusive' ||
-        report.changes.some(
-            (change) =>
-                change.kind === 'uncertain' ||
-                (change.oldValue !== null && change.oldEvidenceIds.length === 0),
-        );
-    if (incomplete || unknown)
-        return {
-            state: 'inconclusive',
-            title: '变化结论仍不确定',
-            message: incomplete
-                ? '本次查阅不完整，以下保留已取得证据与待核实线索，不能据此认定没有重要变化。'
-                : report.changes.some(
-                        (change) => change.oldValue !== null && change.oldEvidenceIds.length === 0,
-                    )
-                  ? '旧值证据不足，不能据此认定没有重要变化。'
-                  : report.changes.some((change) => change.kind === 'uncertain')
-                    ? '存在待核验比较，不能据此认定没有重要变化。'
-                    : '报告尚未得出确定的变化结论，不能据此认定没有重要变化。',
-        };
+    const previous = report.baselineRunId || report.baseline;
+    const important = report.changes.filter(
+        (change) => change.important && change.kind !== 'baseline',
+    ).length;
     if (
-        report.outcome === 'no_important_change' &&
-        !report.changes.some((change) => change.important)
+        report.outcome === 'baseline' &&
+        report.coverage.completeness === 'complete' &&
+        report.coverage.baseline?.eligible !== false
     )
         return {
-            state: 'no_important_change',
-            title: '本次范围内未发现重要变化',
-            message:
-                '本次计划范围内查阅完整；此结论不表示穷尽互联网资料，也不表示所有内容完全相同。',
-        };
-    if (report.outcome === 'baseline')
-        return {
             state: 'baseline',
-            title: '本次建立比较基线',
-            message: '这是报告给出的基线结果；建立基线本身不代表已经比较出重要变化。',
+            title: '已设为比较起点',
+            message: `${report.changes.filter((change) => change.kind === 'baseline').length || report.claims.length} 项事实，下次执行将与本次对比`,
         };
-    if (report.outcome === 'important_change')
+    if (!previous) {
+        const eligible =
+            report.coverage.baseline?.eligible ??
+            (report.outcome === 'baseline' && report.coverage.completeness === 'complete');
+        if (eligible)
+            return {
+                state: 'baseline',
+                title: '已设为比较起点',
+                message: `${report.changes.filter((change) => change.kind === 'baseline').length || report.claims.length} 项事实，下次执行将与本次对比`,
+            };
+        if (report.coverage.baseline || report.outcome === 'baseline')
+            return {
+                state: 'inconclusive',
+                title: '未设为比较起点',
+                message: baselineReason(report.coverage),
+            };
+    }
+    if (report.coverage.completeness === 'partial')
+        return { state: 'inconclusive', title: '变化未定', message: '本次查阅不完整' };
+    if (report.changes.some((change) => change.oldValue !== null && !change.oldEvidenceIds.length))
+        return { state: 'inconclusive', title: '变化未定', message: '旧值证据不足，比较仍待核验' };
+    if (report.changes.some((change) => change.kind === 'uncertain'))
+        return { state: 'inconclusive', title: '变化未定', message: '存在待核验的比较' };
+    if (important && report.outcome === 'important_change')
+        return { state: 'important_change', title: `${important} 项重要变化`, message: '' };
+    if (important)
         return {
-            state: 'important_change',
-            title: '报告记录了重要变化',
-            message: '请结合逐项原因、旧值与本次观测及双方引用阅读。',
+            state: 'inconclusive',
+            title: '变化未定',
+            message: '逐项重要变化与报告结论尚需核对',
         };
+    if (report.outcome === 'no_important_change')
+        return { state: 'no_important_change', title: '无重要变化', message: '' };
     if (report.outcome === 'new_findings')
-        return {
-            state: 'new_findings',
-            title: '报告记录了新增发现',
-            message: '新增发现与已确认的重要事实变化分别呈现，请查看各项分类和引用。',
-        };
+        return { state: 'new_findings', title: '新增资料', message: '' };
     return {
         state: 'inconclusive',
-        title: '变化结论仍需核对',
-        message: '当前记录不足以支持无重要变化结论，请结合报告和逐项证据阅读。',
+        title: '变化未定',
+        message: '当前记录尚不足以形成确定的比较结论',
     };
 }

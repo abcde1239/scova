@@ -4,16 +4,16 @@
 
 ## 资产与组装
 
-| 阶段         | 源码                                             | 作用                                                               |
-| ------------ | ------------------------------------------------ | ------------------------------------------------------------------ |
-| 搜索规划     | `packages/agent-core/src/prompts/planning.md`    | 冻结任务、时间和问题 ID；用互补查询覆盖对象、条件和不同观点        |
-| 内容综合     | `packages/agent-core/src/prompts/synthesis.md`   | 先回答问题，再组织依据；合并同源互补信息，保留条件、争议和不确定性 |
-| 证据评估     | `packages/agent-core/src/prompts/assessment.md`  | 解释 schema 枚举；区分逐字匹配、语义支持与模型自评                 |
-| 交付形式     | `packages/agent-core/src/output-instructions.ts` | 简报、清单、对比和研究报告各自的采集及写作目标；只生成选中形式     |
-| 比较与修复   | `packages/agent-core/src/agent.ts`               | 稳定事实键、原文值、有界修复与冻结上下文                           |
-| 输入与篇幅   | `packages/agent-core/src/model-input.ts`         | 先计算提示开销，再提供全文或分隔片段；输出留出完整 JSON 的空间     |
-| 规划输入预算 | `packages/agent-core/src/planning-input.ts`      | 完整任务与 schema 预检；仅压缩固定指令，保留原阶段和累计预算       |
-| 协议系统规则 | `packages/connectors/src/providers.ts`           | 结构化 JSON、来源隔离、禁止伪造和语言约束                          |
+| 阶段         | 源码                                                   | 作用                                                               |
+| ------------ | ------------------------------------------------------ | ------------------------------------------------------------------ |
+| 搜索规划     | `packages/agent-core/src/model/prompts/planning.md`    | 冻结任务、时间和问题 ID；用互补查询覆盖对象、条件和不同观点        |
+| 内容综合     | `packages/agent-core/src/model/prompts/synthesis.md`   | 先回答问题，再组织依据；合并同源互补信息，保留条件、争议和不确定性 |
+| 证据评估     | `packages/agent-core/src/model/prompts/assessment.md`  | 解释 schema 枚举；区分逐字匹配、语义支持与模型自评                 |
+| 交付形式     | `packages/agent-core/src/model/output-instructions.ts` | 简报、清单、对比和研究报告各自的采集及写作目标；只生成选中形式     |
+| 比较与修复   | `packages/agent-core/src/research/nodes/compare.ts`    | 稳定事实键、原文值、有界修复与冻结上下文                           |
+| 输入与篇幅   | `packages/agent-core/src/model/input.ts`               | 先计算提示开销，再提供全文或分隔片段；输出留出完整 JSON 的空间     |
+| 规划输入预算 | `packages/agent-core/src/model/planning-input.ts`      | 完整任务与 schema 预检；仅压缩固定指令，保留原阶段和累计预算       |
+| 协议系统规则 | `packages/connectors/src/model/provider.ts`            | 结构化 JSON、来源隔离、禁止伪造和语言约束                          |
 
 Markdown 在模块启动时读取，修改后重启对应 Server/Worker；Docker 使用源码包，资产随包复制。任务和修复数据通过单次 JSON 替换进入固定模板，用户内容中的 `{{input}}` 保持字面，不再作为模板展开。预算、权限、工具授权和保存校验仍由代码执行。
 

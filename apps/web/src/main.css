@@ -84,7 +84,7 @@ p {
 
 /* Low specificity lets navigation, cards and button links retain their own treatment. */
 :where(.scova-theme) :where(a[href]) {
-    @apply scova-link;
+    @apply internal-link;
 }
 
 .scova-theme select:not([multiple]) {
@@ -316,4 +316,14 @@ html:has(.mobile-drawer[open]) {
 
 [data-reduced-transparency='true'] .auth-layout .auth-motion {
     display: none;
+}
+
+/* Destination arrows move only when the user permits motion. */
+@media (prefers-reduced-motion: no-preference) {
+    .navigation-link > .app-icon:last-child {
+        transition: transform 150ms ease;
+    }
+    .navigation-link:hover > .app-icon:last-child {
+        transform: translateX(0.125rem);
+    }
 }

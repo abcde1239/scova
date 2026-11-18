@@ -306,7 +306,8 @@ const writes = (state: State, method?: string) =>
     );
 async function openReport(page: Page) {
     await page.goto(reportPath);
-    await expect(page.locator('.report-brief')).toBeVisible();
+    await expect(page.getByRole('region', { name: '对话与后续研究', exact: true })).toBeVisible();
+    await expect(page.locator('.report-brief')).toBeAttached();
     await openReportTool(page, 'notes');
     await expect(panel(page)).toBeVisible();
 }

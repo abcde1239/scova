@@ -180,7 +180,7 @@ for (const width of [390, 1440]) {
             );
             if (label) await chooseOption(page, '本次搜索方式', label);
             await page.getByRole('button', { name: '重试并创建新执行', exact: true }).click();
-            await expect(page.getByRole('link', { name: '打开执行', exact: true })).toBeVisible();
+            await expect(page.getByRole('link', { name: '查看执行', exact: true })).toBeVisible();
             expect(bodies.at(-1)).toEqual({ mode: 'live', ...(searchMode ? { searchMode } : {}) });
             await noOverflow(page);
         }
@@ -474,8 +474,9 @@ for (const status of ['succeeded', 'partial'] as const) {
         await page.getByRole('link', { name: '执行详情', exact: true }).click();
         await expect(page).toHaveURL(new RegExp(`/runs/${runId}$`));
         const sections = page.locator('.execution-detail > section');
-        await expect(sections.first()).toHaveAttribute('aria-labelledby', 'report-title');
-        await expect(page.getByRole('link', { name: '查看已发布报告' })).toHaveAttribute(
+        await expect(sections.first()).toHaveAttribute('aria-labelledby', 'execution-status');
+        await expect(sections.nth(1)).toHaveAttribute('aria-labelledby', 'report-title');
+        await expect(page.getByRole('link', { name: '阅读报告' })).toHaveAttribute(
             'href',
             `/reports/${reportId}`,
         );
@@ -515,9 +516,10 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
                     await expect(
                         page.getByText('已耗尽预算：搜索、执行时间', { exact: true }),
                     ).toBeVisible();
-                    await expect(
-                        page.getByRole('link', { name: '查看已发布报告' }),
-                    ).toHaveAttribute('href', `/reports/${reportId}`);
+                    await expect(page.getByRole('link', { name: '阅读报告' })).toHaveAttribute(
+                        'href',
+                        `/reports/${reportId}`,
+                    );
                 } else {
                     await expect(
                         page.getByText('执行时间预算已耗尽，未完成交付。', { exact: true }),
@@ -525,7 +527,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
                     await expect(
                         page.getByText('本次执行未完成报告交付。', { exact: true }),
                     ).toBeVisible();
-                    await expect(page.getByRole('link', { name: '查看已发布报告' })).toHaveCount(0);
+                    await expect(page.getByRole('link', { name: '阅读报告' })).toHaveCount(0);
                 }
                 await noOverflow(page);
                 await page.evaluate(async () => {
@@ -584,7 +586,7 @@ for (const [status, label, answeredQuestions, answeredCoreQuestions] of [
         } as ReturnType<typeof snapshot>);
         await page.goto(`/runs/${runId}`);
         await expect(page.getByRole('heading', { name: label, exact: true })).toBeVisible();
-        await expect(page.getByRole('link', { name: '查看已发布报告' })).toBeVisible();
+        await expect(page.getByRole('link', { name: '阅读报告' })).toBeVisible();
         await expect(page.getByText('本次范围内未发现重要变化', { exact: true })).toHaveCount(0);
         await expect(
             page.getByText('部分来源读取失败，尚未核验冲突证据。', { exact: true }),
@@ -685,9 +687,9 @@ test('本地HTTP样本：报告分页只匹配当前执行，报告查找失败�
     await expect(page.getByText('报告入口暂时无法读取，请重试查找。')).toBeVisible();
     failed = false;
     await page.getByRole('button', { name: '重试查找报告' }).click();
-    await expect(page.getByRole('link', { name: '查看已发布报告' })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: '阅读报告' })).toHaveCount(0);
     await page.getByRole('button', { name: '继续查找报告' }).click();
-    await expect(page.getByRole('link', { name: '查看已发布报告' })).toHaveAttribute(
+    await expect(page.getByRole('link', { name: '阅读报告' })).toHaveAttribute(
         'href',
         `/reports/${reportId}`,
     );
@@ -733,7 +735,7 @@ test('本地HTTP样本：卸载取消等待请求，退出换号不展示旧流�
     await expect(page.getByRole('heading', { name: '执行失败', exact: true })).toBeVisible();
     release();
     await expect(page.getByRole('region', { name: '执行日志内容' })).not.toContainText('调用开始');
-    await expect(page.getByRole('link', { name: '查看已发布报告' })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: '阅读报告' })).toHaveCount(0);
     await page
         .getByRole('navigation', { name: '主导航', exact: true })
         .getByRole('link', { name: '任务', exact: true })

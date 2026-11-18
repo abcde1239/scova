@@ -14,23 +14,25 @@
             >
                 <app-icon v-if="index" name="chevron" />
                 <router-link
-                    class="[.breadcrumbs_&:is(a)]:(inline-flex items-center min-h-11 scova-link) [.breadcrumbs_&:is(a):focus-visible]:([outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.125rem])"
-                    v-if="item.to"
-                    :to="item.to"
+                    class="[.breadcrumbs_&:is(a)]:(inline-flex items-center min-h-11 internal-link) [.breadcrumbs_&:is(a):focus-visible]:([outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.125rem])"
+                    :to="item.to ?? route.fullPath"
+                    :aria-current="index === items.length - 1 ? 'page' : undefined"
+                    :class="{ 'font-semibold text-default': index === items.length - 1 }"
                     >{{ item.label }}</router-link
                 >
-                <span v-else aria-current="page">{{ item.label }}</span>
             </li>
         </ol>
     </nav>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, inject } from 'vue';
+import { breadcrumbContext } from '@/layout/breadcrumbs';
 import { RouterLink, useRoute } from 'vue-router';
 import AppIcon from '@/components/common/AppIcon.vue';
 
 const route = useRoute();
+const context = inject(breadcrumbContext, undefined);
 const sections: Record<string, { label: string; to: string }> = {
     tasks: { label: '任务', to: '/tasks' },
     inbox: { label: '收件箱', to: '/inbox' },
@@ -51,6 +53,8 @@ const items = computed(() => {
     }
     if (route.name === 'task-edit' && typeof route.params.taskId === 'string')
         result.push({ label: '任务摘要', to: `/tasks/${route.params.taskId}` });
+    if (route.name === 'run-detail' && context?.value?.path === route.fullPath)
+        result.push({ label: context.value.label, to: context.value.to });
     result.push({ label: route.meta.title ?? '页面' });
     return result;
 });

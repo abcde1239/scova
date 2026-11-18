@@ -265,7 +265,7 @@ test('ResearchReport 目录、四类结论、changes 与孤立 evidence 按真�
     for (const name of [
         '报告概述',
         '查阅与核验详情',
-        '变化与基线',
+        '变化',
         '来源事实',
         'Agent 推断',
         '冲突证据',
@@ -286,7 +286,9 @@ test('ResearchReport 目录、四类结论、changes 与孤立 evidence 按真�
     expect(
         await page
             .locator('a[href^="#evidence-"]')
-            .evaluateAll((links) => links.every((link) => !!link.closest('.evidence-appendix'))),
+            .evaluateAll((links) =>
+                links.every((link) => !!link.closest('.evidence-appendix, .report-changes')),
+            ),
     ).toBe(true);
     await expect(page.locator('.evidence-appendix .claim-provenance > summary')).toHaveText(
         '结论依据',
@@ -320,10 +322,10 @@ test('目录原生锚点点击实际聚焦目标、设置 tabindex -1 与 6rem �
 test('空 changes 但存在 baselineRunId 时目录仍显示变化与基线且不虚构变化', async ({ page }) => {
     const state: State = { baselineOnly: true, requests: [] };
     await openReport(page, state);
-    await expect(page.getByRole('link', { name: '变化与基线', exact: true })).toBeVisible();
-    await expect(page.getByRole('heading', { name: '变化与基线', exact: true })).toBeVisible();
-    await expect(page.getByText(baselineRunId, { exact: true })).toBeVisible();
-    await expect(page.getByText('本报告没有提供逐项变化记录。')).toBeVisible();
+    await expect(page.getByRole('link', { name: '变化', exact: true })).toBeVisible();
+    await expect(page.locator('#report-changes-title')).toBeVisible();
+    await expect(page.locator('.report-changes')).not.toContainText(baselineRunId);
+    await expect(page.locator('.change-record')).toHaveCount(0);
 });
 
 test('Brief 与 Research 切换共享同一 DTO、claim 文本与保存引用，路由保持独立 fixture', async ({
@@ -383,7 +385,7 @@ test('无 changes 且无 baseline 仍可达变化结论；保存引用全文字�
         '<script>window.researchExecuted = true</script>\n' + '来源原文完整保留😀。'.repeat(80);
     report.evidence[2]!.quote = longQuote;
     await page.evaluate((value) => window.scovaResearchFixture.setReport(value), report);
-    await expect(page.getByRole('link', { name: '变化与基线', exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: '变化', exact: true })).toBeVisible();
     const orphan = page.locator(`#evidence-${report.evidence[2]!.id}`);
     await orphan
         .locator('xpath=ancestor::details[contains(@class, "evidence-source-group")]')
@@ -395,9 +397,9 @@ test('无 changes 且无 baseline 仍可达变化结论；保存引用全文字�
 });
 
 for (const [outcome, title] of [
-    ['no_important_change', '本次范围内未发现重要变化'],
-    ['baseline', '本次建立比较基线'],
-    ['inconclusive', '变化结论仍不确定'],
+    ['no_important_change', '无重要变化'],
+    ['baseline', '已设为比较起点'],
+    ['inconclusive', '变化未定'],
 ] as const) {
     test(`空 changes/null baseline 的 ${outcome} 与 Brief 呈现完全一致`, async ({ page }) => {
         const state: State = { baselineOnly: false, requests: [] };
@@ -410,7 +412,7 @@ for (const [outcome, title] of [
         report.coverage.exhausted = [];
         report.limitations = [];
         await page.evaluate((value) => window.scovaResearchFixture.setReport(value), report);
-        const link = page.getByRole('link', { name: '变化与基线', exact: true });
+        const link = page.getByRole('link', { name: '变化', exact: true });
         await expect(link).toBeVisible();
         await link.press('Enter');
         await expect(page.locator('#report-changes-title')).toBeFocused();

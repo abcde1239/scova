@@ -1,45 +1,6 @@
 <template>
     <article v-if="run" class="execution-detail layout-stack pb-12">
         <section
-            v-if="terminal"
-            class="detail-section scova-surface report-grid [align-content:start] rounded-3 p-[clamp(1rem,_3%,_2rem)]"
-            aria-labelledby="report-title"
-        >
-            <h2 class="text-[1.25rem] leading-[1.5] m-0" id="report-title">报告结果</h2>
-            <router-link
-                v-if="execution.reportId.value"
-                class="scova-reference report-link keyboard-focus-wide [&&]:(inline-flex flex-wrap gap-2 items-center min-h-11 justify-self-start cursor-pointer)"
-                :to="`/reports/${execution.reportId.value}`"
-                >查看已发布报告<app-icon name="library"
-            /></router-link>
-            <template v-else-if="['succeeded', 'partial'].includes(run.status)">
-                <p>
-                    {{
-                        execution.reports.isError.value
-                            ? '报告入口暂时无法读取，请重试查找。'
-                            : execution.reports.isPending.value
-                              ? '正在查找已发布报告'
-                              : '当前已读取记录中尚未找到此执行的报告。'
-                    }}
-                </p>
-                <action-button
-                    v-if="execution.reports.isError.value"
-                    :busy="execution.reports.isFetching.value"
-                    @click="execution.reports.refetch()"
-                    >重试查找报告</action-button
-                >
-                <div v-else-if="execution.reports.hasNextPage.value" class="scova-pagination">
-                    <action-button
-                        :busy="execution.reports.isFetchingNextPage.value"
-                        @click="execution.reports.fetchNextPage()"
-                        >继续查找报告</action-button
-                    >
-                </div>
-            </template>
-            <p v-else>本次执行未完成报告交付。</p>
-        </section>
-
-        <section
             class="execution-overview scova-surface layout-grid [align-content:start] gap-2.5 rounded-3 break-anywhere p-[clamp(1rem,_3%,_2rem)]"
             aria-labelledby="execution-status"
         >
@@ -73,6 +34,13 @@
             >
                 {{ executionOutcome(run) }}
             </p>
+            <p
+                v-if="terminal && run.coverage?.baseline && !run.coverage.baseline.eligible"
+                class="scova-partial m-0"
+            >
+                未设为比较起点 · {{ baselineReason(run.coverage) }}
+            </p>
+            <research-completion-summary v-if="run.coverage" :coverage="run.coverage" />
             <p class="[.execution-overview_&:is(p)]:m-0" v-if="executionFailure(run)">
                 {{ executionFailure(run) }}
             </p>
@@ -135,6 +103,56 @@
             </details>
         </section>
 
+        <section
+            v-if="terminal"
+            class="detail-section scova-surface report-grid [align-content:start] rounded-3 p-[clamp(1rem,_3%,_2rem)]"
+            aria-labelledby="report-title"
+        >
+            <h2 class="text-[1.25rem] leading-[1.5] m-0" id="report-title">报告结果</h2>
+            <div v-if="execution.reportId.value" class="flex flex-wrap items-center gap-4 min-w-0">
+                <app-icon name="report" />
+                <div class="layout-grid gap-1 [flex:1_1_16rem]">
+                    <p class="font-semibold m-0">{{ resultReport?.title ?? '本次报告' }}</p>
+                    <p class="text-muted m-0" v-if="resultReport">
+                        {{ outputFormatLabels[resultReport.format] }} ·
+                        {{
+                            resultReport.coverage.gaps.length
+                                ? resultReport.coverage.gaps.length + ' 项覆盖说明'
+                                : '无额外覆盖缺口'
+                        }}
+                    </p>
+                </div>
+                <router-link class="navigation-link" :to="`/reports/${execution.reportId.value}`"
+                    >阅读报告<app-icon name="chevron"
+                /></router-link>
+            </div>
+            <template v-else-if="['succeeded', 'partial'].includes(run.status)">
+                <p>
+                    {{
+                        execution.reports.isError.value
+                            ? '报告入口暂时无法读取，请重试查找。'
+                            : execution.reports.isPending.value
+                              ? '正在查找已发布报告'
+                              : '当前已读取记录中尚未找到此执行的报告。'
+                    }}
+                </p>
+                <action-button
+                    v-if="execution.reports.isError.value"
+                    :busy="execution.reports.isFetching.value"
+                    @click="execution.reports.refetch()"
+                    >重试查找报告</action-button
+                >
+                <div v-else-if="execution.reports.hasNextPage.value" class="scova-pagination">
+                    <action-button
+                        :busy="execution.reports.isFetchingNextPage.value"
+                        @click="execution.reports.fetchNextPage()"
+                        >继续查找报告</action-button
+                    >
+                </div>
+            </template>
+            <p v-else>本次执行未完成报告交付。</p>
+        </section>
+
         <execution-logs
             :key="run.id"
             :log="execution.log.value"
@@ -174,7 +192,6 @@
             >
                 <h2 class="text-[1.25rem] leading-[1.5] m-0" id="coverage-title">覆盖与局限</h2>
                 <template v-if="run.coverage">
-                    <research-coverage-summary :metrics="run.coverage.metrics" />
                     <p :class="{ 'scova-partial': run.coverage.completeness === 'partial' }">
                         {{
                             run.coverage.completeness === 'partial'
@@ -317,7 +334,7 @@
 </template>
 
 <script setup lang="ts">
-import { reportDeliveryLabels } from '@scova/models';
+import { outputFormatLabels, reportDeliveryLabels } from '@scova/models';
 import { computed, onScopeDispose, shallowRef } from 'vue';
 import { onlineManager } from '@tanstack/vue-query';
 import { RouterLink } from 'vue-router';
@@ -325,19 +342,37 @@ import ActionButton from '@/components/common/ActionButton.vue';
 import AppIcon from '@/components/common/AppIcon.vue';
 import RunActions from '@/components/run/RunActions.vue';
 import ExecutionLogs from '@/components/run/ExecutionLogs.vue';
-import ResearchCoverageSummary from '@/components/reports/ResearchCoverageSummary.vue';
+import ResearchCompletionSummary from '@/components/reports/ResearchCompletionSummary.vue';
 import {
     executionStates,
     executionOutcome,
     executionFailure,
     type useExecution,
 } from '@/composables/useExecution';
+import { useReport } from '@/composables/useReport';
+import { baselineReason } from '@/utils/report-changes';
 const props = defineProps<{ execution: ReturnType<typeof useExecution> }>();
 // Use the same browser connectivity signal as Query. An existing SSE connection
 // can retain its last open state while the browser pauses new network requests.
 const online = shallowRef(onlineManager.isOnline());
 onScopeDispose(onlineManager.subscribe((value) => (online.value = value)));
 const run = computed(() => props.execution.run.value);
+const listedReport = computed(() =>
+    props.execution.reports.data.value?.pages
+        .flatMap((page) => page.items)
+        .find((report) => report.id === props.execution.reportId.value),
+);
+const result = useReport(() => (listedReport.value ? undefined : props.execution.reportId.value));
+const resultReport = computed(() => {
+    const report = result.report.value;
+    if (
+        report &&
+        report.runId === run.value?.id &&
+        report.taskVersionId === run.value?.taskVersionId
+    )
+        return report;
+    return listedReport.value;
+});
 const terminal = computed(
     () => !!run.value && ['succeeded', 'partial', 'failed', 'canceled'].includes(run.value.status),
 );

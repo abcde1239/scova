@@ -35,17 +35,15 @@ export default defineConfig({
         'theme-surface': 'bg-surface text-default',
         'theme-selected': '[background:var(--scova-selected)] text-primary',
         'internal-link':
-            'no-underline rounded-1 [color:color-mix(in_srgb,_var(--scova-primary)_72%,_var(--scova-text))] hover:[color:var(--scova-primary)] keyboard-focus motion-safe:transition-colors',
-        'scova-link': 'internal-link',
+            'no-underline rounded-1 [color:color-mix(in_srgb,_var(--scova-primary)_72%,_var(--scova-text))] hover:[color:var(--scova-primary)] active:(underline underline-offset-[0.2em]) keyboard-focus motion-safe:transition-colors',
         'external-link':
-            'no-underline rounded-1 text-default hover:text-primary keyboard-focus motion-safe:transition-colors inline-flex items-center gap-1.5 w-fit max-w-full justify-self-start min-h-11 break-anywhere',
+            'no-underline rounded-1 text-default hover:text-primary active:(underline underline-offset-[0.2em]) keyboard-focus motion-safe:transition-colors inline-flex items-center gap-1.5 w-fit max-w-full justify-self-start min-h-11 break-anywhere',
         'navigation-link':
             'internal-link inline-flex items-center gap-1.5 w-fit max-w-full justify-self-start min-h-11 break-anywhere font-medium',
         'title-link':
-            'no-underline rounded-1 text-default hover:text-primary keyboard-focus motion-safe:transition-colors',
+            'no-underline rounded-1 text-default hover:text-primary active:(underline underline-offset-[0.2em]) keyboard-focus motion-safe:transition-colors',
         'reference-link':
             'internal-link inline-flex items-center min-h-11 w-fit max-w-full justify-self-start gap-1.5',
-        'theme-reference': 'scova-link',
         'theme-partial': '[color:var(--scova-partial)]',
         'theme-failure': 'text-danger',
         'text-muted': '[color:var(--scova-muted)]',
@@ -79,7 +77,6 @@ export default defineConfig({
             'focus-visible:[outline:0.125rem_solid_var(--scova-primary)] focus-visible:[outline-offset:-0.125rem]',
         'scova-surface': '[background:var(--scova-surface)] [color:var(--scova-text)]',
         'scova-selected': '[background:var(--scova-selected)] [color:var(--scova-primary)]',
-        'scova-reference': 'navigation-link',
         'scova-partial': '[color:var(--scova-partial)]',
         'empty-copy':
             '[margin:0] [padding-block:1.5rem] [color:var(--scova-muted)] [font-size:0.9375rem]',

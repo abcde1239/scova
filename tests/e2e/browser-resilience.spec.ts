@@ -49,7 +49,7 @@ test('关闭网页与Worker停止分开验证：暂停保留在途Run，重开�
     await owner.page.goto(`/runs/${run.id}`);
     await expect(owner.page.locator('#execution-status')).toHaveText('已生成结果');
     const delivered = await waitForDelivery(environment, owner, run);
-    await expect(owner.page.getByRole('link', { name: '查看已发布报告' })).toHaveAttribute(
+    await expect(owner.page.getByRole('link', { name: '阅读报告' })).toHaveAttribute(
         'href',
         `/reports/${delivered.report.id}`,
     );

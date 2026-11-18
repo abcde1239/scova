@@ -160,7 +160,7 @@ test('real SFCs: same DTO has identical claims and ordered end-only provenance',
             await article(page)
                 .locator('a[href^="#evidence-"]')
                 .evaluateAll((links) =>
-                    links.every((link) => !!link.closest('.evidence-appendix')),
+                    links.every((link) => !!link.closest('.evidence-appendix, .report-changes')),
                 ),
         ).toBe(true);
         expect(
@@ -187,7 +187,12 @@ test('real SFCs: same DTO has identical claims and ordered end-only provenance',
     const changesOnly = report.evidence.filter((entry) => !direct.has(entry.id));
     expect(changesOnly).toHaveLength(1);
     expect(report.changes[0]!.newEvidenceIds).toContain(changesOnly[0]!.id);
-    await expect(article(page).locator(`[id$="-evidence-${changesOnly[0]!.id}"]`)).toHaveCount(0);
+    await expect(
+        article(page).locator(`.claim-provenance a[href="#evidence-${changesOnly[0]!.id}"]`),
+    ).toHaveCount(0);
+    await expect(
+        article(page).locator(`.report-changes a[href="#evidence-${changesOnly[0]!.id}"]`),
+    ).toHaveCount(1);
     const equalText = report.claims.filter((entry) => entry.kind === 'inference');
     expect(equalText.map((entry) => entry.text)).toEqual([equalText[0]!.text, equalText[0]!.text]);
     expect(new Set(equalText.map((entry) => entry.id)).size).toBe(2);

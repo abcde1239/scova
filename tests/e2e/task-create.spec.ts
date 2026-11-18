@@ -109,7 +109,7 @@ test('资料收集方式保存到配置且任务显示已启用', async ({ page 
     const calls = await samples(page);
     await page.goto('/tasks/new');
     await fillMain(page);
-    await chooseOption(page, '任务方式', '资料收集：整理来源信息');
+    await page.getByRole('radio', { name: /^资料采集/ }).check();
     await chooseOption(page, '输出形式', '主题清单');
     await page.getByRole('button', { name: '确认保存任务', exact: true }).click();
     await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();

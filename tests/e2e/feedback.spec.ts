@@ -1,8 +1,8 @@
 import { logoutFromAccount, expectAccountReady } from './support/account-menu.ts';
 import { openReportTool } from './support/report-tools.ts';
 import { expect, test, type BrowserContext, type Page, type TestInfo } from '@playwright/test';
-import type { Feedback, FeedbackInput } from '../../packages/models/src/feedback.ts';
-import type { Report } from '../../packages/models/src/reports.ts';
+import type { Feedback, FeedbackInput } from '../../packages/models/src/task/feedback.ts';
+import type { Report } from '../../packages/models/src/report/schema.ts';
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const instant = '2026-10-31T02:00:00Z';

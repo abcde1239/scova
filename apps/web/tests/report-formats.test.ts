@@ -732,7 +732,7 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
                 document
                     .querySelector('.report-document')!
                     .compareDocumentPosition(document.querySelector('#report-changes-title')!) &
-                    Node.DOCUMENT_POSITION_FOLLOWING,
+                    Node.DOCUMENT_POSITION_PRECEDING,
             ).toBeTruthy();
             if (format === 'research_report') {
                 const links = [...document.querySelectorAll('.report-directory a')];
@@ -1380,48 +1380,33 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
     );
 
     it.each(formats)(
-        '%s preserves all seven change categories, values, reasons and distinct evidence sides',
+        '%s shows each meaningful change once with nearby authorized citations',
         async (format) => {
             const report = fixture();
             const document = await render(format, report);
-            const rows =
-                format === 'comparison'
-                    ? [...document.querySelectorAll('.comparison-table tbody > tr')]
-                    : [...document.querySelectorAll('.change-record')];
-            expect(rows).toHaveLength(report.changes.length);
-            for (const [index, change] of report.changes.entries()) {
-                const row = rows[index]!;
+            const visible = report.changes.filter((change) => change.kind !== 'baseline');
+            expect(document.querySelectorAll('.change-record')).toHaveLength(visible.length);
+            expect(document.querySelectorAll('.change-provenance, .comparison-table')).toHaveLength(
+                0,
+            );
+            for (const change of visible) {
+                const row = document.querySelector(`[data-change-id="${change.id}"]`)!;
                 expect(row.textContent).toContain(change.factKey);
                 expect(row.textContent).toContain(change.reason);
-                expect(
-                    text(
-                        row,
-                        format === 'comparison'
-                            ? '.old-side .original-text'
-                            : '.old-side .change-value',
-                    ),
-                ).toContain(change.oldValue ?? '未提供旧值');
-                expect(
-                    text(
-                        row,
-                        format === 'comparison'
-                            ? '.new-side .original-text'
-                            : '.new-side .change-value',
-                    ),
-                ).toContain(change.newValue ?? '未提供新值');
-                expect(
-                    [...document.querySelectorAll(`#change-support-${change.id} .old-side a`)].map(
-                        (entry) => entry.getAttribute('href'),
-                    ),
-                ).toEqual(change.oldEvidenceIds.map((value) => `#evidence-${value}`));
-                expect(
-                    [...document.querySelectorAll(`#change-support-${change.id} .new-side a`)].map(
-                        (entry) => entry.getAttribute('href'),
-                    ),
-                ).toEqual(change.newEvidenceIds.map((value) => `#evidence-${value}`));
-                expect(row.querySelector('.evidence-link')).toBeNull();
-                if (change.important) expect(row.textContent).toContain('重要性标记：重要');
+                if (change.oldValue !== null) expect(text(row, '.old-value')).toBe(change.oldValue);
+                expect(text(row, '.new-value')).toBe(change.newValue ?? '未提供新值');
+                for (const side of ['old', 'new'] as const)
+                    expect(
+                        [...row.querySelectorAll(`a[id*="-${side}-"]`)].map((link) =>
+                            link.getAttribute('href'),
+                        ),
+                    ).toEqual(
+                        change[side === 'old' ? 'oldEvidenceIds' : 'newEvidenceIds'].map(
+                            (id) => `#evidence-${id}`,
+                        ),
+                    );
             }
+            expect(document.querySelector('details > summary')?.textContent).toContain('其他');
         },
     );
 
@@ -1501,9 +1486,9 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
         '%s preserves authoritative empty-change outcomes with or without a baseline',
         async (format) => {
             for (const [outcome, expected] of [
-                ['baseline', '本次建立比较基线'],
-                ['no_important_change', '本次范围内未发现重要变化'],
-                ['inconclusive', '变化结论仍不确定'],
+                ['baseline', '已设为比较起点'],
+                ['no_important_change', '无重要变化'],
+                ['inconclusive', '变化未定'],
             ] as const) {
                 for (const baselineRunId of [null, id(5)]) {
                     const report = parseContract(ReportSchema, {
@@ -1522,9 +1507,13 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
                     });
                     const document = await render(format, report);
                     expect(text(document, '.comparison-summary')).toContain(expected);
-                    expect(document.body.textContent).toContain(
+                    expect(document.querySelector('.report-changes')?.textContent).not.toContain(
                         baselineRunId ?? '报告未提供关联的基线执行。',
                     );
+                    if (baselineRunId)
+                        expect(
+                            document.querySelector('.report-changes a')?.getAttribute('href'),
+                        ).toBe(`/runs/${baselineRunId}`);
                     expect(
                         document.querySelectorAll('.change-record, .comparison-table tbody > tr'),
                     ).toHaveLength(0);
@@ -1545,7 +1534,7 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
                 baselineRunId: null,
             });
             const document = await render(format, partial);
-            expect(text(document, '.comparison-summary')).toContain('不能据此认定没有重要变化');
+            expect(text(document, '.comparison-summary')).toContain('本次查阅不完整');
             expect(text(document, '.scope-status')).toBe('查看来源覆盖说明');
         },
     );
@@ -1628,7 +1617,7 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
                 ).toBeNull();
                 expect(
                     document.querySelector(
-                        '.report-content .report-baseline #report-changes-title',
+                        '.report-content > .artifact-scroll > .report-changes #report-changes-title',
                     ),
                 ).not.toBeNull();
                 expect(router.currentRoute.value.fullPath).toBe(address);

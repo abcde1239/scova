@@ -36,22 +36,29 @@
                     :key="run.id"
                     class="history-entry layout-grid gap-3 break-anywhere [.history-entry_+_&.history-entry]:([border-top:0.0625rem_solid_var(--scova-border)] pt-6)"
                 >
-                    <router-link
-                        class="inline-flex items-center justify-self-start min-h-11 scova-link cursor-pointer keyboard-focus-wide"
-                        :to="`/runs/${run.id}`"
-                        >{{ executionTitle(run) }} · 查看执行</router-link
-                    >
-                    <p class="[.run-history_>_&:is(p)]:text-muted">
-                        {{ run.mode === 'demo' ? '演示执行' : '任务执行' }}
-                    </p>
-                    <p class="[.run-history_>_&:is(p)]:text-muted">
-                        排队于
+                    <div class="flex flex-wrap items-center justify-between gap-x-6">
+                        <router-link
+                            class="title-link inline-flex items-center min-h-11"
+                            :class="{
+                                'scova-partial': run.status === 'partial',
+                                'scova-failure': run.status === 'failed',
+                            }"
+                            :to="`/runs/${run.id}`"
+                            >{{ executionTitle(run) }}</router-link
+                        >
+                        <router-link
+                            class="navigation-link"
+                            :aria-label="`查看${localTaskTime(run.queuedAt, timezone)}的执行`"
+                            :to="`/runs/${run.id}`"
+                            >查看<app-icon name="chevron"
+                        /></router-link>
+                    </div>
+                    <p class="text-muted m-0">
+                        <span>{{ run.mode === 'demo' ? '演示执行' : '任务执行' }}</span> ·
                         <time :datetime="run.queuedAt">{{
                             localTaskTime(run.queuedAt, timezone)
                         }}</time>
-                    </p>
-                    <p class="[.run-history_>_&:is(p)]:text-muted">
-                        固定配置版本：{{ run.taskVersionId }}
+                        · <span>版本 {{ run.taskVersionId.slice(0, 8) }}</span>
                     </p>
                 </li>
             </ol>
@@ -84,6 +91,7 @@ import { RouterLink } from 'vue-router';
 import { useTaskRunHistory } from '@/composables/useTaskRunHistory';
 import { executionTitle } from '@/composables/useExecution';
 import { localTaskTime } from '@/composables/useTasks';
+import AppIcon from '@/components/common/AppIcon.vue';
 import ActionButton from '@/components/common/ActionButton.vue';
 import StatePanel from '@/components/common/StatePanel.vue';
 const props = defineProps<{ taskId: string }>();

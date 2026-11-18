@@ -2,6 +2,7 @@
     <report-frame
         :report="report"
         :show-sources="showSources"
+        :show-changes="showChanges"
         format="list"
         class="report-topic-list"
     >
@@ -44,7 +45,6 @@
                 </li>
             </ul>
         </section>
-        <report-changes v-if="showChanges" :report="report" />
     </report-frame>
 </template>
 
@@ -53,7 +53,6 @@ import { computed } from 'vue';
 import type { Report } from '@scova/models';
 import ReportFrame from '@/components/reports/ReportFrame.vue';
 import ReportClaim from '@/components/reports/ReportClaim.vue';
-import ReportChanges from '@/components/reports/ReportChanges.vue';
 import ReportFormatBanner from '@/components/reports/ReportFormatBanner.vue';
 import { reportSections } from '@/composables/useReport';
 import { reportCardWidth } from '@/utils/report-layout';

@@ -137,6 +137,16 @@
                 </ul>
                 <dl class="draft-preview grid gap-4 m-0">
                     <div>
+                        <dt class="text-muted">任务类型与规则</dt>
+                        <dd class="mt-1 mb-0 mx-0">
+                            {{
+                                draft.result.value.config.researchMode === 'collection'
+                                    ? '资料采集：仅收录窗口内、有直接出处的值，不使用模型补答。'
+                                    : '分析研究：综合证据与推论，允许带标记的模型回答，日期窗口可选。'
+                            }}
+                        </dd>
+                    </div>
+                    <div>
                         <dt class="text-muted">建议标题</dt>
                         <dd class="mt-1 mb-0 mx-0">{{ draft.result.value.config.title }}</dd>
                     </div>

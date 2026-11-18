@@ -24,7 +24,7 @@ defineProps<{ register?: boolean }>();
 }
 .auth-switch a {
     @apply inline-flex items-center justify-center gap-1.5 min-w-11 min-h-11 max-w-full pt-1.5 pr-2.5
-        pb-1.5 pl-2.5 rounded-2 scova-link break-anywhere cursor-pointer;
+        pb-1.5 pl-2.5 rounded-2 internal-link break-anywhere cursor-pointer;
 }
 @media (max-width: 22rem) {
     .auth-switch a {

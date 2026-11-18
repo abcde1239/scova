@@ -49,7 +49,7 @@
 
 完全阻断字体请求的 320 宽度样本实际回退为 Microsoft YaHei / STSong，中文、英文、数字仍可读，按钮可点击。390 宽度以 300ms 延迟、64 KiB/s 下载及每个字体额外 1.5s 延迟验证回退到加载完成的切换，长标题与按钮无重叠、无整页溢出。所有样本保留默认根字号，使用弹性相对尺寸。以上为本机 Chromium 的受控字体交付测试，不代表真实业务页面、实体移动设备、所有操作系统或完整可访问性验收。
 
-运行 `vp test apps/web/tests/fonts.test.ts apps/web/tests/reading-typography.test.ts` 核对发行许可保留、字重、中文分片、有效 WOFF2、资产预算和本地偏好恢复/存储故障。共享排版可在外观页及已接入的任务、收件箱/资料库、报告页面检查；本项样本不代替业务页面的完整验收。修改字体或页面内容后在浏览器禁用缓存重新检查：
+运行 `vp test apps/web/tests/reading-typography.test.ts` 核对本地偏好恢复和存储故障；字体实际加载、回退和请求预算由 `tests/e2e/visual-foundation.spec.ts` 验证，运行入口见[浏览器验证](browser-testing.md)。升级字体依赖时核对 `apps/web/public/fonts/LICENSES.txt` 中的发行许可。共享排版可在外观页及已接入的任务、收件箱/资料库、报告页面检查；本项样本不代替业务页面的完整验收。修改字体或页面内容后在浏览器禁用缓存重新检查：
 
 1. Network 仅有同源字体；记录首屏请求和字节，打开阅读前不出现 Noto Serif。
 2. Rendered Fonts 检查实际中文及 Latin 字形，分别验证 400/500/600。

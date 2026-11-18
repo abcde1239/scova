@@ -2,8 +2,8 @@
     <header class="workspace-heading scova-interface">
         <div>
             <p class="workspace-eyebrow">
-                <router-link to="/inbox">收件箱</router-link><span aria-hidden="true"> / </span
-                >{{ report?.title ?? '报告' }}
+                <router-link :to="inboxDestination">收件箱</router-link
+                ><span aria-hidden="true"> / </span>{{ report?.title ?? '报告' }}
             </p>
             <p v-if="report" class="workspace-description">
                 <time :datetime="report.publishedAt">{{
@@ -14,10 +14,7 @@
             </p>
         </div>
         <nav class="report-tools" aria-label="报告阅读工具">
-            <navigation-button
-                v-if="returnTo"
-                :to="{ path: returnTo.path, state: { inboxRestore: { ...returnTo } } }"
-            >
+            <navigation-button v-if="returnTo" :to="inboxDestination">
                 <app-icon name="back" />返回收件箱
             </navigation-button>
             <navigation-button to="/account/appearance" icon="appearance" label="阅读外观"
@@ -39,10 +36,16 @@
 </template>
 <script setup lang="ts">
 import type { Report } from '@scova/models';
+import { computed } from 'vue';
 import type { inboxReturn } from '@/composables/useInbox';
 import NavigationButton from '@/components/common/NavigationButton.vue';
 import AppIcon from '@/components/common/AppIcon.vue';
-defineProps<{ report?: Report; returnTo?: ReturnType<typeof inboxReturn> }>();
+const props = defineProps<{ report?: Report; returnTo?: ReturnType<typeof inboxReturn> }>();
+const inboxDestination = computed(() =>
+    props.returnTo
+        ? { path: props.returnTo.path, state: { inboxRestore: { ...props.returnTo } } }
+        : '/inbox',
+);
 const emit = defineEmits<{ openArtifact: [] }>();
 </script>
 <style scoped>
@@ -62,7 +65,7 @@ const emit = defineEmits<{ openArtifact: [] }>();
     @apply flex flex-wrap gap-2 justify-self-start max-w-full p-0;
 }
 a {
-    @apply inline-flex items-center gap-2 min-h-11 scova-link cursor-pointer break-anywhere;
+    @apply inline-flex items-center gap-2 min-h-11 internal-link cursor-pointer break-anywhere;
 }
 a:focus-visible {
     @apply [outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.25rem];

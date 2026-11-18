@@ -49,16 +49,16 @@
             <p v-if="phase === 'uncertain' || phase === 'blocked'" role="status">
                 合并结果尚未确认，已保留原请求。{{
                     phase === 'blocked'
-                        ? '请求与保存记录不一致，请查看任务执行。'
+                        ? '请求与保存记录不一致，请返回任务摘要查看。'
                         : '使用同一请求确认不会重复建立执行。'
                 }}
             </p>
             <router-link
                 v-if="report && ['rejected', 'blocked'].includes(phase)"
-                class="scova-link"
+                class="navigation-link"
                 :to="`/tasks/${report.taskId}`"
-                >查看任务执行</router-link
-            >
+                >返回任务摘要<app-icon name="chevron"
+            /></router-link>
             <footer
                 class="flex flex-wrap justify-between items-center gap-2 [border-top:0.0625rem_solid_var(--scova-border)] pt-3"
             >
@@ -102,6 +102,7 @@
 </template>
 
 <script setup lang="ts">
+import AppIcon from '@/components/common/AppIcon.vue';
 import { computed, nextTick, onScopeDispose, ref, shallowRef, watch } from 'vue';
 import { useQuery } from '@tanstack/vue-query';
 import type { Report, ReportConversation, OutputFormat, Run } from '@scova/models';

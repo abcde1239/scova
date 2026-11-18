@@ -2,6 +2,7 @@
     <report-frame
         :report="report"
         :show-sources="showSources"
+        :show-changes="showChanges"
         summary-title="简报概述"
         class="report-brief"
     >
@@ -24,7 +25,6 @@
                 :claim="claim"
             />
         </section>
-        <report-changes v-if="showChanges" :report="report" />
     </report-frame>
 </template>
 
@@ -33,7 +33,6 @@ import { computed } from 'vue';
 import type { Report } from '@scova/models';
 import ReportFrame from '@/components/reports/ReportFrame.vue';
 import ReportClaim from '@/components/reports/ReportClaim.vue';
-import ReportChanges from '@/components/reports/ReportChanges.vue';
 import { reportSections } from '@/composables/useReport';
 const props = withDefaults(
     defineProps<{ report: Report; showChanges?: boolean; showSources?: boolean }>(),

@@ -19,7 +19,7 @@
                 <p v-if="delivery" class="scova-interface report-delivery">
                     <a
                         v-if="organized"
-                        class="scova-link inline-flex items-center min-h-11"
+                        class="internal-link inline-flex items-center min-h-11"
                         href="#coverage-title"
                         @click="openCoverage"
                         >{{
@@ -42,9 +42,11 @@
                     <time :datetime="report.publishedAt">{{ published }}</time>
                 </p>
             </div>
-            <research-coverage-summary :metrics="report.coverage.metrics" />
+            <research-completion-summary :coverage="report.coverage" />
         </header>
 
+        <report-changes v-if="showChanges" :report="report" />
+        <report-date-screening :coverage="report.coverage" />
         <slot name="format-notice" />
         <section
             v-if="!replacesSummary"
@@ -74,8 +76,9 @@
             </p>
         </section>
         <slot v-if="!document || structured" name="after-summary" />
+        <collection-results v-if="collectionList" :report="report" />
         <report-document
-            v-if="document && !structured"
+            v-if="!collectionList && document && !structured"
             :report="report"
             :document="document"
             :format="format"
@@ -83,24 +86,24 @@
             <template #navigation><slot name="after-summary" /></template>
         </report-document>
         <report-document
-            v-if="structured && split.lead"
+            v-if="!collectionList && structured && split.lead"
             :report="report"
             :document="split.lead"
             :format="format"
         />
         <report-answers
-            v-if="report.coverage.reportValue"
+            v-if="!collectionList && report.coverage.reportValue"
             :report="report"
             :format="format"
             :document="document"
         />
         <report-document
-            v-if="structured && split.tail"
+            v-if="!collectionList && structured && split.tail"
             :report="report"
             :document="split.tail"
             :format="format"
         />
-        <slot />
+        <slot v-if="!collectionList" />
         <aside
             v-if="integrity.partial && !organized"
             class="report-warning scova-interface"
@@ -190,13 +193,16 @@
 </template>
 
 <script setup lang="ts">
+import ReportChanges from '@/components/reports/ReportChanges.vue';
+import ReportDateScreening from '@/components/reports/ReportDateScreening.vue';
+import CollectionResults from '@/components/reports/CollectionResults.vue';
 import { computed, ref } from 'vue';
 import { classifyReportDelivery, reportDeliveryLabels, type Report } from '@scova/models';
 import { reportIntegrity } from '@/composables/useReport';
 import { useReadingTypography } from '@/composables/useReadingTypography';
 import ReportSources from '@/components/reports/ReportSources.vue';
 import ModelAnswerTag from '@/components/reports/ModelAnswerTag.vue';
-import ResearchCoverageSummary from '@/components/reports/ResearchCoverageSummary.vue';
+import ResearchCompletionSummary from '@/components/reports/ResearchCompletionSummary.vue';
 import ReportAnswers from '@/components/reports/ReportAnswers.vue';
 import ReportDocument from '@/components/reports/ReportDocument.vue';
 import {
@@ -211,14 +217,19 @@ const props = withDefaults(
         summaryTitle?: string;
         format?: Report['format'];
         showSources?: boolean;
+        showChanges?: boolean;
     }>(),
     {
         summaryTitle: '报告概述',
         format: 'brief',
         showSources: true,
+        showChanges: true,
     },
 );
 const { reading } = useReadingTypography();
+const collectionList = computed(
+    () => props.format === 'list' && !!props.report.coverage.dateScreening,
+);
 const formatNames = {
     brief: '简报',
     list: '主题清单',
@@ -327,6 +338,10 @@ function revealCitation(event: MouseEvent) {
     const root = event.currentTarget;
     const link = event.target instanceof Element ? event.target.closest('a[href^="#"]') : null;
     const href = link?.getAttribute('href');
+    if (href === '#coverage-title' && !event.defaultPrevented) {
+        openCoverage(event);
+        return;
+    }
     if (
         !(root instanceof HTMLElement) ||
         !href ||
@@ -373,16 +388,16 @@ const budgetLabels = {
     @apply layout-grid gap-2.5;
 }
 .answer-gaps a {
-    @apply scova-link;
+    @apply internal-link;
 }
 .answer-gap-overview {
     @apply flex flex-wrap items-baseline gap-[0.25rem_0.75rem] text-muted text-[0.875rem];
 }
 .answer-gap-overview a {
-    @apply inline-flex items-center min-h-11 max-w-full scova-link;
+    @apply inline-flex items-center min-h-11 max-w-full internal-link;
 }
 .scope-status {
-    @apply inline-flex items-center min-h-11 justify-self-start scova-link;
+    @apply inline-flex items-center min-h-11 justify-self-start internal-link;
 }
 h2,
 h3,

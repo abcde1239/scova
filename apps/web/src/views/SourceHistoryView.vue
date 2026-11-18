@@ -11,12 +11,12 @@
             aria-label="来源历史导航"
         >
             <router-link
-                class="inline-flex items-center justify-self-start min-h-11 max-w-full scova-link cursor-pointer keyboard-focus-wide"
+                class="inline-flex items-center justify-self-start min-h-11 max-w-full internal-link cursor-pointer keyboard-focus-wide"
                 to="/library"
                 >返回资料库</router-link
             >
             <router-link
-                class="inline-flex items-center justify-self-start min-h-11 max-w-full scova-link cursor-pointer keyboard-focus-wide"
+                class="inline-flex items-center justify-self-start min-h-11 max-w-full internal-link cursor-pointer keyboard-focus-wide"
                 v-if="origin"
                 :to="origin.path"
                 >返回刚才的报告</router-link
@@ -67,7 +67,7 @@
                         :aria-current="
                             item.id.toLowerCase() === state.snapshotId.value ? 'page' : undefined
                         "
-                        class="scova-content-title inline-flex items-center justify-self-start min-h-11 max-w-full scova-link cursor-pointer keyboard-focus-wide [&&]:text-[1.25rem]"
+                        class="scova-content-title inline-flex items-center justify-self-start min-h-11 max-w-full internal-link cursor-pointer keyboard-focus-wide [&&]:text-[1.25rem]"
                         @click="selectionFocus = true"
                         >{{ item.title }}</router-link
                     >
@@ -93,7 +93,7 @@
                     </dl>
                     <router-link
                         :to="`/runs/${item.runId}`"
-                        class="scova-interface inline-flex items-center justify-self-start min-h-11 max-w-full scova-link cursor-pointer keyboard-focus-wide"
+                        class="scova-interface inline-flex items-center justify-self-start min-h-11 max-w-full internal-link cursor-pointer keyboard-focus-wide"
                         >查看该次执行</router-link
                     >
                 </li>

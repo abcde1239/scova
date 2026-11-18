@@ -172,7 +172,7 @@ describe('report changes presentation', () => {
         });
         expect(changeSummary(report)).toMatchObject({
             state: 'no_important_change',
-            title: '本次范围内未发现重要变化',
+            title: '无重要变化',
         });
         expect(changeSummary({ ...report, outcome: 'new_findings' }).state).toBe('new_findings');
         expect(changeSummary({ ...report, changes: [] }).state).toBe('no_important_change');
@@ -184,7 +184,7 @@ describe('report changes presentation', () => {
             changes: [change('duplicate')],
         });
         expect(changeSummary(report).state).toBe('inconclusive');
-        expect(changeSummary(report).title).toBe('变化结论仍不确定');
+        expect(changeSummary(report).title).toBe('变化未定');
     });
     it('keeps partial comparison uncertain and does not claim null-baseline partial established a baseline', () => {
         const report = parseContract(ReportSchema, {
@@ -325,5 +325,30 @@ describe('report changes presentation', () => {
             baseline: report.baselineRunId,
             version: report.taskVersionId,
         }).toEqual(snapshot);
+    });
+});
+
+describe('baseline eligibility presentation', () => {
+    it('separates a completed model answer from baseline eligibility', () => {
+        const report = fixture();
+        report.baselineRunId = null;
+        report.outcome = 'inconclusive';
+        report.coverage.baseline = {
+            version: 1,
+            eligible: false,
+            reason: 'external_incomplete',
+            modelOnlyFields: 5,
+        };
+        expect(changeSummary(report)).toMatchObject({
+            title: '未设为比较起点',
+            message: '5 个字段仅有模型回答',
+        });
+        report.coverage.baseline = {
+            version: 1,
+            eligible: true,
+            reason: 'eligible',
+            modelOnlyFields: 0,
+        };
+        expect(changeSummary(report).title).toBe('已设为比较起点');
     });
 });

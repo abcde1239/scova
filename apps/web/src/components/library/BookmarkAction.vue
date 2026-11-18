@@ -10,7 +10,7 @@
                 <app-icon name="retry" />核对收藏状态
             </action-button>
             <router-link
-                class="inline-flex items-center gap-2 min-h-11 scova-link cursor-pointer keyboard-focus-wide"
+                class="inline-flex items-center gap-2 min-h-11 internal-link cursor-pointer keyboard-focus-wide"
                 v-if="reportId"
                 :to="libraryLink"
                 ><app-icon name="library" />查看收藏</router-link

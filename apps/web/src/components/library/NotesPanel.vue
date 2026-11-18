@@ -118,7 +118,7 @@
                             >编辑笔记</action-button
                         >
                         <router-link
-                            class="inline-flex items-center min-h-11 scova-link cursor-pointer keyboard-focus-wide"
+                            class="inline-flex items-center min-h-11 internal-link cursor-pointer keyboard-focus-wide"
                             v-if="note.target.kind === 'report'"
                             :to="`/reports/${note.target.id}`"
                             >打开关联报告</router-link

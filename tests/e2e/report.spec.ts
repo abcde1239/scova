@@ -217,13 +217,13 @@ test('宽屏左侧对话右侧成果、窄屏对话在前，基线在成果内�
     expect(content!.x).toBeGreaterThanOrEqual(companion!.x + companion!.width);
     expect(Math.abs(companion!.y - content!.y)).toBeLessThan(1);
     expect(content!.width).toBeGreaterThan(companion!.width);
-    const baseline = await page.locator('.report-baseline').boundingBox();
-    const reportDocument = await page.locator('.report-document').boundingBox();
+    const baseline = await page.locator('.report-changes').boundingBox();
+    const reportDocument = await page.locator('.artifact-document').boundingBox();
     expect(baseline!.x).toBeGreaterThan(content!.x);
     expect(baseline!.x + baseline!.width).toBeLessThan(content!.x + content!.width);
-    expect(baseline!.y).toBeGreaterThanOrEqual(reportDocument!.y + reportDocument!.height);
-    await expect(page.locator('.report-document .report-changes')).toHaveCount(0);
-    await expect(page.locator('.report-content .report-baseline')).toBeVisible();
+    expect(baseline!.y + baseline!.height).toBeLessThanOrEqual(reportDocument!.y);
+    await expect(page.locator('.artifact-document .report-changes')).toHaveCount(0);
+    await expect(page.locator('.report-content .report-changes')).toBeVisible();
     await expect(page.locator('#report-conversation')).toBeVisible();
     await expect(page.getByRole('link', { name: '执行详情', exact: true })).toHaveAttribute(
         'href',
@@ -279,7 +279,7 @@ test('成果关闭恢复与完整阅读保留布局、问题和笔记草稿，�
     const citation = page.locator('.evidence-appendix .evidence-source-group').first();
     await citation.locator(':scope > summary').click();
     await expect(citation.locator('blockquote').first()).toBeVisible();
-    const reportDocument = await page.locator('.report-document').elementHandle();
+    const reportDocument = await page.locator('.artifact-document').elementHandle();
     await close.click();
     await expect(panel).toBeHidden();
     await expect(card).toBeFocused();
@@ -300,7 +300,7 @@ test('成果关闭恢复与完整阅读保留布局、问题和笔记草稿，�
     const focus = page.getByRole('button', { name: '完整阅读', exact: true });
     await focus.click();
     await expect(page.locator('.report-companion')).toBeHidden();
-    await expect(page.locator('.report-baseline')).toBeVisible();
+    await expect(page.locator('.report-changes')).toBeVisible();
     await expect(panel).toBeVisible();
     await expect(page.locator('#report-title')).toBeFocused();
     await expect(citation.locator('blockquote').first()).toBeVisible();
@@ -668,10 +668,10 @@ for (const width of [320, 390, 1024, 1440]) {
                     await expect(answers).toContainText('仅限当前保存版本');
                     await expect(
                         page.locator(
-                            '.report-document .report-changes, .report-document .comparison-context',
+                            '.artifact-document .report-changes, .artifact-document .comparison-context',
                         ),
                     ).toHaveCount(0);
-                    await expect(page.locator('.report-baseline')).toBeVisible();
+                    await expect(page.locator('.report-changes')).toBeVisible();
                     await expect(answers.locator('table')).toHaveCount(0);
                     if (format === 'comparison' || format === 'list')
                         await expect(answers.locator('.legacy-notice')).toContainText(
@@ -880,11 +880,11 @@ test('仅展示已保存的两份独立成果，阅读切换与刷新不会生�
     await expect(nav.getByRole('button', { name: '主题清单', exact: true })).toHaveCount(0);
     await expect(nav.getByRole('button', { name: '研究报告', exact: true })).toHaveCount(0);
     await expect(page.getByLabel('报告形式', { exact: true })).toHaveCount(0);
-    const claims = page.locator('.report-document .claim-text');
+    const claims = page.locator('.artifact-document .claim-text');
     await expect(claims).toHaveText([saved.claims[0]!.text]);
     await generatedFormat(page, 'comparison').click();
     await expect(claims).toHaveText([saved.claims[1]!.text]);
-    await expect(page.locator('.report-document .report-comparison')).toBeVisible();
+    await expect(page.locator('.artifact-document .report-comparison')).toBeVisible();
     await expect(page.locator('.evidence-appendix .evidence-entry')).toHaveCount(1);
     await page.reload();
     await expect(generatedFormat(page, 'brief')).toHaveAttribute('aria-pressed', 'true');
@@ -1284,14 +1284,16 @@ for (const width of [320, 1440]) {
 async function assertFormatContent(page: Page, expected: Report) {
     const frame = page.locator('.report-frame');
     await expect(frame).toHaveCount(1);
-    await expect(page.locator('.report-document .evidence-appendix')).toHaveCount(0);
+    await expect(page.locator('.artifact-document .evidence-appendix')).toHaveCount(0);
     await expect(page.locator('.evidence-appendix')).toHaveCount(1);
     await expect(frame.locator('.claim a,.claim details')).toHaveCount(0);
-    await expect(page.locator('.report-baseline .evidence-link')).toHaveCount(0);
+    await expect(page.locator('.report-changes .evidence-link')).toHaveCount(0);
     expect(
         await page
             .locator('a[href^="#evidence-"]')
-            .evaluateAll((links) => links.every((link) => !!link.closest('.evidence-appendix'))),
+            .evaluateAll((links) =>
+                links.every((link) => !!link.closest('.evidence-appendix, .report-changes')),
+            ),
     ).toBe(true);
     expect(
         await page
@@ -1300,7 +1302,7 @@ async function assertFormatContent(page: Page, expected: Report) {
                 (appendix) =>
                     !!(
                         document
-                            .querySelector('.report-baseline')!
+                            .querySelector('.report-changes')!
                             .compareDocumentPosition(appendix) & Node.DOCUMENT_POSITION_FOLLOWING
                     ),
             ),
@@ -1343,25 +1345,22 @@ async function assertFormatContent(page: Page, expected: Report) {
             })),
         ),
     ).toEqual(expected.evidence.map((entry) => ({ id: entry.id, quote: entry.quote })));
-    for (const entry of expected.changes) {
+    for (const entry of expected.changes.filter((entry) => entry.kind !== 'baseline')) {
         const row = page.locator(
-            `.report-baseline .change-record[aria-labelledby="change-${entry.id}"]`,
+            `.report-changes .change-record[aria-labelledby="change-${entry.id}"]`,
         );
         await expect(row).toHaveCount(1);
         await expect(row).toContainText(entry.factKey);
         await expect(row).toContainText(entry.reason);
-        for (const side of ['old', 'new'] as const) {
-            const section = row.locator(`.${side}-side`);
-            await expect(section).toContainText(
-                entry[`${side}Value`] ?? `未提供${side === 'old' ? '旧' : '新'}值`,
-            );
+        if (entry.oldValue !== null)
+            await expect(row.locator('.old-value')).toHaveText(entry.oldValue);
+        await expect(row.locator('.new-value')).toHaveText(entry.newValue ?? '未提供新值');
+        for (const side of ['old', 'new'] as const)
             expect(
-                await page
-                    .locator(`.change-provenance [data-change-id="${entry.id}"] .${side}-side`)
-                    .locator('.evidence-link')
+                await row
+                    .locator(`a[id*="-${side}-"]`)
                     .evaluateAll((links) => links.map((link) => link.getAttribute('href'))),
-            ).toEqual(entry[`${side}EvidenceIds`].map((evidenceId) => `#evidence-${evidenceId}`));
-        }
+            ).toEqual(entry[`${side}EvidenceIds`].map((id) => `#evidence-${id}`));
     }
     expect(
         await page.evaluate(() => {

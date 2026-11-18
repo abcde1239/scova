@@ -294,7 +294,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         const success = page
             .locator('.scova-notifications .n-notification')
             .filter({ hasText: '任务修改已保存' });
-        await expect(success).toContainText('下一次完整执行将建立新基线');
+        await expect(success).toContainText('下次执行会重新设定比较起点');
         await expect(success).not.toBeFocused();
         await expect(page).toHaveURL(new RegExp(`${editPath}$`));
         const attempts = patches(calls);

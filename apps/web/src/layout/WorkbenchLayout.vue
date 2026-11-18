@@ -108,7 +108,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, provide, shallowRef } from 'vue';
+import { breadcrumbContext, type BreadcrumbContext } from '@/layout/breadcrumbs';
 import { RouterLink, useRoute } from 'vue-router';
 import type { RouteRecordNormalized } from 'vue-router';
 import AppIcon from '@/components/common/AppIcon.vue';
@@ -121,6 +122,7 @@ import NotificationMenu from '@/components/notifications/NotificationMenu.vue';
 const props = defineProps<{ title: string; navigation: RouteRecordNormalized[] }>();
 defineSlots<{ default(): unknown; context(): unknown; tools(): unknown; reading(): unknown }>();
 const route = useRoute();
+provide(breadcrumbContext, shallowRef<BreadcrumbContext>());
 const primary = computed(() =>
     props.navigation.filter((item) => item.meta.navigation === 'primary'),
 );

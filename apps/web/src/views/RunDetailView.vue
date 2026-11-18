@@ -11,7 +11,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, watch } from 'vue';
+import { computed, inject, nextTick, onScopeDispose, watch, watchEffect } from 'vue';
+import { useQuery } from '@tanstack/vue-query';
+import { breadcrumbContext } from '@/layout/breadcrumbs';
+import { taskEndpoint, taskKeys } from '@/api/tasks';
+import { useSessionLifecycle } from '@/composables/useSessionQuery';
 import { useRoute, useRouter } from 'vue-router';
 import StatePanel from '@/components/common/StatePanel.vue';
 import ExecutionDetail from '@/components/run/ExecutionDetail.vue';
@@ -23,6 +27,34 @@ const searchSuggestion = useSearchApiSuggestion();
 const execution = useExecution(() => String(route.params.runId ?? ''), {
     onEvent: searchSuggestion.onEvent,
     onReset: searchSuggestion.reset,
+});
+const lifecycle = useSessionLifecycle();
+const context = inject(breadcrumbContext, undefined);
+const taskId = computed(() => execution.run.value?.taskId ?? '');
+const task = useQuery(
+    computed(() => ({
+        ...lifecycle.queryOptions(
+            taskEndpoint,
+            { params: { taskId: taskId.value } },
+            taskKeys.detail(taskId.value),
+        ),
+        enabled: !!taskId.value && !!lifecycle.session.user,
+    })),
+    lifecycle.queryClient,
+);
+watchEffect(() => {
+    if (!context) return;
+    const detail = !task.isError.value ? task.data.value?.data : undefined;
+    context.value = taskId.value
+        ? {
+              path: route.fullPath,
+              to: `/tasks/${taskId.value}`,
+              label: detail?.task.id === taskId.value ? detail.version.config.title : '任务摘要',
+          }
+        : undefined;
+});
+onScopeDispose(() => {
+    if (context) context.value = undefined;
 });
 let watchedRun: string | undefined;
 // Only follow an execution observed in progress. Opening its history remains an explicit detail view.

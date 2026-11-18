@@ -10,7 +10,7 @@
 
 默认 API 没有模型，必须诚实显示 `model_unavailable`。随后仅该隔离项目的 API 使用已有 `acceptanceQuestionModel` 测试入口，验证证据回答的授权引用、独立预算与真实持久化。测试入口拒绝非验收 schema 和远程凭据；生产入口没有此开关。该供应商不会联网，报告及附件的 `remoteResearch: false` 不代表远程模型研究成功。
 
-固定研究供应商的目标事实包含当前观点评估契约，供真实 Agent 验证问题回答和基线推进；逐字引用、来源发布时间、排除记录和冲突仍走生产逻辑。联合旅程先断言首轮完整基线，并附上两轮报告，避免旧样本缺少评估信息时仅在后续变化断言暴露问题。三类场景的样本契约回归位于 `apps/worker/tests/acceptance-scenario-fixtures.test.ts`。
+固定研究供应商的目标事实包含当前观点评估契约，供真实 Agent 验证问题回答和基线推进；逐字引用、来源发布时间、排除记录和冲突仍走生产逻辑。联合旅程先断言首轮完整基线，并附上两轮报告，避免旧样本缺少评估信息时仅在后续变化断言暴露问题。三类场景的交付回归位于 `apps/server/tests/acceptance-scenarios.integration.test.ts`；浏览器中的排除记录、次级来源与冲突由 `tests/e2e/two-rounds-english.spec.ts`、`tests/e2e/two-rounds-research.spec.ts` 验证。
 
 ## 补充页面矩阵
 

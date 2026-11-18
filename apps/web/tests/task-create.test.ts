@@ -360,3 +360,22 @@ describe('手工任务配置', () => {
         expect(controller.saved.value).toBe(false);
     });
 });
+
+describe('task mode date policy input', () => {
+    it('keeps analysis unbounded and requires a date window for collection', () => {
+        const draft = validDraft();
+        draft.rangeKind = 'unbounded';
+        expect(taskInput(draft).config.timeRange).toEqual({ kind: 'unbounded' });
+        draft.researchMode = 'collection';
+        expect(() => taskInput(draft)).toThrow();
+        draft.rangeKind = 'rolling';
+        draft.collectionDateUnknown = 'discard';
+        draft.outputFormat = 'list';
+        expect(taskInput(draft).config).toMatchObject({
+            researchMode: 'collection',
+            timeRange: { kind: 'rolling', days: 7 },
+            collectionDateUnknown: 'discard',
+            outputFormat: 'list',
+        });
+    });
+});

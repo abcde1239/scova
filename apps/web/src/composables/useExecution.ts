@@ -25,7 +25,7 @@ export const executionStates = {
     canceled: ['已取消', '执行已经停止，不能据此判断查阅结论。'],
 } satisfies Record<Run['status'], [string, string]>;
 const outcomes = {
-    baseline: '已建立基线',
+    baseline: '已设为比较起点',
     important_change: '发现重要变化',
     new_findings: '发现新资料',
     no_important_change: '本次范围内未发现重要变化',
@@ -46,6 +46,8 @@ export function executionTitle(run: Run) {
 export function executionFailure(run: Run) {
     if (run.status !== 'failed') return undefined;
     const reasons: Record<string, string> = {
+        MODEL_QUOTA_EXCEEDED: '模型服务额度不足，请补充额度后新建执行。',
+        BUDGET_EXCEEDED: '执行调用预算已耗尽，未完成报告交付。',
         NO_EVIDENCE: '未取得可用证据，未生成报告。',
         DEADLINE_EXCEEDED: '执行时间预算已耗尽，未完成交付。',
         AGENT_CONFIGURATION_INVALID: '研究服务配置不可用，本次未完成。',

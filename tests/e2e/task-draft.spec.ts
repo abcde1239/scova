@@ -4,7 +4,7 @@ import type {
     TaskDraftResponse,
     TaskDraftInput,
     TaskDraftScope,
-} from '../../packages/models/src/task-drafts.ts';
+} from '../../packages/models/src/task/drafts.ts';
 import type { taskInput } from '../../apps/web/src/composables/useCreateTask.ts';
 
 test.use({ timezoneId: 'Asia/Tokyo' });
@@ -451,7 +451,7 @@ test('AI先整理范围，非法日期可回退修正，确认前不生成草稿
     await chooseOption(page, '搜索时间范围', '最近一段时间');
     await questions.getByLabel('搜索最近多少天', { exact: true }).fill('30');
     await questions.getByRole('button', { name: '下一步', exact: true }).click();
-    await chooseOption(page, '此次需要的工作', '资料收集');
+    await chooseOption(page, '此次需要的工作', '资料采集');
     await chooseOption(page, '希望得到的形式', '简报');
     expect(draftPosts(calls)).toHaveLength(0);
     await page.evaluate(() => (document.documentElement.style.fontSize = '200%'));
@@ -470,10 +470,11 @@ test('AI先整理范围，非法日期可回退修正，确认前不生成草稿
             timeRange: { kind: 'rolling', days: 30 },
             researchMode: 'collection',
             outputFormat: 'brief',
+            collectionDateUnknown: 'separate',
         },
     });
     await apply(page).click();
-    await expect(page.getByLabel('任务方式', { exact: true })).toContainText('资料收集');
+    await expect(page.getByRole('radio', { name: /^资料采集/ })).toBeChecked();
     expect(taskPosts(calls)).toHaveLength(0);
 });
 

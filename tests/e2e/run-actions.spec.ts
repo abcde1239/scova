@@ -218,7 +218,7 @@ test('离开日志返回任务时活动执行禁止再次启动，刷新及终�
     const { calls, runs } = await samples(page.context());
     await page.goto(`/tasks/${taskId}`);
     await actions(page).getByRole('button', { name: '立即执行', exact: true }).click();
-    const open = actions(page).getByRole('link', { name: '打开执行', exact: true });
+    const open = actions(page).getByRole('link', { name: '查看执行', exact: true });
     await expect(open).toBeVisible();
     const href = await open.getAttribute('href');
     const activeId = href!.split('/').at(-1)!;
@@ -340,7 +340,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
             body: { mode: 'live' },
             csrf: 'local-actions-csrf',
         });
-        await actions(page).getByRole('link', { name: '打开执行', exact: true }).click();
+        await actions(page).getByRole('link', { name: '查看执行', exact: true }).click();
         await expect(page).toHaveURL(new RegExp(`/runs/${created.id}$`));
         await page.getByText('执行标识与时间', { exact: true }).click();
         await expect(page.locator('.execution-overview')).toContainText(id(201));
@@ -459,7 +459,7 @@ test('未知结果显式重发冻结key/body，终态幂等命中按实际状态
     expect(posts(calls)[1]!.key).toBe(posts(calls)[0]!.key);
     expect(posts(calls)[1]!.body).toEqual(posts(calls)[0]!.body);
     await expect(
-        actions(page).getByRole('link', { name: '打开执行', exact: true }),
+        actions(page).getByRole('link', { name: '查看执行', exact: true }),
     ).toHaveAttribute('href', `/runs/${created.id}`);
 });
 
@@ -529,7 +529,7 @@ test('重试复用不同mode/version/parent的活动执行，按返回事实打�
     await expect(commandStatus(page)).toContainText('演示执行');
     await expect(commandStatus(page)).toContainText('正在取消');
     await expect(commandStatus(page)).not.toContainText('已创建关联');
-    await actions(page).getByRole('link', { name: '打开执行', exact: true }).click();
+    await actions(page).getByRole('link', { name: '查看执行', exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/runs/${id(99)}$`));
     await expect(page.locator('.execution-overview')).toContainText(id(999));
 });

@@ -41,6 +41,7 @@ export function initialTaskDraft(preferences?: SessionResponse['user']['preferen
         outputFormat: 'brief',
         outputFormats: [] as TaskConfig['outputFormat'][],
         researchMode: 'analysis',
+        collectionDateUnknown: 'separate',
         agentProviderId: '',
         searchMode: 'auto',
         maxSearches: String(DEFAULT_TASK_BUDGET.maxSearches),
@@ -85,6 +86,7 @@ export function taskDraftFromConfig(config: TaskConfig): TaskDraft {
         outputFormat: config.outputFormat,
         outputFormats: config.outputFormats ? [...config.outputFormats] : [],
         researchMode: config.researchMode ?? 'analysis',
+        collectionDateUnknown: config.collectionDateUnknown ?? 'separate',
         agentProviderId: config.agentProviderId ?? '',
         searchMode: config.searchMode ?? 'auto',
         ...(Object.fromEntries(
@@ -145,7 +147,9 @@ export function taskInput(draft: TaskDraft, original?: TaskConfig, keepSchedule 
                       instant(draft.end),
                   ),
               }
-            : { kind: 'rolling', days: Number(draft.days) };
+            : draft.rangeKind === 'unbounded'
+              ? { kind: 'unbounded' }
+              : { kind: 'rolling', days: Number(draft.days) };
     const range =
         original &&
         initial &&
@@ -165,7 +169,12 @@ export function taskInput(draft: TaskDraft, original?: TaskConfig, keepSchedule 
             : scheduleInput(draft);
     // 先校验用户选中的共享分支，避免 Union 的另一分支错误误指向正确日期。
     try {
-        parseContract(TimeRangeSchema.anyOf[draft.rangeKind === 'fixed' ? 1 : 0]!, range);
+        parseContract(
+            TimeRangeSchema.anyOf[
+                draft.rangeKind === 'fixed' ? 1 : draft.rangeKind === 'unbounded' ? 2 : 0
+            ]!,
+            range,
+        );
     } catch (cause) {
         if (cause instanceof ContractValidationError)
             throw new ContractValidationError(
@@ -213,6 +222,9 @@ export function taskInput(draft: TaskDraft, original?: TaskConfig, keepSchedule 
                 : {}),
             ...(draft.researchMode === 'collection' || original?.researchMode !== undefined
                 ? { researchMode: draft.researchMode }
+                : {}),
+            ...(draft.researchMode === 'collection' || original?.collectionDateUnknown !== undefined
+                ? { collectionDateUnknown: draft.collectionDateUnknown }
                 : {}),
             ...(draft.agentProviderId ? { agentProviderId: draft.agentProviderId } : {}),
             ...(draft.searchMode !== 'auto' || original?.searchMode !== undefined

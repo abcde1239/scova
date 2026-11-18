@@ -141,7 +141,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
                 });
             await expect(history.getByText('演示执行', { exact: true })).toBeVisible();
             await expect(
-                history.getByText(`固定配置版本：${id(211)}`, { exact: true }),
+                history.getByText(`版本 ${id(211).slice(0, 8)}`, { exact: true }).first(),
             ).toBeVisible();
             expect(
                 await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
@@ -155,7 +155,10 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
                 contentType: 'image/png',
             });
         }
-        await history.locator(`a[href="/runs/${id(11)}"]`).click();
+        await history
+            .locator(`a[href="/runs/${id(11)}"]`)
+            .first()
+            .click();
         await expect(page.locator('.execution-detail')).toBeVisible();
         await page.getByText('执行标识与时间', { exact: true }).click();
         await expect(
@@ -223,4 +226,23 @@ test('本地历史样本：换任务清除旧列表，空历史保留当前任�
         '此任务尚无执行记录',
     );
     await expect(page.locator('.history-entry')).toHaveCount(0);
+});
+
+test('execution breadcrumb returns to the owning task and clears after navigation', async ({
+    page,
+}) => {
+    await samples(page);
+    await page.goto(`/runs/${id(11)}`);
+    const trail = page.getByRole('navigation', { name: '面包屑导航' });
+    await expect(trail.locator('ol > li')).toHaveCount(3);
+    const task = trail.getByRole('link', { name: config.title, exact: true });
+    await expect(task).toHaveAttribute('href', `/tasks/${id(1)}`);
+    await expect(trail.getByRole('link', { name: '执行详情', exact: true })).toHaveAttribute(
+        'aria-current',
+        'page',
+    );
+    await task.focus();
+    await task.press('Enter');
+    await expect(page).toHaveURL(new RegExp(`/tasks/${id(1)}$`));
+    await expect(trail.locator('ol > li')).toHaveCount(2);
 });

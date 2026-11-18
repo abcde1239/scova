@@ -1,6 +1,6 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import type { InboxItem } from '../../apps/web/src/api/inbox.ts';
-import type { Report } from '../../packages/models/src/reports.ts';
+import type { Report } from '../../packages/models/src/report/schema.ts';
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const instant = '2026-10-31T02:00:00Z';
@@ -286,12 +286,23 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         const before = await page.evaluate(() => scrollY);
         await reportLink(page, 6).press('Enter');
         await expect(page).toHaveURL(new RegExp(`/reports/${id(106)}$`));
+        if (width < 1024) await page.getByRole('button', { name: '成果', exact: true }).click();
         await expect(
             page.getByRole('article', { name: item(6).report.title, exact: true }),
         ).toBeVisible();
         expect(patches(calls)).toHaveLength(0);
         if ([390, 1024, 1920].includes(width)) await page.goBack();
-        else await page.getByRole('link', { name: '返回收件箱', exact: true }).click();
+        else if (width < 1024) {
+            await page.getByRole('button', { name: '返回对话', exact: true }).click();
+            await expect(page.getByRole('dialog', { name: '报告交付物', exact: true })).toHaveCount(
+                0,
+            );
+            const back = page
+                .locator('.workspace-eyebrow')
+                .getByRole('link', { name: '收件箱', exact: true });
+            await expect(back).toHaveAttribute('href', '/inbox');
+            await back.click();
+        } else await page.getByRole('link', { name: '返回收件箱', exact: true }).click();
         await expect(page).toHaveURL(width === 390 ? /\/inbox\?read=unread$/ : /\/inbox$/);
         await expect(filterLink(page, width === 390 ? '未读' : '全部')).toHaveAttribute(
             'aria-current',

@@ -6,8 +6,8 @@ import type {
     Feedback,
     FeedbackEffect,
     FeedbackInput,
-} from '../../packages/models/src/feedback.ts';
-import type { Report } from '../../packages/models/src/reports.ts';
+} from '../../packages/models/src/task/feedback.ts';
+import type { Report } from '../../packages/models/src/report/schema.ts';
 
 // Controlled Report HTTP samples exercise the real production Web bundle, not Worker/DB policy.
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -201,6 +201,12 @@ async function samples(context: BrowserContext) {
             state.owner++;
             return route.fulfill({ json: account() });
         }
+        if (url.pathname.startsWith('/api/v1/reports/') && url.pathname.endsWith('/conversation')) {
+            const saved =
+                state.reports[url.pathname.slice('/api/v1'.length).replace(/\/conversation$/, '')];
+            if (owner !== 900 || !saved) return fail(404);
+            return route.fulfill({ json: { reportId: saved.id, turns: [], hasEarlier: false } });
+        }
         if (url.pathname.startsWith('/api/v1/reports/')) {
             if (owner !== 900) return fail(404);
             const saved = structuredClone(state.reports[url.pathname.slice('/api/v1'.length)]);
@@ -305,12 +311,20 @@ test('saved effects: all nine states and identical duplicates preserve array ord
     );
     await expect(actions(page)).toBeVisible();
     await expect.poll(() => calls.filter((call) => call.path.endsWith('/feedback')).length).toBe(1);
-    expect(calls.map((call) => [call.method, call.path])).toEqual([
-        ['GET', '/api/v1/me'],
-        ['GET', `/api/v1/reports/${id(1)}`],
-        ['GET', `/api/v1/tasks/${id(2)}/feedback`],
-        ['GET', '/api/v1/notes'],
-    ]);
+    await expect
+        .poll(() => calls.filter((call) => call.path.endsWith('/conversation')).length)
+        .toBe(1);
+    const byRequest = (left: string[], right: string[]) =>
+        left.join(' ').localeCompare(right.join(' '));
+    expect(calls.map((call) => [call.method, call.path]).sort(byRequest)).toEqual(
+        [
+            ['GET', '/api/v1/me'],
+            ['GET', `/api/v1/reports/${id(1)}`],
+            ['GET', `/api/v1/tasks/${id(2)}/feedback`],
+            ['GET', '/api/v1/notes'],
+            ['GET', `/api/v1/reports/${id(1)}/conversation`],
+        ].sort(byRequest),
+    );
     await expect(panel(page).locator('button, img, input, select')).toHaveCount(0);
 });
 

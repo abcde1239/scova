@@ -108,7 +108,7 @@
                                         class="shared-answer scova-interface m-0 [.assessment_&:is(p)]:mt-2"
                                     >
                                         <a
-                                            class="inline-flex min-h-11 items-center scova-link keyboard-focus-wide"
+                                            class="inline-flex min-h-11 items-center internal-link keyboard-focus-wide"
                                             :href="`#claim-${report.claims[index]!.id}`"
                                             >查看前文相关结论</a
                                         >

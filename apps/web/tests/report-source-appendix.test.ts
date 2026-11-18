@@ -169,16 +169,16 @@ describe('actual report source appendix', () => {
         expect(document.querySelectorAll('.evidence-appendix')).toHaveLength(1);
         const appendix = document.querySelector('.evidence-appendix')!;
         expect(
-            appendix.compareDocumentPosition(document.querySelector('.report-baseline')!) &
+            appendix.compareDocumentPosition(document.querySelector('.report-changes')!) &
                 Node.DOCUMENT_POSITION_PRECEDING,
         ).toBeTruthy();
         expect(appendix.querySelector('#evidence-evidence-1')).not.toBeNull();
         expect(appendix.querySelector('#evidence-evidence-3')).not.toBeNull();
         expect(appendix.querySelector('#evidence-evidence-2, #claim-support-other')).toBeNull();
         expect(
-            appendix.querySelector('#change-support-change-a .new-side a')?.getAttribute('href'),
+            document.querySelector('#comparison-change-a-new-evidence-3')?.getAttribute('href'),
         ).toBe('#evidence-evidence-3');
-        expect(document.querySelector('.report-baseline a.evidence-link')).toBeNull();
+        expect(appendix.querySelector('.change-provenance')).toBeNull();
         expect(report).toEqual(before);
     });
 

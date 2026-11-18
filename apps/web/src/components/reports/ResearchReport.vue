@@ -7,6 +7,7 @@
         <report-frame
             :report="report"
             :show-sources="showSources"
+            :show-changes="showChanges"
             format="research_report"
             summary-title="报告概述"
         >
@@ -72,7 +73,6 @@
                     :claim="claim"
                 />
             </section>
-            <report-changes v-if="showChanges" :report="report" />
         </report-frame>
     </article>
 </template>
@@ -82,7 +82,6 @@ import { computed, ref } from 'vue';
 import type { Report } from '@scova/models';
 import ReportFrame from '@/components/reports/ReportFrame.vue';
 import ReportClaim from '@/components/reports/ReportClaim.vue';
-import ReportChanges from '@/components/reports/ReportChanges.vue';
 import ReportFormatBanner from '@/components/reports/ReportFormatBanner.vue';
 import { reportSections } from '@/composables/useReport';
 import { documentSectionNumbers, savedArtifactDocument } from '@/utils/report-artifacts';
@@ -114,7 +113,7 @@ const directory = computed<{ id: string; title: string; number?: number }[]>(() 
               })),
           ]),
     ...(document.value ? [{ id: 'answers-title', title: '问题覆盖' }] : []),
-    ...(props.showChanges ? [{ id: 'report-changes-title', title: '变化与基线' }] : []),
+    ...(props.showChanges ? [{ id: 'report-changes-title', title: '变化' }] : []),
     { id: 'coverage-title', title: '查阅与核验详情' },
     ...(props.showSources ? [{ id: 'saved-evidence-title', title: '来源与保存引用' }] : []),
 ]);

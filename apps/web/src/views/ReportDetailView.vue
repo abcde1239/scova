@@ -308,7 +308,7 @@ const {
     @apply [outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.25rem];
 }
 a {
-    @apply inline-flex items-center gap-2 min-h-11 scova-link cursor-pointer
+    @apply inline-flex items-center gap-2 min-h-11 internal-link cursor-pointer
         break-anywhere;
 }
 a:focus-visible {

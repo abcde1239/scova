@@ -248,7 +248,7 @@ test('来源历史列表、opaque 分页、详情 quote 与真实 run→report �
     expect(state.listReads.at(-1)?.cursor).toBe(null);
     await page.getByRole('link', { name: '查看该次执行' }).first().click();
     await expect(page).toHaveURL(new RegExp(`/runs/${runId}$`));
-    await expect(page.getByRole('link', { name: '查看已发布报告' })).toHaveAttribute(
+    await expect(page.getByRole('link', { name: '阅读报告' })).toHaveAttribute(
         'href',
         `/reports/${reportId}`,
     );

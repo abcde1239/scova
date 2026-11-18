@@ -123,12 +123,9 @@
         </div>
         <div v-if="state.phase.value === 'rejected'" class="layout-grid gap-2" role="status">
             <p class="m-0">{{ state.message.value }}</p>
-            <router-link
-                v-if="report"
-                :to="`/tasks/${report.taskId}`"
-                class="scova-link min-h-11 inline-flex items-center"
-                >查看任务执行</router-link
-            >
+            <router-link v-if="report" :to="`/tasks/${report.taskId}`" class="navigation-link"
+                >返回任务摘要<app-icon name="chevron"
+            /></router-link>
         </div>
         <template v-if="state.candidateId.value || validatedId">
             <report-run-card

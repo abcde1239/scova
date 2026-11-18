@@ -31,22 +31,42 @@
                 v-model:search="task.draft.searchMode"
                 :disabled="locked"
             />
+            <fieldset class="layout-grid gap-3 border-0 p-0 m-0">
+                <legend class="font-semibold mb-2">任务类型</legend>
+                <label
+                    v-for="mode in researchModes"
+                    :key="mode.value"
+                    class="flex items-start gap-3 min-h-11 cursor-pointer"
+                >
+                    <input
+                        v-model="task.draft.researchMode"
+                        type="radio"
+                        name="research-mode"
+                        :value="mode.value"
+                        class="mt-1.5"
+                        @change="selectResearchMode(mode.value)"
+                    />
+                    <span
+                        ><strong>{{ mode.label }}</strong
+                        ><span class="block text-muted">{{ mode.description }}</span></span
+                    >
+                </label>
+            </fieldset>
             <task-config-field
-                v-model="task.draft.researchMode"
-                label="任务方式"
+                v-if="task.draft.researchMode === 'collection'"
+                v-model="task.draft.collectionDateUnknown"
+                label="日期未确认的条目"
                 kind="select"
-                :options="researchModes"
-                :error="task.fields.value.researchMode"
+                :options="unknownDateOptions"
+                :error="task.fields.value.collectionDateUnknown"
                 :disabled="locked"
             />
-            <p class="text-muted break-anywhere m-0 [details_>_&:is(p)]:mt-4">
-                资料收集汇集当前可读内容，不要求来源在查阅窗口内新发布；如需跟踪指定期间的新进展或核验推论，请选分析研究。
-            </p>
             <task-config-field
                 v-model="task.draft.rangeKind"
                 label="查阅时间范围"
                 kind="select"
                 :options="ranges"
+                :error="task.fields.value.rangeKind"
                 :disabled="locked"
             />
             <task-config-field
@@ -57,7 +77,7 @@
                 :error="task.fields.value.days"
                 :disabled="locked"
             />
-            <template v-else>
+            <template v-else-if="task.draft.rangeKind === 'fixed'">
                 <p class="text-muted break-anywhere m-0 [details_>_&:is(p)]:mt-4">
                     日期按 {{ browserTimezone }} 当地时间填写
                 </p>
@@ -243,13 +263,13 @@
                 }}</action-button
             >
             <router-link
-                class="min-h-11 inline-flex items-center scova-link cursor-pointer keyboard-focus"
+                class="min-h-11 inline-flex items-center internal-link cursor-pointer keyboard-focus"
                 v-if="initialResponse"
                 :to="{ name: 'task-summary', params: { taskId: initialResponse.data.task.id } }"
                 >返回任务摘要</router-link
             >
             <router-link
-                class="min-h-11 inline-flex items-center scova-link cursor-pointer keyboard-focus"
+                class="min-h-11 inline-flex items-center internal-link cursor-pointer keyboard-focus"
                 :to="{ name: 'tasks' }"
                 >返回任务列表</router-link
             >
@@ -383,14 +403,38 @@ const sourceFields = [
         addLabel: '添加排除链接',
     },
 ] as const;
-const ranges = [
+const ranges = computed(() => [
     { value: 'rolling', label: '滚动范围' },
     { value: 'fixed', label: '固定范围' },
-];
+    ...(task.draft.researchMode === 'analysis'
+        ? [{ value: 'unbounded', label: '不限日期（可选）' }]
+        : []),
+]);
 const researchModes = [
-    { value: 'collection', label: '资料收集：整理来源信息' },
-    { value: 'analysis', label: '分析研究：核对依据与时间' },
+    {
+        value: 'collection',
+        label: '资料采集',
+        description: '仅收录日期在窗口内、有直接原文出处的值；不使用模型补答。',
+    },
+    {
+        value: 'analysis',
+        label: '分析研究',
+        description: '综合证据与推论；允许标注为模型回答，日期窗口可选。',
+    },
 ];
+const unknownDateOptions = [
+    { value: 'separate', label: '单列展示，不计入采集结果' },
+    { value: 'discard', label: '直接剔除' },
+];
+function selectResearchMode(mode: string) {
+    if (mode !== 'collection') return;
+    if (task.draft.rangeKind === 'unbounded') {
+        task.draft.rangeKind = 'rolling';
+        task.draft.days = '7';
+    }
+    task.draft.outputFormats = ['list'];
+    task.draft.outputFormat = 'list';
+}
 const notifications = [
     { value: 'summary', label: '每次汇总' },
     { value: 'important_change', label: '仅重要变化' },
@@ -412,9 +456,9 @@ async function save() {
         notice.success(
             editor ? '任务修改已保存' : '任务已创建',
             editor?.result.value?.baselineResetRequired
-                ? '语义查阅范围已变化，下一次完整执行将建立新基线。历史执行与报告保持原样。'
+                ? '修改了查阅范围，下次执行会重新设定比较起点；历史报告不变'
                 : editor
-                  ? '本次保存无需重置比较基线，历史执行与报告保持原样。保存不会开始执行研究。'
+                  ? '保存不会开始执行研究。'
                   : '保存不会开始执行研究。',
         );
         emit('saved', result);

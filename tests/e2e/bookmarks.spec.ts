@@ -47,7 +47,11 @@ test('空列表只显示短提示，收藏和全部笔记不重复放置读取�
     await expect(empty).toHaveText('暂无通知');
     await expect(empty.getByRole('button')).toHaveCount(0);
     await page.goto('/inbox');
-    await expect(empty).toHaveText('暂无报告');
+    await expect(empty.getByRole('status')).toHaveText('暂无报告');
+    await expect(empty.getByRole('link', { name: '查看任务', exact: true })).toHaveAttribute(
+        'href',
+        '/tasks',
+    );
     await expect(empty.getByRole('button')).toHaveCount(0);
 });
 function bookmark(n = 40, source = sourceId) {

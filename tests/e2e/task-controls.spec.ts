@@ -217,7 +217,7 @@ test('活动执行拒绝清除可刷新重新确认', async ({ page }) => {
     const trigger = page.getByRole('button', { name: '清除任务', exact: true });
     await trigger.click();
     await page.getByRole('button', { name: '确认永久清除' }).click();
-    await expect(page.getByRole('region', { name: '任务管理' })).toContainText('等待执行结束');
+    await expect(page.getByRole('status').filter({ hasText: '等待执行结束' })).toBeVisible();
     await expect(trigger).toBeDisabled();
     await page.getByRole('button', { name: '刷新任务状态' }).click();
     await expect(trigger).toBeEnabled();
@@ -229,7 +229,7 @@ test('单次执行选择Agent发送指定配置，不修改账号默认', async 
     await page.goto(`/tasks/${id(10)}`);
     await chooseOption(page, '执行 Agent 配置', '研究配置2');
     await page.getByRole('button', { name: '立即执行', exact: true }).click();
-    await expect(page.getByRole('link', { name: '打开执行' })).toBeVisible();
+    await expect(page.getByRole('link', { name: '查看执行' })).toBeVisible();
     expect(writes).toHaveLength(1);
     expect(writes[0]!.body).toEqual({ mode: 'live', agentProviderId: id(22) });
     await expect(page.getByRole('combobox', { name: '执行 Agent 配置' })).toBeDisabled();

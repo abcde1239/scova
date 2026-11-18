@@ -243,7 +243,7 @@ test('键盘注册、登录、创建、执行、报告引用及菜单返回；�
         ).toBeVisible();
         await tabTo(page, page.getByRole('button', { name: '立即执行', exact: true }));
         await page.keyboard.press('Enter');
-        const open = page.getByRole('link', { name: '打开执行', exact: true });
+        const open = page.getByRole('link', { name: '查看执行', exact: true });
         await expect(open).toBeVisible();
         const runId = (await open.getAttribute('href'))!.split('/').at(-1)!;
         await tabTo(page, open);
@@ -265,7 +265,7 @@ test('键盘注册、登录、创建、执行、报告引用及菜单返回；�
             `/api/v1/reports/${reports.items[0]!.id}`,
         );
         expect(report.runId).toBe(runId);
-        const reportLink = page.getByRole('link', { name: '查看已发布报告', exact: true });
+        const reportLink = page.getByRole('link', { name: '阅读报告', exact: true });
         await expect(reportLink).toHaveAttribute('href', `/reports/${report.id}`);
         await tabTo(page, reportLink);
         await page.keyboard.press('Enter');

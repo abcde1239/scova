@@ -48,38 +48,6 @@
                 </li>
             </ol>
         </details>
-        <details v-if="report.changes.length" class="change-provenance scova-interface">
-            <summary class="source-disclosure-control min-h-11 py-2 px-2">变化依据</summary>
-            <ol class="layout-grid gap-4 m-0 pl-5">
-                <li
-                    v-for="change in report.changes"
-                    :id="`change-support-${change.id}`"
-                    :key="change.id"
-                    v-bind="{ 'data-change-id': change.id }"
-                    class="layout-grid gap-2"
-                >
-                    <p class="font-medium m-0">{{ change.factKey }}</p>
-                    <div
-                        v-for="side in ['old', 'new'] as const"
-                        :key="side"
-                        :class="`${side}-side`"
-                        class="flex flex-wrap gap-3 items-baseline"
-                    >
-                        <span>{{ side === 'old' ? '旧值 · 基线' : '本次观测 · 新值' }}</span>
-                        <a
-                            v-for="id in side === 'old'
-                                ? change.oldEvidenceIds
-                                : change.newEvidenceIds"
-                            :id="`comparison-${change.id}-${side}-${id}`"
-                            :key="id"
-                            :href="`#evidence-${id}`"
-                            class="evidence-link reference-link source-inline-action"
-                            >来源 {{ sourceNumber(id) }}</a
-                        >
-                    </div>
-                </li>
-            </ol>
-        </details>
     </section>
 </template>
 

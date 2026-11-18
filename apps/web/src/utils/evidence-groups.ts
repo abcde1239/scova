@@ -3,6 +3,10 @@ import type { Evidence } from '@scova/models';
 /** Page identity excludes fragments and tracking parameters, preserving meaningful query values. */
 export function evidencePageUrl(entry: Evidence): string {
     const value = entry.snapshot?.canonicalUrl || entry.snapshot?.originalUrl || entry.url;
+    return normalizePageUrl(value);
+}
+
+export function normalizePageUrl(value: string): string {
     try {
         const url = new URL(value);
         url.hash = '';

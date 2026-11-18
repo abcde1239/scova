@@ -267,6 +267,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         }));
         await link(page, 6).press('Enter');
         await expect(page).toHaveURL(new RegExp(`/reports/${id(6)}$`));
+        if (width < 1024) await page.getByRole('button', { name: '成果', exact: true }).click();
         await expect(page.getByRole('article', { name: item(6).title, exact: true })).toBeVisible();
         await page.goBack();
         await expect(entries(page)).toHaveCount(width === 390 ? 6 : 12);
@@ -302,6 +303,8 @@ test('短标题报告也具有足够点击高度，窄屏与桌面均可键盘�
         expect((await link(page, 1).boundingBox())!.height).toBeGreaterThanOrEqual(44);
         await link(page, 1).focus();
         await link(page, 1).press('Enter');
+        await expect(page).toHaveURL(new RegExp(`/reports/${id(1)}$`));
+        if (width < 1024) await page.getByRole('button', { name: '成果', exact: true }).click();
         await expect(page.getByRole('article', { name: '政策报告', exact: true })).toBeVisible();
     }
 });
@@ -402,7 +405,7 @@ test('迟到all读取不覆盖新任务，切换回旧筛选也从首页', async
 test('对应Run入口保留真实执行ID与partial模式，不隐式写已读', async ({ page }) => {
     const { calls } = await samples(page.context());
     await page.goto('/tasks/reports');
-    await entry(page, 1).getByRole('link', { name: '查看对应执行', exact: true }).press('Enter');
+    await entry(page, 1).getByRole('link', { name: '查看执行', exact: true }).press('Enter');
     await expect(page).toHaveURL(new RegExp(`/runs/${id(101)}$`));
     await expect(page.getByRole('heading', { name: '已生成结果', exact: true })).toBeVisible();
     expect(calls.every((call) => call.method === 'GET')).toBe(true);

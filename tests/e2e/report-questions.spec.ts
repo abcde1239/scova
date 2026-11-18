@@ -1,8 +1,8 @@
 import { logoutFromAccount, expectAccountReady } from './support/account-menu.ts';
 import { expect, test } from '@playwright/test';
 import type { BrowserContext, Page } from '@playwright/test';
-import type { Report } from '../../packages/models/src/reports.ts';
-import type { ReportQuestion, QuestionAnswer } from '../../packages/models/src/report-questions.ts';
+import type { Report } from '../../packages/models/src/report/schema.ts';
+import type { ReportQuestion, QuestionAnswer } from '../../packages/models/src/report/questions.ts';
 
 // HTTP samples exercise the frozen production SFC and real requestlane validators.
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;

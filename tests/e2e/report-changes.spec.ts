@@ -1,5 +1,5 @@
-import { expect, test, type BrowserContext, type Page, type TestInfo } from '@playwright/test';
-import type { Report, Evidence } from '../../packages/models/src/reports.ts';
+import { expect, test, type BrowserContext, type Page } from '@playwright/test';
+import type { Report, Evidence } from '../../packages/models/src/report/schema.ts';
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const instant = '2026-10-31T02:00:00Z';
@@ -85,15 +85,6 @@ function fixture(): Report {
         publishedAt: instant,
     };
 }
-const kinds = [
-    ['baseline', '基线记录'],
-    ['new', '新增资料'],
-    ['changed', '实质变化'],
-    ['duplicate', '重复资料'],
-    ['duplicate_candidate', '疑似转载'],
-    ['non_material', '非实质变化'],
-    ['uncertain', '待核验'],
-] as const;
 type Kind = Report['changes'][number]['kind'];
 function change(kind: Kind, n = 30): Report['changes'][number] {
     return {
@@ -160,316 +151,186 @@ async function samples(context: BrowserContext) {
     });
     return { state, calls };
 }
-const panel = (page: Page) => page.getByRole('region', { name: '变化与基线', exact: true });
-const record = (page: Page, n = 30) =>
-    panel(page).locator(`article[aria-labelledby="change-${id(n)}"]`);
-async function screenshot(page: Page, info: TestInfo, name: string, fullPage = false) {
-    await page.evaluate(async () => {
-        await document.fonts.ready;
-    });
-    await info.attach(name, {
-        body: await page.screenshot({ path: info.outputPath(`${name}.png`), fullPage }),
-        contentType: 'image/png',
-    });
+
+const panel = (page: Page) => page.locator('.report-changes');
+async function openReport(page: Page) {
+    await page.goto(path);
+    if ((page.viewportSize()?.width ?? 1440) < 1024)
+        await page.getByRole('button', { name: '成果', exact: true }).click();
+    await expect(page.locator('.artifact-document')).toBeVisible();
 }
 async function noOverflow(page: Page) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
         true,
     );
-    for (const control of await panel(page).locator('summary, a').all()) {
-        if (!(await control.isVisible())) continue;
-        const box = await control.boundingBox();
-        expect(box!.x).toBeGreaterThanOrEqual(0);
-        expect(box!.x + box!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
-        expect(box!.height).toBeGreaterThanOrEqual(44);
-    }
 }
-for (const width of [320, 390, 768, 1024, 1440, 1920]) {
-    test(`招生变化${width}：双方引用键盘展开、普通与200%文字重排`, async ({
-        page,
-        baseURL,
-    }, info) => {
-        const { calls } = await samples(page.context());
-        const external: string[] = [];
-        const errors: string[] = [];
-        page.on('request', (request) => {
-            if (new URL(request.url()).origin !== new URL(baseURL!).origin)
-                external.push(request.url());
-        });
-        page.on('pageerror', (error) => errors.push(error.message));
-        await page.setViewportSize({ width, height: 1000 });
-        await page.goto(path);
-        await expect(panel(page)).toBeVisible();
-        await expect(
-            panel(page).getByRole('heading', { name: '报告记录了重要变化', exact: true }),
-        ).toBeVisible();
-        await expect(panel(page).locator('.comparison-context dd').first()).toHaveText('演示数据');
-        await expect(panel(page).locator('.comparison-context dd').last()).toHaveText(id(5));
-        await expect(page.locator('.metadata')).toContainText(id(4));
-        await expect(panel(page).locator('.evidence-link')).toHaveCount(0);
-        await page.locator('.change-provenance > summary').press('Enter');
-        for (const [n, oldValue, newValue] of [
-            [30, '11月1日', '12月1日'],
-            [31, '100元', '150元'],
-        ] as const) {
-            await expect(record(page, n).locator('.old-side .change-value')).toHaveText(oldValue);
-            await expect(record(page, n).locator('.new-side .change-value')).toHaveText(newValue);
-            await expect(record(page, n)).toContainText('重要性标记：重要');
-            for (const side of ['old', 'new']) {
-                const section = page.locator(`#change-support-${id(n)} .${side}-side`);
-                const reference = section.locator('.evidence-link');
-                await reference.focus();
-                await reference.press('Enter');
-                const citation = page.locator((await reference.getAttribute('href'))!);
-                await expect(citation).toBeFocused();
-                await expect(citation.locator('blockquote')).toHaveText(
-                    side === 'old'
-                        ? '截止日期为11月1日，申请费为100元。'
-                        : '截止日期为12月1日，申请费为150元。',
-                );
-                const link = page.locator('.evidence-appendix .source-page-link');
-                await expect(link).toHaveAttribute('href', 'https://example.test/admissions');
-                await expect(link).toHaveAttribute('target', '_blank');
-                await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+for (const width of [320, 768, 1440])
+    for (const colorScheme of ['light', 'dark'] as const) {
+        test(`single changes / citations / text resize ${width} ${colorScheme}`, async ({
+            page,
+        }, info) => {
+            const { state } = await samples(page.context());
+            state.report.baseline = { runId: id(5), reportId: id(50), publishedAt: instant };
+            await page.emulateMedia({ colorScheme, reducedMotion: 'reduce' });
+            await page.setViewportSize({ width, height: 1000 });
+            await openReport(page);
+            await expect(panel(page)).toHaveCount(1);
+            await expect(panel(page).getByRole('heading', { name: '2 项重要变化' })).toBeVisible();
+            await expect(panel(page)).not.toContainText(id(5));
+            await expect(panel(page).getByRole('link', { name: /对比.*的报告/ })).toHaveAttribute(
+                'href',
+                `/reports/${id(50)}`,
+            );
+            await expect(page.locator('.change-provenance, .comparison-table')).toHaveCount(0);
+            for (const change of state.report.changes) {
+                const record = panel(page).locator(`[data-change-id="${change.id}"]`);
+                await expect(record).toHaveCount(1);
+                await expect(record.locator('.old-value')).toHaveText(change.oldValue!);
+                await expect(record.getByLabel('变为')).toHaveText('→');
+                await expect(record.locator('.new-value')).toHaveText(change.newValue!);
+                const citation = record.getByRole('link', { name: /（上次）/ });
+                await citation.focus();
+                await citation.press('Enter');
+                await expect(page.locator((await citation.getAttribute('href'))!)).toBeFocused();
             }
-        }
-        expect(
-            await record(page)
-                .locator('.change-value')
-                .first()
-                .evaluate((element) => getComputedStyle(element).fontFamily),
-        ).toContain('Noto Serif SC');
-        expect(
-            await page
-                .locator('.change-provenance .evidence-link')
-                .first()
-                .evaluate((element) => getComputedStyle(element).fontFamily),
-        ).toContain('Inter');
-        await expect(page.locator('.evidence-source-group')).toHaveCount(1);
-        await expect(page.locator('.source-page-link')).toHaveCount(1);
-        await expect(page.locator('.source-version')).toHaveCount(2);
-        for (const enlarged of [false, true]) {
-            if (enlarged)
-                await page.evaluate(() => (document.documentElement.style.fontSize = '200%'));
-            await noOverflow(page);
-            // Read both boxes in one frame: citation navigation may still be smoothly scrolling.
-            const { old, current } = await record(page).evaluate((article) => {
-                const measure = (selector: string) => {
-                    const { x, y, width, height } = article
-                        .querySelector(selector)!
-                        .getBoundingClientRect();
-                    return { x, y, width, height };
-                };
-                return { old: measure('.old-side'), current: measure('.new-side') };
+            for (const size of ['100%', '200%']) {
+                await page.evaluate(
+                    (value) => (document.documentElement.style.fontSize = value),
+                    size,
+                );
+                await noOverflow(page);
+            }
+            await info.attach('changes-200', {
+                body: await page.screenshot({ fullPage: true }),
+                contentType: 'image/png',
             });
-            // Compare side by side when there is room; stack without overlap on narrow layouts.
-            if (Math.abs(current.y - old.y) < 1)
-                expect(current.x).toBeGreaterThanOrEqual(old.x + old.width - 1);
-            else expect(current.y).toBeGreaterThanOrEqual(old.y + old.height - 1);
-            await panel(page).scrollIntoViewIfNeeded();
-            await screenshot(
-                page,
-                info,
-                enlarged ? 'comparison-text-200-viewport' : 'comparison-viewport',
-            );
-            await screenshot(
-                page,
-                info,
-                enlarged ? 'comparison-text-200' : 'comparison-normal',
-                true,
-            );
-        }
-        expect(calls).toEqual([
-            { method: 'GET', path: `/api/v1/reports/${id(1)}` },
-            { method: 'GET', path: `/api/v1/tasks/${id(3)}/feedback` },
-            { method: 'GET', path: '/api/v1/notes' },
-            { method: 'GET', path: `/api/v1/reports/${id(1)}/conversation` },
-        ]);
-        expect(external).toEqual([]);
-        expect(errors).toEqual([]);
+        });
+    }
+for (const format of ['brief', 'list', 'comparison', 'research_report'] as const) {
+    test(`one status across output form ${format}`, async ({ page }) => {
+        const { state } = await samples(page.context());
+        state.report.format = format;
+        state.report.changes = [
+            change('changed', 30),
+            change('new', 31),
+            change('baseline', 32),
+            change('duplicate', 33),
+            change('non_material', 34),
+            change('duplicate_candidate', 35),
+        ];
+        await openReport(page);
+        await expect(panel(page)).toHaveCount(1);
+        await expect(panel(page).locator('.change-record:visible')).toHaveCount(2);
+        const more = panel(page).getByText('其他 3 项', { exact: true });
+        await more.focus();
+        await more.press('Enter');
+        await expect(panel(page).locator('.change-record:visible')).toHaveCount(5);
+        await expect(panel(page).locator(`[data-change-id="${id(32)}"]`)).toHaveCount(0);
+        await expect(page.locator('.comparison-table,.change-provenance')).toHaveCount(0);
     });
 }
-test('七分类保持原因与important，必要分类文字和非零计数逐组可读', async ({ page }, info) => {
-    const { state } = await samples(page.context());
-    state.report.changes = kinds.map(([kind], index) => ({
-        ...change(kind, 40 + index),
-        reason: `服务端原始原因-${kind}`,
-    }));
-    state.report.outcome = 'inconclusive';
-    await page.setViewportSize({ width: 1440, height: 1000 });
-    await page.goto(path);
-    await expect(panel(page).locator('.change-group')).toHaveCount(7);
-    for (const [index, [kind, title]] of kinds.entries()) {
-        const group = panel(page).getByRole('region', { name: `${title} · 1 项`, exact: true });
-        await expect(group).toContainText(`服务端原始原因-${kind}`);
-        await expect(record(page, 40 + index)).toContainText(
-            kind === 'changed' ? '重要性标记：重要' : '重要性标记：未标记为重要',
-        );
-    }
-    await expect(
-        panel(page).getByRole('heading', { name: '变化结论仍不确定', exact: true }),
-    ).toBeVisible();
-    await panel(page).scrollIntoViewIfNeeded();
-    await screenshot(page, info, 'seven-kinds-viewport');
-});
-for (const scenario of [
-    'complete-zero',
-    'partial-null-baseline',
-    'inconclusive',
-    'uncertain',
-    'missing-old',
-    'important-conflict',
-    'baseline',
-    'new-findings',
-] as const) {
-    test(`变化摘要${scenario}：保留服务端分类，保守表达结论`, async ({ page }, info) => {
+for (const stateName of ['eligible', 'model-only', 'date', 'none', 'uncertain'] as const) {
+    test(`baseline status ${stateName}`, async ({ page }) => {
         const { state } = await samples(page.context());
-        state.report.outcome = 'no_important_change';
-        state.report.changes = [change('duplicate')];
-        let title = '变化结论仍不确定';
-        if (scenario === 'complete-zero') {
-            state.report.changes = [];
-            title = '本次范围内未发现重要变化';
-        }
-        if (scenario === 'partial-null-baseline') {
+        state.report.changes = [];
+        state.report.outcome = 'inconclusive';
+        let expected = '变化未定';
+        if (['eligible', 'model-only', 'date'].includes(stateName)) {
             state.report.baselineRunId = null;
-            state.report.outcome = 'inconclusive';
-            state.report.coverage.completeness = 'partial';
-            state.report.coverage.gaps = ['旧范围未完成比较'];
-            state.report.changes = [change('baseline')];
+            state.report.coverage.baseline = {
+                version: 1,
+                eligible: stateName === 'eligible',
+                reason:
+                    stateName === 'eligible'
+                        ? 'eligible'
+                        : stateName === 'date'
+                          ? 'date_unconfirmed'
+                          : 'external_incomplete',
+                modelOnlyFields: stateName === 'model-only' ? 5 : 0,
+            };
+            expected = stateName === 'eligible' ? '已设为比较起点' : '未设为比较起点';
         }
-        if (scenario === 'inconclusive') state.report.outcome = 'inconclusive';
-        if (scenario === 'uncertain') state.report.changes = [change('uncertain')];
-        if (scenario === 'missing-old')
-            state.report.changes = [{ ...change('non_material'), oldEvidenceIds: [] }];
-        if (scenario === 'important-conflict') {
-            state.report.changes = [change('changed')];
-            title = '变化结论仍需核对';
+        if (stateName === 'none') {
+            state.report.outcome = 'no_important_change';
+            expected = '无重要变化';
         }
-        if (scenario === 'baseline') {
-            state.report.outcome = 'baseline';
-            state.report.baselineRunId = null;
-            state.report.changes = [change('baseline')];
-            title = '本次建立比较基线';
+        await openReport(page);
+        await expect(
+            panel(page).getByRole('heading', { name: expected, exact: true }),
+        ).toBeVisible();
+        await expect(panel(page).locator('.change-record')).toHaveCount(0);
+        if (stateName === 'model-only') {
+            await expect(panel(page)).toContainText('5 个字段仅有模型回答');
+            await panel(page).getByRole('link', { name: '查看缺口' }).press('Enter');
+            await expect(page.locator('.coverage details')).toHaveAttribute('open', '');
         }
-        if (scenario === 'new-findings') {
-            state.report.outcome = 'new_findings';
-            state.report.changes = [change('new')];
-            title = '报告记录了新增发现';
-        }
-        await page.setViewportSize({ width: 390, height: 1000 });
-        await page.goto(path);
-        await expect(panel(page).getByRole('heading', { name: title, exact: true })).toBeVisible();
-        if (scenario !== 'complete-zero')
-            await expect(
-                panel(page).getByRole('heading', { name: '本次范围内未发现重要变化', exact: true }),
-            ).toHaveCount(0);
-        if (scenario === 'complete-zero')
-            await expect(panel(page)).toContainText('本报告没有提供逐项变化记录');
-        if (scenario === 'partial-null-baseline') {
-            await expect(
-                page.getByRole('note', { name: '查阅范围说明', exact: true }),
-            ).toBeVisible();
-            await expect(panel(page)).toContainText('报告未提供关联的基线执行');
-            await expect(
-                panel(page).getByRole('heading', { name: '本次建立比较基线', exact: true }),
-            ).toHaveCount(0);
-        }
-        if (scenario === 'missing-old')
-            await expect(record(page)).toContainText('旧值缺少可核对引用');
-        await panel(page).scrollIntoViewIfNeeded();
-        await screenshot(page, info, `${scenario}-viewport`);
+    });
+}
+for (const handling of ['separate', 'discard'] as const) {
+    test(`collection date counts and precision ${handling}`, async ({ page }) => {
+        const { state } = await samples(page.context());
+        const report = state.report;
+        report.format = 'list';
+        report.changes = [];
+        report.evidence = [evidence(11, false)];
+        report.evidence[0]!.url = 'https://example.test/requested?utm_source=test';
+        report.coverage.dateScreening = {
+            window: { start: '2026-10-25T00:00:00Z', end: instant },
+            accepted: 1,
+            unconfirmed: 1,
+            outside: 1,
+            unconfirmedHandling: handling,
+            entries: [
+                {
+                    pageId: 'read-1',
+                    url: 'https://example.test/admissions',
+                    title: '本次公告',
+                    publishedAt: null,
+                    dateValue: '2026-10-30',
+                    dateKind: 'modified',
+                    dateSource: 'dateModified',
+                    status: 'accepted',
+                },
+                {
+                    pageId: 'read-2',
+                    url: 'https://example.test/unknown',
+                    title: '日期不详线索',
+                    publishedAt: null,
+                    dateSource: null,
+                    status: 'unconfirmed',
+                },
+                {
+                    pageId: 'read-3',
+                    url: 'https://example.test/outside',
+                    title: '过期来源',
+                    publishedAt: '2025-10-01T00:00:00Z',
+                    dateSource: 'datePublished',
+                    status: 'outside',
+                },
+            ],
+        };
+        await page.setViewportSize({ width: 320, height: 1000 });
+        await openReport(page);
+        await expect(page.getByLabel('采集日期筛选')).toContainText(
+            '收录 1 页 · 日期未确认 1 页 · 窗口外剔除 1 页',
+        );
+        const table = page.getByRole('table', { name: '采集值、发布日期及直接出处' });
+        await expect(table).toContainText('2026-10-30');
+        await expect(table).toContainText('页面更新时间');
+        await expect(table).not.toContainText('过期来源');
+        await expect(table).not.toContainText('日期不详线索');
+        const citation = table.getByRole('link', { name: '来源 1', exact: true });
+        await citation.focus();
+        await citation.press('Enter');
+        const evidenceTarget = page.locator((await citation.getAttribute('href'))!);
+        await expect(evidenceTarget).toBeFocused();
+        await expect(evidenceTarget).toContainText(report.evidence[0]!.quote);
+        const unknown = page.getByText('日期未确认的来源 · 不计入采集结果', { exact: true });
+        if (handling === 'separate') {
+            await unknown.press('Enter');
+            await expect(page.getByRole('link', { name: /日期不详线索/ })).toBeVisible();
+        } else await expect(unknown).toHaveCount(0);
         await page.evaluate(() => (document.documentElement.style.fontSize = '200%'));
         await noOverflow(page);
-        await panel(page).scrollIntoViewIfNeeded();
-        await screenshot(page, info, `${scenario}-text-200-viewport`);
     });
 }
-test('null新值不产生删除撤回断言，长值与普通文本quote安全重排', async ({ page }, info) => {
-    const { state } = await samples(page.context());
-    state.report.outcome = 'inconclusive';
-    state.report.changes = [
-        {
-            ...change('uncertain'),
-            oldValue: '尚未核验的旧公告适用范围。'.repeat(20),
-            newValue: null,
-            newEvidenceIds: [],
-        },
-    ];
-    state.report.evidence[0]!.quote = '<script>window.changeExecuted=true</script> 旧公告原文';
-    await page.setViewportSize({ width: 320, height: 1000 });
-    await page.goto(path);
-    await page.evaluate(() => (document.documentElement.style.fontSize = '200%'));
-    await expect(record(page).locator('.new-side .change-value')).toHaveText('未提供新值');
-    await expect(record(page).locator('.evidence-link')).toHaveCount(0);
-    await expect(panel(page)).not.toContainText('资料已撤回。');
-    await page.locator('.change-provenance > summary').press('Enter');
-    await expect(page.locator('.change-provenance .new-side .evidence-link')).toHaveCount(0);
-    await page.locator('.change-provenance .old-side .evidence-link').press('Enter');
-    await expect(page.locator(`#evidence-${state.report.evidence[0]!.id} blockquote`)).toHaveText(
-        state.report.evidence[0]!.quote,
-    );
-    expect(await page.evaluate(() => 'changeExecuted' in window)).toBe(false);
-    await noOverflow(page);
-    await record(page).locator('.new-side').scrollIntoViewIfNeeded();
-    await screenshot(page, info, 'null-long-value-text-200-viewport');
-});
-for (const side of ['old', 'new']) {
-    test(`样本API拒绝${side}侧409：缓存全报告隐藏且键盘重试恢复`, async ({ page }, info) => {
-        const { state } = await samples(page.context());
-        await page.clock.install();
-        await page.setViewportSize({ width: 390, height: 1000 });
-        await page.goto(path);
-        await expect(panel(page)).toBeVisible();
-        await page.locator('.change-provenance > summary').press('Enter');
-        await page.locator(`.change-provenance .${side}-side .evidence-link`).first().click();
-        await page.getByRole('link', { name: '阅读外观', exact: true }).click();
-        await expect(page).toHaveURL(/\/account\/appearance$/);
-        state.failure = 409;
-        await page.clock.setFixedTime(new Date((await page.evaluate(() => Date.now())) + 31000));
-        await page.goBack();
-        await expect(page).toHaveURL(new RegExp(`${path}$`));
-        await expect(
-            page.locator('.report-content .state-panel').getByRole('status'),
-        ).toContainText('报告证据校验未通过');
-        await expect(page.locator('article.report-brief, .report-changes, blockquote')).toHaveCount(
-            0,
-        );
-        await screenshot(page, info, `${side}-409-viewport`);
-        state.failure = null;
-        await page.getByRole('button', { name: '重试', exact: true }).press('Enter');
-        await expect(panel(page)).toBeVisible();
-        await expect(page.locator('#report-title')).toBeFocused();
-    });
-}
-for (const status of [403, 404, 503, 'protocol', 'missing'] as const) {
-    test(`变化读取${status}：失败不展示半份变化面板`, async ({ page }, info) => {
-        const { state } = await samples(page.context());
-        state.failure = status;
-        await page.setViewportSize({ width: 320, height: 1000 });
-        await page.goto(path);
-        await expect(page.getByRole('status')).toContainText('加载失败');
-        await expect(panel(page)).toHaveCount(0);
-        await screenshot(page, info, `failure-${status}-viewport`);
-        if (status !== 403 && status !== 404) {
-            state.failure = null;
-            await page.getByRole('button', { name: '重试', exact: true }).press('Enter');
-            await expect(panel(page)).toBeVisible();
-        }
-    });
-}
-test('live模式与配置、基线标识仍按真实报告展示', async ({ page }) => {
-    const { state, calls } = await samples(page.context());
-    state.report.mode = 'live';
-    await page.goto(path);
-    await expect(page.locator('.report-header .mode')).toHaveText('简报');
-    await expect(panel(page).locator('.comparison-context dd').first()).toHaveText('任务执行');
-    await expect(panel(page).locator('.comparison-context dd').last()).toHaveText(id(5));
-    await expect(page.locator('.metadata')).toContainText(id(4));
-    expect(calls).toEqual([
-        { method: 'GET', path: `/api/v1/reports/${id(1)}` },
-        { method: 'GET', path: `/api/v1/tasks/${id(3)}/feedback` },
-        { method: 'GET', path: '/api/v1/notes' },
-        { method: 'GET', path: `/api/v1/reports/${id(1)}/conversation` },
-    ]);
-});

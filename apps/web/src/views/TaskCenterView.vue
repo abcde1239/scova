@@ -17,11 +17,7 @@
                     >
                         <app-icon name="retry" />刷新
                     </action-button>
-                    <navigation-button
-                        class="back-link keyboard-focus-wide [&&]:(inline-flex items-center min-h-11 justify-self-start scova-link cursor-pointer)"
-                        icon="create"
-                        :to="{ name: 'task-create' }"
-                    >
+                    <navigation-button icon="create" :to="{ name: 'task-create' }">
                         新建任务
                     </navigation-button>
                 </div>

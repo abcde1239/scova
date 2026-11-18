@@ -182,7 +182,7 @@
             "id": "unit-tests",
             "workspace": "root",
             "kind": "test",
-            "argv": ["vp", "test"],
+            "argv": ["vp", "test", "--maxWorkers=4"],
             "covers": [
                 "apps-web",
                 "apps-server",
