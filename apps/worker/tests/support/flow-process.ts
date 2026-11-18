@@ -1,3 +1,4 @@
+import { ConnectorError } from '@scova/connectors';
 import { createDatabaseClient, connectDatabase, closeDatabase } from '@scova/db';
 
 import { Redis } from 'ioredis';
@@ -45,6 +46,13 @@ const agent = createAgentRuntime({
         ...fixtureBundle,
         reader: {
             async read(...args) {
+                // The task deliberately includes a preferred source outside the controlled catalog.
+                // This is a supplier/source failure, not a fixture implementation fault.
+                if (!args[0].startsWith('https://acceptance.example.org/english/'))
+                    throw new ConnectorError(
+                        'extraction_failed',
+                        'Controlled preferred source has no readable body',
+                    );
                 const page = await fixtureBundle.reader.read(...args);
                 return { ...page, truncated: true };
             },

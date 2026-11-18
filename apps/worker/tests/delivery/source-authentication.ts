@@ -5,6 +5,7 @@ import { candidateFromCheckpoint, type AgentCandidate } from '@scova/agent-core'
 import { createAgentRepository } from '../../src/repo/agent.ts';
 import { research, fixture, saver, sha, delivery, assertEmpty } from './fixture.ts';
 import { liveResearch } from './live-research.ts';
+import { checkpointWithBodies } from './checkpoint.ts';
 
 export function registerSourceAuthentication() {
     it('即使伪造正文已写入并提升checkpoint也必须匹配当前Run成功read账本', async () => {
@@ -97,7 +98,12 @@ export function registerSourceAuthentication() {
                 ...(await repository.comparison()),
                 usage: await repository.usage(),
             };
-            expect(candidateFromCheckpoint(restoredContext, state)).toEqual(seed.candidate);
+            expect(
+                candidateFromCheckpoint(
+                    restoredContext,
+                    checkpointWithBodies(state, seed.candidate.pages),
+                ),
+            ).toEqual(seed.candidate);
             if (forgery === 'delete') delete state.pages[0].collection;
             else
                 state.pages[0].collection = {
@@ -119,7 +125,10 @@ export function registerSourceAuthentication() {
                 ...ref,
                 checkpointId: saved.configurable!.checkpoint_id as string,
             });
-            const forged = candidateFromCheckpoint(restoredContext, state);
+            const forged = candidateFromCheckpoint(
+                restoredContext,
+                checkpointWithBodies(state, seed.candidate.pages),
+            );
             await expect(delivery.deliver(seed.claimed.token, forged)).rejects.toMatchObject({
                 code: 'INVALID_DELIVERY_EVIDENCE',
             });
@@ -161,7 +170,12 @@ export function registerSourceAuthentication() {
             ...(await repository.comparison()),
             usage: await repository.usage(),
         };
-        expect(candidateFromCheckpoint(restoredContext, state)).toEqual(seed.candidate);
+        expect(
+            candidateFromCheckpoint(
+                restoredContext,
+                checkpointWithBodies(state, seed.candidate.pages),
+            ),
+        ).toEqual(seed.candidate);
         state.gaps = [];
         checkpoint.id = crypto.randomUUID();
         const saved = await saver.put(
@@ -174,7 +188,10 @@ export function registerSourceAuthentication() {
             ...ref,
             checkpointId: saved.configurable!.checkpoint_id as string,
         });
-        const restored = candidateFromCheckpoint(restoredContext, state);
+        const restored = candidateFromCheckpoint(
+            restoredContext,
+            checkpointWithBodies(state, seed.candidate.pages),
+        );
         expect(restored.coverage.completeness).toBe('partial');
         expect([...restored.coverage.gaps, ...(restored.coverage.notes ?? [])].join(' ')).toContain(
             '网页渲染或资源加载受限',

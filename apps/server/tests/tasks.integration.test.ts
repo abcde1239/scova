@@ -196,17 +196,21 @@ describe('长期任务、不可变版本与并发编辑', () => {
         }
     });
 
-    it('保留旧版本；标题、格式和提醒不重置基线，语义变更会提示', async () => {
+    it('保留旧版本；标题、形式打开顺序和提醒不重置基线，语义变更会提示', async () => {
         const owner = await register();
         const created = await request('/api/v1/tasks', {
             method: 'POST',
             headers: authHeaders(owner),
-            body: JSON.stringify({ inputText: '原始自然语言需求', config: config() }),
+            body: JSON.stringify({
+                inputText: '原始自然语言需求',
+                config: config({ outputFormats: ['brief', 'comparison'] }),
+            }),
         });
         const first = await json(created);
         const titleEdit = config({
             title: '更新标题',
             outputFormat: 'comparison',
+            outputFormats: ['comparison', 'brief'],
             notificationPreference: { mode: 'important_change', runIssues: false },
         });
         const secondResponse = await request(`/api/v1/tasks/${first.task.id}`, {
@@ -227,7 +231,12 @@ describe('长期任务、不可变版本与并发编辑', () => {
         const semantic = await request(`/api/v1/tasks/${first.task.id}`, {
             method: 'PATCH',
             headers: authHeaders(owner, { 'if-match': '"2"' }),
-            body: JSON.stringify({ config: config({ topic: '官方招生通知' }) }),
+            body: JSON.stringify({
+                config: config({
+                    topic: '官方招生通知',
+                    outputFormats: ['brief', 'comparison'],
+                }),
+            }),
         });
         expect(semantic.status).toBe(200);
         expect((await json(semantic)).baselineResetRequired).toBe(true);

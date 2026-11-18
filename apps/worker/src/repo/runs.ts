@@ -38,7 +38,7 @@ import {
     type RunProgressEvent,
 } from '@/utils/runs.ts';
 
-export type RunFencePurpose = 'work' | 'control' | 'deadline_delivery';
+export type RunFencePurpose = 'work' | 'delivery' | 'control' | 'deadline_delivery';
 export interface ClaimedRun {
     kind: 'claimed';
     token: RunLeaseToken;
@@ -59,7 +59,9 @@ export interface RunRepository {
     renew(
         token: RunLeaseToken,
         leaseMs: number,
+        options?: { allowDeadline?: boolean },
     ): Promise<'renewed' | 'canceled' | 'deadline' | 'lost'>;
+    release(token: RunLeaseToken): Promise<boolean>;
     finish(token: RunLeaseToken, failure: { code: string }): Promise<boolean>;
     emit(token: RunLeaseToken, event: RunProgressEvent): Promise<void>;
     assertActive(token: RunLeaseToken): Promise<void>;
@@ -112,14 +114,25 @@ export function withRunFence<T>(
         if (!validLease(run, token, now)) throw new RunFenceError('LEASE_LOST');
         if (purpose !== 'control' && (run.cancelRequestedAt || run.status === 'cancel_requested'))
             throw new RunFenceError('RUN_CANCELED');
-        if (purpose === 'work' && (!run.deadlineAt || run.deadlineAt <= now))
+        if (
+            (purpose === 'work' || purpose === 'delivery') &&
+            (!run.deadlineAt || run.deadlineAt <= now)
+        )
             throw new RunFenceError('DEADLINE_EXCEEDED');
+        // Delivery holds the row lock; reserve a bounded DB-only window before heartbeat resumes.
+        if (purpose === 'delivery' || purpose === 'deadline_delivery') {
+            const expiresAt = new Date(
+                Math.max(run.leaseExpiresAt!.getTime(), now.getTime() + 30_000),
+            );
+            await tx.update(dbRuns).set({ leaseExpiresAt: expiresAt }).where(eq(dbRuns.id, run.id));
+            run.leaseExpiresAt = expiresAt;
+        }
         const result = await operation(tx, run, now);
         // callback 可能执行多条 SQL；事务变长不能把已过期权限带到提交点。
         // 用加锁时的租约核验，允许 callback 自己原子终结 Run 或续期。
         const finishingAt = await databaseNow(tx);
         if (run.leaseExpiresAt! <= finishingAt) throw new RunFenceError('LEASE_LOST');
-        if (purpose === 'work' && run.deadlineAt! <= finishingAt)
+        if ((purpose === 'work' || purpose === 'delivery') && run.deadlineAt! <= finishingAt)
             throw new RunFenceError('DEADLINE_EXCEEDED');
         return result;
     });
@@ -225,7 +238,8 @@ export function createRunRepository(db: DatabaseClient): RunRepository {
                 const now = await databaseNow(tx);
                 if (!run || !active(run)) return { kind: 'ignored' };
                 if (run.leaseExpiresAt && run.leaseExpiresAt > now) return { kind: 'busy' };
-                const recovering = run.leaseEpoch > 0 || run.startedAt !== null;
+                const recovering =
+                    (run.leaseEpoch > 0 || run.startedAt !== null) && run.status !== 'queued';
                 const recoveryCount = run.recoveryCount + (recovering ? 1 : 0);
                 if (run.cancelRequestedAt || run.status === 'cancel_requested') {
                     await finishLocked(tx, run, now, 'EXECUTOR_FAILED');
@@ -238,10 +252,10 @@ export function createRunRepository(db: DatabaseClient): RunRepository {
                 let config: TaskConfig;
                 let budget: Budget;
                 let usage: Usage;
+                const version = await tx.query.taskVersions.findFirst({
+                    where: eq(dbTaskVersions.id, run.taskVersionId),
+                });
                 try {
-                    const version = await tx.query.taskVersions.findFirst({
-                        where: eq(dbTaskVersions.id, run.taskVersionId),
-                    });
                     if (!version || version.userId !== run.userId || version.taskId !== run.taskId)
                         throw new Error('执行版本不存在');
                     config = parseContract(
@@ -331,12 +345,13 @@ export function createRunRepository(db: DatabaseClient): RunRepository {
                 };
             });
         },
-        async renew(token, leaseMs) {
+        async renew(token, leaseMs, options = {}) {
             try {
                 return await withRunFence(db, token, 'control', async (tx, run, now) => {
                     if (run.cancelRequestedAt || run.status === 'cancel_requested')
                         return 'canceled' as const;
-                    if (!run.deadlineAt || run.deadlineAt <= now) return 'deadline' as const;
+                    if ((!run.deadlineAt || run.deadlineAt <= now) && !options.allowDeadline)
+                        return 'deadline' as const;
                     await tx
                         .update(dbRuns)
                         .set({ leaseExpiresAt: leaseExpiry(now, leaseMs) })
@@ -347,6 +362,25 @@ export function createRunRepository(db: DatabaseClient): RunRepository {
                 });
             } catch (error) {
                 if (error instanceof RunFenceError) return 'lost';
+                throw error;
+            }
+        },
+        async release(token) {
+            try {
+                await withRunFence(db, token, 'control', async (tx, run, now) => {
+                    if (run.cancelRequestedAt || run.status === 'cancel_requested') {
+                        await finishLocked(tx, run, now, 'EXECUTOR_FAILED');
+                        return;
+                    }
+                    // Queued is a durable graceful handoff marker, selected by recovery scans.
+                    await tx
+                        .update(dbRuns)
+                        .set({ status: 'queued', leaseOwner: null, leaseExpiresAt: null })
+                        .where(eq(dbRuns.id, run.id));
+                });
+                return true;
+            } catch (error) {
+                if (error instanceof RunFenceError) return false;
                 throw error;
             }
         },

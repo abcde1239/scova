@@ -168,7 +168,8 @@ export function registerRollbackDeadline() {
             .returning()
             .then((rows) => requiredDatabaseValue(rows[0]));
         await expect(delivery.deliver(seed.claimed.token, partial!, true)).rejects.toMatchObject({
-            code: 'NO_EVIDENCE',
+            // The promoted checkpoint names bodies whose receipts are now outside the deadline.
+            code: 'INVALID_DELIVERY_EVIDENCE',
         });
         await fixture.db
             .update(dbRuns)

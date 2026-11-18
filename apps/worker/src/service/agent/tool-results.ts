@@ -1,5 +1,10 @@
 import { createHash } from 'node:crypto';
-import { PAGE_TEXT_CHAR_LIMIT, validPageCollection, type ReadPage } from '@scova/connectors';
+import {
+    PAGE_TEXT_CHAR_LIMIT,
+    validPageCollection,
+    validPageLinks,
+    type ReadPage,
+} from '@scova/connectors';
 import type { Usage } from '@scova/models';
 import { AgentPersistenceError } from '@/repo/agent.ts';
 
@@ -24,6 +29,7 @@ export function readPage(value: unknown, mode: 'demo' | 'live'): ReadPage {
         page.untrusted !== true ||
         typeof page.truncated !== 'boolean' ||
         !validPageCollection(page.collection) ||
+        !validPageLinks(page.links) ||
         ![page.url, page.originalUrl, page.fetchedUrl].every(
             (url) => typeof url === 'string' && /^https?:\/\//.test(url),
         ) ||

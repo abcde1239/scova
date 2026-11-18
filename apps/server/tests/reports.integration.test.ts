@@ -460,6 +460,7 @@ describe('报告证据与收件箱 API', () => {
         expect(response.status).toBe(200);
         expect((await json(response)).evidence[0].snapshot).toMatchObject({
             publishedAt: null,
+            dateSource: 'meta:published',
             sourceDates: {
                 published: {
                     status: 'known',
@@ -474,6 +475,72 @@ describe('报告证据与收件箱 API', () => {
                     precision: 'instant',
                 },
             },
+        });
+    });
+
+    it('采集报告按已验证更新时间显示日期来源，仍不伪装为发布时间', async () => {
+        const auth = await register();
+        const data = await fixture(auth);
+        const dateScreening = {
+            window: { start: '2026-10-01T00:00:00Z', end: '2026-11-01T00:00:00Z' },
+            accepted: 1,
+            outside: 0,
+            unconfirmed: 0,
+            entries: [
+                {
+                    pageId: 'read-0',
+                    url: data.url,
+                    title: '来源页面',
+                    publishedAt: '2026-10-25T00:00:00.000Z',
+                    dateSource: 'dateModified',
+                    status: 'accepted',
+                },
+            ],
+        };
+        await db
+            .update(tables.runs)
+            .set({
+                coverageJson: {
+                    completeness: 'partial',
+                    searchedQueries: [],
+                    gaps: ['未完成'],
+                    exhausted: [],
+                    dateScreening,
+                },
+            })
+            .where(eq(tables.runs.id, data.run.id));
+        await db
+            .update(tables.runSources)
+            .set({
+                metadataJson: {
+                    mode: 'demo',
+                    truncated: false,
+                    publication: {
+                        parserVersion: 'scova-publication-v2',
+                        status: 'unknown',
+                        instant: null,
+                        observations: [
+                            {
+                                field: 'dateModified',
+                                rawValue: '2026-10-25T00:00:00Z',
+                                locator: 'jsonld[0]$.dateModified',
+                            },
+                        ],
+                    },
+                },
+            })
+            .where(
+                and(
+                    eq(tables.runSources.runId, data.run.id),
+                    eq(tables.runSources.sourceId, data.source.id),
+                ),
+            );
+        const response = await request(`/reports/${data.report.id}`, { headers: headers(auth) });
+        expect(response.status).toBe(200);
+        expect((await json(response)).evidence[0].snapshot).toMatchObject({
+            publishedAt: null,
+            dateSource: 'dateModified',
+            sourceDates: { modified: { status: 'known', value: '2026-10-25T00:00:00.000Z' } },
         });
     });
 
@@ -669,6 +736,16 @@ describe('报告证据与收件箱 API', () => {
             const body = await json(response);
             if (variant === 'valid') {
                 expect(body.baselineRunId).toBe(previous.run.id);
+                expect(body.baseline).toEqual({
+                    runId: previous.run.id,
+                    reportId: previous.report.id,
+                    publishedAt: previous.report.publishedAt.toISOString(),
+                });
+                const other = await register();
+                expect(
+                    (await request(`/reports/${current.report.id}`, { headers: headers(other) }))
+                        .status,
+                ).toBe(404);
                 expect(body.changes[0]).toMatchObject({
                     oldEvidenceIds: [previous.evidence.id],
                     newEvidenceIds: [current.evidence.id],

@@ -21,6 +21,7 @@ import {
 import { createAgentRepository } from '../../src/repo/agent.ts';
 import { liveResearch } from './live-research.ts';
 import { delivery, fixture, saver, assertEmpty, research } from './fixture.ts';
+import { checkpointWithBodies } from './checkpoint.ts';
 
 export function registerComparisonAuthentication() {
     it('篡改已提升manifest重要性或候选oldEvidenceIds无法绕过成功模型账本/冻结证据授权', async () => {
@@ -69,7 +70,10 @@ export function registerComparisonAuthentication() {
             second.claimed.token,
         ).comparison();
         expect(() =>
-            candidateFromCheckpoint({ ...second.context, ...comparisonBefore }, state),
+            candidateFromCheckpoint(
+                { ...second.context, ...comparisonBefore },
+                checkpointWithBodies(state, second.candidate.pages),
+            ),
         ).toThrow();
         // Even forging both projections cannot bypass the independent committed tool result.
         (
@@ -94,7 +98,7 @@ export function registerComparisonAuthentication() {
         ).comparison();
         const promotedForgery = candidateFromCheckpoint(
             { ...second.context, ...comparison },
-            state,
+            checkpointWithBodies(state, second.candidate.pages),
         );
         await expect(delivery.deliver(second.claimed.token, promotedForgery)).rejects.toMatchObject(
             {
@@ -162,7 +166,10 @@ export function registerComparisonAuthentication() {
                 fixture.db,
                 seed.claimed.token,
             ).comparison();
-            const forged = candidateFromCheckpoint({ ...seed.context, ...comparison }, state);
+            const forged = candidateFromCheckpoint(
+                { ...seed.context, ...comparison },
+                checkpointWithBodies(state, seed.candidate.pages),
+            );
             if (tampering === 'clipped')
                 expect(
                     [...forged.coverage.gaps, ...(forged.coverage.notes ?? [])].join(' '),

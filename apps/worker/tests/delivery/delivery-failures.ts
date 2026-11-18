@@ -7,7 +7,7 @@ import {
     runs as dbRuns,
 } from '@scova/db';
 import { expect, it } from 'vite-plus/test';
-import { createConnectorBundle, type ConnectorBundle } from '@scova/connectors';
+import { ConnectorError, createConnectorBundle, type ConnectorBundle } from '@scova/connectors';
 import { createAgentRuntime } from '../../src/service/agent.ts';
 import { RunService } from '../../src/service/runs.ts';
 import { seedRun } from '../support/run-database.ts';
@@ -34,7 +34,7 @@ export function registerDeliveryFailures() {
             ...base,
             reader: {
                 async read() {
-                    throw new Error('no body');
+                    throw new ConnectorError('extraction_failed', 'no body');
                 },
             },
         };

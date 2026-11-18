@@ -1,3 +1,6 @@
+import { createHash } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
+import type { AgentPage } from '@scova/agent-core';
 import { requiredDatabaseValue } from '@/utils/database.ts';
 import {
     toolCalls as dbToolCalls,
@@ -30,6 +33,7 @@ export function createRecoveryMethods({
     | 'promoteCheckpoint'
     | 'searchPage'
     | 'readPages'
+    | 'readCheckpointPages'
 > {
     return {
         comparison: (options = {}) =>
@@ -75,11 +79,61 @@ export function createRecoveryMethods({
 
         usage: () => fence(async (_tx, run) => usage(run.usageJson)),
 
-        readAuthorizedCheckpoint: () =>
-            fence(async (_tx, run) =>
-                run.checkpointRef === null
-                    ? null
-                    : checkpointRef(run.checkpointRef, run.id, token.leaseEpoch),
+        readAuthorizedCheckpoint: (options = {}) =>
+            withRunFence(
+                db,
+                token,
+                options.allowDeadline ? 'deadline_delivery' : 'work',
+                async (_tx, run) =>
+                    run.checkpointRef === null
+                        ? null
+                        : checkpointRef(run.checkpointRef, run.id, token.leaseEpoch),
+            ),
+
+        readCheckpointPages: (refs, options = {}) =>
+            withRunFence(
+                db,
+                token,
+                options.allowDeadline ? 'deadline_delivery' : 'work',
+                async (tx, run) => {
+                    if (!Array.isArray(refs) || refs.length > 20)
+                        throw new AgentPersistenceError('INVALID_CHECKPOINT');
+                    const calls = await tx.query.toolCalls.findMany({
+                        where: and(
+                            eq(dbToolCalls.userId, run.userId),
+                            eq(dbToolCalls.runId, run.id),
+                            eq(dbToolCalls.tool, 'read'),
+                            eq(dbToolCalls.status, 'succeeded'),
+                            lte(dbToolCalls.finishedAt, run.deadlineAt!),
+                        ),
+                    });
+                    return refs.map((ref) => {
+                        if (
+                            !ref ||
+                            !/^read-\d+$/.test(ref.id) ||
+                            typeof ref.originalUrl !== 'string'
+                        )
+                            throw new AgentPersistenceError('INVALID_CHECKPOINT');
+                        const key =
+                            ref.id +
+                            ':' +
+                            createHash('sha256')
+                                .update(JSON.stringify(ref.originalUrl))
+                                .digest('hex');
+                        const call = calls.find((entry) => entry.operationKey === key);
+                        if (!call) throw new AgentPersistenceError('INVALID_CHECKPOINT');
+                        const output = completedOutput(call) as unknown as AgentPage;
+                        const { text, ...metadata } = output;
+                        const { id, questionIds, ...savedMetadata } = ref;
+                        if (
+                            typeof text !== 'string' ||
+                            !isDeepStrictEqual(metadata, savedMetadata) ||
+                            createHash('sha256').update(text).digest('hex') !== ref.contentHash
+                        )
+                            throw new AgentPersistenceError('INVALID_CHECKPOINT');
+                        return { ...output, id, questionIds: structuredClone(questionIds) };
+                    });
+                },
             ),
 
         async promoteCheckpoint(ref) {

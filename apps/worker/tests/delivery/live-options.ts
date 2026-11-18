@@ -3,6 +3,7 @@ import { type ReadPage } from '@scova/connectors';
 import { seedRun } from '../support/run-database.ts';
 
 export interface LiveResearchOptions {
+    researchMode?: TaskConfig['researchMode'];
     previous?: Pick<
         Awaited<ReturnType<typeof seedRun>>,
         'user' | 'task' | 'version' | 'config' | 'run'

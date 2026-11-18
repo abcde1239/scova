@@ -1,3 +1,4 @@
+import { registerResearchPolicies } from './delivery/research-policies.ts';
 import { describe } from 'vite-plus/test';
 import { registerReceiptAuthentication } from './delivery/receipt-authentication.ts';
 import { registerGapRepairs } from './delivery/gap-repairs.ts';
@@ -13,6 +14,7 @@ import { registerRollbackDeadline } from './delivery/rollback-deadline.ts';
 import { registerDeliveryFailures } from './delivery/delivery-failures.ts';
 
 describe('原子证据与报告交付（真实 PostgreSQL，不使用 Redis）', () => {
+    registerResearchPolicies();
     registerReceiptAuthentication();
     registerGapRepairs();
     registerArtifacts();

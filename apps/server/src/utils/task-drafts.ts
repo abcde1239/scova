@@ -88,6 +88,10 @@ function strictOutputFormats(value: unknown): unknown {
             anyOf: [result.properties.outputFormats, { type: 'null' }],
         };
         result.required = Object.keys(result.properties);
+        if (result.properties.collectionDateUnknown)
+            result.properties.collectionDateUnknown = {
+                anyOf: [result.properties.collectionDateUnknown, { type: 'null' }],
+            };
     }
     return result;
 }
@@ -95,6 +99,7 @@ export function decodeDraftOutputFormats(data: unknown): unknown {
     if (!object(data)) return data;
     const result = { ...data };
     if (result.outputFormats === null) delete result.outputFormats;
+    if (result.collectionDateUnknown === null) delete result.collectionDateUnknown;
     if (object(result.scope)) result.scope = decodeDraftOutputFormats(result.scope);
     return result;
 }
@@ -111,7 +116,6 @@ export const draftModelSchema = (() => {
     const schema = JSON.parse(JSON.stringify(TaskConfigSchema));
     // 执行配置必须由账号显式选择，不允许自然语言模型生成供应商ID。
     delete schema.properties.agentProviderId;
-    delete schema.properties.researchMode;
     delete schema.properties.searchMode;
     return strictOutputFormats(removeFormats(schema)) as Record<string, unknown>;
 })();
@@ -131,7 +135,7 @@ export const draftQuestionPrompt = [
     'If the requirements are sufficiently clear, or round is 2, return questions: [] and summarize the proposed scope. Do not manufacture questions to fill a template.',
     'scope is an editable proposal, never a confirmed user choice. Retain explicit requirements, URLs and answers faithfully. Do not invent URLs. Use collection for collecting existing data; use analysis for changes, explanation or inference.',
     'Choose only the requested output forms: brief, list, comparison or research_report. If multiple are explicitly requested use outputFormats for exactly those forms and outputFormat for the first. For a single form set outputFormats to null. Do not add extra deliverables.',
-    'Use the supplied timezone and currentDate to interpret relative dates. For an unspecified time window propose rolling 7 days and make the default clear in summary; fixed timestamps must include UTC offsets. Do not silently discard a requested time range.',
+    'Use the supplied timezone and currentDate to interpret relative dates. Collection requires a date window (default rolling 7 days); analysis may use unbounded when no date constraint is requested. Make defaults clear in summary; fixed timestamps must include UTC offsets. Do not discard a requested time range. For collection choose list when no output form is requested, and collectionDateUnknown separate unless the user requests discard; otherwise collectionDateUnknown may be null.',
     'question ids must be unique q1, q2, q3. Keep summary under 500 Chinese characters and each question/options short. Include a short reason explaining why the choice matters.',
 ].join('\n');
 
@@ -141,9 +145,9 @@ export const draftPrompt = [
     'Include every field. title/topic/goal must describe the request, not invented facts.',
     'Use only URLs literally present in the request. Do not invent URLs or sources.',
     'Keep the supplied server budget, timezone and notification preferences exactly.',
-    'Default timeRange to rolling 7 days and outputFormat to brief when unspecified.',
+    'Choose researchMode collection for collecting dated source items, analysis for explanation or inference. Collection requires a date window (default rolling 7 days), direct source support and no model answers; default its outputFormat to list. Analysis may use timeRange kind unbounded when no date constraint is requested, and defaults outputFormat to brief. For collection choose collectionDateUnknown separate unless the user requests discard; otherwise use null.',
     'Choose only requested output forms: brief for 简报/摘要, list for 清单/条目, comparison for 对比/比较, research_report for 研究报告/详细研究. If multiple are explicitly requested use outputFormats for exactly those forms and outputFormat for the first; otherwise outputFormats must be null. Do not add extra deliverables.',
-    'When confirmedSearchScope is supplied, preserve its goal, focusPoints, exclusions, sourcePreferences, timeRange and outputFormat exactly. It describes the user-confirmed research boundary; do not broaden it or add inferred research questions. researchMode is controlled by the server.',
+    'When confirmedSearchScope is supplied, preserve its goal, focusPoints, exclusions, sourcePreferences, timeRange, researchMode, collectionDateUnknown and output forms exactly. It describes the user-confirmed research boundary; do not broaden it or add inferred research questions.',
     'Only propose daily or weekly if the request explicitly says daily/每天/每日 or weekly/每周.',
     'A periodic schedule requires an explicitly specified localTime and weekday for weekly. Never guess either.',
     'Otherwise use manual. Hourly and other unsupported schedules must be manual.',
@@ -162,6 +166,7 @@ export function manualDraft(input: TaskDraftInput, defaults: DraftDefaults): Tas
         timezone: resolveDraftTimezone(input, defaults.timezone).timezone,
         schedule: { frequency: 'manual' },
         outputFormat: 'brief',
+        researchMode: 'analysis',
         budget: { ...TASK_DRAFT_DEFAULT_BUDGET },
         notificationPreference: defaults.notificationPreference,
         ...input.searchScope,
@@ -216,7 +221,6 @@ export function normalizeDraft(data: unknown, input: TaskDraftInput, fallback: T
         throw new ContractValidationError([{ path: '/', message: '模型配置必须为对象' }]);
     const config = decodeDraftOutputFormats(data) as Record<string, unknown>;
     delete config.agentProviderId;
-    delete config.researchMode;
     delete config.searchMode;
     const modelTimezoneMatches =
         canonicalTimezone(config.timezone) !== null &&
@@ -231,6 +235,7 @@ export function normalizeDraft(data: unknown, input: TaskDraftInput, fallback: T
         'timeRange',
         'schedule',
         'outputFormat',
+        'researchMode',
     ] as const)
         if (config[key] === undefined) {
             config[key] = fallback[key];
@@ -322,6 +327,7 @@ export function normalizeDraft(data: unknown, input: TaskDraftInput, fallback: T
     if (input.searchScope) {
         // Absence in the confirmed legacy single selection also excludes model-added formats.
         delete config.outputFormats;
+        delete config.collectionDateUnknown;
         for (const [key, value] of Object.entries(input.searchScope)) {
             if (!same(config[key], value)) warn(key, '采用问答中已确认的搜索范围与交付要求。');
             config[key] = value;

@@ -13,6 +13,7 @@ import {
 import type { Report } from '@scova/models';
 import { expect, it } from 'vite-plus/test';
 import { candidateFromCheckpoint } from '@scova/agent-core';
+import { checkpointWithBodies } from './checkpoint.ts';
 import { createAgentRepository } from '../../src/repo/agent.ts';
 import { liveResearch } from './live-research.ts';
 import { delivery, fixture, assertEmpty, saver } from './fixture.ts';
@@ -184,7 +185,12 @@ export function registerArtifacts() {
                     ...(await repository.comparison()),
                     usage: await repository.usage(),
                 };
-                expect(candidateFromCheckpoint(context, state)).toEqual(seed.candidate);
+                expect(
+                    candidateFromCheckpoint(
+                        context,
+                        checkpointWithBodies(state, seed.candidate.pages),
+                    ),
+                ).toEqual(seed.candidate);
                 if (attack === 'strip_plan') {
                     delete state.artifactPolicy;
                     delete state.planningExtraction;
@@ -205,7 +211,10 @@ export function registerArtifacts() {
                     ...ref,
                     checkpointId: saved.configurable!.checkpoint_id as string,
                 });
-                candidate = candidateFromCheckpoint(context, state);
+                candidate = candidateFromCheckpoint(
+                    context,
+                    checkpointWithBodies(state, seed.candidate.pages),
+                );
             }
             await expect(delivery.deliver(seed.claimed.token, candidate)).rejects.toMatchObject({
                 code: 'INVALID_DELIVERY_EVIDENCE',

@@ -75,7 +75,7 @@ export async function saveReport(
     await saveChanges(tx, run, report.id, input, saveEvidence);
     // An uncertain model conclusion need not have a direct citation. Keep a real
     // source excerpt in the appendix without falsely linking it as claim support.
-    if (!hasEvidence())
+    if (!hasEvidence() && candidate.pages.length)
         await saveEvidence({
             pageId: candidate.pages[0]!.id,
             quote: Array.from(candidate.pages[0]!.text).slice(0, 300).join(''),
@@ -116,7 +116,7 @@ export async function saveReport(
         .where(eq(dbRuns.id, run.id))
         .returning()
         .then((rows) => requiredDatabaseValue(rows[0]));
-    if (complete)
+    if (complete && candidate.coverage.baseline?.eligible !== false)
         await tx
             .insert(dbBaselines)
             .values({

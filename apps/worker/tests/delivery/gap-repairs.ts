@@ -19,6 +19,7 @@ import { createDefaultServices } from '../../../server/src/app/services.ts';
 import { createReportService } from '../../../server/src/service/reports.ts';
 import { liveResearch } from './live-research.ts';
 import { fixture, delivery, assertEmpty, saver, runs } from './fixture.ts';
+import { checkpointWithBodies } from './checkpoint.ts';
 
 export function registerGapRepairs() {
     it('authenticates extended local synthesis receipts and persists completed gap repairs', async () => {
@@ -99,7 +100,12 @@ export function registerGapRepairs() {
                 await fixture.db.query.baselines.findFirst({
                     where: eq(dbBaselines.taskId, seed.task.id),
                 }),
-            ).toMatchObject({ completeRunId: seed.run.id });
+            ).toBeUndefined();
+            expect(dto.coverage.baseline).toMatchObject({
+                eligible: false,
+                reason: 'external_incomplete',
+                modelOnlyFields: 4,
+            });
         },
     );
 
@@ -108,11 +114,18 @@ export function registerGapRepairs() {
             outputFormats: ['research_report', 'comparison', 'list', 'brief'],
             failSynthesis: true,
         });
+        expect(seed.claimed.budget).toMatchObject({
+            maxInputTokens: 40_000,
+            maxOutputTokens: 8_000,
+        });
         expect(seed.candidate.coverage).toMatchObject({
             completeness: 'partial',
             delivery: { status: 'sources_only' },
         });
         expect(seed.candidate.claims.every((claim) => claim.kind === 'insufficient')).toBe(true);
+        const usage = await createAgentRepository(fixture.db, seed.claimed.token).usage();
+        expect(usage.inputTokens).toBeLessThanOrEqual(seed.claimed.budget.maxInputTokens);
+        expect(usage.outputTokens).toBeLessThanOrEqual(seed.claimed.budget.maxOutputTokens);
         const { reportId } = await delivery.deliver(seed.claimed.token, seed.candidate);
         expect(
             await fixture.db.query.reports.findFirst({ where: eq(dbReports.id, reportId) }),
@@ -165,7 +178,12 @@ export function registerGapRepairs() {
                 ...(await repository.comparison()),
                 usage: await repository.usage(),
             };
-            expect(candidateFromCheckpoint(restoredContext, state)).toEqual(seed.candidate);
+            expect(
+                candidateFromCheckpoint(
+                    restoredContext,
+                    checkpointWithBodies(state, seed.candidate.pages),
+                ),
+            ).toEqual(seed.candidate);
             const search = state.searches[0]!;
             expect(search.response.results[0]).not.toHaveProperty('page');
             const calls = await fixture.db.query.toolCalls.findMany({
@@ -209,7 +227,10 @@ export function registerGapRepairs() {
                 ...ref,
                 checkpointId: saved.configurable!.checkpoint_id as string,
             });
-            const forged = candidateFromCheckpoint(restoredContext, state);
+            const forged = candidateFromCheckpoint(
+                restoredContext,
+                checkpointWithBodies(state, seed.candidate.pages),
+            );
             await expect(delivery.deliver(seed.claimed.token, forged)).rejects.toMatchObject({
                 code: 'INVALID_DELIVERY_EVIDENCE',
             });

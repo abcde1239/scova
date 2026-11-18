@@ -8,6 +8,22 @@ import { draftConfig } from './support/task-drafts.ts';
 const config = (): TaskConfig => draftConfig();
 
 describe('research collection scope', () => {
+    it('date-unknown handling resets collection scope only when its effective policy changes', () => {
+        const analysis = config();
+        expect(comparisonScopeHash({ ...analysis, collectionDateUnknown: 'discard' })).toBe(
+            comparisonScopeHash(analysis),
+        );
+        const collection: TaskConfig = { ...analysis, researchMode: 'collection' };
+        expect(comparisonScopeHash({ ...collection, collectionDateUnknown: 'separate' })).toBe(
+            comparisonScopeHash(collection),
+        );
+        expect(comparisonScopeHash({ ...collection, collectionDateUnknown: 'discard' })).not.toBe(
+            comparisonScopeHash(collection),
+        );
+        expect(comparisonScopeHash({ ...analysis, timeRange: { kind: 'unbounded' } })).not.toBe(
+            comparisonScopeHash(analysis),
+        );
+    });
     it('search overrides reset comparison scope while legacy defaults and unchanged retries remain stable', () => {
         const original = config();
         const inherited = { config: original, scope: 'f'.repeat(64) };

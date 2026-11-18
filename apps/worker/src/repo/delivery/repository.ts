@@ -30,7 +30,12 @@ export function createDeliveryRepository(db: DatabaseClient) {
             const already = await existing(token);
             if (already) return already;
             try {
-                return await withRunFence(db, token, deadline ? 'deadline_delivery' : 'work', work);
+                return await withRunFence(
+                    db,
+                    token,
+                    deadline ? 'deadline_delivery' : 'delivery',
+                    work,
+                );
             } catch (error) {
                 if (error instanceof RunFenceError) {
                     const committed = await existing(token);

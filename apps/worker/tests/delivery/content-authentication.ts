@@ -19,6 +19,7 @@ import { candidateFromCheckpoint } from '@scova/agent-core';
 import { createAgentRepository } from '../../src/repo/agent.ts';
 import { liveResearch } from './live-research.ts';
 import { fixture, saver, delivery, assertEmpty } from './fixture.ts';
+import { checkpointWithBodies } from './checkpoint.ts';
 
 export function registerContentAuthentication() {
     it.each(['valid', 'candidate', 'receipt'] as const)(
@@ -79,7 +80,12 @@ export function registerContentAuthentication() {
                     ...(await repository.comparison()),
                     usage: await repository.usage(),
                 };
-                expect(candidateFromCheckpoint(context, state)).toEqual(seed.candidate);
+                expect(
+                    candidateFromCheckpoint(
+                        context,
+                        checkpointWithBodies(state, seed.candidate.pages),
+                    ),
+                ).toEqual(seed.candidate);
                 state.synthesisExtractions[0]!.response.data.artifacts[0]!.document.sections[0]!.title =
                     '伪造标题';
                 checkpoint.id = crypto.randomUUID();
@@ -99,7 +105,10 @@ export function registerContentAuthentication() {
                     ...ref,
                     checkpointId: saved.configurable!.checkpoint_id as string,
                 });
-                candidate = candidateFromCheckpoint(context, state);
+                candidate = candidateFromCheckpoint(
+                    context,
+                    checkpointWithBodies(state, seed.candidate.pages),
+                );
             }
             if (attack !== 'valid') {
                 await expect(delivery.deliver(seed.claimed.token, candidate)).rejects.toMatchObject(

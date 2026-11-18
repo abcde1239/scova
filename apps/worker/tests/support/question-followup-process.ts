@@ -11,6 +11,7 @@ import {
 
 import {
     createConnectorBundle,
+    ConnectorError,
     createHttpPageReader as createPageReader,
     type ConnectorBundle,
     type StructuredInput,
@@ -74,7 +75,7 @@ const bundle: ConnectorBundle = {
         async read(requestedUrl, context) {
             if (phase === 'fail') {
                 await context?.beforeAttempt?.('read');
-                throw new Error('Injected unavailable evidence');
+                throw new ConnectorError('extraction_failed', 'Injected unavailable evidence');
             }
             return reader.read(requestedUrl, context);
         },
@@ -117,6 +118,7 @@ const bundle: ConnectorBundle = {
                         claims: [
                             {
                                 kind: 'fact',
+                                outputFormat: selectedOutputFormats(observed!.config)[0],
                                 assessment: {
                                     ...((properties.claims as any)?.items.properties.assessment
                                         ?.properties.gapKind

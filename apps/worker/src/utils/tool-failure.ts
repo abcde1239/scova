@@ -68,3 +68,49 @@ export function classifyToolFailure(error: unknown): ToolFailureCode | undefined
     const code = `TOOL_${error.code.toUpperCase()}`;
     return Object.hasOwn(toolFailures, code) ? (code as ToolFailureCode) : undefined;
 }
+
+/** Retry recognized infrastructure failures, never programming or ledger integrity faults. */
+export function isRetryableExecutionFailure(error: unknown): boolean {
+    if (error instanceof TypeError || error instanceof SyntaxError || error instanceof RangeError)
+        return false;
+    const tool = classifyToolFailure(error);
+    if (tool) return toolFailures[tool][1];
+    let value = error;
+    const seen = new Set<unknown>();
+    while (value && typeof value === 'object' && !seen.has(value)) {
+        seen.add(value);
+        const record = value as { code?: unknown; cause?: unknown };
+        if (
+            value instanceof Error &&
+            value.name === 'Error' &&
+            [
+                'Connection terminated unexpectedly',
+                'Connection terminated',
+                'Connection terminated due to connection timeout',
+                'timeout exceeded when trying to connect',
+                'Query read timeout',
+            ].includes(value.message)
+        )
+            return true;
+        if (
+            typeof record.code === 'string' &&
+            (/^(?:08[0-9A-Z]{3}|53[0-9A-Z]{3}|55P03|57P0[123]|57014|40001|40P01)$/.test(
+                record.code,
+            ) ||
+                [
+                    'ECONNRESET',
+                    'ECONNREFUSED',
+                    'ETIMEDOUT',
+                    'EPIPE',
+                    'ENETUNREACH',
+                    'EHOSTUNREACH',
+                    'EAI_AGAIN',
+                    'UND_ERR_CONNECT_TIMEOUT',
+                    'UND_ERR_SOCKET',
+                ].includes(record.code))
+        )
+            return true;
+        value = record.cause;
+    }
+    return false;
+}

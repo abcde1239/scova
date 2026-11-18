@@ -102,6 +102,16 @@ export function createReportRepo(services: Pick<ApiServices, 'db'>) {
         findReport(userId: string, id: string) {
             return readReport(services.db(), and(eq(reports.id, id), eq(reports.userId, userId))!);
         },
+        findBaselineReport(userId: string, taskId: string, runId: string) {
+            return services.db().query.reports.findFirst({
+                where: and(
+                    eq(reports.userId, userId),
+                    eq(reports.taskId, taskId),
+                    eq(reports.runId, runId),
+                ),
+                columns: { id: true, runId: true, publishedAt: true },
+            });
+        },
         findInboxAnchor(userId: string, id: string) {
             return services.db().query.inboxItems.findFirst({
                 where: and(eq(inboxItems.id, id), eq(inboxItems.userId, userId)),

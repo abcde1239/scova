@@ -2,6 +2,7 @@ import { requiredDatabaseValue } from '@/utils/database.ts';
 import { eq, taskVersions as dbTaskVersions, runs as dbRuns } from '@scova/db';
 import {
     createConnectorBundle,
+    ConnectorError,
     createHttpPageReader as createPageReader,
     type ConnectorBundle,
 } from '@scova/connectors';
@@ -14,7 +15,13 @@ import { createDeliveryModel } from './model.ts';
 
 export async function liveResearch(options: LiveResearchOptions = {}) {
     const initial = options.previous ?? (await seedRun(fixture.db, { mode: 'live' }));
-    if (options.notificationPreference || options.officialOnly || options.outputFormats) {
+    if (
+        options.notificationPreference ||
+        options.officialOnly ||
+        options.outputFormats ||
+        options.researchMode
+    ) {
+        if (options.researchMode) initial.config.researchMode = options.researchMode;
         if (options.outputFormats) {
             initial.config.outputFormats = options.outputFormats;
             initial.config.outputFormat = options.outputFormats[0]!;
@@ -78,7 +85,7 @@ export async function liveResearch(options: LiveResearchOptions = {}) {
                         body: '',
                     };
                 if (options.failUrls?.includes(requestedUrl))
-                    throw new Error('Injected missing source');
+                    throw new ConnectorError('network', 'Injected missing source');
                 return {
                     url: requestedUrl,
                     status: 200,

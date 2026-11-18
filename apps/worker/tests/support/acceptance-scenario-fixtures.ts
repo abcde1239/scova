@@ -1,4 +1,5 @@
 import {
+    ConnectorError,
     createHttpPageReader as createPageReader,
     type CallContext,
     type ConnectorBundle,
@@ -122,7 +123,10 @@ export function scenarioConnectors(
         http: {
             async request(url) {
                 if (phase === 'C' && url === data.changedUrl)
-                    throw new Error('Acceptance fixture: source temporarily unavailable');
+                    throw new ConnectorError(
+                        'network',
+                        'Acceptance fixture: source temporarily unavailable',
+                    );
                 const canonical = new URL(url);
                 canonical.search = '';
                 const facts = data.pages.get(canonical.href);

@@ -5,6 +5,71 @@ import { scenarioConnectors } from '../support/acceptance-scenario-fixtures.ts';
 import { setup, sessionFixture, fixture, usage, takeover } from './fixture.ts';
 
 export function registerFailedUsage() {
+    it('releases only confirmed local preflight reservations and keeps immutable failed receipts', async () => {
+        const seed = await setup({ mode: 'live' });
+        const bundle = scenarioConnectors('research', 'A');
+        let dispatched = 0;
+        bundle.model = createModelProvider({
+            apiKey: 'test-key',
+            model: 'test-model',
+            http: {
+                async request() {
+                    dispatched++;
+                    throw new Error('Unexpected provider dispatch');
+                },
+            },
+        });
+        const { session, close } = sessionFixture(seed, bundle);
+        const input = {
+            prompt: 'Compile before dispatch',
+            schema: { type: 'string', enum: [] },
+            maxInputTokens: 4096,
+            maxOutputTokens: 100,
+        };
+        try {
+            for (let attempt = 1; attempt <= 2; attempt++) {
+                await expect(
+                    session.tools.model('local-schema-failure', input),
+                ).rejects.toMatchObject({
+                    code: 'configuration',
+                });
+                expect(await seed.repo.usage()).toMatchObject({ inputTokens: 0, outputTokens: 0 });
+            }
+            expect(dispatched).toBe(0);
+            const calls = await fixture.db.query.toolCalls.findMany({
+                where: eq(dbToolCalls.runId, seed.run.id),
+                orderBy: [asc(dbToolCalls.attemptNo)],
+            });
+            expect(
+                calls.map((call) => ({
+                    attemptNo: call.attemptNo,
+                    status: call.status,
+                    usage: call.usage,
+                    outputRef: call.outputRef,
+                })),
+            ).toEqual(
+                [1, 2].map((attemptNo) => ({
+                    attemptNo,
+                    status: 'failed',
+                    usage: usage({ estimated: false }),
+                    outputRef: null,
+                })),
+            );
+            await seed.repo.fail({
+                toolCallId: calls[0]!.id,
+                actualUsage: usage({ estimated: false }),
+                failureCode: 'TOOL_CONFIGURATION',
+            });
+            expect(await seed.repo.usage()).toMatchObject({ inputTokens: 0, outputTokens: 0 });
+            const events = await fixture.db.query.runEvents.findMany({
+                where: eq(dbRunEvents.runId, seed.run.id),
+            });
+            expect(events.filter((event) => event.type === 'tool.failed')).toHaveLength(2);
+            expect(JSON.stringify(events)).not.toContain('test-key');
+        } finally {
+            await close();
+        }
+    });
     it('settles confirmed usage on rejected model JSON without saving a success receipt or refunding twice', async () => {
         const seed = await setup({ mode: 'live' });
         const bundle = scenarioConnectors('research', 'A');

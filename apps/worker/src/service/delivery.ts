@@ -16,6 +16,7 @@ import {
     finalizeCoverage,
     type DeliveryProof,
 } from '@/service/delivery-proof.ts';
+import { checkpointRef } from '@/repo/agent/validation.ts';
 import { invalid } from '@/utils/delivery.ts';
 import { RunExecutionError, type RunLeaseToken } from '@/utils/runs.ts';
 
@@ -51,7 +52,6 @@ export function createDeliveryService(database: DatabaseClient, saver: PostgresS
     };
     return {
         async deliver(token: RunLeaseToken, candidate: AgentCandidate, deadline = false) {
-            if (deadline) return settle(token, { candidate, deadline });
             const run = await database.query.runs.findFirst({
                 where: and(eq(dbRuns.id, token.runId), eq(dbRuns.userId, token.userId)),
             });
@@ -60,19 +60,15 @@ export function createDeliveryService(database: DatabaseClient, saver: PostgresS
                 where: and(eq(dbReports.userId, token.userId), eq(dbReports.runId, token.runId)),
             });
             if (existing) return { reportId: existing.id, reused: true };
-            const ref = run.checkpointRef as {
-                threadId?: string;
-                namespace?: string;
-                checkpointId?: string;
-                leaseEpoch?: number;
-            } | null;
-            if (
-                !ref ||
-                ref.threadId !== `run-${run.id}-epoch-${token.leaseEpoch}` ||
-                ref.leaseEpoch !== token.leaseEpoch ||
-                ref.namespace !== '' ||
-                typeof ref.checkpointId !== 'string'
-            )
+            if (deadline && run.checkpointRef === null)
+                return settle(token, { candidate, deadline });
+            let ref;
+            try {
+                ref = checkpointRef(run.checkpointRef, run.id, token.leaseEpoch);
+            } catch {
+                throw new RunExecutionError('INVALID_DELIVERY_EVIDENCE');
+            }
+            if (!deadline && ref.leaseEpoch !== token.leaseEpoch)
                 throw new RunExecutionError('INVALID_DELIVERY_EVIDENCE');
             const tuple = await saver.getTuple({
                 configurable: {

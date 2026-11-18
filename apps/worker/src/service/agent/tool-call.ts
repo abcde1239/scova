@@ -1,7 +1,9 @@
 import { classifyToolFailure, modelFailureDiagnostic } from '@/utils/tool-failure.ts';
 import {
     ConnectorError,
+    isModelPreflightFailure,
     MODEL_CALL_TIMEOUT_MS,
+    READ_CALL_TIMEOUT_MS,
     withDeadline,
     type CallContext,
     type StructuredInput,
@@ -49,6 +51,10 @@ export function createToolCaller(
                     : {}),
             });
         } catch (error) {
+            if (error instanceof AgentPersistenceError && error.code === 'BUDGET_EXCEEDED') {
+                // No usage was committed: allow the graph to persist its bounded fallback.
+                throw new ConnectorError('budget_exceeded', '执行预算不足');
+            }
             if (error instanceof AgentPersistenceError && error.code === 'MODEL_QUOTA_EXCEEDED')
                 throw new ConnectorError(
                     'model_quota_exceeded',
@@ -67,7 +73,9 @@ export function createToolCaller(
             const remaining = Math.min(
                 tool === 'model' || (tool === 'search' && bundle.search.tokenReservation)
                     ? MODEL_CALL_TIMEOUT_MS
-                    : 15_000,
+                    : tool === 'read' && bundle.searchProvider === 'api'
+                      ? READ_CALL_TIMEOUT_MS
+                      : 15_000,
                 context.deadlineAt.getTime() - Date.now(),
             );
             if (remaining <= 0) throw new ConnectorError('timeout', '时间预算已耗尽');
@@ -142,12 +150,18 @@ export function createToolCaller(
             Object.assign(currentUsage, settled.usage);
             return result;
         } catch (error) {
-            if (error instanceof ConnectorError && error.code === 'budget_exceeded')
+            // Only the connector's private preflight identity proves no dispatch. Missing callbacks,
+            // plain configuration errors and transport failures do not authorize a refund.
+            const preflight = tool === 'model' && attempts === 0 && isModelPreflightFailure(error);
+            if (!preflight && error instanceof ConnectorError && error.code === 'budget_exceeded')
                 invalidateBudget();
-            // A rejected generated result can still have confirmed usage. Transport failures
-            // without it retain their reservation; no rejected output becomes a reusable receipt.
-            const actual =
-                tool === 'model' && error instanceof ConnectorError ? error.modelUsage : undefined;
+            // A rejected generated result can still have confirmed usage; no rejected output
+            // becomes a reusable receipt.
+            const actual = preflight
+                ? { inputTokens: 0, outputTokens: 0, estimated: false }
+                : tool === 'model' && error instanceof ConnectorError
+                  ? error.modelUsage
+                  : undefined;
             if (
                 actual &&
                 actual.estimated === false &&

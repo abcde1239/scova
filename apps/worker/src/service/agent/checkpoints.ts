@@ -15,6 +15,7 @@ const configFromRef = (ref: AgentCheckpointRef): RunnableConfig => ({
 export function createSessionCheckpoints(
     { repository, saver, token }: Pick<AgentSessionOptions, 'repository' | 'saver' | 'token'>,
     guard: () => Promise<void>,
+    readDeadlineTuple = (config: RunnableConfig) => saver.getTuple(config),
 ) {
     async function promote(config: RunnableConfig) {
         await guard();
@@ -61,5 +62,18 @@ export function createSessionCheckpoints(
         return { config: fork, resume: true };
     }
 
-    return { promote, openCheckpoint };
+    async function readDeadlineCheckpoint(): Promise<object | null> {
+        const ref = await repository.readAuthorizedCheckpoint({ allowDeadline: true });
+        if (!ref) return null;
+        const tuple = await readDeadlineTuple(configFromRef(ref));
+        if (!tuple || tuple.checkpoint.id !== ref.checkpointId)
+            throw new AgentPersistenceError('INVALID_CHECKPOINT');
+        // Re-check cancellation and ownership after saver I/O, without mutating/forking the graph.
+        await repository.readAuthorizedCheckpoint({ allowDeadline: true });
+        const research = tuple.checkpoint.channel_values.research;
+        if (!research || typeof research !== 'object')
+            throw new AgentPersistenceError('INVALID_CHECKPOINT');
+        return research;
+    }
+    return { promote, openCheckpoint, readDeadlineCheckpoint };
 }

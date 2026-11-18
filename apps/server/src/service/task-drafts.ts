@@ -127,6 +127,9 @@ export function createTaskDraftService(services: ApiServices) {
                 outputFormat: fallback.outputFormat,
                 ...(fallback.outputFormats ? { outputFormats: fallback.outputFormats } : {}),
                 researchMode: fallback.researchMode ?? 'analysis',
+                ...(fallback.collectionDateUnknown
+                    ? { collectionDateUnknown: fallback.collectionDateUnknown }
+                    : {}),
             });
         const manual = (reason: Reason) =>
             kind === 'questions'

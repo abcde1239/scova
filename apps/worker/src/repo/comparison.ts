@@ -8,6 +8,7 @@ import {
 } from '@scova/db';
 import { createHash } from 'node:crypto';
 import { isComparisonManifest, type AgentBaseline } from '@scova/agent-core';
+import { CoverageSchema, parseContract, type Coverage } from '@scova/models';
 
 const sha = (text: string) => createHash('sha256').update(text, 'utf8').digest('hex');
 
@@ -146,5 +147,19 @@ export async function loadBaseline(
             evidence.push({ id: reference.id, pageId: page.pageId, quote: reference.quote });
         }
     }
-    return { ...unavailable, status: 'ready', manifest: structuredClone(manifest), evidence };
+    // Old executions keep their original manifest semantics. New policies separately check this
+    // optional authenticated coverage; malformed legacy coverage must never grant eligibility.
+    let coverage: Coverage | undefined;
+    try {
+        coverage = parseContract(CoverageSchema, baseline.coverageJson);
+    } catch {
+        /* No eligibility proof. */
+    }
+    return {
+        ...unavailable,
+        status: 'ready',
+        manifest: structuredClone(manifest),
+        evidence,
+        ...(coverage ? { coverage } : {}),
+    };
 }

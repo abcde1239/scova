@@ -2,6 +2,9 @@ import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import {
     runResearchAgent,
     deterministicPartial,
+    candidateFromCheckpoint,
+    AgentError,
+    type AgentPageRef,
     type AgentCandidate,
     type AgentContext,
 } from '@scova/agent-core';
@@ -9,6 +12,7 @@ import { ConnectorError, type ConnectorBundle } from '@scova/connectors';
 import { type AgentRepository } from '@/repo/agent.ts';
 import type { RunExecutionContext } from '@/service/runs.ts';
 import { RunExecutionError, type RunLeaseToken, type RunProgressEvent } from '@/utils/runs.ts';
+import { within } from '@/utils/timeout.ts';
 import { digest, readPage } from '@/service/agent/tool-results.ts';
 import { createSessionCheckpoints } from '@/service/agent/checkpoints.ts';
 import { createSessionPersistence } from '@/service/agent/persistence.ts';
@@ -43,15 +47,17 @@ export function createAgentSession({
     const currentUsage = { ...context.usage };
     let tokenBudgetInvalid = false;
     const guard = async () => {
-        if (context.signal.aborted) throw new ConnectorError('aborted', '执行已停止');
+        if (context.controlSignal?.aborted || context.signal.aborted)
+            throw new ConnectorError('aborted', '执行已停止');
         await context.assertActive();
         if (tokenBudgetInvalid)
             throw new ConnectorError('budget_exceeded', '模型预算已失效，停止后续调用');
     };
 
-    const { promote, openCheckpoint } = createSessionCheckpoints(
+    const { promote, openCheckpoint, readDeadlineCheckpoint } = createSessionCheckpoints(
         { repository, saver, token },
         guard,
+        (config) => trackDomain(() => rawSaver.getTuple(config), true),
     );
     const call = createToolCaller({ repository, context, bundle }, currentUsage, guard, () => {
         tokenBudgetInvalid = true;
@@ -90,8 +96,16 @@ export function createAgentSession({
         openCheckpoint,
         persist: trackDomain,
         drain: async () => {
-            await bundle.reader.close?.();
-            await drain();
+            const results = await Promise.allSettled([
+                within(
+                    Promise.resolve().then(() => bundle.reader.close?.()),
+                    5_000,
+                    'Reader 停止超时',
+                ),
+                within(drain(), 6_000, 'Agent 持久化停止超时'),
+            ]);
+            const failed = results.find((result) => result.status === 'rejected');
+            if (failed?.status === 'rejected') throw failed.reason;
         },
         async execute(): Promise<AgentCandidate> {
             if (bundle.mode !== context.mode)
@@ -102,6 +116,7 @@ export function createAgentSession({
             const candidate = await runResearchAgent(agentContext, {
                 ...opened,
                 tools,
+                loadPages: (refs) => repository.readCheckpointPages(refs),
                 checkpointer: saver,
                 promote,
                 onClaimsRepair: () =>
@@ -136,11 +151,31 @@ export function createAgentSession({
             return candidate;
         },
         async partial(): Promise<AgentCandidate | null> {
-            if (context.signal.aborted && context.signal.reason !== 'deadline')
+            if (
+                context.controlSignal?.aborted ||
+                (context.signal.aborted && context.signal.reason !== 'deadline')
+            )
                 throw new ConnectorError('aborted', '执行已停止');
             // A fresh post-deadline session never executes the graph. Load the same frozen context
             // used by delivery while retaining owner, lease and cancellation checks; no external calls.
             Object.assign(agentContext, await repository.comparison({ allowDeadline: true }));
+            const checkpoint = await readDeadlineCheckpoint();
+            if (checkpoint && typeof checkpoint === 'object') {
+                const state = structuredClone(checkpoint) as {
+                    pagePolicy?: number;
+                    pages: AgentPageRef[];
+                };
+                if (state.pagePolicy === 1)
+                    state.pages = await repository.readCheckpointPages(state.pages, {
+                        allowDeadline: true,
+                    });
+                try {
+                    return candidateFromCheckpoint(agentContext, state, 'deadline');
+                } catch (error) {
+                    if (error instanceof AgentError && error.code === 'NO_EVIDENCE') return null;
+                    throw error;
+                }
+            }
             // This bound domain read still validates lease and cancellation. No network/model operation.
             const pages = (await repository.readPages({ allowDeadline: true })).map((value) =>
                 readPage(value, context.mode),

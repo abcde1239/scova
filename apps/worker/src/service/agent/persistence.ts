@@ -9,9 +9,22 @@ export function createSessionPersistence(
 ) {
     const pending = new Set<Promise<unknown>>();
     function trackDomain<T>(operation: () => Promise<T>, allowDeadline = false): Promise<T> {
-        if (context.signal.aborted && !(allowDeadline && context.signal.reason === 'deadline'))
-            return Promise.reject(new ConnectorError('aborted', '执行已停止'));
-        const task = Promise.resolve().then(operation);
+        const assertControl = () => {
+            if (
+                context.controlSignal?.aborted ||
+                (context.signal.aborted && !(allowDeadline && context.signal.reason === 'deadline'))
+            )
+                throw new ConnectorError('aborted', '执行已停止');
+        };
+        try {
+            assertControl();
+        } catch (error) {
+            return Promise.reject(error);
+        }
+        const task = Promise.resolve().then(() => {
+            assertControl();
+            return operation();
+        });
         pending.add(task);
         void task.then(
             () => pending.delete(task),
@@ -27,9 +40,17 @@ export function createSessionPersistence(
             return (...args: unknown[]) =>
                 trackDomain(
                     async () => Reflect.apply(method, target, args),
-                    ['readPages', 'comparison'].includes(String(property)) &&
-                        (args[0] as { allowDeadline?: boolean } | undefined)?.allowDeadline ===
-                            true,
+                    [
+                        'readPages',
+                        'comparison',
+                        'readAuthorizedCheckpoint',
+                        'readCheckpointPages',
+                    ].includes(String(property)) &&
+                        (
+                            args[property === 'readCheckpointPages' ? 1 : 0] as
+                                | { allowDeadline?: boolean }
+                                | undefined
+                        )?.allowDeadline === true,
                 );
         },
     });

@@ -242,7 +242,7 @@ describe('草稿解析与独立预算', () => {
         expect(result.warnings.some((w) => w.message.includes('已移除'))).toBe(false);
         if (available) expect(JSON.stringify(fixture.inputs[0])).toContain('confirmedSearchScope');
     });
-    it('模型不能擅自改变研究方式或选择个人执行配置', () => {
+    it('模型可提议资料采集，但不能选择个人执行配置或搜索供应商', () => {
         const fallback = manualDraft(request, {
             timezone: 'Asia/Tokyo',
             notificationPreference: { mode: 'off', runIssues: false },
@@ -257,9 +257,40 @@ describe('草稿解析与独立预算', () => {
             request,
             fallback,
         );
-        expect(result.config.researchMode).toBeUndefined();
+        expect(result.config.researchMode).toBe('collection');
         expect(result.config.agentProviderId).toBeUndefined();
         expect(result.config.searchMode).toBeUndefined();
+    });
+    it('分析不限日期可由模型产出，采集不可取消窗口，确认的日期处理不被覆盖', () => {
+        const input = { inputText: '解释机制，不限日期' };
+        const fallback = manualDraft(input, {
+            timezone: 'UTC',
+            notificationPreference: { mode: 'off', runIssues: false },
+        });
+        const proposed = { ...fallback, timeRange: { kind: 'unbounded' } };
+        expect(normalizeDraft(proposed, input, fallback).config.timeRange).toEqual({
+            kind: 'unbounded',
+        });
+        expect(() =>
+            normalizeDraft({ ...proposed, researchMode: 'collection' }, input, fallback),
+        ).toThrow(ContractValidationError);
+        const searchScope = {
+            goal: fallback.goal,
+            focusPoints: [],
+            exclusions: [],
+            sourcePreferences: fallback.sourcePreferences,
+            timeRange: { kind: 'rolling' as const, days: 7 },
+            outputFormat: 'list' as const,
+            researchMode: 'collection' as const,
+            collectionDateUnknown: 'discard' as const,
+        };
+        expect(
+            normalizeDraft(
+                { ...fallback, collectionDateUnknown: 'separate' },
+                { ...input, searchScope },
+                fallback,
+            ).config,
+        ).toMatchObject(searchScope);
     });
     it('无模型明确手工回退，原样保留描述并使用用户偏好与合法完整配置', async () => {
         const { service, evalRedis } = setup();
@@ -287,7 +318,10 @@ describe('草稿解析与独立预算', () => {
             const result = await service.create(session, input);
             expect(result.mode).toBe('model');
             expect(result.requiresConfirmation).toBe(true);
-            expect(result.config).toEqual(config);
+            expect(result.config).toEqual({
+                ...config,
+                researchMode: config.researchMode ?? 'analysis',
+            });
             expect(result.parsingUsage).toEqual({
                 attempts: 1,
                 inputTokens: 100,
@@ -764,6 +798,8 @@ describe('真实模型适配器的本地HTTP契约', () => {
                                     content: JSON.stringify({
                                         ...draftConfig(),
                                         outputFormats: null,
+                                        researchMode: 'analysis',
+                                        collectionDateUnknown: null,
                                     }),
                                 },
                             },
@@ -783,7 +819,7 @@ describe('真实模型适配器的本地HTTP契约', () => {
         expect((await setup(model).service.create(session, request)).mode).toBe('model');
         expect(http.request).toHaveBeenCalledTimes(1);
         expect(JSON.stringify(draftModelSchema)).not.toContain('scova-timezone');
-        expect(JSON.stringify(draftModelSchema)).not.toContain('searchMode');
+        expect(draftModelSchema.properties).not.toHaveProperty('searchMode');
     });
     it('上游HTTP失败不会触发内置三次重试或结构repair', async () => {
         const http = {

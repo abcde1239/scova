@@ -1,5 +1,6 @@
 import { Worker, type Queue } from 'bullmq';
 import { Redis } from 'ioredis';
+import { within } from '@/utils/timeout.ts';
 
 export interface RecoverableRun {
     id: string;
@@ -82,22 +83,6 @@ export function createRunConsumer(
     worker.on('error', () => undefined);
     let running: Promise<void> | undefined;
     let closing: Promise<void> | undefined;
-    async function within<T>(task: Promise<T>, milliseconds: number): Promise<T> {
-        let timer: ReturnType<typeof setTimeout> | undefined;
-        try {
-            return await Promise.race([
-                task,
-                new Promise<never>((_, reject) => {
-                    timer = setTimeout(
-                        () => reject(new Error('Run consumer 操作超时')),
-                        milliseconds,
-                    );
-                }),
-            ]);
-        } finally {
-            clearTimeout(timer);
-        }
-    }
     return {
         worker,
         finished: () => finished,
@@ -120,14 +105,25 @@ export function createRunConsumer(
             return (closing ??= (async () => {
                 try {
                     // 先等领域处理和在途 DB 写入收敛，再释放队列；不依赖 Redis ACK 完成停止。
-                    await Promise.allSettled(pending);
+                    const results: PromiseSettledResult<unknown>[] = await Promise.allSettled([
+                        within(Promise.allSettled(pending), 25_000),
+                    ]);
                     redis.disconnect();
-                    await worker.close(true);
+                    results.push(
+                        ...(await Promise.allSettled([within(worker.close(true), 5_000)])),
+                    );
+                    const failed = results.find((result) => result.status === 'rejected');
+                    if (failed?.status === 'rejected') throw failed.reason;
                     if (running)
                         await within(
                             running.catch(() => undefined),
                             5000,
                         );
+                } catch (error) {
+                    rejectFinished(
+                        error instanceof Error ? error : new Error('Run consumer 停止失败'),
+                    );
+                    throw error;
                 } finally {
                     redis.disconnect();
                     resolveFinished();

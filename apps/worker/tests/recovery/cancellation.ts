@@ -195,7 +195,7 @@ export function registerCancellation() {
             expect(await seed.repo.usage()).toMatchObject({ searches: 2 });
             await expect(
                 session.tools.search('retry-provider', 'different-input'),
-            ).rejects.toMatchObject({ code: 'BUDGET_EXCEEDED' });
+            ).rejects.toMatchObject({ name: 'ConnectorError', code: 'budget_exceeded' });
             expect(externalAttempts).toBe(2);
             expect(
                 await fixture.db

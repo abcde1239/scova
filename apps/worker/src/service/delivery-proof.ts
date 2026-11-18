@@ -1,7 +1,10 @@
+import { deliveryPages } from './delivery-pages.ts';
 import type { Run, ToolCall } from '@scova/db';
 import { isDeepStrictEqual } from 'node:util';
 import {
     candidateFromCheckpoint,
+    baselineEligibility,
+    collectionDateEntry,
     deterministicPartial,
     manifestFromModel,
     comparisonReceiptMatchesOutput,
@@ -9,6 +12,8 @@ import {
     type AgentCandidate,
     type AgentContext,
     type ComparisonExtraction,
+    type AgentPage,
+    type AgentPageRef,
 } from '@scova/agent-core';
 import { classifyReportDelivery, CoverageSchema, parseContract } from '@scova/models';
 import { type ReadPage, type SearchResponse } from '@scova/connectors';
@@ -52,11 +57,18 @@ export function authenticateCandidate(
 ): AgentCandidate {
     let candidate: AgentCandidate;
     try {
-        if (proof.deadline) candidate = deadlineCandidate(context, successful);
+        const state = proof.research as { pagePolicy?: number; pages: AgentPageRef[] } | undefined;
+        if (state?.pagePolicy === 1)
+            proof.research = { ...state, pages: deliveryPages(state.pages, successful) };
+        if (proof.deadline && !proof.research) candidate = deadlineCandidate(context, successful);
         else {
             if (!run.checkpointRef || !isDeepStrictEqual(run.checkpointRef, proof.checkpointRef))
                 invalid();
-            candidate = candidateFromCheckpoint(context, proof.research);
+            candidate = candidateFromCheckpoint(
+                context,
+                proof.research,
+                proof.deadline ? 'deadline' : undefined,
+            );
         }
     } catch (error) {
         if (error instanceof RunExecutionError) throw error;
@@ -75,14 +87,15 @@ export function authenticateCandidate(
     if (!isDeepStrictEqual(supplied, candidate)) invalid();
     if (
         (!candidate.pages.length &&
-            !candidate.claims.some((claim) => claim.kind === 'model_answer')) ||
+            !candidate.claims.some((claim) => claim.kind === 'model_answer') &&
+            !(proof.research as { collectionPolicy?: number } | undefined)?.collectionPolicy) ||
         !candidate.claims.length
     )
         throw new RunExecutionError('NO_EVIDENCE');
     // Object/field coverage is founded on the frozen model plan, not a
     // caller-editable checkpoint projection. Removing its policy marker
     // must not hide a committed structured plan either.
-    if (!proof.deadline) {
+    if (proof.research) {
         const research = proof.research as {
             artifactPolicy?: number;
             evidencePolicy?: number;
@@ -92,6 +105,13 @@ export function authenticateCandidate(
             gapKindPolicy?: number;
             knowledgeFirstPolicy?: number;
             gapLoopPolicy?: number;
+            loopQualityPolicy?: number;
+            collectionPolicy?: number;
+            baselinePolicy?: number;
+            pagePolicy?: number;
+            dateScreening?: unknown[];
+            pages?: AgentPage[];
+            readIndex?: number;
             planningExtraction?: ComparisonExtraction;
         };
         // These flags are stamped by the Worker from frozen request metadata, never by the model.
@@ -104,8 +124,51 @@ export function authenticateCandidate(
                 'gapKindPolicy',
                 'knowledgeFirstPolicy',
                 'gapLoopPolicy',
+                'loopQualityPolicy',
+                'collectionPolicy',
+                'baselinePolicy',
+                'pagePolicy',
             ] as const)
                 if (policy?.[name] !== research[name]) invalid();
+        }
+        if (research.collectionPolicy) {
+            const expected = [
+                ...new Map(
+                    successful
+                        .filter(
+                            (call) =>
+                                call.tool === 'read' &&
+                                Number(/^read-(\d+):/.exec(call.operationKey)?.[1] ?? Infinity) <
+                                    (research.readIndex ?? 0),
+                        )
+                        .map((call) => [call.operationKey.split(':')[0], call]),
+                ).values(),
+            ]
+                .map((call) => {
+                    const body = output(call) as AgentPage;
+                    return collectionDateEntry(context, {
+                        ...body,
+                        id: call.operationKey.split(':')[0]!,
+                        questionIds: [],
+                    });
+                })
+                .sort((a, b) => a.pageId.localeCompare(b.pageId));
+            const screened = [...(research.dateScreening ?? [])].sort((a, b) =>
+                String((a as { pageId: string }).pageId).localeCompare(
+                    String((b as { pageId: string }).pageId),
+                ),
+            );
+            // Only reads included in the promoted checkpoint are eligible; a settled read after its
+            // last promotion may be absent during a deadline, but no checkpoint entry may be invented.
+            if (!isDeepStrictEqual(screened, expected)) invalid();
+            const accepted = screened.filter(
+                (entry) => (entry as { status: string }).status === 'accepted',
+            ) as { pageId: string }[];
+            if (
+                accepted.length !== candidate.pages.length ||
+                accepted.some((entry) => !candidate.pages.some((p) => p.id === entry.pageId))
+            )
+                invalid();
         }
         // New support links cannot be reinterpreted with legacy discovery scopes.
         const committedEvidencePolicy = successful.some((call) => {
@@ -274,7 +337,8 @@ export function finalizeCoverage(
         !proof.deadline &&
         (proof.research as { answerCompletionPolicy?: number } | undefined)
             ?.answerCompletionPolicy === 1 &&
-        candidate.coverage.completeness === 'complete';
+        candidate.coverage.completeness === 'complete' &&
+        !(proof.research as { collectionPolicy?: number } | undefined)?.collectionPolicy;
     const process = answered ? notes : gaps;
     // These checks are independent of a model/caller's completeness flag.
     if (candidate.pages.some((page) => page.truncated))
@@ -302,6 +366,9 @@ export function finalizeCoverage(
             searches: { query: { query: string }; response: unknown }[];
             selections: { url: string; questionIds: string[] }[];
         };
+        const screened =
+            (proof.research as { dateScreening?: { pageId: string; status: string }[] })
+                .dateScreening ?? [];
         if (!state.queries.length || !state.searches.length) process.push('搜索计划未完成');
         for (const search of state.searches)
             if (
@@ -318,6 +385,9 @@ export function finalizeCoverage(
                 process.push('部分计划查询未取得成功结果');
         for (const [index, selection] of state.selections.entries())
             if (
+                !screened.some(
+                    (entry) => entry.pageId === `read-${index}` && entry.status !== 'accepted',
+                ) &&
                 !candidate.pages.some(
                     (page) =>
                         page.id === `read-${index}` &&
@@ -354,6 +424,8 @@ export function finalizeCoverage(
         gaps: [...new Set(gaps)],
         completeness: gaps.length || proof.deadline ? 'partial' : 'complete',
     });
+    if ((proof.research as { baselinePolicy?: number } | undefined)?.baselinePolicy)
+        candidate.coverage.baseline = baselineEligibility(candidate.coverage);
 }
 
 /** A comparison scope with a baseline cannot be advanced without a completed comparison. */
@@ -382,16 +454,19 @@ export function applyBaselineGaps(
 }
 
 export function deliveryOutcome(candidate: AgentCandidate, run: Run) {
+    if (candidate.coverage.baseline)
+        candidate.coverage.baseline = baselineEligibility(candidate.coverage);
     const complete = candidate.coverage.completeness === 'complete';
     const changes = candidate.changes ?? [];
-    const outcome = !complete
-        ? 'inconclusive'
-        : !run.baselineRunId
-          ? 'baseline'
-          : changes.some((change) => change.important && change.kind === 'changed')
-            ? 'important_change'
-            : changes.some((change) => change.kind === 'new')
-              ? 'new_findings'
-              : 'no_important_change';
+    const outcome =
+        !complete || candidate.coverage.baseline?.eligible === false
+            ? 'inconclusive'
+            : !run.baselineRunId
+              ? 'baseline'
+              : changes.some((change) => change.important && change.kind === 'changed')
+                ? 'important_change'
+                : changes.some((change) => change.kind === 'new')
+                  ? 'new_findings'
+                  : 'no_important_change';
     return { complete, changes, outcome } as const;
 }

@@ -256,7 +256,7 @@ describe('生产 Run 租约、消费与恢复（真实 PG/Redis，串行）', ()
                 clearTimeout(timer);
             }
             expect(context.signal.aborted).toBe(true);
-            expect((await stored(seed.run.id)).status).toBe('running');
+            expect((await stored(seed.run.id)).status).toBe('queued');
             expect((await stored(seed.run.id)).cancelRequestedAt).toBeNull();
             expect(await redis.ping()).toBe('PONG');
         } finally {
@@ -380,7 +380,7 @@ describe('生产 Run 租约、消费与恢复（真实 PG/Redis，串行）', ()
         expect(
             (await events(seed.run.id)).filter((event) => event.type === 'step.started'),
         ).toHaveLength(1);
-        expect((await stored(seed.run.id)).status).toBe('running');
+        expect((await stored(seed.run.id)).status).toBe('queued');
     });
     it('C12-04 fenced事务跨租约到期在提交前拒绝并回滚已写业务数据', async () => {
         const seed = await seedRun(fixture.db);
@@ -560,7 +560,7 @@ describe('生产 Run 租约、消费与恢复（真实 PG/Redis，串行）', ()
         }
         expect(await pending).toBe('stopped');
         expect(context.signal.aborted).toBe(true);
-        expect((await stored(seed.run.id)).status).toBe('running');
+        expect((await stored(seed.run.id)).status).toBe('queued');
         expect((await events(seed.run.id)).some((event) => event.type === 'run.canceled')).toBe(
             false,
         );
@@ -1069,7 +1069,7 @@ describe('真实进程崩溃与IPC停止', () => {
                 await endProcess(second);
                 expect(second.exit?.code, second.output).toBe(0);
                 const stopped = await stored(seed.run.id);
-                expect(stopped.status).toBe('running');
+                expect(stopped.status).toBe('queued');
                 expect(stopped.cancelRequestedAt).toBeNull();
                 expect(stopped.finishedAt).toBeNull();
                 expect(

@@ -337,15 +337,23 @@ describe('整体后端：真实 HTTP → PostgreSQL Outbox → BullMQ → Run co
                     runId: first.run.id,
                     taskVersionId: task.currentVersionId,
                 });
-                await waitUntil(
-                    async () =>
-                        (
-                            await fixture.db.query.runs
-                                .findFirst({ where: and(eq(tables.runs.id, first.run.id)) })
-                                .then(requireRow)
-                        ).status === 'partial',
-                    worker,
-                );
+                await waitUntil(async () => {
+                    const run = await fixture.db.query.runs
+                        .findFirst({ where: and(eq(tables.runs.id, first.run.id)) })
+                        .then(requireRow);
+                    if (['failed', 'canceled', 'succeeded'].includes(run.status))
+                        throw new Error(
+                            'Expected controlled partial delivery: ' +
+                                JSON.stringify({
+                                    status: run.status,
+                                    failureCode: run.failureCode,
+                                    coverage: run.coverageJson,
+                                }) +
+                                '\n' +
+                                worker!.output,
+                        );
+                    return run.status === 'partial';
+                }, worker);
                 expect(
                     (
                         await fixture.db.query.runs
@@ -370,15 +378,21 @@ describe('整体后端：真实 HTTP → PostgreSQL Outbox → BullMQ → Run co
                         ).sentAt !== null,
                     worker,
                 );
-                await waitUntil(
-                    async () =>
-                        (
-                            await fixture.db.query.runs
-                                .findFirst({ where: and(eq(tables.runs.id, second.run.id)) })
-                                .then(requireRow)
-                        ).status === 'partial',
-                    worker,
-                );
+                await waitUntil(async () => {
+                    const run = await fixture.db.query.runs
+                        .findFirst({ where: and(eq(tables.runs.id, second.run.id)) })
+                        .then(requireRow);
+                    if (['failed', 'canceled', 'succeeded'].includes(run.status))
+                        throw new Error(
+                            'Expected controlled partial delivery: ' +
+                                JSON.stringify({
+                                    status: run.status,
+                                    failureCode: run.failureCode,
+                                    coverage: run.coverageJson,
+                                }),
+                        );
+                    return run.status === 'partial';
+                }, worker);
                 await stop(worker);
                 worker = undefined;
                 const unchanged = await fixture.db.query.outbox

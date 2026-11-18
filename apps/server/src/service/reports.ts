@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { validatePublication, describePublication } from '@scova/connectors';
+import { validatePublication, describePublication, publicationDateSource } from '@scova/connectors';
 import {
     EvidenceSelectorSchema,
     InboxItemSchema,
@@ -126,6 +126,13 @@ function evidence(row: StoredEvidence, report: StoredReport, expectedRunId: stri
             contentHash: snapshot.contentHash,
             extractorVersion: snapshot.extractorVersion,
             publishedAt: publication.instant,
+            dateSource: publicationDateSource(
+                metadata?.publication,
+                (report.run.coverageJson as { dateScreening?: unknown } | null)?.dateScreening &&
+                    dates.published.status === 'unknown'
+                    ? 'modified'
+                    : 'published',
+            ),
             ...(metadata?.publication
                 ? {
                       sourceDates: {
@@ -139,7 +146,22 @@ function evidence(row: StoredEvidence, report: StoredReport, expectedRunId: stri
         },
     };
 }
-function detail(row: StoredReport): Report {
+function comparableBaseline(row: StoredReport): boolean {
+    const baseline = row.baseline;
+    const coverage = baseline?.coverageJson as Record<string, unknown> | null;
+    return (
+        !!baseline &&
+        baseline.id === row.baselineRunId &&
+        baseline.id === row.run.baselineRunId &&
+        baseline.userId === row.userId &&
+        baseline.taskId === row.taskId &&
+        baseline.mode === row.run.mode &&
+        baseline.comparisonScopeHash === row.run.comparisonScopeHash &&
+        baseline.status === 'succeeded' &&
+        coverage?.completeness === 'complete'
+    );
+}
+function detail(row: StoredReport, baseline?: Report['baseline']): Report {
     try {
         const coverage = summary(row).coverage;
         if (
@@ -153,21 +175,8 @@ function detail(row: StoredReport): Report {
             row.changes.some((change) =>
                 change.citations.some((citation) => citation.side === 'old'),
             )
-        ) {
-            const baseline = row.baseline;
-            const baselineCoverage = baseline?.coverageJson as Record<string, unknown> | null;
-            if (
-                !baseline ||
-                baseline.id !== row.run.baselineRunId ||
-                baseline.userId !== row.userId ||
-                baseline.taskId !== row.taskId ||
-                baseline.mode !== row.run.mode ||
-                baseline.comparisonScopeHash !== row.run.comparisonScopeHash ||
-                baseline.status !== 'succeeded' ||
-                baselineCoverage?.completeness !== 'complete'
-            )
-                throw invalidEvidence();
-        }
+        )
+            if (!comparableBaseline(row)) throw invalidEvidence();
         const available = new Map<string, Evidence>();
         const addEvidence = (entry: StoredEvidence, runId: string) => {
             const mapped = evidence(entry, row, runId);
@@ -232,6 +241,7 @@ function detail(row: StoredReport): Report {
                 : {}),
             ...summary(row),
             baselineRunId: row.baselineRunId,
+            ...(baseline ? { baseline } : {}),
             schemaVersion: row.schemaVersion,
             limitations: row.limitationsJson,
             claims,
@@ -278,7 +288,20 @@ export function createReportService(services: ApiServices) {
             if (!uuid.test(reportId)) throw missing();
             const row = await repo.findReport(userId, reportId);
             if (!row) throw missing();
-            return detail(row);
+            const previous =
+                comparableBaseline(row) && row.baselineRunId
+                    ? await repo.findBaselineReport(userId, row.taskId, row.baselineRunId)
+                    : undefined;
+            return detail(
+                row,
+                previous
+                    ? {
+                          runId: previous.runId,
+                          reportId: previous.id,
+                          publishedAt: previous.publishedAt.toISOString(),
+                      }
+                    : undefined,
+            );
         },
         async inbox(userId: string, input: unknown) {
             const query = parseContract(InboxListQuerySchema, input);

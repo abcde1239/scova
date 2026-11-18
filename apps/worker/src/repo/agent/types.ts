@@ -1,6 +1,6 @@
 import { type Usage, type FeedbackSnapshot } from '@scova/models';
 import { type ToolFailureCode } from '@/utils/tool-failure.ts';
-import type { AgentBaseline } from '@scova/agent-core';
+import type { AgentPage, AgentPageRef, AgentBaseline } from '@scova/agent-core';
 
 export type AgentTool = 'search' | 'read' | 'model';
 
@@ -56,7 +56,13 @@ export interface AgentRepository {
     }): Promise<void>;
     markInterruptedUnknown(): Promise<number>;
     usage(): Promise<Usage>;
-    readAuthorizedCheckpoint(): Promise<AgentCheckpointRef | null>;
+    readCheckpointPages(
+        refs: AgentPageRef[],
+        options?: { allowDeadline?: boolean },
+    ): Promise<AgentPage[]>;
+    readAuthorizedCheckpoint(options?: {
+        allowDeadline?: boolean;
+    }): Promise<AgentCheckpointRef | null>;
     promoteCheckpoint(ref: AgentCheckpointRef): Promise<void>;
     readPages(options?: { allowDeadline?: boolean }): Promise<AgentJson[]>;
     searchPage?(url: string): Promise<AgentJson | null>;

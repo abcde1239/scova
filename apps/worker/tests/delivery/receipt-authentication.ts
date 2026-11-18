@@ -6,6 +6,7 @@ import { createDefaultServices } from '../../../server/src/app/services.ts';
 import { createReportService } from '../../../server/src/service/reports.ts';
 import { liveResearch } from './live-research.ts';
 import { fixture, saver, delivery, assertEmpty } from './fixture.ts';
+import { checkpointWithBodies } from './checkpoint.ts';
 
 export function registerReceiptAuthentication() {
     it.each([false, true])(
@@ -82,6 +83,8 @@ export function registerReceiptAuthentication() {
         'strip_gap',
         'strip_knowledge',
         'strip_gap_loop',
+        'strip_quality',
+        'navigation',
     ])(
         'authenticates cross-question passage links and gap policy against immutable model receipts (tampered=%s)',
         async (tampered) => {
@@ -113,6 +116,7 @@ export function registerReceiptAuthentication() {
                 gapKindPolicy?: number;
                 knowledgeFirstPolicy?: number;
                 gapLoopPolicy?: number;
+                loopQualityPolicy?: number;
                 planningExtraction: {
                     response: {
                         researchPolicy?: {
@@ -120,6 +124,7 @@ export function registerReceiptAuthentication() {
                             gapKindPolicy?: number;
                             knowledgeFirstPolicy?: number;
                             gapLoopPolicy?: number;
+                            loopQualityPolicy?: number;
                         };
                     };
                 };
@@ -146,7 +151,12 @@ export function registerReceiptAuthentication() {
                 ),
                 JSON.stringify(seed.candidate.coverage),
             ).toBe(true);
-            expect(candidateFromCheckpoint(restoredContext, state)).toEqual(seed.candidate);
+            expect(
+                candidateFromCheckpoint(
+                    restoredContext,
+                    checkpointWithBodies(state, seed.candidate.pages),
+                ),
+            ).toEqual(seed.candidate);
             if (!tampered) {
                 for (const attack of ['metrics', 'passage'] as const) {
                     const forged = structuredClone(seed.candidate);
@@ -162,6 +172,7 @@ export function registerReceiptAuthentication() {
                 ).get(seed.user.id, published.reportId);
                 expect(dto.coverage.metrics).toEqual(seed.candidate.coverage.metrics);
                 expect(dto.coverage.propositions).toEqual(seed.candidate.coverage.propositions);
+                expect(dto.coverage.completion).toEqual(seed.candidate.coverage.completion);
                 return;
             }
             // Same span and projected answer: only immutable receipt authentication catches this.
@@ -173,6 +184,7 @@ export function registerReceiptAuthentication() {
                     'strip_gap',
                     'strip_knowledge',
                     'strip_gap_loop',
+                    'strip_quality',
                 ].includes(String(tampered))
             ) {
                 if (tampered === 'strip_loop' || tampered === 'strip_completion') {
@@ -186,7 +198,12 @@ export function registerReceiptAuthentication() {
                 if (tampered === 'strip_loop' || tampered === 'strip_knowledge') {
                     delete state.knowledgeFirstPolicy;
                     delete state.planningExtraction.response.researchPolicy?.knowledgeFirstPolicy;
-                    expect(() => candidateFromCheckpoint(restoredContext, state)).toThrow();
+                    expect(() =>
+                        candidateFromCheckpoint(
+                            restoredContext,
+                            checkpointWithBodies(state, seed.candidate.pages),
+                        ),
+                    ).toThrow();
                     // Also remove the draft cursor/receipts so the core state is coherent.
                     // Delivery must still reject it against the immutable planning receipt.
                     for (const key of [
@@ -207,6 +224,23 @@ export function registerReceiptAuthentication() {
                     delete state.planningExtraction.response.researchPolicy?.gapLoopPolicy;
                     Reflect.deleteProperty(state, 'gapLoop');
                 }
+                if (
+                    tampered === 'strip_loop' ||
+                    tampered === 'strip_gap_loop' ||
+                    tampered === 'strip_quality'
+                ) {
+                    delete state.loopQualityPolicy;
+                    delete state.planningExtraction.response.researchPolicy?.loopQualityPolicy;
+                    Reflect.deleteProperty(state, 'verificationStopReason');
+                }
+                changed++;
+            } else if (tampered === 'navigation') {
+                const pages = (
+                    state as unknown as { pages: { links?: { url: string; text: string }[] }[] }
+                ).pages;
+                pages[0]!.links = [
+                    { url: 'https://example.com/forged', text: 'Forged navigation target' },
+                ];
                 changed++;
             } else
                 for (const receipt of state.synthesisExtractions)
@@ -234,7 +268,10 @@ export function registerReceiptAuthentication() {
                 ...ref,
                 checkpointId: saved.configurable!.checkpoint_id as string,
             });
-            const forged = candidateFromCheckpoint(restoredContext, state);
+            const forged = candidateFromCheckpoint(
+                restoredContext,
+                checkpointWithBodies(state, seed.candidate.pages),
+            );
             if (
                 ![
                     'strip_loop',
@@ -242,6 +279,8 @@ export function registerReceiptAuthentication() {
                     'strip_gap',
                     'strip_knowledge',
                     'strip_gap_loop',
+                    'strip_quality',
+                    'navigation',
                 ].includes(String(tampered))
             )
                 expect(forged).toEqual(seed.candidate);
