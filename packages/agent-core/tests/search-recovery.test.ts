@@ -9,7 +9,7 @@ import {
     objectRecoveryQuery,
     relaxSitePath,
     retrievalTargets,
-} from '../src/search-recovery.ts';
+} from '../src/search/recovery.ts';
 
 describe('bounded source discovery recovery', () => {
     it('relaxes only the site path and preserves version, language and module tokens', () => {

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vite-plus/test';
-import { comparisonSchema, manifestFromModel } from '../src/comparison.ts';
+import { comparisonSchema, manifestFromModel } from '../src/report/comparison/compare.ts';
 import type { AgentContext, AgentPage } from '../src/types.ts';
 
 function fixture() {

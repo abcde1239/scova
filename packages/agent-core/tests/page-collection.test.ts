@@ -51,7 +51,7 @@ async function execute(collection: ReadPage['collection']) {
             title: 'Application notices',
             topic: 'Application deadline',
             goal: 'When is the deadline?',
-            researchMode: 'collection',
+            researchMode: 'analysis',
             focusPoints: [],
             exclusions: [],
             sourcePreferences: { preferredUrls: [], excludedUrls: [], officialOnly: false },
@@ -104,6 +104,14 @@ async function execute(collection: ReadPage['collection']) {
             truncated: false,
             untrusted: true,
             collection: structuredClone(collection),
+            publication: {
+                parserVersion: 'scova-publication-v1',
+                status: 'known',
+                instant: '2026-11-09T00:00:00Z',
+                observations: [
+                    { field: 'datePublished', rawValue: '2026-11-09T00:00:00Z', locator: 'meta' },
+                ],
+            },
         })),
         model: vi.fn<AgentTools['model']>(async (key, input) => ({
             mode: 'live',

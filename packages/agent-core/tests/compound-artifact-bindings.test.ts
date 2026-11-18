@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test';
 import { classifyReportDelivery, validReportArtifacts, type ReportValue } from '@scova/models';
-import { buildReportArtifacts } from '../src/report-artifacts.ts';
+import { buildReportArtifacts } from '../src/report/artifacts/index.ts';
 import type { AgentClaim, AgentContext, ComparisonExtraction } from '../src/types.ts';
 
 const questions = [

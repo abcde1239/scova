@@ -10,7 +10,7 @@ import {
     type AgentContext,
     type AgentDependencies,
 } from '../src/index.ts';
-import { synthesisBatches, synthesisBatchLimits } from '../src/synthesis-batches.ts';
+import { synthesisBatches, synthesisBatchLimits } from '../src/research/synthesis-batches.ts';
 
 type Wire = {
     properties: {
@@ -83,7 +83,7 @@ function fixture(
             timeRange: { kind: 'rolling', days: 30 },
             timezone: 'UTC',
             schedule: { frequency: 'manual' },
-            researchMode: 'collection',
+            researchMode: 'analysis',
             outputFormat: 'research_report',
             outputFormats: ['research_report', 'comparison'],
             budget: { ...DEFAULT_TASK_BUDGET },

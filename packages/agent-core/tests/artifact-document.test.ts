@@ -5,7 +5,7 @@ import {
     validReportArtifacts,
     type ReportValue,
 } from '@scova/models';
-import { buildArtifactDocument, artifactSynthesisSchema } from '../src/report-artifacts.ts';
+import { buildArtifactDocument, artifactSynthesisSchema } from '../src/report/artifacts/index.ts';
 import type { AgentClaim, ComparisonExtraction } from '../src/types.ts';
 
 const assessment = {

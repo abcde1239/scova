@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vite-plus/test';
 import { estimateModelInputTokens } from '@scova/connectors';
-import { evidenceExcerpt, fitSources } from '../src/model-input.ts';
+import { evidenceExcerpt, fitSources } from '../src/model/input.ts';
 import type { AgentPage } from '../src/types.ts';
-import { comparisonSourceCoverage } from '../src/comparison-extraction.ts';
+import { comparisonSourceCoverage } from '../src/report/comparison/extraction.ts';
 import { compoundApiBody } from './fixtures/api-anchor-source.ts';
 
 describe('model source coverage', () => {

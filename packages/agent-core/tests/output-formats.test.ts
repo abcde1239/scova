@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { MemorySaver } from '@langchain/langgraph';
 import { describe, expect, it, vi } from 'vite-plus/test';
 import { DEFAULT_TASK_BUDGET, type TaskConfig } from '@scova/models';
-import { outputInstructions } from '../src/output-instructions.ts';
+import { outputInstructions } from '../src/model/output-instructions.ts';
 import { ConnectorError, type ReadPage, type StructuredInput } from '@scova/connectors';
 import {
     runResearchAgent,
@@ -38,7 +38,7 @@ function fixture() {
             schedule: { frequency: 'manual' },
             outputFormat: 'brief',
             outputFormats: ['brief', 'comparison'],
-            researchMode: 'collection',
+            researchMode: 'analysis',
             budget: { ...DEFAULT_TASK_BUDGET },
             notificationPreference: { mode: 'off', runIssues: false },
         },

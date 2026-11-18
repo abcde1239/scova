@@ -9,7 +9,7 @@ import {
     comparisonSourceCoverage,
     comparisonReceipt,
     comparisonReceiptMatchesOutput,
-} from '../src/comparison-extraction.ts';
+} from '../src/report/comparison/extraction.ts';
 import type { AgentContext, AgentPage, ComparisonExtraction } from '../src/types.ts';
 import type { StructuredInput } from '@scova/connectors';
 

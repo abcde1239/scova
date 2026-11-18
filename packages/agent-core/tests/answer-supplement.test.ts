@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vite-plus/test';
-import { answerSupplementDecision } from '../src/answer-supplement.ts';
+import { answerSupplementDecision } from '../src/research/answer-supplement.ts';
 import type { AgentContext } from '../src/types.ts';
 import type { ReportValue } from '@scova/models';
 const now = Date.now();

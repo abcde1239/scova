@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vite-plus/test';
 import { estimateModelInputTokens, type StructuredInput } from '@scova/connectors';
-import { fitPlanningInput } from '../src/planning-input.ts';
-import { requirementPlanSchema } from '../src/report-artifacts.ts';
+import { fitPlanningInput } from '../src/model/planning-input.ts';
+import { requirementPlanSchema } from '../src/report/artifacts/index.ts';
 
 describe('planning input preflight', () => {
     const frozen = {

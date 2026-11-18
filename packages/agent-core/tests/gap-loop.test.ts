@@ -7,11 +7,14 @@ import {
     initialSearchLimit,
     type GapLoop,
     type GapTarget,
-} from '../src/gap-loop.ts';
-import { isSynthesisOperation } from '../src/synthesis-batches.ts';
-import { needsConflictReview } from '../src/agent/claims.ts';
-import { isConflictReviewOperation, conflictReviewOperation } from '../src/conflict-review.ts';
-import type { ResearchState } from '../src/agent/state.ts';
+} from '../src/research/gap-loop.ts';
+import { isSynthesisOperation } from '../src/research/synthesis-batches.ts';
+import { needsConflictReview } from '../src/research/claims.ts';
+import {
+    isConflictReviewOperation,
+    conflictReviewOperation,
+} from '../src/research/conflict-review.ts';
+import type { ResearchState } from '../src/research/state.ts';
 import type { AgentCandidate } from '../src/types.ts';
 
 const candidate = {

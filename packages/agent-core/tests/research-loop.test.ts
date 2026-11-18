@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vite-plus/test';
-import { allowsKnowledge, fieldChecks, gapActions } from '../src/research-loop.ts';
+import { allowsKnowledge, fieldChecks, gapActions } from '../src/research/loop.ts';
 import type { AgentCandidate, ComparisonExtraction } from '../src/types.ts';
-import type { PlannedRequirement } from '../src/report-artifacts.ts';
+import type { PlannedRequirement } from '../src/report/artifacts/index.ts';
 
 const requirement: PlannedRequirement = {
     id: 'r0',

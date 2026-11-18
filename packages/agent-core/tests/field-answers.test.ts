@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vite-plus/test';
-import { activeFieldClaims, mergeFieldClaims } from '../src/field-answers.ts';
-import { fieldSynthesisBatches, isSynthesisOperation } from '../src/synthesis-batches.ts';
+import {
+    activeFieldClaims,
+    mergeFieldClaims,
+    pendingFieldClaims,
+} from '../src/report/field-answers.ts';
+import { fieldSynthesisBatches, isSynthesisOperation } from '../src/research/synthesis-batches.ts';
 import type { AgentClaim } from '../src/types.ts';
 import type { ReportArtifact } from '@scova/models';
 
@@ -31,6 +35,23 @@ const artifact = (index: number): ReportArtifact => ({
     },
 });
 describe('field answer activity and stable grouping', () => {
+    it('keeps validated pending evidence when a draft wins display, without reviving invalid or finished claims', () => {
+        const external = claim('合法但尚未完成字段关联的外部命题');
+        const artifacts = [artifact(0)];
+        artifacts[0]!.coverage!.requirements[0]!.status = 'model_answered';
+        const data = {
+            claims: [external, claim('未经验证的内容')],
+            artifacts: [
+                {
+                    format: 'research_report',
+                    requirements: [{ id: 'field', claimIndexes: [0, 1, 999] }],
+                },
+            ],
+        };
+        expect(pendingFieldClaims(data, [external], artifacts)).toEqual([external]);
+        artifacts[0]!.coverage!.requirements[0]!.status = 'supported';
+        expect(pendingFieldClaims(data, [external], artifacts)).toEqual([]);
+    });
     it('does not accumulate previous attempts across repeated field replacement', () => {
         let active: AgentClaim[] = [];
         const history: AgentClaim[] = [];

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test';
 import type { SearchResponse, ReadPage } from '@scova/connectors';
-import { searchCheckpointResponse, searchReceiptMatchesOutput } from '../src/search-receipt.ts';
+import { searchCheckpointResponse, searchReceiptMatchesOutput } from '../src/search/receipt.ts';
 
 const response: SearchResponse = {
     kind: 'search_results',

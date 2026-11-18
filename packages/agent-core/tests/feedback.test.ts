@@ -6,7 +6,7 @@ import type { FeedbackSnapshotItem } from '@scova/models';
 import { readFeedbackSnapshot } from '@scova/models';
 import type { AgentContext, AgentTools, AgentPage } from '../src/index.ts';
 import { runResearchAgent, candidateFromCheckpoint } from '../src/index.ts';
-import { explainFeedback } from '../src/feedback.ts';
+import { explainFeedback } from '../src/research/feedback.ts';
 const sha = (value: string) => createHash('sha256').update(value).digest('hex');
 const urls = [
     'https://example.com/ignored',

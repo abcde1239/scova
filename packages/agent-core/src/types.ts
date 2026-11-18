@@ -23,6 +23,10 @@ export interface AgentTools {
 
 /** Worker-authored metadata, outside model-generated content and provider schemas. */
 export interface ResearchPolicy {
+    pagePolicy?: 1;
+    collectionPolicy?: 1;
+    baselinePolicy?: 1;
+    loopQualityPolicy?: 1;
     answerCompletionPolicy?: 1;
     gapKindPolicy?: 1;
     knowledgeFirstPolicy?: 1;
@@ -88,6 +92,7 @@ export interface ComparisonFact {
     relation?: { kind: 'secondary' | 'revision' | 'contrasting'; url: string; quote: string };
 }
 export interface ComparisonManifest {
+    collectionPolicy?: 1;
     schemaVersion: 1;
     runId: string;
     comparisonScopeHash: string;
@@ -97,10 +102,12 @@ export interface ComparisonManifest {
         url: string;
         contentHash: string;
         extractorVersion: string;
+        publicationKey?: string;
         facts: ComparisonFact[];
     }[];
 }
 export interface AgentBaseline {
+    coverage?: Coverage;
     runId: string;
     userId: string;
     comparisonScopeHash: string;
@@ -172,6 +179,9 @@ export interface AgentPage extends ReadPage {
     questionIds: string[];
 }
 
+/** Persisted page identity; source text is loaded from an immutable successful read receipt. */
+export type AgentPageRef = Omit<AgentPage, 'text'>;
+
 export interface AgentCandidate {
     feedbackEffects?: FeedbackEffect[];
     schemaVersion: 1;
@@ -190,6 +200,8 @@ export interface AgentCandidate {
 }
 
 export interface AgentDependencies {
+    /** Required to resume pagePolicy:1 checkpoints; never performs a new source request. */
+    loadPages?: (refs: AgentPageRef[]) => Promise<AgentPage[]>;
     tools: AgentTools;
     checkpointer: BaseCheckpointSaver;
     /** Explicit promoted checkpoint for resume; only thread identity for a new execution. */

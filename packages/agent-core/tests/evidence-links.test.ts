@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vite-plus/test';
-import { citationSupportsQuestions, evidenceLinks } from '../src/evidence-links.ts';
+import { citationSupportsQuestions, evidenceLinks } from '../src/evidence/links.ts';
 import type { AgentPage } from '../src/types.ts';
 
 const page = {

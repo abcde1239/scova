@@ -2,7 +2,7 @@ import { runStructuredFixture as runResearchAgent } from './structured-fixtures.
 import { createHash, randomUUID } from 'node:crypto';
 import { MemorySaver } from '@langchain/langgraph';
 import { describe, expect, it, vi } from 'vite-plus/test';
-import { normalizeUrl, type ReadPage } from '@scova/connectors';
+import { ConnectorError, normalizeUrl, type ReadPage } from '@scova/connectors';
 import {
     compareResearch,
     candidateFromCheckpoint,
@@ -89,6 +89,7 @@ function baseline(candidate: AgentCandidate): AgentBaseline {
         comparisonScopeHash: candidate.manifest!.comparisonScopeHash,
         mode: candidate.mode,
         status: 'ready',
+        coverage: candidate.coverage,
         manifest: candidate.manifest!,
         evidence: candidate.manifest!.pages.flatMap((p) =>
             p.facts.map((f) => ({
@@ -145,9 +146,9 @@ async function execute(
         read: vi.fn(async (_key, url): Promise<ReadPage> => {
             reads.push(url);
             if (options.failedUrls?.includes(normalizeUrl(url)))
-                throw new Error('unreachable old page');
+                throw new ConnectorError('network', 'unreachable old page');
             const current = sources.find((s) => normalizeUrl(s.url) === normalizeUrl(url));
-            if (!current) throw new Error('not observed');
+            if (!current) throw new ConnectorError('network', 'not observed');
             pages.set(`read-${readCount++}`, current);
             return {
                 kind: 'read_page',

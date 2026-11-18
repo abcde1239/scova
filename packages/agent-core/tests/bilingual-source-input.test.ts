@@ -3,7 +3,7 @@ import { MemorySaver } from '@langchain/langgraph';
 import { createHash } from 'node:crypto';
 import { ConnectorError, estimateModelInputTokens, type StructuredInput } from '@scova/connectors';
 import { runResearchAgent, type AgentContext, type AgentDependencies } from '../src/index.ts';
-import { bilingualRetrievalTerms, retrievalTermMatcher } from '../src/retrieval-terms.ts';
+import { bilingualRetrievalTerms, retrievalTermMatcher } from '../src/search/retrieval-terms.ts';
 import {
     bilingualWatcherBody,
     watcherSourceParagraphs,
@@ -55,7 +55,7 @@ describe('production source input from bilingual task requirements', () => {
                         excludedUrls: [],
                         officialOnly: true,
                     },
-                    researchMode: 'collection',
+                    researchMode: 'analysis',
                     timeRange: { kind: 'rolling', days: 30 },
                     timezone: 'Asia/Shanghai',
                     schedule: { frequency: 'manual' },

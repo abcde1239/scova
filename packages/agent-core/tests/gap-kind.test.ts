@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test';
-import { structuredSupport } from '../src/gap-kind.ts';
-import { buildReportValue } from '../src/report-value.ts';
+import { structuredSupport } from '../src/evidence/support.ts';
+import { buildReportValue } from '../src/report/value.ts';
 import type { AgentClaim, AgentContext, AgentPage } from '../src/types.ts';
 
 const pages = [0, 1].map((i) => ({
@@ -34,6 +34,16 @@ function entry(
 }
 const options = { gapKinds: true, pages };
 describe('frozen structured gap support', () => {
+    it('does not upgrade missing details or a composition of partial sources under strict field support', () => {
+        const strict = { ...options, strictFields: true };
+        expect(structuredSupport([entry(0, 'direct', 'missing_detail')], ['q0'], strict)).toBe(
+            false,
+        );
+        expect(structuredSupport([entry(0, 'partial'), entry(1, 'partial')], ['q0'], strict)).toBe(
+            false,
+        );
+        expect(structuredSupport([entry(0)], ['q0'], strict)).toBe(true);
+    });
     it('does not activate structured support for a legacy checkpoint carrying a gap kind', () => {
         expect(structuredSupport([entry(0)], ['q0'], {})).toBeUndefined();
         const context = {

@@ -15,7 +15,7 @@ import {
     type AgentContext,
     type AgentDependencies,
 } from '../src/index.ts';
-import { projectModelAnswers } from '../src/model-answer.ts';
+import { projectModelAnswers } from '../src/research/model-answer.ts';
 
 function fixture(
     options: {
@@ -44,6 +44,10 @@ function fixture(
         knowledgeFirst?: boolean;
         gapLoop?: boolean;
         manyPages?: boolean;
+        sharedAnswer?: boolean;
+        navigation?: boolean;
+        requiredMissingDetail?: boolean;
+        structuredFormat?: 'comparison' | 'list';
     } = {},
 ) {
     const budget = {
@@ -96,20 +100,20 @@ function fixture(
             timeRange: { kind: 'rolling', days: 30 },
             timezone: 'UTC',
             schedule: { frequency: 'manual' },
-            researchMode: options.researchMode ?? 'collection',
+            researchMode: options.researchMode ?? 'analysis',
             outputFormat: 'research_report',
-            outputFormats: ['research_report', 'comparison'],
+            outputFormats: ['research_report', options.structuredFormat ?? 'comparison'],
             budget,
             notificationPreference: { mode: 'off', runIssues: false },
         },
     };
-    const formats = ['research_report', 'comparison'] as const;
+    const formats = ['research_report', options.structuredFormat ?? 'comparison'] as const;
     const requirements = formats.flatMap((format) =>
         ['loop', 'memory'].map((field) => ({
             id: `${format}-${field}`,
             format,
             questionIds:
-                options.sharedConflict && field === 'memory'
+                (options.sharedConflict || options.sharedAnswer) && field === 'memory'
                     ? ['q0', 'q1']
                     : [options.crossQuestion && field === 'memory' ? 'q1' : 'q0'],
             object: 'ReAct',
@@ -128,6 +132,7 @@ function fixture(
         'LATS is more expensive than ReAct with multiple candidates.',
     ];
     const calls: string[] = [];
+    const readUrls: string[] = [];
     const inputs: { key: string; input: StructuredInput }[] = [];
     const saver = new MemorySaver();
     let promoted: RunnableConfig | undefined;
@@ -189,17 +194,21 @@ function fixture(
                 } as SearchResponse;
             },
             read: async (_key, readUrl) => {
+                readUrls.push(readUrl);
                 context.usage.pages++;
-                if (options.noPages) throw new Error('No body');
-                const body = options.manyPages
-                    ? `${text}\n${readUrl}`
-                    : options.conflict
-                      ? readUrl.endsWith('/second')
-                          ? costQuotes[1]
-                          : text + ' ' + costQuotes[0]
-                      : options.crossQuestion
-                        ? `${text}\n\n${memoryText}`
-                        : text;
+                if (options.noPages) throw new ConnectorError('network', 'No body');
+                const body =
+                    options.navigation && readUrl.endsWith('/memory')
+                        ? memoryText
+                        : options.manyPages
+                          ? `${text}\n${readUrl}`
+                          : options.conflict
+                            ? readUrl.endsWith('/second')
+                                ? costQuotes[1]
+                                : text + ' ' + costQuotes[0]
+                            : options.crossQuestion
+                              ? `${text}\n\n${memoryText}`
+                              : text;
                 return {
                     kind: 'read_page',
                     mode: 'live',
@@ -207,6 +216,16 @@ function fixture(
                     fetchedUrl: readUrl,
                     url: readUrl,
                     title: 'ReAct',
+                    ...(options.navigation && readUrl === url
+                        ? {
+                              links: [
+                                  {
+                                      url: url + '/memory',
+                                      text: 'ReAct agent persistent memory mechanism original paper',
+                                  },
+                              ],
+                          }
+                        : {}),
                     text: body,
                     contentHash: createHash('sha256').update(body).digest('hex'),
                     extractionVersion: 'fixture',
@@ -357,7 +376,8 @@ function fixture(
                         ),
                     };
                 } else {
-                    if (options.synthesisFailure) throw new Error('Synthesis unavailable');
+                    if (options.synthesisFailure)
+                        throw new ConnectorError('network', 'Synthesis unavailable');
                     const schema = input.schema as {
                         properties: {
                             claims: { items: { properties: { outputFormat: { enum: string[] } } } };
@@ -377,7 +397,9 @@ function fixture(
                         schema.properties.artifacts.items.properties.requirements.items.properties
                             .id.enum;
                     const memory =
-                        options.crossQuestion && ids.every((id) => id.endsWith('memory'));
+                        (options.crossQuestion ||
+                            (options.navigation && readUrls.includes(url + '/memory'))) &&
+                        ids.every((id) => id.endsWith('memory'));
                     const answerText = memory ? memoryText : text;
                     data = {
                         ...(options.gapDriven
@@ -421,8 +443,16 @@ function fixture(
                                 outputFormat: format,
                                 kind: 'inference',
                                 text: answerText,
-                                questionIds: [memory ? 'q1' : 'q0'],
-                                citations: [{ pageId: 'read-0', quote: answerText }],
+                                questionIds:
+                                    memory && options.sharedAnswer
+                                        ? ['q0', 'q1']
+                                        : [memory && options.crossQuestion ? 'q1' : 'q0'],
+                                citations: [
+                                    {
+                                        pageId: memory && options.navigation ? 'read-1' : 'read-0',
+                                        quote: answerText,
+                                    },
+                                ],
                                 assessment: {
                                     relevance: 'direct',
                                     support: 'direct',
@@ -430,7 +460,7 @@ function fixture(
                                     sourceRelation: 'original',
                                     reason: '原文',
                                     conditions: '',
-                                    gap: '',
+                                    gap: options.requiredMissingDetail ? '必需阶段尚不明确' : '',
                                 },
                             },
                         ],
@@ -486,9 +516,11 @@ function fixture(
                 ) {
                     for (const claim of (data as { claims: any[] }).claims) {
                         if (claim.assessment)
-                            claim.assessment.gapKind = claim.assessment.gap
-                                ? 'missing_core'
-                                : 'none';
+                            claim.assessment.gapKind = options.requiredMissingDetail
+                                ? 'missing_detail'
+                                : claim.assessment.gap
+                                  ? 'missing_core'
+                                  : 'none';
                     }
                 }
                 if (options.wire) {
@@ -529,6 +561,178 @@ function fixture(
 }
 
 describe('external evidence followed by explicitly labelled model answers', () => {
+    it('continues later stages after a draft reservation limit without treating it as provider exhaustion', async () => {
+        const f = fixture({ reasoning: true, gapDriven: true, knowledgeFirst: true });
+        const model = f.deps.tools.model;
+        f.deps.tools.model = async (key, input) => {
+            if (key.startsWith('model-draft'))
+                throw new ConnectorError('budget_exceeded', 'local stage reservation');
+            return model(key, input);
+        };
+        const result = await runResearchAgent(f.context, f.deps);
+        expect(f.calls.some((key) => key.startsWith('synthesize'))).toBe(true);
+        expect(result.claims.some((c) => c.kind === 'model_answer')).toBe(true);
+        const state = (await f.saver.get(f.checkpoint()))!.channel_values.research;
+        expect(state).not.toMatchObject({ modelBlocked: true });
+        expect(candidateFromCheckpoint(f.context, state)).toEqual(result);
+    });
+
+    it('keeps an earlier draft batch when the next batch exhausts provider quota', async () => {
+        const f = fixture({ reasoning: true, gapDriven: true, knowledgeFirst: true });
+        const model = f.deps.tools.model;
+        const calls: string[] = [];
+        f.deps.tools.model = async (key, input) => {
+            calls.push(key);
+            if (key === 'model-draft-1-0')
+                throw new ConnectorError('model_quota_exceeded', 'quota exhausted');
+            return model(key, input);
+        };
+        const result = await runResearchAgent(f.context, f.deps);
+        expect(calls.at(-1)).toBe('model-draft-1-0');
+        expect(result.claims.filter((c) => c.kind === 'model_answer')).toHaveLength(3);
+        expect(
+            candidateFromCheckpoint(
+                f.context,
+                (await f.saver.get(f.checkpoint()))!.channel_values.research,
+            ),
+        ).toEqual(result);
+    });
+
+    it('retains successful answers when a later comparison exhausts provider quota, including recovery', async () => {
+        const f = fixture({ reasoning: true, gapDriven: true, wire: true });
+        f.context.comparisonScopeHash = 'review-scope';
+        const model = f.deps.tools.model;
+        const calls: string[] = [];
+        f.deps.tools.model = async (key, input) => {
+            calls.push(key);
+            if (key.startsWith('compare'))
+                throw new ConnectorError('model_quota_exceeded', 'quota exhausted');
+            return model(key, input);
+        };
+        const result = await runResearchAgent(f.context, f.deps);
+        expect(result.claims.filter((c) => c.kind === 'model_answer')).toHaveLength(2);
+        expect(calls.at(-1)).toMatch(/^compare/);
+        const state = (await f.saver.get(f.checkpoint()))!.channel_values.research;
+        expect(state).toMatchObject({ modelBlocked: true });
+        expect(candidateFromCheckpoint(f.context, state)).toEqual(result);
+        const before = calls.length;
+        expect(
+            await runResearchAgent(f.context, {
+                ...f.deps,
+                resume: true,
+                config: f.checkpoint(),
+                onStep: undefined,
+            }),
+        ).toEqual(result);
+        expect(calls).toHaveLength(before);
+    });
+
+    it.each(['model-draft', 'model-answer', 'conflict-review'] as const)(
+        'stops subsequent model calls after provider quota failure in %s',
+        async (stage) => {
+            const f = fixture({
+                reasoning: true,
+                gapDriven: true,
+                knowledgeFirst: stage === 'model-draft',
+                ...(stage === 'conflict-review' ? { conflict: 'unresolved' as const } : {}),
+            });
+            const model = f.deps.tools.model;
+            const calls: string[] = [];
+            f.deps.tools.model = async (key, input) => {
+                calls.push(key);
+                if (key.startsWith(stage))
+                    throw new ConnectorError('model_quota_exceeded', 'quota exhausted');
+                return model(key, input);
+            };
+            const result = await runResearchAgent(f.context, f.deps);
+            const failed = calls.findIndex((key) => key.startsWith(stage));
+            expect(failed).toBeGreaterThanOrEqual(0);
+            expect(calls.slice(failed + 1)).toEqual([]);
+            expect(result.pages.length).toBeGreaterThan(0);
+            const state = (await f.saver.get(f.checkpoint()))!.channel_values.research;
+            expect(state).toMatchObject({ modelBlocked: true });
+            expect(candidateFromCheckpoint(f.context, state)).toEqual(result);
+            const before = calls.length;
+            expect(
+                await runResearchAgent(f.context, {
+                    ...f.deps,
+                    resume: true,
+                    config: f.checkpoint(),
+                    onStep: undefined,
+                }),
+            ).toEqual(result);
+            expect(calls).toHaveLength(before);
+        },
+    );
+
+    it.each(['comparison', 'list'] as const)(
+        'excludes bound %s cells from the final document after report coverage adjustment',
+        async (format) => {
+            const f = fixture({ reasoning: true, gapDriven: true, structuredFormat: format });
+            const model = f.deps.tools.model;
+            f.deps.tools.model = async (key, input) => {
+                const response = await model(key, input);
+                if (key.startsWith('synthesize')) {
+                    const data = response.data as { artifacts: { document: unknown }[] };
+                    for (const artifact of data.artifacts)
+                        artifact.document = {
+                            version: 1,
+                            sections: [
+                                {
+                                    id: 'overview',
+                                    title: '说明',
+                                    role: 'overview',
+                                    claimIndexes: [0],
+                                },
+                            ],
+                        };
+                }
+                return createModelProvider({
+                    protocol: 'openai_json',
+                    model: 'fixture',
+                    apiKey: 'fixture-only',
+                    baseUrl: 'https://model.example/v1',
+                    maxAttempts: 1,
+                    http: {
+                        request: async (url) => ({
+                            url,
+                            status: 200,
+                            headers: {},
+                            body: JSON.stringify({
+                                choices: [
+                                    {
+                                        finish_reason: 'stop',
+                                        message: { content: JSON.stringify(response.data) },
+                                    },
+                                ],
+                                usage: { prompt_tokens: 50, completion_tokens: 100 },
+                            }),
+                        }),
+                    },
+                }).generateStructured(input);
+            };
+            const result = await runResearchAgent(f.context, f.deps);
+            const artifact = result.coverage.artifacts!.find((a) => a.format === format)!;
+            const bound = [
+                ...(artifact.content?.comparison?.cells ?? []),
+                ...(artifact.content?.list?.entries.flatMap((entry) => entry.fields) ?? []),
+            ].flatMap((cell) => cell.claimIndexes);
+            const outlined =
+                artifact.content?.document?.sections.flatMap((s) => s.claimIndexes) ?? [];
+            expect(bound.length).toBeGreaterThan(0);
+            expect(outlined.filter((i) => bound.includes(i))).toEqual([]);
+            expect(
+                validReportArtifacts([artifact], result.claims, result.coverage.reportValue),
+            ).toBe(true);
+            expect(
+                candidateFromCheckpoint(
+                    f.context,
+                    (await f.saver.get(f.checkpoint()))!.channel_values.research,
+                ),
+            ).toEqual(result);
+        },
+    );
+
     it('runs the new policy through strict HTTP schemas and restores proposition spans and independent metrics', async () => {
         const f = fixture({
             reasoning: true,
@@ -984,7 +1188,7 @@ describe('bounded evidence conflict review', () => {
             required: true,
         };
         const { validConflictReview, conflictFingerprint } =
-            await import('../src/conflict-review.ts');
+            await import('../src/research/conflict-review.ts');
         const prior = state.claims.filter((c) =>
             data.conflictReview.priorClaimHashes.includes(conflictFingerprint(c)),
         );
@@ -1267,7 +1471,7 @@ describe('persisted gap loop', () => {
         answerCompletion: true,
         unknown: true,
     } as const;
-    it('keeps eight reads available after the initial twelve and spends only four on a targeted gap', async () => {
+    it('keeps eight reads after the initial twelve and uses observed URLs without another search or false gain', async () => {
         const f = fixture({ ...policy, manyPages: true });
         let initialPages = 0;
         f.deps.onStep = async (step, phase) => {
@@ -1276,18 +1480,122 @@ describe('persisted gap loop', () => {
         };
         await runResearchAgent(f.context, f.deps);
         expect(initialPages).toBe(12);
-        expect(f.context.usage.pages).toBe(16);
-        expect(f.context.usage.searches).toBe(3);
         const state = (await f.saver.get(f.checkpoint()))!.channel_values
-            .research as import('../src/agent/state.ts').ResearchState;
-        expect(state.gapLoop?.history[0]).toMatchObject({ action: 'search', gain: true });
-        expect(state.gapLoop?.history.some((h) => h.action === 'rebind')).toBe(true);
+            .research as import('../src/research/state.ts').ResearchState;
+        expect(f.context.usage.searches).toBe(2);
+        const reads = state.gapLoop!.history.filter((h) => h.action === 'read');
+        expect(reads.length).toBeGreaterThan(0);
+        expect(f.context.usage.pages).toBe(12 + reads.length);
+        expect(f.context.usage.pages).toBeLessThanOrEqual(16);
+        expect(state.gapLoop?.history.every((h) => h.gain === false)).toBe(true);
+    });
+    it('verifies all knowledge-drafted fields and binds a shared-question claim without widening read scope', async () => {
+        const f = fixture({
+            ...policy,
+            unknown: false,
+            knowledgeFirst: true,
+            crossQuestion: true,
+            sharedAnswer: true,
+            wire: true,
+        });
+        const result = await runResearchAgent(f.context, f.deps);
+        expect(result.coverage.completion).toMatchObject({
+            answerReady: true,
+            verificationDone: true,
+            externalEvidenceComplete: true,
+            stopReason: 'verified',
+        });
+        expect(result.coverage.metrics?.externallySupportedFields).toBe(4);
+        expect(result.claims.filter((c) => c.kind === 'model_answer')).toEqual([]);
+        expect(result.pages[0]!.questionIds).toEqual(['q0']);
+        expect(
+            result.claims.some((c) => c.questionIds.length === 2 && c.citations.length > 0),
+        ).toBe(true);
+        expect(
+            candidateFromCheckpoint(
+                f.context,
+                (await f.saver.get(f.checkpoint()))!.channel_values.research,
+            ),
+        ).toEqual(result);
+    });
+    it('rejects shared-question support without a valid passage association', async () => {
+        const f = fixture({
+            ...policy,
+            crossQuestion: true,
+            sharedAnswer: true,
+            invalidLink: true,
+        });
+        const result = await runResearchAgent(f.context, f.deps);
+        expect(result.coverage.metrics?.externallySupportedFields).toBe(2);
+        expect(result.coverage.completion?.externalEvidenceComplete).toBe(false);
+        expect(result.claims.some((c) => c.questionIds.length === 2)).toBe(false);
+    });
+    it('reads an observed body link first, resumes that action once and gains target support', async () => {
+        const f = fixture({ ...policy, navigation: true });
+        f.deps.onStep = async (step, phase) => {
+            if (step === 'gap_loop' && phase === 'completed') throw new Error('navigation restart');
+        };
+        await expect(runResearchAgent(f.context, f.deps)).rejects.toThrow('navigation restart');
+        const pending = (await f.saver.get(f.checkpoint()))!.channel_values
+            .research as import('../src/research/state.ts').ResearchState;
+        expect(pending.gapLoop?.target).toMatchObject({
+            action: 'read',
+            url: 'https://example.com/react/memory',
+        });
+        const result = await runResearchAgent(f.context, {
+            ...f.deps,
+            onStep: undefined,
+            resume: true,
+            config: f.checkpoint(),
+        });
+        expect(f.context.usage).toMatchObject({ searches: 1, pages: 2 });
+        expect(result.coverage.completion).toMatchObject({
+            externalEvidenceComplete: true,
+            stopReason: 'verified',
+        });
+        const state = (await f.saver.get(f.checkpoint()))!.channel_values
+            .research as import('../src/research/state.ts').ResearchState;
+        expect(state.gapLoop?.history[0]).toMatchObject({ action: 'read', gain: true });
+        expect(candidateFromCheckpoint(f.context, state)).toEqual(result);
+        expect(() =>
+            candidateFromCheckpoint(f.context, { ...state, loopQualityPolicy: undefined }),
+        ).toThrow();
+    });
+    it('retains a required missing component even if the model calls it a detail and marks the field supported', async () => {
+        const f = fixture({ ...policy, requiredMissingDetail: true });
+        const result = await runResearchAgent(f.context, f.deps);
+        expect(result.coverage.metrics?.externallySupportedFields).toBe(0);
+        expect(result.coverage.completion).toMatchObject({
+            answerReady: false,
+            externalEvidenceComplete: false,
+            verificationDone: true,
+        });
+        expect(result.coverage.completeness).toBe('partial');
+    });
+    it('continues bounded verification after all draft answers are available', async () => {
+        const f = fixture({
+            ...policy,
+            unknown: false,
+            knowledgeFirst: true,
+            diagnosis: 'binding_missing',
+        });
+        const result = await runResearchAgent(f.context, f.deps);
+        const state = (await f.saver.get(f.checkpoint()))!.channel_values
+            .research as import('../src/research/state.ts').ResearchState;
+        expect(state.gapLoop?.history.length).toBeGreaterThan(0);
+        expect(result.coverage.completion).toMatchObject({
+            answerReady: true,
+            externalEvidenceComplete: false,
+            verificationDone: true,
+            stopReason: 'no_progress',
+        });
+        expect(result.coverage.completeness).toBe('complete');
     });
     it('repairs only one field at a time without searching when the binding is missing', async () => {
         const f = fixture({ ...policy, diagnosis: 'binding_missing' });
         const result = await runResearchAgent(f.context, f.deps);
         const state = (await f.saver.get(f.checkpoint()))!.channel_values
-            .research as import('../src/agent/state.ts').ResearchState;
+            .research as import('../src/research/state.ts').ResearchState;
         expect(state.gapLoop?.history.length).toBeGreaterThan(0);
         expect(state.gapLoop?.history.every((h) => h.action === 'rebind' && h.gain === false)).toBe(
             true,
@@ -1325,7 +1633,7 @@ describe('persisted gap loop', () => {
         });
         for (const key of previous) expect(f.calls.filter((k) => k === key)).toHaveLength(1);
         const state = (await f.saver.get(f.checkpoint()))!.channel_values
-            .research as import('../src/agent/state.ts').ResearchState;
+            .research as import('../src/research/state.ts').ResearchState;
         expect(f.context.usage.searches).toBe(2);
         expect(state.gapLoop?.history).toHaveLength(1);
         expect(state.gapLoop?.history[0]).toMatchObject({ action: 'search', gain: false });
@@ -1337,7 +1645,7 @@ describe('persisted gap loop', () => {
         const f = fixture({ ...policy, synthesisFailure: true });
         const result = await runResearchAgent(f.context, f.deps);
         const state = (await f.saver.get(f.checkpoint()))!.channel_values
-            .research as import('../src/agent/state.ts').ResearchState;
+            .research as import('../src/research/state.ts').ResearchState;
         expect(state.synthesisAttempts).toBeGreaterThan(4);
         expect(result.claims.length).toBeLessThanOrEqual(192);
         expect(state.gapLoop?.history.every((h) => h.gain === false)).toBe(true);
@@ -1362,7 +1670,7 @@ describe('persisted gap loop', () => {
             };
             await runResearchAgent(f.context, f.deps);
             const state = (await f.saver.get(f.checkpoint()))!.channel_values
-                .research as import('../src/agent/state.ts').ResearchState;
+                .research as import('../src/research/state.ts').ResearchState;
             expect(state.gapLoop?.stopped).toBe(true);
             expect(state.gapLoop?.history).toEqual([]);
             expect(f.context.usage.searches).toBe(1);

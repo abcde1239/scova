@@ -11,7 +11,9 @@ import {
     type SearchResponse,
 } from '@scova/connectors';
 import { deterministicPartial } from '../src/index.ts';
-import { researchWindow, scopedQuery } from '../src/research-context.ts';
+import { candidateFromCheckpoint } from '../src/index.ts';
+import { hydrateCheckpointPages } from '../src/research/pages.ts';
+import { researchWindow, scopedQuery } from '../src/research/context.ts';
 import type { AgentContext, AgentDependencies, AgentTools } from '../src/index.ts';
 
 const text = 'The application deadline is 15 November 2026. Other claims require more evidence.';
@@ -136,6 +138,82 @@ function fixture() {
 }
 
 describe('persistent bounded research Agent', () => {
+    it('persists page references and resumes through authenticated receipt hydration without rereading sources', async () => {
+        const { context, deps, tools, saver, promote } = fixture();
+        deps.loadPages = vi.fn<NonNullable<AgentDependencies['loadPages']>>(async (refs) => {
+            expect(refs.every((ref) => !Object.hasOwn(ref, 'text'))).toBe(true);
+            return refs.map((ref) => ({ ...ref, text }));
+        });
+        const result = await runResearchAgent(context, deps);
+        expect(result.pages[0]?.text).toBe(text);
+        const checkpoints = [];
+        for await (const entry of saver.list(deps.config)) checkpoints.push(entry);
+        expect(
+            checkpoints.some(
+                (entry) => (entry.checkpoint.channel_values.research as any)?.pages?.length,
+            ),
+        ).toBe(true);
+        for (const entry of checkpoints) {
+            const state = entry.checkpoint.channel_values.research as any;
+            if (!state) continue;
+            expect(state.pagePolicy).toBe(1);
+            expect(state.pages.every((ref: object) => !Object.hasOwn(ref, 'text'))).toBe(true);
+        }
+        const config = promote.mock.calls.at(-1)![0];
+        const reads = vi.mocked(tools.read).mock.calls.length;
+        const resumed = await runResearchAgent(context, { ...deps, config, resume: true });
+        expect(resumed).toEqual(result);
+        expect(vi.mocked(tools.read).mock.calls.length).toBe(reads);
+        await expect(
+            runResearchAgent(context, { ...deps, config, resume: true, loadPages: undefined }),
+        ).rejects.toMatchObject({ code: 'INVALID_STATE' });
+        await expect(
+            runResearchAgent(context, {
+                ...deps,
+                config,
+                resume: true,
+                loadPages: async (refs) => refs.map((ref) => ({ ...ref, title: 'tampered', text })),
+            }),
+        ).rejects.toMatchObject({ code: 'INVALID_STATE' });
+        await expect(
+            runResearchAgent(context, {
+                ...deps,
+                config,
+                resume: true,
+                loadPages: async (refs) =>
+                    refs.map((ref) => ({ ...ref, text: `${text} tampered` })),
+            }),
+        ).rejects.toMatchObject({ code: 'INVALID_STATE' });
+        const tuple = await saver.getTuple(config);
+        const saved = tuple!.checkpoint.channel_values.research as any;
+        expect(() => candidateFromCheckpoint(context, saved)).toThrow();
+        const hydrated = await hydrateCheckpointPages(context, saved, deps.loadPages);
+        const partial = candidateFromCheckpoint(context, { ...hydrated, ready: false }, 'deadline');
+        expect(partial.claims).toEqual(result.claims);
+        expect(partial.coverage.completeness).toBe('partial');
+        expect(partial.coverage.exhausted).toContain('time');
+        expect(partial.coverage.baseline?.eligible).not.toBe(true);
+        const early = candidateFromCheckpoint(
+            context,
+            { ...hydrated, ready: false, claims: [] },
+            'deadline',
+        );
+        expect(early.coverage.completeness).toBe('partial');
+        expect(early.pages[0]?.text).toBe(text);
+        expect(early.claims[0]?.kind).toBe('insufficient');
+    });
+    it('does not upgrade embedded-body legacy checkpoints when a loader becomes available', async () => {
+        const { context, deps, saver, promote } = fixture();
+        const result = await runResearchAgent(context, deps);
+        const config = promote.mock.calls.at(-1)![0];
+        const loadPages = vi.fn(async () => []);
+        expect(
+            await runResearchAgent(context, { ...deps, config, resume: true, loadPages }),
+        ).toEqual(result);
+        expect(loadPages).not.toHaveBeenCalled();
+        const tuple = await saver.getTuple(config);
+        expect((tuple!.checkpoint.channel_values.research as any).pagePolicy).toBeUndefined();
+    });
     it('uses the actual synthesis schema claim limit in the generated model prompt', async () => {
         const { context, deps, tools } = fixture();
         await runResearchAgent(context, deps);
@@ -151,7 +229,7 @@ describe('persistent bounded research Agent', () => {
     });
     it('recovers an empty precise site query within the original search budget', async () => {
         const { context, deps, tools, searchResponse } = fixture();
-        context.config.researchMode = 'collection';
+        context.config.researchMode = 'analysis';
         context.budget.maxSearches = 3;
         const recoveredUrl = 'https://official.example/docs/v1/deadline.html';
         const model = tools.model;
@@ -194,7 +272,7 @@ describe('persistent bounded research Agent', () => {
     });
     it('does not read a conflicting version returned for a precise query', async () => {
         const { context, deps, tools, searchResponse } = fixture();
-        context.config.researchMode = 'collection';
+        context.config.researchMode = 'analysis';
         context.config.topic = 'Application deadline Node.js v22.12.0';
         context.budget.maxSearches = 3;
         const model = tools.model;
@@ -245,7 +323,7 @@ describe('persistent bounded research Agent', () => {
     });
     it('retains the original module constraint after relaxing an exact site path', async () => {
         const { context, deps, tools, searchResponse } = fixture();
-        context.config.researchMode = 'collection';
+        context.config.researchMode = 'analysis';
         context.budget.maxSearches = 3;
         const model = tools.model;
         tools.model = vi.fn<AgentTools['model']>(async (key, input) =>
@@ -300,7 +378,7 @@ describe('persistent bounded research Agent', () => {
     });
     it('keeps a current-version request partial when the retrieved source does not confirm its version', async () => {
         const { context, deps } = fixture();
-        context.config.researchMode = 'collection';
+        context.config.researchMode = 'analysis';
         context.config.topic = 'Application deadline PostgreSQL current';
         const output = await runResearchAgent(context, deps);
         expect(output.pages).toHaveLength(1);
@@ -309,7 +387,7 @@ describe('persistent bounded research Agent', () => {
     });
     it('searches a missing planned object even when its shared question already has a page', async () => {
         const { context, deps, tools, searchResponse } = fixture();
-        context.config.researchMode = 'collection';
+        context.config.researchMode = 'analysis';
         context.config.topic = 'Python 3.13 pathlib json';
         context.config.goal = 'Compare public interfaces';
         context.budget.maxSearches = 3;
@@ -441,7 +519,7 @@ describe('persistent bounded research Agent', () => {
     });
     it('skips twenty unsupported candidates and uses the read budget for a later HTML source', async () => {
         const { context, deps, tools, searchResponse } = fixture();
-        context.config.researchMode = 'collection';
+        context.config.researchMode = 'analysis';
         context.budget.maxSearches = 3;
         context.budget.maxPages = 1;
         const original = searchResponse.results[0]!;
@@ -490,7 +568,7 @@ describe('persistent bounded research Agent', () => {
     it('records unsupported explicit preferred sources as gaps without spending a read attempt', async () => {
         const { context, deps, tools } = fixture();
         const preferred = 'https://files.example/preferred.pdf';
-        context.config.researchMode = 'collection';
+        context.config.researchMode = 'analysis';
         context.config.sourcePreferences.preferredUrls = [preferred];
         context.budget.maxSearches = 1;
         context.budget.maxPages = 1;
@@ -506,7 +584,7 @@ describe('persistent bounded research Agent', () => {
     it('lets the remote provider read a preferred document without requiring a search body', async () => {
         const { context, deps, tools } = fixture();
         const preferred = 'https://files.example/preferred.pdf';
-        context.config.researchMode = 'collection';
+        context.config.researchMode = 'analysis';
         context.config.sourcePreferences.preferredUrls = [preferred];
         context.budget.maxSearches = 1;
         context.budget.maxPages = 1;
@@ -524,7 +602,7 @@ describe('persistent bounded research Agent', () => {
     });
     it('retains normalized provider body capability without storing the body in search checkpoints', async () => {
         const { context, deps, tools, searchResponse, saver } = fixture();
-        context.config.researchMode = 'collection';
+        context.config.researchMode = 'analysis';
         context.budget.maxSearches = 1;
         context.budget.maxPages = 1;
         const canonical = 'https://provider.example/report.pdf';
@@ -556,19 +634,48 @@ describe('persistent bounded research Agent', () => {
         expect(state.searches[0]!.response.results[0]).not.toHaveProperty('page');
     });
 
-    it('collection keeps source content useful without requiring publication metadata', async () => {
-        const { context, deps, tools } = fixture();
+    it('collection excludes unknown-date content and never marks it collected', async () => {
+        const { context, deps, tools, saver } = fixture();
         context.config.researchMode = 'collection';
+        context.startedAt = new Date('2026-10-26T00:00:00Z');
         const result = await runResearchAgent(context, deps);
-        expect(result.coverage.completeness).toBe('complete');
-        expect(result.coverage.gaps).toEqual([]);
-        expect(result.coverage.reportValue?.questions[0].status).toBe('supported');
-        expect(result.coverage.notes?.join(' ')).toContain('不认定为查阅窗口内新发布');
+        expect(result.coverage.completeness).toBe('partial');
+        expect(result.pages).toEqual([]);
+        expect(result.coverage.dateScreening).toMatchObject({
+            accepted: 0,
+            unconfirmed: 1,
+            outside: 0,
+        });
+        expect(result.coverage.baseline?.eligible).toBe(false);
+        expect(result.claims.every((c) => c.kind !== 'model_answer')).toBe(true);
         const prompts = vi
             .mocked(tools.model)
             .mock.calls.map(([, input]) => input.prompt)
             .join(' ');
-        expect(prompts).toContain('Collection:');
+        expect(prompts).not.toContain('model_answer');
+        expect(vi.mocked(tools.model).mock.calls.every(([key]) => key.startsWith('plan'))).toBe(
+            true,
+        );
+        let earlyProjection = false;
+        for await (const tuple of saver.list(deps.config)) {
+            const state = tuple.checkpoint.channel_values.research as {
+                dateScreening?: unknown[];
+                claims: unknown[];
+            };
+            if (state?.dateScreening?.length && !state.claims.length) {
+                const partial = candidateFromCheckpoint(context, state, 'deadline');
+                expect(partial.pages).toEqual([]);
+                expect(partial.claims.every((c) => c.kind === 'insufficient')).toBe(true);
+                expect(partial.coverage).toMatchObject({
+                    completeness: 'partial',
+                    dateScreening: { accepted: 0, unconfirmed: 1 },
+                    baseline: { eligible: false },
+                });
+                earlyProjection = true;
+                break;
+            }
+        }
+        expect(earlyProjection).toBe(true);
     });
     it('keeps adaptive queries on the task topic instead of adding Agent architecture terms', async () => {
         const { context, deps, tools, searchResponse } = fixture();
@@ -1343,9 +1450,30 @@ describe('persistent bounded research Agent', () => {
         ).toBe(true);
     });
 
+    it.each(['read', 'synthesis'] as const)(
+        'propagates persistence and programming errors from %s instead of recording a tool failure',
+        async (stage) => {
+            const { context, deps, tools } = fixture();
+            const error = Object.assign(new Error('checkpoint database unavailable'), {
+                code: 'ECONNRESET',
+            });
+            if (stage === 'read') vi.mocked(tools.read).mockRejectedValue(error);
+            else {
+                const model = tools.model;
+                tools.model = async (key, input) => {
+                    if (key.startsWith('synthesize')) throw error;
+                    return model(key, input);
+                };
+            }
+            await expect(runResearchAgent(context, deps)).rejects.toBe(error);
+        },
+    );
+
     it('rejects search snippets as evidence when body retrieval fails', async () => {
         const { context, deps, tools } = fixture();
-        vi.mocked(tools.read).mockRejectedValue(new Error('page not reachable'));
+        vi.mocked(tools.read).mockRejectedValue(
+            new ConnectorError('network', 'page not reachable'),
+        );
         await expect(runResearchAgent(context, deps)).rejects.toMatchObject({
             code: 'NO_EVIDENCE',
         });
@@ -1622,8 +1750,12 @@ describe('persistent bounded research Agent', () => {
         const { context, deps, tools } = fixture();
         context.usage.searches = context.budget.maxSearches;
         context.usage.inputTokens = context.budget.maxInputTokens;
-        vi.mocked(tools.model).mockRejectedValue(new Error('durable ledger budget exceeded'));
-        vi.mocked(tools.search).mockRejectedValue(new Error('durable ledger budget exceeded'));
+        vi.mocked(tools.model).mockRejectedValue(
+            new ConnectorError('budget_exceeded', 'durable ledger budget exceeded'),
+        );
+        vi.mocked(tools.search).mockRejectedValue(
+            new ConnectorError('budget_exceeded', 'durable ledger budget exceeded'),
+        );
         await expect(runResearchAgent(context, deps)).rejects.toMatchObject({
             code: 'NO_EVIDENCE',
         });

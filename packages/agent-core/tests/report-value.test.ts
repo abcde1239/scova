@@ -6,7 +6,7 @@ import {
     readAssessment,
     requiresFreshness,
     taskQuestions,
-} from '../src/report-value.ts';
+} from '../src/report/value.ts';
 import type { AgentClaim, AgentContext, AgentPage } from '../src/types.ts';
 
 const assessment: ClaimAssessment = {

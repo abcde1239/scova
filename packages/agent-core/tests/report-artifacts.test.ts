@@ -11,7 +11,7 @@ import {
     plannedRequirements,
     supersededArtifactClaims,
     type PlannedRequirement,
-} from '../src/report-artifacts.ts';
+} from '../src/report/artifacts/index.ts';
 import type { AgentClaim, AgentContext, ComparisonExtraction } from '../src/types.ts';
 
 const questions = [{ id: 'q0', text: '比较甲乙价格与离线能力' }];

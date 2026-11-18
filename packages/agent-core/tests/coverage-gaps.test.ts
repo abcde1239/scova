@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vite-plus/test';
-import { compactCoverageGaps } from '../src/coverage-gaps.ts';
+import { compactCoverageGaps } from '../src/report/coverage-gaps.ts';
 
 describe('coverage limitation presentation', () => {
     it('groups repeated failed attempts and duplicate required fields without hiding missing coverage', () => {

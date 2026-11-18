@@ -1,5 +1,5 @@
 import { selectedOutputFormats } from '@scova/models';
-import { runResearchAgent } from '../src/agent.ts';
+import { runResearchAgent } from '../src/research/graph.ts';
 import type { AgentContext, AgentDependencies } from '../src/types.ts';
 
 /** Supply the current wire contract for older scenario fixtures that test other behavior. */

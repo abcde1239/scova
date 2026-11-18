@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vite-plus/test';
 import { estimateModelInputTokens, type StructuredInput } from '@scova/connectors';
 import type { ReportConversationContext } from '@scova/models';
-import { withReportConversation } from '../src/conversation-input.ts';
+import { withReportConversation } from '../src/model/conversation-input.ts';
 
 function input(): StructuredInput {
     const value = {

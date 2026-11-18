@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vite-plus/test';
 import {
     unsupportedReadCandidate,
     unsupportedSearchReadCandidate,
-} from '../src/read-candidates.ts';
+} from '../src/search/read-candidates.ts';
 
 describe('HTML read candidate capabilities', () => {
     it.each([
