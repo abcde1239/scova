@@ -1866,11 +1866,13 @@ describe('persistent bounded research Agent', () => {
     it('emits completed step events only after authorized checkpoint promotion', async () => {
         const { context, deps } = fixture();
         const calls: string[] = [];
+        const identities: Array<{ step: string; phase: string; sourceCheckpoint: string }> = [];
         deps.promote = async () => {
             calls.push('promoted');
         };
-        deps.onStep = async (step, phase) => {
+        deps.onStep = async (step, phase, identity) => {
             calls.push(`${step}:${phase}`);
+            identities.push({ step, phase, ...identity });
         };
         await runResearchAgent(context, deps);
         expect(calls.slice(0, 3)).toEqual([
@@ -1879,6 +1881,18 @@ describe('persistent bounded research Agent', () => {
             'load_context:completed',
         ]);
         expect(calls.at(-1)).toBe('validate:completed');
+        for (let index = 0; index < identities.length; index += 2) {
+            const start = identities[index]!,
+                complete = identities[index + 1]!;
+            expect(complete).toEqual({ ...start, phase: 'completed' });
+        }
+        expect(
+            new Set(
+                identities
+                    .filter((item) => item.phase === 'started')
+                    .map((item) => item.sourceCheckpoint),
+            ).size,
+        ).toBe(identities.length / 2);
     });
 
     it('allows the ledger to reuse last-budget search/read/model results after checkpoint loss', async () => {

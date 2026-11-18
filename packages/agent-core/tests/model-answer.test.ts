@@ -259,6 +259,12 @@ function fixture(
                               }
                             : {}),
                     };
+                else if (key.startsWith('search-rewrite-'))
+                    data = {
+                        query: 'ReAct agent memory original paper',
+                        language: 'en',
+                        reason: '补充原始论文查询',
+                    };
                 else if (key.startsWith('conflict-review')) {
                     if (options.conflict === 'failed') {
                         const error = new ConnectorError('invalid_response', 'review failed');
@@ -523,6 +529,22 @@ function fixture(
                                   : 'none';
                     }
                 }
+                // Keep scenario fixtures compatible with the current strict search contract.
+                const searchData = data as {
+                    queries?: { language?: null }[];
+                    fieldChecks?: { language?: null }[];
+                };
+                if (key.startsWith('plan') && JSON.stringify(input.schema).includes('"language"'))
+                    searchData.queries?.forEach((query) => {
+                        query.language = null;
+                    });
+                if (
+                    key.startsWith('synthesize') &&
+                    JSON.stringify(input.schema).includes('"language"')
+                )
+                    searchData.fieldChecks?.forEach((check) => {
+                        check.language = null;
+                    });
                 if (options.wire) {
                     const provider = createModelProvider({
                         protocol: 'openai_json',

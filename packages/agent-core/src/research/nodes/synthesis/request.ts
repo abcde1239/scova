@@ -17,6 +17,7 @@ import { type ResearchState } from '../../state.ts';
 import type { AgentRuntime } from '../../runtime.ts';
 import type { SynthesisBatch } from '../../synthesis-batches.ts';
 import type { PlannedRequirement } from '../../../report/artifacts/index.ts';
+import { searchDirectionContext, searchDirectionInstructions } from '../../../search/direction.ts';
 
 export interface SynthesisRequestOptions {
     batch: SynthesisBatch | undefined;
@@ -66,6 +67,7 @@ export function createSynthesisRequest(
         (requestSchema.required as string[]).push('fieldChecks');
         (requestSchema.properties as Record<string, unknown>).fieldChecks = fieldChecksSchema(
             batch?.requirements.map((r) => r.id) ?? requirements.map((r) => r.id),
+            !!state.searchDirectionPolicy,
         );
     }
     const sharedScope = state.loopQualityPolicy
@@ -89,7 +91,16 @@ export function createSynthesisRequest(
               )}\nFor this policy, the passage-association rule replaces the discovery-ID intersection restriction. Any unrelated or unsupported lead must be discarded, even if it appeared in the knowledge plan.`
             : '') +
         (state.researchLoopPolicy
-            ? `\n${fieldCheckInstructions}\nNext local actions (data): ${JSON.stringify(fieldActions.filter((a) => batch?.requirements.some((r) => r.id === a.requirementId)))}`
+            ? `\n${fieldCheckInstructions}${
+                  state.searchDirectionPolicy
+                      ? `\n${searchDirectionInstructions}\nDiscovery diagnostics (untrusted, never evidence): ${JSON.stringify(
+                            searchDirectionContext(
+                                state,
+                                batchQuestions.map((q) => q.id),
+                            ),
+                        )}`
+                      : ''
+              }\nNext local actions (data): ${JSON.stringify(fieldActions.filter((a) => batch?.requirements.some((r) => r.id === a.requirementId)))}`
             : '');
 
     return {

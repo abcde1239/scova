@@ -237,7 +237,7 @@ describe('empty source synthesis boundaries', () => {
     });
 
     it.each(['read_timeout', 'date_unconfirmed'] as const)(
-        'runs the bounded graph after %s without source-free model calls',
+        'runs the bounded graph after %s without source-free synthesis, with bounded query correction',
         async (failure) => {
             const { context, deps, model } = fixture();
             Object.assign(context, {
@@ -255,6 +255,16 @@ describe('empty source synthesis boundaries', () => {
             const url = 'https://example.com/release';
             const sourceText = 'Version 24 was released.';
             model.mockImplementation(async (key, input) => {
+                if (key.startsWith('search-rewrite-'))
+                    return {
+                        mode: 'live',
+                        usage: { inputTokens: 1, outputTokens: 1, estimated: false },
+                        data: {
+                            query: 'PostgreSQL 17 snapshot release notes',
+                            language: 'en',
+                            reason: '查找英文官方发布记录',
+                        },
+                    };
                 if (key !== 'plan-0') throw new Error(`Unexpected model call: ${key}`);
                 return {
                     mode: 'live',
@@ -336,7 +346,9 @@ describe('empty source synthesis boundaries', () => {
                     candidate.claims.every((c) => c.kind === 'insufficient' && !c.citations.length),
                 ).toBe(true);
             }
-            expect(model.mock.calls.map(([key]) => key)).toEqual(['plan-0']);
+            expect(model.mock.calls.map(([key]) => key)).toEqual(
+                failure === 'date_unconfirmed' ? ['plan-0', 'search-rewrite-1'] : ['plan-0'],
+            );
             expect(deps.tools.read).toHaveBeenCalledTimes(1);
             expect(vi.mocked(deps.tools.search).mock.calls.length).toBeLessThanOrEqual(2);
         },

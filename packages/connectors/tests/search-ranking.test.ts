@@ -2,6 +2,28 @@ import { describe, expect, it } from 'vite-plus/test';
 import { rankSearchCandidates, plainSearchQuery, createSearxngSearch } from '../src/index.ts';
 
 describe('bounded candidate selection', () => {
+    it.each(['リリース更新履歴', '릴리스업데이트'])(
+        'ranks original-language matches for %s',
+        (query) => {
+            const result = rankSearchCandidates(query, [
+                {
+                    kind: 'search_snippet',
+                    originalUrl: 'https://a.example',
+                    url: 'https://a.example',
+                    title: 'Unrelated',
+                    snippet: 'News',
+                },
+                {
+                    kind: 'search_snippet',
+                    originalUrl: 'https://b.example',
+                    url: 'https://b.example',
+                    title: query,
+                    snippet: '',
+                },
+            ]);
+            expect(result[0].url).toBe('https://b.example');
+        },
+    );
     it('ranks an AI Agent source beyond the first five above generic latest news and React UI', async () => {
         const sources = [
             ...Array.from({ length: 5 }, (_, i) => ({

@@ -139,7 +139,7 @@ for (const width of [1440, 320]) {
         const search = page.getByRole('region', { name: '搜索与正文提取', exact: true });
         await expect(search).toContainText('内置 SearXNG＋网页读取工具（默认）');
         await search.getByRole('button', { name: '配置搜索', exact: true }).click();
-        await chooseOption(page, '账号搜索方式', 'Search API（搜索与网页读取）');
+        await chooseOption(page, '账号搜索方式', 'Search API／自定义搜索');
         await expect(page.getByLabel('搜索 API 地址', { exact: true })).toHaveValue(
             'https://api.deepseek.com/v1',
         );

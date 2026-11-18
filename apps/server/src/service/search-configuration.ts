@@ -12,7 +12,11 @@ import {
     openCredential,
     openProviderCredentials,
 } from '@scova/shared/credentials';
-import { validatePublicUrl } from '@scova/connectors';
+import {
+    validatePublicUrl,
+    validateCustomSearchTemplate,
+    customSearchEndpoint,
+} from '@scova/connectors';
 import type { ApiServices } from '@/app/services';
 import { createSearchConfigurationRepo } from '@/repo/search-configuration';
 import { ApiError } from '@/utils/errors';
@@ -29,7 +33,10 @@ export function searchConfigurationDto(row: SearchRow): SearchConfiguration {
                 ? {
                       protocol: row.protocol,
                       baseUrl: row.baseUrl,
-                      contentMode: 'prefer_api',
+                      contentMode: row.protocol === 'custom_json' ? 'reader' : 'prefer_api',
+                      ...(row.protocol === 'custom_json' && row.customTemplate
+                          ? { custom: row.customTemplate }
+                          : {}),
                       hasApiKey: true,
                   }
                 : null,
@@ -82,23 +89,64 @@ export function createSearchConfigurationService(services: Pick<ApiServices, 'db
                 ? {
                       protocol: previous.protocol,
                       baseUrl: previous.baseUrl,
-                      contentMode: previous.contentMode ? ('prefer_api' as const) : null,
+                      contentMode: previous.contentMode
+                          ? previous.protocol === 'custom_json'
+                              ? ('reader' as const)
+                              : ('prefer_api' as const)
+                          : null,
                       encryptedApiKey: previous.encryptedApiKey,
+                      customTemplate: previous.customTemplate ?? null,
                   }
-                : { protocol: null, baseUrl: null, contentMode: null, encryptedApiKey: null };
+                : {
+                      protocol: null,
+                      baseUrl: null,
+                      contentMode: null,
+                      encryptedApiKey: null,
+                      customTemplate: null,
+                  };
         if (input === null)
-            return { protocol: null, baseUrl: null, contentMode: null, encryptedApiKey: null };
+            return {
+                protocol: null,
+                baseUrl: null,
+                contentMode: null,
+                encryptedApiKey: null,
+                customTemplate: null,
+            };
         if (input.protocol === 'perplexity')
             throw new ApiError(422, 'VALIDATION_ERROR', '所选 API 暂不支持独立网页读取', [
                 { path: '/api/protocol', message: '请选择支持搜索与读取的 DeepSeek 或 Tavily' },
             ]);
-        const baseUrl = searchBaseUrl(input.baseUrl);
+        let baseUrl: string;
+        let customTemplate = null;
+        if (input.protocol === 'custom_json') {
+            try {
+                if (input.contentMode !== 'reader') throw new Error();
+                baseUrl = customSearchEndpoint(input.baseUrl);
+                customTemplate = validateCustomSearchTemplate(input.custom);
+            } catch {
+                throw new ApiError(422, 'VALIDATION_ERROR', '自定义搜索配置无效', [
+                    {
+                        path: '/api/custom',
+                        message: '请检查公网 HTTPS 完整端点、有限 JSON 模板，并明确选择本地 Reader',
+                    },
+                ]);
+            }
+        } else {
+            if (input.custom !== undefined)
+                throw new ApiError(422, 'VALIDATION_ERROR', '内置协议不接受自定义搜索模板', [
+                    { path: '/api/custom', message: '请移除自定义模板或选择自定义 JSON 协议' },
+                ]);
+            baseUrl = searchBaseUrl(input.baseUrl);
+        }
         let apiKey = input.apiKey;
         if (
             !apiKey &&
             previous?.encryptedApiKey &&
             previous.protocol === input.protocol &&
-            previous.baseUrl === baseUrl
+            previous.baseUrl === baseUrl &&
+            (input.protocol !== 'custom_json' ||
+                JSON.stringify(validateCustomSearchTemplate(previous.customTemplate)) ===
+                    JSON.stringify(customTemplate))
         ) {
             try {
                 apiKey = openCredential(previous.encryptedApiKey, userId, id);
@@ -112,12 +160,17 @@ export function createSearchConfigurationService(services: Pick<ApiServices, 'db
         }
         if (!apiKey)
             throw new ApiError(422, 'VALIDATION_ERROR', '请填写独立搜索密钥', [
-                { path: '/api/apiKey', message: '首次配置或更改地址、协议时须填写密钥' },
+                {
+                    path: '/api/apiKey',
+                    message: '首次配置或更改地址、协议、自定义模板时须填写密钥',
+                },
             ]);
         return {
             protocol: input.protocol,
             baseUrl,
-            contentMode: 'prefer_api' as const,
+            contentMode:
+                input.protocol === 'custom_json' ? ('reader' as const) : ('prefer_api' as const),
+            customTemplate,
             encryptedApiKey: sealCredential(apiKey, userId, id),
         };
     }

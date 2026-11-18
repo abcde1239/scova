@@ -6,6 +6,7 @@ import { createRunService } from '@/service/runs.ts';
 import { ApiError } from '@/utils/errors.ts';
 import { createRunEventService } from '@/service/run-events.ts';
 import { createSseBody } from '@/http/sse.ts';
+import { createRunGraphService } from '@/service/run-graph.ts';
 
 type HttpContext = Pick<Context, 'request' | 'set'>;
 type RunParams = { runId: string };
@@ -14,6 +15,7 @@ type RunParams = { runId: string };
 export function createRunHandlers(services: ApiServices) {
     const runs = createRunService(services);
     const events = createRunEventService(services);
+    const graph = createRunGraphService(services);
     return {
         async list(
             this: void,
@@ -57,6 +59,11 @@ export function createRunHandlers(services: ApiServices) {
             const session = await requireSession(request, services);
             requireCsrf(request, session, services);
             return runs.cancel(session.userId, params.runId);
+        },
+        async graph(this: void, { request, set, params }: HttpContext & { params: RunParams }) {
+            const session = await requireSession(request, services);
+            set.headers['cache-control'] = 'no-store';
+            return graph.get(session.userId, params.runId);
         },
         async retry(
             this: void,

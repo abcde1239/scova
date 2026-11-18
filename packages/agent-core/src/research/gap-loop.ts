@@ -4,13 +4,15 @@ import type { GapAction } from './loop.ts';
 import { evidenceLinks } from '../evidence/links.ts';
 import { object } from '../utils/guards.ts';
 import type { PlannedRequirement } from '../report/artifacts/index.ts';
+import { isSearchLanguage, type SearchOptions } from '@scova/connectors';
 
-export type GapTarget = {
+export type GapTarget = SearchOptions & {
     requirementId: string;
     questionIds: string[];
     action: GapAction;
     query: string;
     url?: string;
+    reason?: string;
 };
 export type GapProgress = {
     supported: string[];
@@ -95,6 +97,9 @@ export function validGapLoop(
             !object(target) ||
             !action(target.action) ||
             typeof target.query !== 'string' ||
+            (target.language !== undefined && !isSearchLanguage(target.language)) ||
+            (target.reason !== undefined &&
+                (typeof target.reason !== 'string' || target.reason.length > 500)) ||
             (target.action === 'read' &&
                 (typeof target.url !== 'string' ||
                     target.url.length > 4000 ||
@@ -176,6 +181,7 @@ export function gapFingerprint(target: GapTarget, candidate: AgentCandidate, err
                 target.action,
                 target.query.trim().replace(/\s+/g, ' ').toLowerCase(),
                 ...(target.url ? [target.url] : []),
+                ...(target.language ? [target.language] : []),
                 candidate.pages
                     .map((p) => [p.url, p.contentHash])
                     .sort((a, b) => a[0]!.localeCompare(b[0]!)),

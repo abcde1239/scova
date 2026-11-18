@@ -84,6 +84,7 @@ export function registerReceiptAuthentication() {
         'strip_knowledge',
         'strip_gap_loop',
         'strip_quality',
+        'strip_direction',
         'navigation',
     ])(
         'authenticates cross-question passage links and gap policy against immutable model receipts (tampered=%s)',
@@ -117,6 +118,7 @@ export function registerReceiptAuthentication() {
                 knowledgeFirstPolicy?: number;
                 gapLoopPolicy?: number;
                 loopQualityPolicy?: number;
+                searchDirectionPolicy?: number;
                 planningExtraction: {
                     response: {
                         researchPolicy?: {
@@ -125,6 +127,7 @@ export function registerReceiptAuthentication() {
                             knowledgeFirstPolicy?: number;
                             gapLoopPolicy?: number;
                             loopQualityPolicy?: number;
+                            searchDirectionPolicy?: number;
                         };
                     };
                 };
@@ -185,6 +188,7 @@ export function registerReceiptAuthentication() {
                     'strip_knowledge',
                     'strip_gap_loop',
                     'strip_quality',
+                    'strip_direction',
                 ].includes(String(tampered))
             ) {
                 if (tampered === 'strip_loop' || tampered === 'strip_completion') {
@@ -223,6 +227,14 @@ export function registerReceiptAuthentication() {
                     delete state.gapLoopPolicy;
                     delete state.planningExtraction.response.researchPolicy?.gapLoopPolicy;
                     Reflect.deleteProperty(state, 'gapLoop');
+                }
+                if (
+                    tampered === 'strip_loop' ||
+                    tampered === 'strip_gap_loop' ||
+                    tampered === 'strip_direction'
+                ) {
+                    delete state.searchDirectionPolicy;
+                    delete state.planningExtraction.response.researchPolicy?.searchDirectionPolicy;
                 }
                 if (
                     tampered === 'strip_loop' ||
@@ -280,6 +292,7 @@ export function registerReceiptAuthentication() {
                     'strip_knowledge',
                     'strip_gap_loop',
                     'strip_quality',
+                    'strip_direction',
                     'navigation',
                 ].includes(String(tampered))
             )

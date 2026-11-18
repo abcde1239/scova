@@ -2,3 +2,4 @@
 export * from 'drizzle-orm';
 export * from './schema.ts';
 export * from './client.ts';
+export * from './run-graph.ts';

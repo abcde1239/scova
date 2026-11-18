@@ -9,6 +9,7 @@ import {
     RunCommandInputSchema,
     RunCommandResponseSchema,
     RunSchema,
+    RunGraphSnapshotSchema,
 } from '@scova/models';
 import type { ApiServices } from '@/app/services';
 import { createRunHandlers } from '@/handler/runs.ts';
@@ -102,6 +103,16 @@ export function createRunPlugin(services: ApiServices) {
                 summary: '请求取消执行',
                 description:
                     '将活动执行标记为取消请求；重复取消复用原命令，终态不回退。Worker 消费取消请求的执行闭环仍待实现。',
+            },
+        })
+        .get('/runs/:runId/graph', handlers.graph, {
+            response: { 200: RunGraphSnapshotSchema, ...errors },
+            detail: {
+                operationId: 'getRunGraph',
+                tags: ['执行'],
+                summary: '读取执行节点图状态',
+                description:
+                    '仅本人可读取版本化研究拓扑、节点实例及恢复尝试。seq与持久化投影在短事务内一致；历史身份缺失时返回阶段汇总，不暴露检查点、租约、提示词或密钥。',
             },
         })
         .post('/runs/:runId/retry', handlers.retry, {

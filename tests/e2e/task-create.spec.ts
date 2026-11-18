@@ -127,7 +127,7 @@ test('任务保存多种采集目标，最后一个必选成果不能取消', as
     await page.goto('/tasks/new');
     await fillMain(page);
     await chooseOutputFormats(page, '输出形式', ['简报', '对比表']);
-    await chooseOption(page, '搜索方式', 'Search API（搜索与网页读取）');
+    await chooseOption(page, '搜索方式', 'Search API／自定义搜索（沿用账号读取方式）');
     const group = page.getByRole('group', { name: '输出形式', exact: true });
     await expect(group).toContainText('核心答案与重要发现');
     await expect(group).toContainText('共同维度与差异依据');

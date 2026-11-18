@@ -66,6 +66,20 @@ export function searchFixture() {
 }
 
 describe('managed search service', () => {
+    it('isolates language caches while coalescing requests with the same scope/query/language', async () => {
+        const f = searchFixture();
+        const search = createManagedSearch({ ...f, scope: 'language' });
+        await search.search('agent', { language: 'en' });
+        expect(
+            (await search.search('agent', { language: 'en' })).coverage.diagnostics?.cacheHit,
+        ).toBe(true);
+        await search.search('agent', { language: 'ja' });
+        await search.search('agent');
+        expect(f.source.search).toHaveBeenCalledTimes(3);
+        expect(f.source.search.mock.calls[0][1]?.language).toBe('en');
+        expect(f.source.search.mock.calls[1][1]?.language).toBe('ja');
+        expect(f.cache.size).toBe(3);
+    });
     it('charges retries separately, rechecks the fence, and reports failed adapter attempts', async () => {
         const f = searchFixture();
         vi.mocked(f.source.search).mockRejectedValue(

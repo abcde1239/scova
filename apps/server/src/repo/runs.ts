@@ -8,7 +8,9 @@ import {
     isNull,
     desc,
     type DatabaseExecutor,
+    persistRunGraphEvent,
 } from '@scova/db';
+import { RunEventSchema, parseContract } from '@scova/models';
 import * as tables from '@scova/db';
 import { captureFeedbackSnapshot } from '@scova/db/feedback';
 import type { ApiServices } from '@/app/services';
@@ -169,8 +171,26 @@ function createRunStore(database: DatabaseExecutor) {
         createRun(data: typeof tables.runs.$inferInsert) {
             return database.insert(tables.runs).values(data).returning().then(firstRow);
         },
-        createEvent(data: typeof tables.runEvents.$inferInsert) {
-            return database.insert(tables.runEvents).values(data).returning().then(firstRow);
+        async createEvent(data: typeof tables.runEvents.$inferInsert) {
+            const event = await database
+                .insert(tables.runEvents)
+                .values(data)
+                .returning()
+                .then(firstRow);
+            await persistRunGraphEvent(
+                database,
+                event.userId,
+                parseContract(RunEventSchema, {
+                    schemaVersion: event.schemaVersion,
+                    eventId: event.id,
+                    runId: event.runId,
+                    seq: event.seq,
+                    occurredAt: event.occurredAt.toISOString(),
+                    type: event.type,
+                    payload: event.payload,
+                }),
+            );
+            return event;
         },
         createOutbox(data: typeof tables.outbox.$inferInsert) {
             return database.insert(tables.outbox).values(data).returning().then(firstRow);

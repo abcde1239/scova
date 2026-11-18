@@ -2,6 +2,10 @@ import { type DatabaseClient } from '@scova/db';
 import { openProviderCredentials } from '@scova/shared/credentials';
 import { activeAgentProvider } from '@/repo/agent-providers.ts';
 import { accountSearchConfiguration } from '@/repo/search-configuration.ts';
+import {
+    customConfigurationHash,
+    freezeSearchConfiguration,
+} from '@/repo/search-configuration-freeze.ts';
 import { installedCheckpointVersion } from '@/utils/checkpoint-version.ts';
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import pg from 'pg';
@@ -14,7 +18,7 @@ import { type AgentCandidate } from '@scova/agent-core';
 import { ConnectorError, createConnectorBundle, type ConnectorBundle } from '@scova/connectors';
 import { createAgentRepository } from '@/repo/agent.ts';
 import type { RunExecutionContext, RunExecutor } from '@/service/runs.ts';
-import { RunExecutionError, type RunLeaseToken } from '@/utils/runs.ts';
+import { RunExecutionError, RunFenceError, type RunLeaseToken } from '@/utils/runs.ts';
 import { createDeliveryService } from '@/service/delivery.ts';
 import { digest } from '@/service/agent/tool-results.ts';
 import { createAgentSession } from '@/service/agent/session.ts';
@@ -63,7 +67,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions) {
     let searchRedis = options.redis;
     let ownsRedis = false;
     let closing: Promise<void> | undefined;
-    async function bundle(context: RunExecutionContext) {
+    async function bundle(context: RunExecutionContext, token: RunLeaseToken) {
         const { mode, userId } = context;
         if (options.bundle) return options.bundle;
         if (mode !== 'live') throw new RunExecutionError('AGENT_CONFIGURATION_INVALID');
@@ -104,6 +108,11 @@ export function createAgentRuntime(options: AgentRuntimeOptions) {
                     userId,
                     context.config.searchMode,
                 );
+                const frozenSearchHash = customConfigurationHash(
+                    savedSearch,
+                    searchConfig.searchProvider,
+                );
+                await freezeSearchConfiguration(options.database, token, frozenSearchHash);
                 usesSearxng =
                     'searchProvider' in searchConfig && searchConfig.searchProvider === 'searxng';
                 liveBundle = createConnectorBundle({
@@ -115,7 +124,10 @@ export function createAgentRuntime(options: AgentRuntimeOptions) {
                     ...searchConfig,
                 });
                 liveBundle.searchProvider = searchConfig.searchProvider;
+                if (frozenSearchHash) liveBundle.searchIdentity = frozenSearchHash;
             } catch (error) {
+                if (error instanceof RunExecutionError || error instanceof RunFenceError)
+                    throw error;
                 if (error instanceof SearchConfigurationError)
                     throw new RunExecutionError(error.failureCode);
                 throw new RunExecutionError('AGENT_CONFIGURATION_INVALID');
@@ -199,7 +211,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions) {
                         saver,
                         token,
                         context,
-                        bundle: await bundle(context),
+                        bundle: await bundle(context, token),
                     });
                     let candidate: AgentCandidate;
                     try {

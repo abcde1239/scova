@@ -82,6 +82,7 @@ export async function runResearchAgent(
                                           ? {
                                                 gapLoopPolicy: 1 as const,
                                                 loopQualityPolicy: 1 as const,
+                                                searchDirectionPolicy: 1 as const,
                                             }
                                           : {}),
                                       ...(!collection &&
@@ -290,7 +291,10 @@ export async function runResearchAgent(
                 context,
                 await hydrateCheckpointPages(context, promoted, deps.loadPages),
             );
-        await deps.onStep?.(nextStep, 'started');
+        const execution = {
+            sourceCheckpoint: String(config.configurable?.checkpoint_id ?? 'initial'),
+        };
+        await deps.onStep?.(nextStep, 'started', execution);
         try {
             await graph.invoke(!deps.resume && step === 0 ? { research: initial } : null, {
                 ...config,
@@ -322,7 +326,7 @@ export async function runResearchAgent(
             throw new AgentError('INVALID_STATE', '节点执行未保存 checkpoint');
         await active(context, true);
         await deps.promote(snapshot.config);
-        await deps.onStep?.(nextStep, 'completed');
+        await deps.onStep?.(nextStep, 'completed', execution);
         config = snapshot.config;
         promoted = snapshot.values.research;
         verifyIdentity(await hydrateCheckpointPages(context, promoted, deps.loadPages), context);

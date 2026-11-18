@@ -22,7 +22,7 @@ export interface RunEventOptions {
     backoffMs?: number;
     onEvent?: (event: RunEvent) => void | Promise<void>;
     onSnapshot?: (snapshot: Run) => void | Promise<void>;
-    onReset?: (snapshot: Run) => void | Promise<void>;
+    onReset?: (snapshot: Run, resumeAfter: number) => void | Promise<void>;
 }
 const terminal = new Set(['succeeded', 'partial', 'failed', 'canceled']);
 class CallbackError extends Error {
@@ -70,7 +70,15 @@ export function subscribeRunEvents(
 
     function invalidate() {
         if (!current()) return;
-        const domains = new Set(['run', 'runs', 'tasks', 'reports', 'notifications', 'inbox']);
+        const domains = new Set([
+            'run',
+            'run-graph',
+            'runs',
+            'tasks',
+            'reports',
+            'notifications',
+            'inbox',
+        ]);
         void lifecycle.queryClient.invalidateQueries({
             predicate: ({ queryKey }) =>
                 queryKey[0] === 'session' &&
@@ -107,7 +115,12 @@ export function subscribeRunEvents(
         for (const message of messages) {
             if (!current()) break;
             if (message.type === 'stream.reset') {
-                await notify(options.onReset, message.payload.snapshot);
+                await notify(
+                    options.onReset
+                        ? (run: Run) => options.onReset!(run, message.payload.resumeAfter)
+                        : undefined,
+                    message.payload.snapshot,
+                );
                 await snapshot(message.payload.snapshot);
                 if (!current()) break;
                 after = message.payload.resumeAfter;

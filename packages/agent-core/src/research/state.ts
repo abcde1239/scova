@@ -1,6 +1,6 @@
 import { Annotation } from '@langchain/langgraph';
 import type { GapLoop } from './gap-loop.ts';
-import { type SearchResponse } from '@scova/connectors';
+import { type SearchResponse, type SearchOptions } from '@scova/connectors';
 import { type Coverage, type ReportArtifact } from '@scova/models';
 import {
     AgentError,
@@ -12,7 +12,7 @@ import {
     type ComparisonExtraction,
 } from '../types.ts';
 
-export interface Query {
+export interface Query extends SearchOptions {
     query: string;
     questionIds: string[];
 }
@@ -22,6 +22,7 @@ export interface Selection {
     reason?: 'priority' | 'topic_and_coverage';
 }
 export interface ResearchState {
+    searchDirectionPolicy?: 1;
     /** The graph stores pages without text and hydrates them before running any domain node. */
     pagePolicy?: 1;
     collectionPolicy?: 1;

@@ -12,10 +12,11 @@ import {
     inArray,
     runEvents as dbRunEvents,
     outbox as dbOutbox,
+    persistRunGraphEvent,
 } from '@scova/db';
 
 import { captureFeedbackSnapshot } from '@scova/db/feedback';
-import { TaskConfigSchema, parseContract } from '@scova/models';
+import { TaskConfigSchema, RunEventSchema, parseContract } from '@scova/models';
 import { dueSchedule, effectiveRunScopeHash, researchComparisonScopeHash } from '@scova/shared';
 import { SchedulerTaskError } from '@/utils/scheduler.ts';
 
@@ -160,7 +161,7 @@ export function createSchedulerRepository(database: DatabaseClient): SchedulerRe
                             .where(eq(dbScheduleOccurrences.id, occurrence.id))
                             .returning()
                             .then((rows) => requiredDatabaseValue(rows[0]));
-                        await tx
+                        const queued = await tx
                             .insert(dbRunEvents)
                             .values({
                                 userId: task.userId,
@@ -172,6 +173,19 @@ export function createSchedulerRepository(database: DatabaseClient): SchedulerRe
                             })
                             .returning()
                             .then((rows) => requiredDatabaseValue(rows[0]));
+                        await persistRunGraphEvent(
+                            tx,
+                            run.userId,
+                            parseContract(RunEventSchema, {
+                                schemaVersion: queued.schemaVersion,
+                                eventId: queued.id,
+                                runId: queued.runId,
+                                seq: queued.seq,
+                                occurredAt: queued.occurredAt.toISOString(),
+                                type: queued.type,
+                                payload: queued.payload,
+                            }),
+                        );
                         await tx
                             .insert(dbOutbox)
                             .values({

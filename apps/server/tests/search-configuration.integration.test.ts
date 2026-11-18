@@ -13,7 +13,7 @@ import {
 } from '@scova/db';
 import { migrateDatabase } from '@scova/db/migrate';
 import { openCredential, sealProviderCredentials } from '@scova/shared/credentials';
-import type { SearchConfiguration } from '@scova/models';
+import { BRAVE_SEARCH_PRESET, type SearchConfiguration } from '@scova/models';
 import { createDefaultServices } from '../src/app/services';
 import { createApiErrorPlugin } from '../src/app/errors';
 import { createSearchConfigurationPlugin } from '../src/router/search-configuration';
@@ -101,6 +101,94 @@ afterAll(async () => {
 });
 
 describe('独立搜索与正文提取配置', () => {
+    it('保存仅搜索的自定义模板，显式使用本地 Reader，并隔离密钥与账号', async () => {
+        const saved = await save({
+            defaultMode: 'api',
+            api: {
+                ...BRAVE_SEARCH_PRESET,
+                protocol: 'custom_json',
+                contentMode: 'reader',
+                apiKey: api.apiKey,
+            },
+        });
+        expect(saved.api).toMatchObject({
+            protocol: 'custom_json',
+            contentMode: 'reader',
+            custom: BRAVE_SEARCH_PRESET.custom,
+            hasApiKey: true,
+        });
+        expect(JSON.stringify(saved)).not.toContain(api.apiKey);
+        const loaded = (await (await request()).json()).configuration;
+        expect(loaded.api.custom).toEqual(BRAVE_SEARCH_PRESET.custom);
+        const row = (
+            await db
+                .select()
+                .from(searchConfigurations)
+                .where(eq(searchConfigurations.userId, owner.id))
+        )[0]!;
+        expect(openCredential(row.encryptedApiKey!, owner.id, row.id)).toBe(api.apiKey);
+        expect(row.customTemplate).toEqual(BRAVE_SEARCH_PRESET.custom);
+        expect(
+            (await (await request('GET', '', undefined, other)).json()).configuration,
+        ).toBeNull();
+        const current = await save({ revision: saved.revision, defaultMode: 'searxng' });
+        expect(current.api?.contentMode).toBe('reader');
+    });
+    it('相同自定义模板可以保留密钥，修改认证头或模板必须重新确认密钥', async () => {
+        const customApi = {
+            ...BRAVE_SEARCH_PRESET,
+            protocol: 'custom_json',
+            contentMode: 'reader',
+        };
+        const saved = await save({ defaultMode: 'api', api: { ...customApi, apiKey: api.apiKey } });
+        const retained = await save({
+            revision: saved.revision,
+            defaultMode: 'api',
+            api: customApi,
+        });
+        const changedTemplate = {
+            ...customApi.custom,
+            auth: { type: 'header', headerName: 'X-Api-Key' },
+        };
+        const response = await request('PUT', '', {
+            revision: retained.revision,
+            defaultMode: 'api',
+            api: { ...customApi, custom: changedTemplate },
+        });
+        expect(response.status).toBe(422);
+        expect(JSON.stringify(await response.json())).not.toContain(api.apiKey);
+        expect((await (await request()).json()).configuration.revision).toBe(retained.revision);
+    });
+    it('拒绝自定义读取策略歧义、任意头和模板中明文密钥', async () => {
+        for (const customApi of [
+            { ...BRAVE_SEARCH_PRESET, protocol: 'custom_json', contentMode: 'prefer_api' },
+            {
+                ...BRAVE_SEARCH_PRESET,
+                protocol: 'custom_json',
+                contentMode: 'reader',
+                custom: {
+                    ...BRAVE_SEARCH_PRESET.custom,
+                    auth: { type: 'header', headerName: 'Cookie' },
+                },
+            },
+            {
+                ...BRAVE_SEARCH_PRESET,
+                protocol: 'custom_json',
+                contentMode: 'reader',
+                custom: {
+                    ...BRAVE_SEARCH_PRESET.custom,
+                    request: { q: '{{query}}', api_key: 'plaintext-secret' },
+                },
+            },
+        ]) {
+            const response = await request('PUT', '', {
+                defaultMode: 'api',
+                api: { ...customApi, apiKey: api.apiKey },
+            });
+            expect(response.status).toBe(422);
+            expect(JSON.stringify(await response.json())).not.toContain(api.apiKey);
+        }
+    });
     it('没有账号配置时返回空，不读取环境中的默认搜索服务或密钥', async () => {
         vi.stubEnv('SEARCH_PROVIDER', 'api');
         vi.stubEnv('SEARCH_API_KEY', 'obsolete-server-key');

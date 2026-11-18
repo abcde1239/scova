@@ -38,7 +38,9 @@ export function createToolCaller(
                       schema: (input as StructuredInput).schema,
                       untrustedSources: (input as StructuredInput).untrustedSources,
                   }
-                : input;
+                : bundle.searchIdentity
+                  ? { source: bundle.searchIdentity, input }
+                  : input;
         const key = `${operationKey}:${digest(JSON.stringify(keyInput))}`;
         let held: AgentReservation;
         try {
@@ -73,7 +75,7 @@ export function createToolCaller(
             const remaining = Math.min(
                 tool === 'model' || (tool === 'search' && bundle.search.tokenReservation)
                     ? MODEL_CALL_TIMEOUT_MS
-                    : tool === 'read' && bundle.searchProvider === 'api'
+                    : tool === 'read' && (bundle.providerReads ?? bundle.searchProvider === 'api')
                       ? READ_CALL_TIMEOUT_MS
                       : 15_000,
                 context.deadlineAt.getTime() - Date.now(),

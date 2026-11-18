@@ -12,8 +12,7 @@
                     <app-icon name="search" class="text-primary" />搜索与正文提取
                 </h3>
                 <p class="m-0 text-muted text-[0.875rem] leading-[1.65] break-anywhere">
-                    Search API 完成搜索与网页读取，内置 SearXNG
-                    配合本地网页读取工具。切换模型不会改变此配置。
+                    可使用 Search API、自定义搜索服务，或内置 SearXNG。切换模型不会改变此配置。
                 </p>
             </div>
             <action-button
@@ -47,14 +46,23 @@
                     {{
                         configuration.api.protocol === 'perplexity'
                             ? '需更换支持网页读取的协议'
-                            : 'API 读取网页'
+                            : configuration.api.protocol === 'custom_json'
+                              ? '本地工具读取网页'
+                              : 'API 读取网页'
                     }}</span
                 >
             </p>
             <p v-if="!storageReady" class="m-0 text-muted text-[0.875rem] leading-[1.65]">
                 管理员尚未启用密钥加密，暂时无法保存搜索配置。
             </p>
-            <form v-if="editing" ref="form" class="search-form" novalidate @submit.prevent="save">
+            <form
+                v-if="editing"
+                ref="form"
+                class="search-form"
+                aria-labelledby="search-configuration-heading"
+                novalidate
+                @submit.prevent="save"
+            >
                 <task-config-field
                     v-model="draft.defaultMode"
                     label="账号搜索方式"
@@ -75,14 +83,22 @@
                     />
                     <task-config-field
                         v-model="draft.baseUrl"
-                        label="搜索 API 地址"
+                        :label="
+                            draft.protocol === 'custom_json'
+                                ? '完整搜索接口地址（HTTPS）'
+                                : '搜索 API 地址'
+                        "
                         :disabled="pending"
                         :error="errors.baseUrl"
                     />
                     <div class="layout-grid gap-2">
                         <label class="font-medium" :for="`${id}-key`"
                             >搜索 API Key{{
-                                configuration?.api ? '（地址与协议不变时留空保留）' : ''
+                                configuration?.api
+                                    ? draft.protocol === 'custom_json'
+                                        ? '（地址、协议与模板不变时留空保留）'
+                                        : '（地址与协议不变时留空保留）'
+                                    : ''
                             }}</label
                         >
                         <n-input
@@ -105,7 +121,15 @@
                             {{ errors.apiKey || '独立加密保存，不使用模型密钥。' }}
                         </p>
                     </div>
-                    <p class="search-wide m-0 text-muted text-[0.875rem] leading-[1.65]">
+                    <search-template-fields
+                        v-if="draft.protocol === 'custom_json'"
+                        v-model="templateDraft"
+                        :disabled="pending"
+                        :errors="errors"
+                        @preset="applyBravePreset"
+                        @clear="clearError"
+                    />
+                    <p v-else class="search-wide m-0 text-muted text-[0.875rem] leading-[1.65]">
                         搜索与网页正文均由所选 API 提供。
                         <template v-if="draft.protocol === 'perplexity'">
                             Perplexity Search 暂不支持独立网页读取，请改选 DeepSeek 或 Tavily。
@@ -177,6 +201,12 @@ import AppIcon from '@/components/common/AppIcon.vue';
 import AppSelect from '@/components/common/AppSelect.vue';
 import StatePanel from '@/components/common/StatePanel.vue';
 import TaskConfigField from '@/components/tasks/TaskConfigField.vue';
+import SearchTemplateFields from '@/components/account/SearchTemplateFields.vue';
+import {
+    braveSearchEndpoint,
+    searchTemplateDraft,
+    parseSearchTemplate,
+} from '@/models/search-template';
 
 const props = defineProps<{ providers: AgentProvider[]; disabled?: boolean }>();
 const lifecycle = useSessionLifecycle();
@@ -189,20 +219,24 @@ const modeLabel = computed(() =>
     !configuration.value
         ? '内置 SearXNG＋网页读取工具（默认）'
         : configuration.value.defaultMode === 'api'
-          ? 'Search API（搜索与网页读取）'
+          ? 'Search API／自定义搜索'
           : '内置 SearXNG＋网页读取工具',
 );
 const protocolLabel = (protocol: string) =>
-    ({ deepseek: 'DeepSeek Search', perplexity: 'Perplexity Search', tavily: 'Tavily Search' })[
-        protocol
-    ] ?? protocol;
+    ({
+        deepseek: 'DeepSeek Search',
+        perplexity: 'Perplexity Search',
+        tavily: 'Tavily Search',
+        custom_json: '自定义 JSON 搜索',
+    })[protocol] ?? protocol;
 const modeOptions = [
-    { value: 'api', label: 'Search API（搜索与网页读取）' },
+    { value: 'api', label: 'Search API／自定义搜索' },
     { value: 'searxng', label: '内置 SearXNG＋网页读取工具' },
 ];
 const protocolOptions = [
     { value: 'deepseek', label: 'DeepSeek Search' },
     { value: 'tavily', label: 'Tavily Search' },
+    { value: 'custom_json', label: '自定义 HTTP JSON＋本地网页读取' },
 ];
 const id = useId();
 const editing = ref(false),
@@ -217,9 +251,12 @@ const draft = reactive({
     baseUrl: 'https://api.deepseek.com/v1',
     apiKey: '',
 });
+const templateDraft = ref(searchTemplateDraft());
 const initial = ref('');
 const editingRevision = ref<number>();
-const dirty = computed(() => editing.value && JSON.stringify(draft) !== initial.value);
+const draftIdentity = () =>
+    JSON.stringify([draft, draft.protocol === 'custom_json' ? templateDraft.value : null]);
+const dirty = computed(() => editing.value && draftIdentity() !== initial.value);
 function canLeave() {
     return !pending.value && (!dirty.value || window.confirm('搜索配置尚未保存，确定放弃修改？'));
 }
@@ -233,7 +270,8 @@ function open() {
         baseUrl: saved?.api?.baseUrl ?? 'https://api.deepseek.com/v1',
         apiKey: '',
     });
-    initial.value = JSON.stringify(draft);
+    templateDraft.value = searchTemplateDraft(saved?.api?.custom);
+    initial.value = draftIdentity();
     errors.value = {};
     message.value = '';
     uncertain.value = false;
@@ -259,16 +297,37 @@ watch(
                 ? 'https://api.deepseek.com/v1'
                 : value === 'tavily'
                   ? 'https://api.tavily.com'
-                  : 'https://api.perplexity.ai';
+                  : value === 'custom_json'
+                    ? braveSearchEndpoint
+                    : 'https://api.perplexity.ai';
         draft.apiKey = '';
+        errors.value = {};
     },
     { flush: 'sync' },
 );
+function applyBravePreset() {
+    draft.baseUrl = braveSearchEndpoint;
+    templateDraft.value = searchTemplateDraft();
+    draft.apiKey = '';
+    errors.value = {};
+}
+function clearError(field: string) {
+    if (errors.value[field]) delete errors.value[field];
+}
 async function reportFailure(cause: unknown, dispatched: boolean) {
     const error = toApiError(cause);
     if (error.kind === 'cancelled') return;
-    for (const field of error.fieldErrors ?? [])
-        errors.value[field.path.split('/').filter(Boolean).at(-1) ?? ''] = field.message;
+    for (const field of error.fieldErrors ?? []) {
+        const parts = field.path.split('/').filter(Boolean);
+        const name = parts.includes('request')
+            ? 'request'
+            : parts.includes('languageMap')
+              ? 'languageMap'
+              : parts.includes('auth') && parts.at(-1) !== 'headerName'
+                ? 'auth'
+                : (parts.at(-1) ?? 'custom');
+        errors.value[name] = field.message;
+    }
     uncertain.value = dispatched && (!error.status || error.status >= 500);
     message.value =
         error.status === 409
@@ -288,6 +347,21 @@ async function save() {
     message.value = '';
     let dispatched = false;
     try {
+        let custom;
+        if (draft.defaultMode === 'api' && draft.protocol === 'custom_json') {
+            try {
+                custom = parseSearchTemplate(templateDraft.value);
+            } catch (cause) {
+                errors.value[cause instanceof TypeError ? 'request' : 'custom'] =
+                    cause instanceof TypeError ? cause.message : '请检查参数、鉴权和结果字段映射。';
+                message.value = '请检查自定义搜索配置后重试。';
+                await nextTick();
+                form.value
+                    ?.querySelector<HTMLElement>('[aria-invalid="true"], [role="alert"]')
+                    ?.focus();
+                return;
+            }
+        }
         const body = parseContract(SearchConfigurationInputSchema, {
             ...(editingRevision.value !== undefined ? { revision: editingRevision.value } : {}),
             defaultMode: draft.defaultMode,
@@ -296,7 +370,8 @@ async function save() {
                       api: {
                           protocol: draft.protocol,
                           baseUrl: draft.baseUrl.trim(),
-                          contentMode: 'prefer_api',
+                          contentMode: draft.protocol === 'custom_json' ? 'reader' : 'prefer_api',
+                          ...(custom ? { custom } : {}),
                           ...(draft.apiKey.trim() ? { apiKey: draft.apiKey.trim() } : {}),
                       },
                   }

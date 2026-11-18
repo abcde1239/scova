@@ -12,6 +12,7 @@ import { runReportsOptions } from '@/api/run-detail';
 import { toApiError } from '@/api/errors';
 import { useRunEvents } from '@/composables/useRunEvents';
 import { useSessionLifecycle } from '@/composables/useSessionQuery';
+import { useRunGraph } from '@/composables/useRunGraph';
 import { appendExecutionLog, emptyExecutionLog } from '@/utils/execution-log';
 
 export const executionStates = {
@@ -53,6 +54,7 @@ export function executionFailure(run: Run) {
         AGENT_CONFIGURATION_INVALID: '研究服务配置不可用，本次未完成。',
         SEARCH_API_NOT_CONFIGURED: '请在账号中配置 Search API，或选择内置 SearXNG。',
         SEARCH_CREDENTIAL_INVALID: '搜索密钥无法读取，请在账号中重新保存 Search API。',
+        SEARCH_CONFIGURATION_CHANGED: '本次执行的自定义搜索配置已更改，请按新配置创建执行。',
         SEARCH_API_READING_UNSUPPORTED:
             '所选 Search API 暂不支持独立网页读取，请改选 DeepSeek 或 Tavily。',
         AGENT_DELIVERY_NOT_CONFIGURED: '报告交付服务不可用，本次未完成。',
@@ -91,6 +93,7 @@ const fallbackId = '00000000-0000-4000-8000-000000000000';
 export function useExecution(
     target: MaybeRefOrGetter<string>,
     options: {
+        graph?: boolean;
         onEvent?: (event: RunEvent) => void;
         onReset?: () => void;
     } = {},
@@ -136,8 +139,10 @@ export function useExecution(
         return snapshot?.id === id.value ? snapshot : undefined;
     });
     const streamId = computed(() => (run.value?.id === id.value ? id.value : undefined));
+    const graph = useRunGraph(() => (options.graph && run.value ? id.value : undefined), lifecycle);
     const subscription = useRunEvents(streamId, {
-        onReset() {
+        onReset(_snapshot, resumeAfter) {
+            graph.requireSeq(resumeAfter);
             options.onReset?.();
             log.value = emptyExecutionLog(true);
             tools.value = [];
@@ -145,6 +150,7 @@ export function useExecution(
         },
         onEvent(event) {
             if (event.runId !== id.value || !lifecycle.session.user) return;
+            graph.requireSeq(event.seq);
             options.onEvent?.(event);
             tools.value = updateTools(tools.value, event);
             log.value = appendExecutionLog(log.value, event);
@@ -181,5 +187,5 @@ export function useExecution(
                 )?.id
         );
     });
-    return { id, run, query, subscription, tools, log, reports, reportId };
+    return { id, run, query, graph, subscription, tools, log, reports, reportId };
 }

@@ -162,7 +162,7 @@ for (const width of [390, 1440]) {
         });
         for (const [searchMode, label] of [
             [undefined, undefined],
-            ['api', 'Search API（搜索与网页读取）'],
+            ['api', 'Search API／自定义搜索（沿用账号读取方式）'],
             ['searxng', '内置 SearXNG＋网页读取工具'],
             ['auto', '沿用账号搜索配置'],
         ] as const) {

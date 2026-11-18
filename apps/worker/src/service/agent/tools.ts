@@ -8,6 +8,7 @@ import {
     ConnectorError,
     estimateModelInputTokens,
     normalizeUrl,
+    searchLanguage,
     type ReadPage,
     type SearchResponse,
 } from '@scova/connectors';
@@ -24,16 +25,21 @@ export function createAgentTools(
     call: AgentToolCaller,
 ): AgentTools {
     const tools: AgentTools = {
-        providerReads: bundle.searchProvider === 'api',
-        search: (operationKey, query) =>
-            context.conversation?.operation === 'revise'
+        providerReads: bundle.providerReads ?? bundle.searchProvider === 'api',
+        search: (operationKey, query, searchOptions = {}) => {
+            const language = searchLanguage(searchOptions);
+            return context.conversation?.operation === 'revise'
                 ? Promise.reject(new ConnectorError('configuration', '报告修订禁止联网搜索'))
                 : call<SearchResponse>(
                       operationKey,
                       'search',
-                      query,
+                      language ? { query, language } : query,
                       { ...emptyUsage(), ...bundle.search.tokenReservation, searches: 1 },
-                      (options) => bundle.search.search(query, options),
+                      (options) =>
+                          bundle.search.search(query, {
+                              ...options,
+                              ...(language ? { language } : {}),
+                          }),
                       (response) => {
                           if (
                               response.kind !== 'search_results' ||
@@ -62,7 +68,8 @@ export function createAgentTools(
                                   );
                           }
                       },
-                  ),
+                  );
+        },
         read: (operationKey, url) =>
             call<ReadPage>(
                 operationKey,

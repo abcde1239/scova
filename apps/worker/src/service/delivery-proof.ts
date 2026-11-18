@@ -105,6 +105,7 @@ export function authenticateCandidate(
             gapKindPolicy?: number;
             knowledgeFirstPolicy?: number;
             gapLoopPolicy?: number;
+            searchDirectionPolicy?: number;
             loopQualityPolicy?: number;
             collectionPolicy?: number;
             baselinePolicy?: number;
@@ -124,6 +125,7 @@ export function authenticateCandidate(
                 'gapKindPolicy',
                 'knowledgeFirstPolicy',
                 'gapLoopPolicy',
+                'searchDirectionPolicy',
                 'loopQualityPolicy',
                 'collectionPolicy',
                 'baselinePolicy',

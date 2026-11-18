@@ -1,18 +1,20 @@
 # 搜索服务配置
 
-Scova 的搜索与正文提取由账号独立配置，与解析、任务执行模型分开保存。账号可选择 Search API 或自部署 SearXNG：Search API 负责搜索与网页读取，SearXNG 配合本地 Reader 读取来源正文。服务器不提供默认搜索 Agent 或搜索 API 密钥。
+Scova 的搜索与正文提取由账号独立配置，与解析、任务执行模型分开保存。账号可选择 Search API、自定义 JSON 搜索服务或自部署 SearXNG：DeepSeek/Tavily 提供搜索与网页读取，自定义搜索和 SearXNG 配合本地 Reader 读取来源正文。服务器不提供默认搜索 Agent 或搜索 API 密钥。
 
 ## 独立搜索 API
 
 在「账号 → Agent 配置 → 搜索与正文提取」选择 Search API，填写协议、HTTPS API 根地址和独立密钥。支持 DeepSeek Search / Fetch 与 Tavily Search / Extract，搜索与正文均由同一 API 服务提供。Perplexity Search 暂无独立网页读取接口，当前不可选；旧配置须改选支持搜索与读取的协议。切换、编辑或删除模型供应商不会改变搜索配置。保存不会调用搜索或模型接口，解析与报告问答不会因此自动联网。
 
-任务可选择「Search API（搜索与网页读取）」或「内置 SearXNG＋网页读取工具」。前者由配置的 API 搜索并提取正文，后者使用聚合搜索与本地 Reader。API 模式不会调用本地网页读取工具，API 提取失败也不切换读取方式。报告的“待补充”还可能来自查询未命中目标、原站不可读、模型输入只覆盖部分正文，或生成答案没有覆盖所需字段，不能仅据此判断搜索引擎好坏。
+任务可选择「Search API／自定义搜索（沿用账号读取方式）」或「内置 SearXNG＋网页读取工具」。前者使用账号保存的搜索服务及读取方式；DeepSeek/Tavily 由同一 API 提取正文，自定义 JSON 服务明确使用本地 Reader。读取失败不自动切换方式。报告的“待补充”还可能来自查询未命中目标、原站不可读、模型输入只覆盖部分正文，或生成答案没有覆盖所需字段，不能仅据此判断搜索引擎好坏。
 
 搜索配置保存在独立账号记录中，搜索密钥单独加密，接口只返回 hasApiKey。同协议、同地址编辑时可留空保留；更改搜索协议或地址必须重新填写搜索密钥。切换到 SearXNG 会保留 API 配置，方便任务显式使用 API。
 
 任务的「沿用账号搜索配置」读取此处默认方式，账号未设置时默认使用内置 SearXNG，立即执行可临时覆盖。Search API 按需配置；显式选择 API 却未保存密钥时，会提示配置 API 或选择内置搜索，不使用模型密钥、旧模型内嵌搜索或环境变量兜底。
 
 查看执行时，内置搜索等待超过15秒或出现搜索 warning/error，会显示可关闭的提示并提供 Search API 配置入口。同次查看仅提示一次，不自动切换服务，也不阻止继续使用 SearXNG；历史日志回放不重复提醒。
+
+新执行的 Agent 会按原始资料选择搜索语言。发现对象混淆、原始来源缺失等字段缺口时，可改写搜索词、保留对象/版本并调整语言；报告仍使用中文。Tavily 接收语言偏好，DeepSeek 使用改写后的原文语言查询，SearXNG 接收逐条语言参数。纠偏共享原搜索、读取、模型和时间预算；重复方向或连续无有效字段增益会停止，不保证仅靠换语言就能解决登录墙、403 或日期未知。
 
 升级须执行增量数据库迁移。旧模型中保存的独立搜索 API 可在该区域点击「迁入」复制为新账号配置；迁入后与原模型无关联。旧模型内置搜索授权不再用于任务搜索。原有 SEARCH_PROVIDER、SEARCH_API_* 和 TAVILY_API_KEY 不再作为服务器搜索配置读取，应从部署文件移除。
 
@@ -31,11 +33,25 @@ DeepSeek 搜索始终请求 need_content=true，只采用 content；Tavily 始�
 
 正文从当前账号、当前执行的持久搜索账本恢复，成功读取后保存独立快照，跨执行租约恢复不依赖内存缓存。API 模式不访问原站核实、不调用本地 Reader，也不因网络、HTTP 或提取失败回退本地工具。取消、URL 安全、租约与预算错误继续传播。API 提取保留 search-api 来源标识；非空、哈希匹配或未本地裁剪均不代表已经证明整页覆盖。不同快照不会拼接成全文，API 日期也不当作已核实的页面发布时间。
 
-远程读取沿用15秒整体时限及页面/尝试预算，复用已提交的读取结果不会再次联网或重复计页。每次 HTTP 响应上限2 MiB；搜索账本保留正文每页最多100,000个 Unicode 码点、合计最多800,000 UTF-8字节，远程单页读取最多保留1,000,000个正文字符；局部裁剪另有标记。历史 contentMode 的 reader / prefer_api 两值均兼容为 API 读取，新写入统一保存 prefer_api，不再提供本地读取策略选项。
+DeepSeek/Tavily 远程读取最多45秒，本地 Reader与普通搜索最多15秒，并受执行剩余时间及页面/尝试预算限制。复用已提交的读取结果不会再次联网或重复计页。每次 HTTP 响应上限2 MiB；搜索账本保留正文每页最多100,000个 Unicode 码点、合计最多800,000 UTF-8字节，远程单页读取最多保留1,000,000个正文字符；局部裁剪另有标记。内置 API 协议历史 contentMode 的 reader / prefer_api 两值均兼容为 API 读取，新写入统一保存 prefer_api；自定义 JSON 协议另行显式保存 reader。
 
 协议参考：[DeepSeek Search](https://api-docs.deepseek.com/api/search)、[DeepSeek Fetch](https://api-docs.deepseek.com/api/fetch)、[Tavily Search](https://docs.tavily.com/documentation/api-reference/endpoint/search)、[Tavily Extract](https://docs.tavily.com/documentation/api-reference/endpoint/extract)。Perplexity 的 [Fetch URL 工具](https://docs.perplexity.ai/docs/agent-api/tools/fetch-url-content)属于另行计费的生成式 Agent API，当前不作为独立 Search API 读取使用。
 
 完整本地开发使用 `vp run local:up` 将 PostgreSQL、Redis、SearXNG 一起启动，搜索地址为 `http://127.0.0.1:18080`，配置统一在根 `.env.local`，见[本地开发环境](local-development.md)。下面的 `search:up` 是仅启动搜索的独立方案，使用自己的配置、端口和 Compose 项目。
+
+## 自定义 HTTP JSON 搜索
+
+在账号搜索配置中选择「自定义 HTTP JSON＋本地网页读取」，填写完整公网 HTTPS 搜索接口地址、独立密钥、请求模板和结果路径。可点击「填入 Brave Search 预设」作为起点，再填写本人服务密钥；预设不含免费额度或平台代付承诺。保存只校验配置，不发送搜索请求。目前一个账号保存一个 API/自定义配置，不支持主备自动切换或多源并行。
+
+支持 GET 查询参数或 POST JSON 对象，首版参数为扁平的字符串、数字或布尔值，最多24个字段。可用变量为 `{{query}}`、`{{count}}`、`{{language}}`；字符串变量按字段编码，不执行脚本。至少一个查询字段须只依赖必有变量，不能把唯一的 `{{query}}` 与可空 `{{language}}` 放在同一字段。未指定语言时省略含语言变量的字段；语言映射可把标准值转换为服务约定，例如 Brave 的 `{"zh":"zh-hans"}`。密钥使用 Bearer 或一个独立请求头，不填写在模板中。
+
+结果数组路径相对整个响应，链接、标题和摘要路径相对每条结果，支持有限的点号及数组下标。例如 Brave 使用 `web.results`、`url`、`title`、`description`。响应只产生链接候选，摘要和供应商生成答案不作为正文或事实支持；随后由本地 Reader 读取并核验原站。自定义搜索词最多2,000个 Unicode 码点，禁止重定向，默认单次请求，不自动重放付费 POST。
+
+自定义服务不支持脚本映射、任意请求头、查询参数鉴权、局域网地址、OAuth刷新、异步轮询或自定义 Fetch。部署者受信的内网 SearXNG 配置与用户公网接口分开，不能以自定义服务绕过网络安全检查。
+
+同一协议、地址及模板未变时，编辑可留空保留密钥；改变自定义模板、认证方式、地址或协议须重新填写。自定义执行在首次装配时冻结配置指纹，正在运行的连接器使用独立配置副本；恢复时若配置修改、替换或移除，将明确停止为配置已变化，不会静默改用新服务。历史已有工具或检查点的执行不新增采用自定义服务。
+
+参考：[Brave Web Search](https://api-dashboard.search.brave.com/api-reference/web/search/get)。预设把中文映射为 `zh-hans`、葡萄牙语映射为 `pt-pt`；搜索服务本身的条款、参数和计费以供应商为准。
 
 ## 启动
 
@@ -62,7 +78,7 @@ vp run search:down
 
 当前固定镜像版本为 `2026.10.24-ef0ec03da`，Compose 使用镜像摘要。2026-10-25 本机启动后观察约 97 MiB，少量搜索后约 110 MiB；这是本次观察，不是高并发或长时间峰值保证。升级时应更新摘要并重验 JSON API 和实际搜索。
 
-搜索配置在 `ops/searxng/settings.yml`：默认地区 `zh-CN`，显式启用 Bing 国际搜索、DuckDuckGo 与 Google CSE，开启 HTML/JSON，仅查询第一页并限制引擎超时。当前出口的 `www.bing.com` 会重定向到中国网关，因此 Bing 通过 `cn.bing.com` 加 `ensearch=1` 使用国际搜索模式，并独立固定 `en-US` 地区。小型 `bing_international.py` 适配层以只读文件挂载，复用固定镜像的原生请求构建与结果解析，不修改其他引擎的地区。Brave 因当前出口返回 429、普通 Google 因适配器返回 403 暂时禁用；修改配置后须重启 SearxNG，新增或改变挂载时须重新执行 Compose up，并分别检查 `/config` 和真实查询。升级镜像须重验挂载路径、引擎加载、国际搜索参数与 Bing 跳转链接解析。
+搜索配置在 `ops/searxng/settings.yml`：默认语言/地区 `zh-CN`，Agent 可逐条传入搜索语言；显式启用 Bing、DuckDuckGo 与 Google CSE，开启 HTML/JSON，仅查询第一页并限制引擎超时。当前出口的 `www.bing.com` 会重定向到中国网关，因此 Bing 通过固定的 `cn.bing.com` 网关访问，采用请求的语言/地区；英文查询使用 `ensearch=1`，其他语言使用 `ensearch=0`，不再固定为英文。小型 `bing_international.py` 适配层以只读文件挂载，复用固定镜像的原生请求构建与结果解析，不修改其他引擎的地区。Brave 因当前出口返回 429、普通 Google 因适配器返回 403 暂时禁用；修改配置后须重启 SearxNG，新增或改变挂载时须重新执行 Compose up，并分别检查 `/config` 和真实查询。升级镜像须重验挂载路径、引擎加载、语言及国际搜索参数与 Bing 跳转链接解析。
 
 Google CSE 使用 SearxNG 自带的 `google cse` 适配器，无需 API Key；它通过 CSE 网页接口和配置的 CX 获取结果，默认使用第三方 CX，不是官方 Custom Search JSON API，也不保证标准 Google 全网覆盖或长期可用。可在该引擎配置中填写自己的 `CX`，再验证覆盖范围。
 

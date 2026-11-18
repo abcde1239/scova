@@ -15,7 +15,12 @@ export function searchNode(rt: AgentRuntime) {
         }
         const index = state.searchIndex++;
         try {
-            const response = await deps.tools.search(`search-${index}`, state.queries[index].query);
+            const planned = state.queries[index];
+            const response = await deps.tools.search(
+                `search-${index}`,
+                planned.query,
+                ...(planned.language ? [{ language: planned.language }] : []),
+            );
             await guard();
             if (
                 response.mode !== context.mode ||

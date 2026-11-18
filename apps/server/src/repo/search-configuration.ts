@@ -45,6 +45,7 @@ export function createSearchConfigurationRepo(services: Pick<ApiServices, 'db'>)
                             baseUrl: data.baseUrl,
                             contentMode: data.contentMode,
                             encryptedApiKey: data.encryptedApiKey,
+                            customTemplate: data.customTemplate,
                             revision: data.revision,
                             updatedAt: data.updatedAt,
                         },

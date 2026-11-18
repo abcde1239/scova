@@ -6,6 +6,7 @@ import { pageFingerprint } from './reader/http-reader.ts';
 import { createPageReader } from './reader/browser.ts';
 import { createSearxngSearch } from './search/searxng.ts';
 import { createSearchApi, type SearchApiOptions } from './search/api.ts';
+import { createCustomJsonSearch } from './search/custom.ts';
 import { createModelSearch, type ModelSearchProtocol } from './search/model.ts';
 import { ConnectorError } from './types.ts';
 import type { ModelProtocol } from './model/protocol.ts';
@@ -23,6 +24,10 @@ const DEMO_TEXT = '演示资料：这是固定的 Scova 功能示例，不是从
 export interface ConnectorBundle {
     mode: 'live' | 'demo';
     searchProvider?: 'searxng' | 'api';
+    /** Explicit custom search + local Reader, independent from the search transport. */
+    providerReads?: boolean;
+    /** Opaque frozen configuration identity for custom search/read tool operations. */
+    searchIdentity?: string;
     reason?: string;
     search: SearchProvider;
     reader: PageReader;
@@ -75,8 +80,29 @@ export function createConnectorBundle(
               http: options.http,
           })
         : undefined;
+    const customSearch =
+        !nativeSearch && searchProvider === 'api' && options.searchApi?.protocol === 'custom_json'
+            ? (() => {
+                  if (
+                      options.searchApi.contentMode !== 'reader' ||
+                      !options.searchApi.custom ||
+                      !options.searchApi.baseUrl
+                  )
+                      throw new ConnectorError(
+                          'configuration',
+                          '自定义 JSON 搜索须明确选择本地 Reader 并填写模板',
+                      );
+                  return createCustomJsonSearch({
+                      ...options.searchApi,
+                      baseUrl: options.searchApi.baseUrl,
+                      custom: options.searchApi.custom,
+                      http: options.searchApi.http ?? options.http,
+                      maxResults: options.managedSearch ? 10 : options.searchApi.maxResults,
+                  });
+              })()
+            : undefined;
     const apiSearch =
-        !nativeSearch && searchProvider === 'api'
+        !nativeSearch && !customSearch && searchProvider === 'api'
             ? createSearchApi({
                   ...options.searchApi!,
                   http: options.searchApi!.http ?? options.http,
@@ -87,20 +113,24 @@ export function createConnectorBundle(
         (nativeSearch ||
             searchProvider === 'searxng' ||
             apiSearch ||
+            customSearch ||
             options.tavilyApiKey?.trim()) &&
         options.modelApiKey?.trim() &&
         options.model?.trim()
     ) {
         return {
             mode: 'live',
-            searchProvider: apiSearch
-                ? 'api'
-                : !nativeSearch && searchProvider === 'searxng'
-                  ? 'searxng'
-                  : undefined,
+            searchProvider:
+                apiSearch || customSearch
+                    ? 'api'
+                    : !nativeSearch && searchProvider === 'searxng'
+                      ? 'searxng'
+                      : undefined,
+            ...(customSearch ? { providerReads: false } : {}),
             search:
                 nativeSearch ??
                 apiSearch ??
+                customSearch ??
                 (searchProvider === 'searxng'
                     ? createSearxngSearch({
                           baseUrl: options.searxngBaseUrl,

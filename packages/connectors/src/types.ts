@@ -1,3 +1,5 @@
+import type { SearchOptions } from './search/language.ts';
+
 export type ConnectorKind = 'search' | 'model' | 'read';
 export interface ModelSchemaIssue {
     schemaPath: string;
@@ -57,7 +59,7 @@ export class ConnectorError extends Error {
     }
 }
 
-export interface CallContext {
+export interface CallContext extends SearchOptions {
     /** Trusted internal observation only; never serialized into report or provider inputs. */
     onReadDiagnostic?: (event: ReadDiagnostic) => void;
     /** Deployment-owned selection; never derived from task or model parameters. */
@@ -129,6 +131,7 @@ export interface SearchResponse {
         | 'tavily'
         | 'deepseek'
         | 'perplexity'
+        | 'custom_json'
         | 'openai_responses'
         | 'anthropic_web_search'
         | 'demo';

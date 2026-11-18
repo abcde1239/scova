@@ -15,6 +15,7 @@ import {
     type PgTableExtraConfigValue,
 } from 'drizzle-orm/pg-core';
 import { type JsonValue } from './enums.ts';
+import type { CustomSearchTemplate } from '@scova/models';
 
 export const users = pgTable(
     'users',
@@ -92,7 +93,8 @@ export const searchConfigurations = pgTable(
             .references(() => users.id, { onDelete: 'cascade' }),
         id: uuid('id').notNull().$defaultFn(randomUUID),
         defaultMode: text('default_mode').$type<'api' | 'searxng'>().notNull(),
-        protocol: text('protocol').$type<'deepseek' | 'perplexity' | 'tavily'>(),
+        protocol: text('protocol').$type<'deepseek' | 'perplexity' | 'tavily' | 'custom_json'>(),
+        customTemplate: jsonb('custom_template').$type<CustomSearchTemplate>(),
         baseUrl: text('base_url'),
         contentMode: text('content_mode').$type<'reader' | 'prefer_api'>(),
         encryptedApiKey: text('encrypted_api_key'),
@@ -107,7 +109,7 @@ export const searchConfigurations = pgTable(
         check('search_configuration_mode_valid', sql`${table.defaultMode} IN ('api', 'searxng')`),
         check(
             'search_configuration_api_complete',
-            sql`(${table.protocol} IS NULL AND ${table.baseUrl} IS NULL AND ${table.contentMode} IS NULL AND ${table.encryptedApiKey} IS NULL AND ${table.defaultMode} = 'searxng') OR (${table.protocol} IS NOT NULL AND ${table.protocol} IN ('deepseek', 'perplexity', 'tavily') AND ${table.baseUrl} IS NOT NULL AND length(${table.baseUrl}) > 0 AND ${table.contentMode} IS NOT NULL AND ${table.contentMode} IN ('reader', 'prefer_api') AND ${table.encryptedApiKey} IS NOT NULL AND length(${table.encryptedApiKey}) > 0)`,
+            sql`(${table.protocol} IS NULL AND ${table.baseUrl} IS NULL AND ${table.contentMode} IS NULL AND ${table.encryptedApiKey} IS NULL AND ${table.customTemplate} IS NULL AND ${table.defaultMode} = 'searxng') OR (${table.protocol} IS NOT NULL AND ${table.protocol} IN ('deepseek', 'perplexity', 'tavily', 'custom_json') AND ${table.baseUrl} IS NOT NULL AND length(${table.baseUrl}) > 0 AND ${table.contentMode} IS NOT NULL AND ${table.contentMode} IN ('reader', 'prefer_api') AND ${table.encryptedApiKey} IS NOT NULL AND length(${table.encryptedApiKey}) > 0 AND ((${table.protocol} = 'custom_json' AND ${table.contentMode} = 'reader' AND ${table.customTemplate} IS NOT NULL) OR (${table.protocol} <> 'custom_json' AND ${table.customTemplate} IS NULL)))`,
         ),
     ],
 );

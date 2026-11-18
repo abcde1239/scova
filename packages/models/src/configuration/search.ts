@@ -1,9 +1,16 @@
 import { Type, type Static } from '@sinclair/typebox';
 import { InstantSchema } from '../common/schema.ts';
+import { CustomSearchTemplateSchema } from './custom-search.ts';
+export * from './custom-search.ts';
 
 const SearchApiFields = {
     protocol: Type.Union(
-        [Type.Literal('deepseek'), Type.Literal('perplexity'), Type.Literal('tavily')],
+        [
+            Type.Literal('deepseek'),
+            Type.Literal('perplexity'),
+            Type.Literal('tavily'),
+            Type.Literal('custom_json'),
+        ],
         { description: '独立搜索 API 协议' },
     ),
     baseUrl: Type.String({
@@ -12,8 +19,9 @@ const SearchApiFields = {
         description: '搜索 API 公网 HTTPS 根地址',
     }),
     contentMode: Type.Union([Type.Literal('reader'), Type.Literal('prefer_api')], {
-        description: '兼容历史字段；两值均由 Search API 搜索和读取，不调用本地 Reader',
+        description: '自定义 JSON 必须显式 reader；历史内置协议两值均使用供应商读取',
     }),
+    custom: Type.Optional(CustomSearchTemplateSchema),
 };
 const Mode = Type.Union([Type.Literal('api'), Type.Literal('searxng')], {
     description: '账号默认搜索方式，与解析和任务执行模型独立',

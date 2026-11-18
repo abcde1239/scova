@@ -11,18 +11,29 @@ import type {
     ClaimAssessment,
     ReportConversationContext,
 } from '@scova/models';
-import type { ModelResponse, ReadPage, SearchResponse, StructuredInput } from '@scova/connectors';
+import type {
+    ModelResponse,
+    ReadPage,
+    SearchResponse,
+    SearchOptions,
+    StructuredInput,
+} from '@scova/connectors';
 
 export interface AgentTools {
     /** Remote provider decides document support; do not apply local HTML Reader filters. */
     providerReads?: boolean;
-    search: (operationKey: string, query: string) => Promise<SearchResponse>;
+    search: (
+        operationKey: string,
+        query: string,
+        options?: SearchOptions,
+    ) => Promise<SearchResponse>;
     read: (operationKey: string, url: string) => Promise<ReadPage>;
     model: (operationKey: string, input: AgentModelInput) => Promise<AgentModelResponse>;
 }
 
 /** Worker-authored metadata, outside model-generated content and provider schemas. */
 export interface ResearchPolicy {
+    searchDirectionPolicy?: 1;
     pagePolicy?: 1;
     collectionPolicy?: 1;
     baselinePolicy?: 1;
@@ -207,7 +218,11 @@ export interface AgentDependencies {
     /** Explicit promoted checkpoint for resume; only thread identity for a new execution. */
     config: RunnableConfig;
     promote: (config: RunnableConfig) => Promise<void>;
-    onStep?: (step: string, phase: 'started' | 'completed') => Promise<void>;
+    onStep?: (
+        step: string,
+        phase: 'started' | 'completed',
+        execution: { sourceCheckpoint: string },
+    ) => Promise<void>;
     onClaimsRepair?: () => Promise<void>;
     /** True only when config explicitly identifies the legal checkpoint copied into this epoch. */
     resume?: boolean;

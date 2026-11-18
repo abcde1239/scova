@@ -2,16 +2,18 @@ import { object } from '../utils/guards.ts';
 import { isConflictReviewOperation } from './conflict-review.ts';
 import type { AgentCandidate, AgentClaim, AgentPage, ComparisonExtraction } from '../types.ts';
 import type { PlannedRequirement } from '../report/artifacts/index.ts';
+import { isSearchLanguage, type SearchOptions } from '@scova/connectors';
+import { searchLanguageSchema } from '../search/direction.ts';
 
 export type GapAction = 'rebind' | 'repair' | 'search' | 'read' | 'conflict';
-type FieldCheck = {
+type FieldCheck = SearchOptions & {
     requirementId: string;
     status: 'supported' | 'binding_missing' | 'evidence_missing' | 'conflict';
     query: string;
     reason: string;
 };
 
-export function fieldChecksSchema(ids: string[]) {
+export function fieldChecksSchema(ids: string[], direction = false) {
     return {
         type: 'array',
         minItems: ids.length,
@@ -19,7 +21,13 @@ export function fieldChecksSchema(ids: string[]) {
         items: {
             type: 'object',
             additionalProperties: false,
-            required: ['requirementId', 'status', 'query', 'reason'],
+            required: [
+                'requirementId',
+                'status',
+                'query',
+                'reason',
+                ...(direction ? ['language'] : []),
+            ],
             properties: {
                 requirementId: { type: 'string', ...(ids.length ? { enum: ids } : {}) },
                 status: {
@@ -27,6 +35,7 @@ export function fieldChecksSchema(ids: string[]) {
                     enum: ['supported', 'binding_missing', 'evidence_missing', 'conflict'],
                 },
                 query: { type: 'string', maxLength: 200 },
+                ...(direction ? { language: searchLanguageSchema } : {}),
                 reason: { type: 'string', minLength: 1, maxLength: 500 },
             },
         },
@@ -57,7 +66,8 @@ export function fieldChecks(receipts: ComparisonExtraction[], requirements: Plan
             if (
                 !object(check) ||
                 Object.keys(check).some(
-                    (key) => !['requirementId', 'status', 'query', 'reason'].includes(key),
+                    (key) =>
+                        !['requirementId', 'status', 'query', 'reason', 'language'].includes(key),
                 ) ||
                 typeof check.requirementId !== 'string' ||
                 !ids.includes(check.requirementId) ||
@@ -67,13 +77,20 @@ export function fieldChecks(receipts: ComparisonExtraction[], requirements: Plan
                 ) ||
                 typeof check.query !== 'string' ||
                 check.query.length > 200 ||
+                (check.language !== undefined &&
+                    check.language !== null &&
+                    !isSearchLanguage(check.language)) ||
+                (check.status !== 'evidence_missing' && check.language != null) ||
                 typeof check.reason !== 'string' ||
                 !check.reason.trim() ||
                 check.reason.length > 500 ||
                 (check.status === 'evidence_missing' ? !check.query.trim() : !!check.query)
             )
                 break;
-            checks.push(check as unknown as FieldCheck);
+            checks.push({
+                ...(check as unknown as FieldCheck),
+                ...(check.language == null ? { language: undefined } : {}),
+            });
         }
         if (checks.length === ids.length)
             for (const check of checks) latest.set(check.requirementId, check);
@@ -180,6 +197,7 @@ export function gapActions(
                     object: field.object,
                     field: field.field,
                     action,
+                    ...(action === 'search' && check?.language ? { language: check.language } : {}),
                     query:
                         action === 'search'
                             ? check?.query ||

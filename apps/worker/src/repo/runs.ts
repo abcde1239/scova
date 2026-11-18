@@ -15,6 +15,8 @@ import {
     baselines as dbBaselines,
     type DatabaseTransaction,
     type JsonValue,
+    persistRunGraphEvent,
+    runGraphSnapshots,
 } from '@scova/db';
 import { randomUUID } from 'node:crypto';
 import { createTerminalNotifications } from '@/repo/notifications.ts';
@@ -150,11 +152,15 @@ export async function appendEvent(
         .from(dbRunEvents)
         .where(eq(dbRunEvents.runId, run.id))
         .then((rows) => ({ _max: rows[0]! }));
+    const [projection] = await tx
+        .select({ seq: runGraphSnapshots.seq })
+        .from(runGraphSnapshots)
+        .where(eq(runGraphSnapshots.runId, run.id));
     const record = parseContract(RunEventSchema, {
         schemaVersion: 1,
         eventId: randomUUID(),
         runId: run.id,
-        seq: (last._max.seq ?? 0) + 1,
+        seq: Math.max(last._max.seq ?? 0, projection?.seq ?? 0) + 1,
         occurredAt: now.toISOString(),
         type: event.type,
         payload: event.payload,
@@ -173,6 +179,7 @@ export async function appendEvent(
         })
         .returning()
         .then((rows) => requiredDatabaseValue(rows[0]));
+    await persistRunGraphEvent(tx, run.userId, record);
 }
 
 async function finishLocked(tx: DatabaseTransaction, run: Run, now: Date, code: string) {

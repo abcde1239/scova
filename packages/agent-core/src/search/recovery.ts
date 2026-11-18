@@ -1,9 +1,6 @@
 import type { PlannedRequirement } from '../report/artifacts/index.ts';
 
-interface Query {
-    query: string;
-    questionIds: string[];
-}
+import type { Query } from '../research/state.ts';
 interface Source {
     title: string;
     url: string;
@@ -203,8 +200,12 @@ export function diversifyQueries(queries: Query[], targets: RetrievalTarget[] = 
             ).length;
         remaining.sort((left, right) => score(right) - score(left));
         const query = remaining.shift()!;
-        if (ordered.some((item) => item.query === query.query)) {
-            const previous = ordered.find((item) => item.query === query.query)!;
+        if (
+            ordered.some((item) => item.query === query.query && item.language === query.language)
+        ) {
+            const previous = ordered.find(
+                (item) => item.query === query.query && item.language === query.language,
+            )!;
             previous.questionIds = [...new Set([...previous.questionIds, ...query.questionIds])];
         } else ordered.push({ ...query, questionIds: [...query.questionIds] });
         query.questionIds.forEach((id) => covered.add(id));

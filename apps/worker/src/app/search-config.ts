@@ -37,7 +37,7 @@ function searchCredential(value: string, userId: string, id: string, key?: strin
 type SearchRecord = Pick<
     typeof searchConfigurations.$inferSelect,
     'id' | 'defaultMode' | 'protocol' | 'baseUrl' | 'contentMode' | 'encryptedApiKey'
->;
+> & { customTemplate?: (typeof searchConfigurations.$inferSelect)['customTemplate'] };
 
 export function accountSearchConfig(
     env: NodeJS.ProcessEnv,
@@ -55,7 +55,13 @@ export function accountSearchConfig(
             ? {
                   protocol: account.protocol,
                   baseUrl: account.baseUrl,
-                  contentMode: 'prefer_api' as const,
+                  contentMode:
+                      account.protocol === 'custom_json'
+                          ? ('reader' as const)
+                          : ('prefer_api' as const),
+                  ...(account.protocol === 'custom_json' && account.customTemplate
+                      ? { custom: account.customTemplate }
+                      : {}),
                   apiKey: searchCredential(
                       account.encryptedApiKey,
                       userId,

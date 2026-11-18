@@ -1,8 +1,14 @@
 import { gapActions } from '../loop.ts';
-import { chooseGap, gapProgress, gained, MAX_GAP_ACTIONS, GAP_LOOP_PASSES } from '../gap-loop.ts';
+import {
+    chooseGap,
+    gapProgress,
+    gapFingerprint,
+    gained,
+    MAX_GAP_ACTIONS,
+    GAP_LOOP_PASSES,
+} from '../gap-loop.ts';
 import { fieldSynthesisBatches } from '../synthesis-batches.ts';
-import { boundedRecoveryQuery } from '../../search/recovery.ts';
-import { scopedQuery } from '../context.ts';
+import { gapSearchQuery, sameSearch, rewriteGapSearch } from '../../search/direction.ts';
 import { frozenRequirements, needsConflictReview } from '../claims.ts';
 import { candidate } from '../candidate.ts';
 import type { ResearchState } from '../state.ts';
@@ -77,19 +83,17 @@ export function gapLoopNode(rt: AgentRuntime) {
             state.synthesisExtractions ?? [],
             !!state.loopQualityPolicy,
         ).map((a) => {
-            const query = boundedRecoveryQuery(
-                scopedQuery(`${context.config.topic} ${a.query}`, context),
-            );
+            const query = gapSearchQuery(a, rt);
             const reuseBody = state.loopQualityPolicy
                 ? discoveryIndex >= 0 &&
                   memory.history[discoveryIndex]!.requirementId !== a.requirementId &&
                   !memory.history
                       .slice(discoveryIndex + 1)
                       .some((h) => h.requirementId === a.requirementId && h.action === 'rebind')
-                : discoveryIndex >= 0 && state.queries.some((q) => q.query === query);
+                : discoveryIndex >= 0 && state.queries.some((q) => sameSearch(q, query));
             if (a.action === 'search' && reuseBody)
                 return { ...a, action: 'rebind' as const, query: '' };
-            if (state.loopQualityPolicy && a.action === 'search') {
+            if (state.loopQualityPolicy && a.action === 'search' && !a.language) {
                 const observed = observedReadTarget(context, state, a, deps.tools.providerReads);
                 if (observed) return { ...a, action: 'read' as const, url: observed.url };
             }
@@ -103,9 +107,7 @@ export function gapLoopNode(rt: AgentRuntime) {
                     context.usage.pages < context.budget.maxPages
                 );
             if (a.action === 'search') {
-                const query = boundedRecoveryQuery(
-                    scopedQuery(`${context.config.topic} ${a.query}`, context),
-                );
+                const query = gapSearchQuery(a, rt);
                 return (
                     !state.searchBlocked &&
                     context.deadlineAt.getTime() - now() >= 45_000 &&
@@ -113,7 +115,8 @@ export function gapLoopNode(rt: AgentRuntime) {
                     context.usage.searches < context.budget.maxSearches &&
                     state.readIndex < Math.min(20, context.budget.maxPages) &&
                     context.usage.pages < context.budget.maxPages &&
-                    !state.queries.some((q) => q.query === query)
+                    (!state.queries.some((q) => sameSearch(q, query)) ||
+                        (!!state.searchDirectionPolicy && !a.language))
                 );
             }
             return a.action !== 'conflict' || !!state.conflictReviewPolicy;
@@ -137,7 +140,24 @@ export function gapLoopNode(rt: AgentRuntime) {
                 actions.length ? (retrievalBudget ? 'budget' : 'no_progress') : 'verified',
             );
         }
-        const target = selected.action;
+        let target = selected.action;
+        if (target.action === 'search') {
+            const rewritten = await rewriteGapSearch(rt, state, target);
+            if (state.modelBlocked) return finish('改写模型不可用', 'provider_unavailable');
+            if (
+                !rewritten ||
+                state.queries.some((q) => sameSearch(q, gapSearchQuery(rewritten, rt)))
+            )
+                return finish('补搜未产生新的查询与语言组合', 'no_progress');
+            target = rewritten;
+            selected.fingerprint = gapFingerprint(
+                target,
+                progress,
+                (state.claimIssues ?? []).map((i) => i.code),
+            );
+            if (memory.history.some((h) => h.fingerprint === selected.fingerprint))
+                return finish('补搜方向已尝试', 'no_progress');
+        }
         memory.target = target;
         memory.pending = memory.history.length;
         memory.history.push({
@@ -164,16 +184,19 @@ export function gapLoopNode(rt: AgentRuntime) {
             };
         }
         if (target.action === 'search') {
-            const query = boundedRecoveryQuery(
-                scopedQuery(`${context.config.topic} ${target.query}`, context),
-            );
+            const planned = gapSearchQuery(target, rt);
+            const query = planned.query;
             state.answerSupplement = {
                 basePages: state.pages.length,
                 readLimit: Math.min(20, context.budget.maxPages, state.readIndex + 4),
                 questionId: target.questionIds[0]!,
                 query,
             };
-            state.queries.push({ query, questionIds: target.questionIds });
+            state.queries.push(planned);
+            if (target.language)
+                state.notes!.push(
+                    `补搜方向：${target.language} / ${query}；${target.reason ?? '针对缺失字段调整查询'}`,
+                );
             state.supplementalSearches = (state.supplementalSearches ?? 0) + 1;
         }
         if (target.action === 'conflict') {

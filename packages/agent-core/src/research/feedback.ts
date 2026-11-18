@@ -3,7 +3,7 @@ import { normalizeUrl } from '@scova/connectors';
 import type { FeedbackEffect, FeedbackSnapshotItem } from '@scova/models';
 import type { AgentClaim, AgentContext, AgentPage, AgentChange } from '../types.ts';
 import { baselineReady } from '../report/comparison/compare.ts';
-type Query = { query: string; questionIds: string[] };
+import type { Query } from './state.ts';
 type Selection = { url: string; questionIds: string[] };
 export interface FeedbackResearch {
     queries: Query[];

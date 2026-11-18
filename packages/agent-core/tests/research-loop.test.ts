@@ -50,6 +50,28 @@ const candidate = {
 } as unknown as AgentCandidate;
 
 describe('gap-driven decisions', () => {
+    it('carries a complementary query language from a receipt-local diagnosis into the search action', () => {
+        const result = gapActions(
+            candidate,
+            [requirement],
+            [receipt([{ ...check, language: 'en' }])],
+        )[0];
+        expect(result).toMatchObject({ action: 'search', query: check.query, language: 'en' });
+        for (const language of ['invalid', '!google', 1])
+            expect(fieldChecks([receipt([{ ...check, language }])], [requirement]).size).toBe(0);
+        expect(
+            fieldChecks(
+                [receipt([{ ...check, status: 'supported', query: '', language: 'en' }])],
+                [requirement],
+            ).size,
+        ).toBe(0);
+        expect(
+            fieldChecks(
+                [receipt([{ ...check, status: 'supported', query: '', language: null }])],
+                [requirement],
+            ).size,
+        ).toBe(1);
+    });
     it('repairs objectively broken citations before a missing-evidence search', () => {
         const broken = receipt([check]);
         const data = broken.response.data as {

@@ -14,6 +14,9 @@ export function fitPlanningInput(
     if (Object.hasOwn(input.schema.properties ?? {}, 'knowledgePlan'))
         compact.prompt +=
             '\nknowledgePlan: tentative learned answers plus checks of terms, mechanisms and original works; UNVERIFIED search leads, never evidence or extra obligations. Verify remembered references externally; no invented sources. Use [] if unknown.';
+    if (JSON.stringify(input.schema.properties).includes('"language"'))
+        compact.prompt +=
+            '\nChoose query language for original sources, set language ISO code or null; preserve proper names/versions. Report language remains Chinese.';
     if (JSON.stringify(input.schema.properties).includes('"verification"'))
         compact.prompt +=
             '\nverification: stable=general concepts/mechanisms; current=live facts; exact=precise quantities/dates/results; source_required=user-specified source/quote. Preserve explicit user obligations; only stable may later use labelled model knowledge.';

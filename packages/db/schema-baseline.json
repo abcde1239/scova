@@ -36,6 +36,10 @@
         {
             "name": "0008_illegal_iceman",
             "hash": "07c8a489611118083edad98b2eca4d775f67d1cb371ba37af867e02b50154b9d"
+        },
+        {
+            "name": "0009_vengeful_senator_kelly",
+            "hash": "6bbb58a18b702d8128d03ca367c858be58e0c3f62da18e3a2ad73b5604875f65"
         }
     ],
     "signature": {
@@ -161,6 +165,13 @@
             },
             {
                 "name": "run_events",
+                "kind": "r",
+                "persistence": "p",
+                "row_security": false,
+                "force_row_security": false
+            },
+            {
+                "name": "run_graph_snapshots",
                 "kind": "r",
                 "persistence": "p",
                 "row_security": false,
@@ -1841,6 +1852,50 @@
                 "collation": null
             },
             {
+                "table_name": "run_graph_snapshots",
+                "name": "run_id",
+                "position": 1,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "run_graph_snapshots",
+                "name": "user_id",
+                "position": 2,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "run_graph_snapshots",
+                "name": "seq",
+                "position": 3,
+                "type": "integer",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "run_graph_snapshots",
+                "name": "state_json",
+                "position": 4,
+                "type": "jsonb",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
                 "table_name": "run_sources",
                 "name": "id",
                 "position": 1,
@@ -2292,6 +2347,17 @@
                 "collation": null
             },
             {
+                "table_name": "runs",
+                "name": "search_configuration_hash",
+                "position": 30,
+                "type": "character(64)",
+                "not_null": false,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
                 "table_name": "schedule_occurrences",
                 "name": "id",
                 "position": 1,
@@ -2474,6 +2540,17 @@
                 "type": "timestamp(6) with time zone",
                 "not_null": true,
                 "default_value": "now()",
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "search_configurations",
+                "name": "custom_template",
+                "position": 10,
+                "type": "jsonb",
+                "not_null": false,
+                "default_value": null,
                 "identity": "",
                 "generated": "",
                 "collation": null
@@ -4065,6 +4142,27 @@
                 "validated": true
             },
             {
+                "table_name": "run_graph_snapshots",
+                "name": "run_graph_snapshot_seq_valid",
+                "type": "c",
+                "definition": "CHECK (seq >= 1)",
+                "validated": true
+            },
+            {
+                "table_name": "run_graph_snapshots",
+                "name": "run_graph_snapshots_pkey",
+                "type": "p",
+                "definition": "PRIMARY KEY (run_id)",
+                "validated": true
+            },
+            {
+                "table_name": "run_graph_snapshots",
+                "name": "run_graph_snapshots_user_id_run_id_fkey",
+                "type": "f",
+                "definition": "FOREIGN KEY (user_id, run_id) REFERENCES runs(user_id, id) ON DELETE CASCADE",
+                "validated": true
+            },
+            {
                 "table_name": "run_sources",
                 "name": "observation_result_valid",
                 "type": "c",
@@ -4222,7 +4320,7 @@
                 "table_name": "search_configurations",
                 "name": "search_configuration_api_complete",
                 "type": "c",
-                "definition": "CHECK (protocol IS NULL AND base_url IS NULL AND content_mode IS NULL AND encrypted_api_key IS NULL AND default_mode = 'searxng'::text OR protocol IS NOT NULL AND (protocol = ANY (ARRAY['deepseek'::text, 'perplexity'::text, 'tavily'::text])) AND base_url IS NOT NULL AND length(base_url) > 0 AND content_mode IS NOT NULL AND (content_mode = ANY (ARRAY['reader'::text, 'prefer_api'::text])) AND encrypted_api_key IS NOT NULL AND length(encrypted_api_key) > 0)",
+                "definition": "CHECK (protocol IS NULL AND base_url IS NULL AND content_mode IS NULL AND encrypted_api_key IS NULL AND custom_template IS NULL AND default_mode = 'searxng'::text OR protocol IS NOT NULL AND (protocol = ANY (ARRAY['deepseek'::text, 'perplexity'::text, 'tavily'::text, 'custom_json'::text])) AND base_url IS NOT NULL AND length(base_url) > 0 AND content_mode IS NOT NULL AND (content_mode = ANY (ARRAY['reader'::text, 'prefer_api'::text])) AND encrypted_api_key IS NOT NULL AND length(encrypted_api_key) > 0 AND (protocol = 'custom_json'::text AND content_mode = 'reader'::text AND custom_template IS NOT NULL OR protocol <> 'custom_json'::text AND custom_template IS NULL))",
                 "validated": true
             },
             {
@@ -4889,6 +4987,13 @@
                 "table_name": "run_events",
                 "name": "run_events_user_id_id_key",
                 "definition": "CREATE UNIQUE INDEX run_events_user_id_id_key ON run_events USING btree (user_id, id)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "run_graph_snapshots",
+                "name": "run_graph_snapshots_pkey",
+                "definition": "CREATE UNIQUE INDEX run_graph_snapshots_pkey ON run_graph_snapshots USING btree (run_id)",
                 "valid": true,
                 "ready": true
             },
@@ -5964,6 +6069,18 @@
                 "enabled": "O"
             },
             {
+                "table_name": "run_graph_snapshots",
+                "constraint_name": "run_graph_snapshots_user_id_run_id_fkey",
+                "event": 5,
+                "enabled": "O"
+            },
+            {
+                "table_name": "run_graph_snapshots",
+                "constraint_name": "run_graph_snapshots_user_id_run_id_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
                 "table_name": "run_sources",
                 "constraint_name": "evidence_user_id_run_id_snapshot_id_fkey",
                 "event": 9,
@@ -6116,6 +6233,18 @@
             {
                 "table_name": "runs",
                 "constraint_name": "run_events_user_id_run_id_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "runs",
+                "constraint_name": "run_graph_snapshots_user_id_run_id_fkey",
+                "event": 9,
+                "enabled": "O"
+            },
+            {
+                "table_name": "runs",
+                "constraint_name": "run_graph_snapshots_user_id_run_id_fkey",
                 "event": 17,
                 "enabled": "O"
             },

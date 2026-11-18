@@ -51,18 +51,39 @@ describe('SearxNG structured search and source authenticity', () => {
             createSearxngSearch({ http, maxAttempts: 1 }).search('agent'),
         ).rejects.toMatchObject({ status, retryAfterMs: 7_200_000 });
     });
+    it('allows a validated discovery language through the real fixed-service transport guard', async () => {
+        const transport = vi.fn<HttpTransport>(async () => response({ results: [] }));
+        const client = createSearxngServiceClient(endpoint, { transport });
+        await createSearxngSearch({ http: client }).search('更新履歴', { language: 'ja' });
+        expect(new URLSearchParams(transport.mock.calls[0][1].body).get('language')).toBe('ja');
+        for (const language of ['all', '!google', 'en&engines=google', 'en&language=ja']) {
+            await expect(
+                client.request(`${endpoint}/search`, {
+                    method: 'POST',
+                    body: `q=release&format=json&language=${language}`,
+                }),
+            ).rejects.toMatchObject({ code: 'unsafe_url' });
+        }
+        expect(transport).toHaveBeenCalledTimes(1);
+    });
     it('sends a bounded JSON form query to the fixed deployment endpoint', async () => {
         const { http, request } = fixtureHttp();
         const beforeAttempt = vi.fn();
-        const result = await createSearxngSearch({ http }).search('deadline & application', {
-            beforeAttempt,
-        });
+        const result = await createSearxngSearch({ http }).search(
+            'deadline & application :en !google',
+            {
+                beforeAttempt,
+                language: 'en',
+            },
+        );
         const [url, options] = request.mock.calls[0];
         expect(url).toBe(`${endpoint}/search`);
         expect(options?.method).toBe('POST');
         const form = new URLSearchParams(options?.body);
         expect(form.get('q')).toBe('deadline & application');
         expect(form.get('format')).toBe('json');
+        expect(form.get('language')).toBe('en');
+        expect(form.has('engines')).toBe(false);
         expect(beforeAttempt).toHaveBeenCalledWith('search');
         expect(result).toMatchObject({ provider: 'searxng', kind: 'search_results', mode: 'live' });
         expect(Number.isNaN(Date.parse(result.searchedAt))).toBe(false);

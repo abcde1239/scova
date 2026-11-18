@@ -19,9 +19,17 @@ const generic = new Set([
 function terms(value: string): string[] {
     return [
         ...new Set(
-            (value.toLowerCase().match(/[a-z][a-z0-9-]+|[\p{Script=Han}]{2,}/gu) ?? [])
+            (
+                value
+                    .toLowerCase()
+                    .match(
+                        /[a-z][a-z0-9-]+|[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]+/gu,
+                    ) ?? []
+            )
                 .flatMap((word) =>
-                    /\p{Script=Han}/u.test(word) && word.length > 2
+                    /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(
+                        word,
+                    ) && word.length > 2
                         ? Array.from({ length: word.length - 1 }, (_, i) => word.slice(i, i + 2))
                         : [word],
                 )

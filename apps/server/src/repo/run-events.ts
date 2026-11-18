@@ -69,7 +69,16 @@ export function createRunEventRepository(database: () => DatabaseClient, clock: 
                                 eq(tables.runEvents.userId, session.userId),
                             ),
                         );
-                    const latest = bounds!.maximum ?? 0;
+                    const [projection] = await tx
+                        .select({ seq: tables.runGraphSnapshots.seq })
+                        .from(tables.runGraphSnapshots)
+                        .where(
+                            and(
+                                eq(tables.runGraphSnapshots.runId, runId),
+                                eq(tables.runGraphSnapshots.userId, session.userId),
+                            ),
+                        );
+                    const latest = Math.max(bounds!.maximum ?? 0, projection?.seq ?? 0);
                     let cursor = after ?? 0;
                     let reset = false;
                     if (lastEventId) {
@@ -97,6 +106,7 @@ export function createRunEventRepository(database: () => DatabaseClient, clock: 
                     if (!reset && cursor > latest)
                         throw new ApiError(400, 'INVALID_EVENT_CURSOR', '事件游标超出当前执行范围');
                     if (bounds!.minimum !== null && cursor < bounds!.minimum - 1) reset = true;
+                    if (bounds!.minimum === null && cursor < latest) reset = true;
                     const events = reset
                         ? []
                         : await tx.query.runEvents.findMany({
@@ -114,6 +124,10 @@ export function createRunEventRepository(database: () => DatabaseClient, clock: 
                                 event.seq !== (index === 0 ? cursor : events[index - 1]!.seq) + 1,
                         )
                     )
+                        reset = true;
+                    // The durable high-water may outlive a pruned tail as well as a prefix.
+                    // A short page below that high-water proves retained events cannot bridge it.
+                    if (!reset && events.length < 100 && (events.at(-1)?.seq ?? cursor) < latest)
                         reset = true;
                     return {
                         run,

@@ -1,4 +1,6 @@
 import { invalidModelOutput } from '../../model/errors.ts';
+import { searchLanguageSchema } from '../../search/direction.ts';
+import { isSearchLanguage } from '@scova/connectors';
 import { ConnectorError } from '@scova/connectors';
 import { repairableModelOutput, modelRepairHint } from '../../model/errors.ts';
 import { researchPrompt } from '../../model/prompts.ts';
@@ -55,6 +57,15 @@ export function planNode(rt: AgentRuntime) {
         }
         try {
             const planningSchema = planSchema(questions.map((question) => question.id));
+            if (state.searchDirectionPolicy) {
+                const item = (
+                    (planningSchema.properties as Record<string, unknown>).queries as {
+                        items: { required: string[]; properties: Record<string, unknown> };
+                    }
+                ).items;
+                item.required.push('language');
+                item.properties.language = searchLanguageSchema;
+            }
             if (state.evidencePolicy) {
                 (planningSchema.required as string[]).push('knowledgePlan');
                 (planningSchema.properties as Record<string, unknown>).knowledgePlan =
@@ -105,6 +116,7 @@ export function planNode(rt: AgentRuntime) {
                     ...(state.gapKindPolicy ? { gapKindPolicy: 1 } : {}),
                     ...(state.knowledgeFirstPolicy ? { knowledgeFirstPolicy: 1 } : {}),
                     ...(state.gapLoopPolicy ? { gapLoopPolicy: 1 } : {}),
+                    ...(state.searchDirectionPolicy ? { searchDirectionPolicy: 1 } : {}),
                 };
             let response;
             try {
@@ -177,7 +189,17 @@ export function planNode(rt: AgentRuntime) {
                         )
                     )
                         throw invalidModelOutput('查询计划不合法');
-                    return { query: item.query, questionIds: unique(item.questionIds) };
+                    if (
+                        item.language !== undefined &&
+                        item.language !== null &&
+                        !isSearchLanguage(item.language)
+                    )
+                        throw invalidModelOutput('查询语言不合法');
+                    return {
+                        query: item.query,
+                        questionIds: unique(item.questionIds),
+                        ...(isSearchLanguage(item.language) ? { language: item.language } : {}),
+                    };
                 }),
                 retrievalTargets(
                     plannedRequirements(

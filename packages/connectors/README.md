@@ -1,6 +1,6 @@
 # @scova/connectors
 
-Scova 的搜索、远程模型与安全网页阅读适配器。默认使用自部署 SearxNG；支持显式配置 DeepSeek Search / Fetch、Tavily Search / Extract，以及授权的 OpenAI Responses/Anthropic 内置搜索。独立 API 模式的搜索与网页读取均由服务商提供，不调用本地 Reader。Perplexity Search 保留搜索适配兼容，但缺少独立读取接口，不可用于 API 模式管线。[部署与计费边界](../../docs/public/guides/search.md)。
+Scova 的搜索、远程模型与安全网页阅读适配器。默认使用自部署 SearxNG；支持显式配置 DeepSeek Search / Fetch、Tavily Search / Extract、自定义 HTTP JSON 搜索，以及授权的 OpenAI Responses/Anthropic 内置搜索。DeepSeek/Tavily 的搜索与网页读取均由服务商提供；自定义 JSON 搜索明确配合本地 Reader。Perplexity Search 保留搜索适配兼容，但缺少独立读取接口，不可用于 API 模式管线。[配置与计费边界](../../docs/public/guides/search.md)。
 
 源码按职责组织，`src/index.ts` 统一导出，`src/types.ts` 保存公共契约，`src/pipeline.ts` 装配连接器：
 
@@ -15,6 +15,8 @@ Scova 的搜索、远程模型与安全网页阅读适配器。默认使用自�
 | `reader/runtime/`    | Bun 到 Node 的 Reader 委托、宿主和私有行协议       |
 
 包内使用相对导入，消费方通过 `@scova/connectors` 使用；子进程入口随实现保存，不属于公开 API。
+
+搜索可传 `search(query, { language: 'ja' })`。`SearchOptions` 接受有限的 ISO 语言代码，SearXNG/Tavily 透传语言，Perplexity 映射语言过滤；DeepSeek 通过查询文本语言检索，不发送未支持的参数。调用方负责生成对应语言的查询，连接器不执行翻译。
 
 `createSearchApi({ protocol, apiKey, baseUrl? })` 接入独立服务；`createModelSearch({ protocol, apiKey, model, baseUrl })` 接入模型搜索，通过 `tokenReservation` 与返回的 `usage` 供调用方预留、结算。调用方必须在 `beforeAttempt` 中先持久预留预算；候选不能直接充当正文证据。
 

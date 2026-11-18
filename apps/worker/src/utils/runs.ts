@@ -41,6 +41,7 @@ export const RUN_FAILURE_MESSAGES: Readonly<Record<string, string>> = {
     AGENT_CONFIGURATION_INVALID: '任务模型或执行服务配置不可用',
     SEARCH_API_NOT_CONFIGURED: '请在账号中配置 Search API，或选择内置 SearXNG',
     SEARCH_CREDENTIAL_INVALID: '搜索密钥无法读取，请在账号中重新保存 Search API',
+    SEARCH_CONFIGURATION_CHANGED: '本次执行的自定义搜索配置已更改，请按新配置创建执行',
     SEARCH_API_READING_UNSUPPORTED:
         '所选 Search API 暂不支持独立网页读取，请改选 DeepSeek 或 Tavily',
     AGENT_DELIVERY_NOT_CONFIGURED: '研究候选已保存，但报告交付服务尚未接入',

@@ -22,6 +22,7 @@ import {
 import { frozenRequirements, fieldConflicts } from './claims.ts';
 import { GAP_LOOP_PASSES, validGapLoop } from './gap-loop.ts';
 import { observedSelections } from '../search/navigation.ts';
+import { isSearchLanguage } from '@scova/connectors';
 
 export function verifyIdentity(state: ResearchState, context: AgentContext): void {
     if (!state || typeof state !== 'object')
@@ -49,10 +50,13 @@ export function verifyIdentity(state: ResearchState, context: AgentContext): voi
             policy.gapKindPolicy !== state.gapKindPolicy ||
             policy.knowledgeFirstPolicy !== state.knowledgeFirstPolicy ||
             policy.gapLoopPolicy !== state.gapLoopPolicy ||
-            policy.loopQualityPolicy !== state.loopQualityPolicy)
+            policy.loopQualityPolicy !== state.loopQualityPolicy ||
+            policy.searchDirectionPolicy !== state.searchDirectionPolicy)
     )
         throw new AgentError('INVALID_STATE', '检查点策略与规划回执不一致');
     if (
+        (state.searchDirectionPolicy !== undefined &&
+            (state.searchDirectionPolicy !== 1 || !state.gapLoopPolicy)) ||
         (state.loopQualityPolicy !== undefined &&
             (state.loopQualityPolicy !== 1 || !state.gapLoopPolicy)) ||
         (state.verificationStopReason !== undefined &&
@@ -341,6 +345,15 @@ export function verifyIdentity(state: ResearchState, context: AgentContext): voi
         (state.modelBlocked !== undefined && typeof state.modelBlocked !== 'boolean') ||
         (state.comparisonRetried !== undefined && typeof state.comparisonRetried !== 'boolean') ||
         state.queries.length > MAX_QUERIES ||
+        state.queries.some(
+            (q) =>
+                !object(q) ||
+                typeof q.query !== 'string' ||
+                !q.query.trim() ||
+                q.query.length > 2000 ||
+                (q.language !== undefined && !isSearchLanguage(q.language)) ||
+                !strings(q.questionIds, MAX_QUESTIONS, 50),
+        ) ||
         !Array.isArray(state.searches) ||
         state.searches.length > MAX_QUERIES ||
         !Array.isArray(state.selections) ||

@@ -13,6 +13,7 @@ import { prepareProvider } from '../http/provider.ts';
 import { ConnectorError } from '../types.ts';
 import type { SearchProvider, SearchResult } from '../types.ts';
 import { plainSearchQuery, rankSearchCandidates } from './ranking.ts';
+import { searchLanguage, isSearchLanguage } from './language.ts';
 
 export const SEARXNG_ENGINES = ['bing', 'duckduckgo', 'google cse'] as const;
 function validEngines(value: string[]): boolean {
@@ -84,7 +85,11 @@ export function createSearxngServiceClient(
             if (
                 form.get('format') !== 'json' ||
                 !form.get('q')?.trim() ||
-                [...form.keys()].some((key) => !['q', 'format', 'engines'].includes(key)) ||
+                [...form.keys()].some(
+                    (key) => !['q', 'format', 'engines', 'language'].includes(key),
+                ) ||
+                form.getAll('language').length > 1 ||
+                (form.has('language') && !isSearchLanguage(form.get('language'))) ||
                 form.getAll('engines').length > 1 ||
                 (form.has('engines') && !validEngines(form.get('engines')!.split(','))) ||
                 plainSearchQuery(form.get('q')!) !== form.get('q')!.trim() ||
@@ -184,6 +189,7 @@ export function createSearxngSearch(
     });
     return {
         async search(query, context = {}) {
+            const language = searchLanguage(context);
             if (!query.trim() || query.length > 2_000)
                 throw new ConnectorError('configuration', '搜索词为空或超长');
             const searchQuery = plainSearchQuery(query);
@@ -196,6 +202,7 @@ export function createSearxngSearch(
                         body: new URLSearchParams({
                             q: searchQuery,
                             format: 'json',
+                            ...(language ? { language } : {}),
                             ...(context.engines ? { engines: context.engines.join(',') } : {}),
                         }).toString(),
                         headers: {

@@ -153,6 +153,26 @@
             <p v-else>本次执行未完成报告交付。</p>
         </section>
 
+        <execution-graph
+            v-if="execution.graph.snapshot.value"
+            :key="`graph-${run.id}`"
+            :snapshot="execution.graph.snapshot.value"
+            :refreshing="execution.graph.query.isFetching.value"
+            :stale="execution.graph.stale.value"
+            @refresh="execution.graph.refresh()"
+        />
+        <state-panel
+            v-else
+            :state="execution.graph.query.isError.value ? 'error' : 'loading'"
+            :message="
+                execution.graph.query.isError.value
+                    ? '研究运行图暂时无法读取'
+                    : '正在读取研究运行图'
+            "
+            :retryable="execution.graph.query.isError.value"
+            @retry="execution.graph.refresh()"
+        />
+
         <execution-logs
             :key="run.id"
             :log="execution.log.value"
@@ -176,9 +196,7 @@
             >
                 快照更新暂不可用，当前展示上次成功读取的状态。
             </p>
-            <action-button
-                :busy="execution.query.isFetching.value"
-                @click="execution.query.refetch()"
+            <action-button :busy="execution.query.isFetching.value" @click="refreshSnapshots"
                 ><app-icon name="retry" />刷新快照</action-button
             >
         </section>
@@ -342,6 +360,8 @@ import ActionButton from '@/components/common/ActionButton.vue';
 import AppIcon from '@/components/common/AppIcon.vue';
 import RunActions from '@/components/run/RunActions.vue';
 import ExecutionLogs from '@/components/run/ExecutionLogs.vue';
+import ExecutionGraph from '@/components/run/ExecutionGraph.vue';
+import StatePanel from '@/components/common/StatePanel.vue';
 import ResearchCompletionSummary from '@/components/reports/ResearchCompletionSummary.vue';
 import {
     executionStates,
@@ -352,6 +372,8 @@ import {
 import { useReport } from '@/composables/useReport';
 import { baselineReason } from '@/utils/report-changes';
 const props = defineProps<{ execution: ReturnType<typeof useExecution> }>();
+const refreshSnapshots = () =>
+    Promise.all([props.execution.query.refetch(), props.execution.graph.refresh()]);
 // Use the same browser connectivity signal as Query. An existing SSE connection
 // can retain its last open state while the browser pauses new network requests.
 const online = shallowRef(onlineManager.isOnline());

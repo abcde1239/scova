@@ -11,13 +11,14 @@ import {
 import { ConnectorError, type ConnectorBundle } from '@scova/connectors';
 import { type AgentRepository } from '@/repo/agent.ts';
 import type { RunExecutionContext } from '@/service/runs.ts';
-import { RunExecutionError, type RunLeaseToken, type RunProgressEvent } from '@/utils/runs.ts';
+import { RunExecutionError, type RunLeaseToken } from '@/utils/runs.ts';
 import { within } from '@/utils/timeout.ts';
 import { digest, readPage } from '@/service/agent/tool-results.ts';
 import { createSessionCheckpoints } from '@/service/agent/checkpoints.ts';
 import { createSessionPersistence } from '@/service/agent/persistence.ts';
 import { createToolCaller } from '@/service/agent/tool-call.ts';
 import { createAgentTools } from '@/service/agent/tools.ts';
+import { createGraphStepReporter } from '@/service/agent/graph-step.ts';
 
 export interface AgentSessionOptions {
     answerSupplementEnabled?: boolean;
@@ -112,7 +113,6 @@ export function createAgentSession({
                 throw new RunExecutionError('AGENT_CONFIGURATION_INVALID');
             Object.assign(agentContext, await repository.comparison());
             const opened = await openCheckpoint();
-            const startedSteps = new Map<string, number>();
             const candidate = await runResearchAgent(agentContext, {
                 ...opened,
                 tools,
@@ -121,30 +121,7 @@ export function createAgentSession({
                 promote,
                 onClaimsRepair: () =>
                     context.emit({ type: 'research.updated', payload: { state: 'claims_repair' } }),
-                onStep: async (step, phase) => {
-                    const name = step as Extract<
-                        RunProgressEvent,
-                        { type: 'step.started' }
-                    >['payload']['step'];
-                    if (phase === 'started') {
-                        startedSteps.set(step, performance.now());
-                        await context.emit({ type: 'step.started', payload: { step: name } });
-                    } else {
-                        await context.emit({
-                            type: 'step.completed',
-                            payload: {
-                                step: name,
-                                durationMs: Math.max(
-                                    0,
-                                    Math.floor(
-                                        performance.now() -
-                                            (startedSteps.get(step) ?? performance.now()),
-                                    ),
-                                ),
-                            },
-                        });
-                    }
-                },
+                onStep: createGraphStepReporter(context.runId, (event) => context.emit(event)),
             });
             await guard();
             await context.emit({ type: 'coverage.updated', payload: candidate.coverage });

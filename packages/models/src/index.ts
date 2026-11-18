@@ -16,6 +16,8 @@ export * from './research/coverage.ts';
 export * from './research/source-dates.ts';
 export * from './notifications.ts';
 export * from './research/events.ts';
+export * from './research/graph.ts';
+export * from './research/graph-projection.ts';
 export * from './research/diagnostics/tool.ts';
 export * from './task/feedback.ts';
 export * from './common/validation.ts';

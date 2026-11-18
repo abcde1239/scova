@@ -1,12 +1,14 @@
 import { normalizeUrl } from '../http/index.ts';
 import { prepareProvider, record, parseJson, type ProviderOptions } from '../http/provider.ts';
 import { ConnectorError, type SearchProvider } from '../types.ts';
+import { searchLanguage } from './language.ts';
 
 export function createTavilySearch(options: ProviderOptions): SearchProvider {
     if (!options.apiKey.trim()) throw new ConnectorError('configuration', '供应商密钥未配置');
     const provider = prepareProvider(options);
     return {
         async search(query, context = {}) {
+            const language = searchLanguage(context);
             if (!query.trim() || query.length > 2_000)
                 throw new ConnectorError('configuration', '搜索词为空或超长');
             const response = await provider.call('search', context, (signal) =>
@@ -22,6 +24,7 @@ export function createTavilySearch(options: ProviderOptions): SearchProvider {
                         search_depth: 'basic',
                         include_answer: false,
                         include_raw_content: false,
+                        ...(language ? { language } : {}),
                     }),
                     signal,
                     maxRedirects: 0,

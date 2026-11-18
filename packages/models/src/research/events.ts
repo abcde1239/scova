@@ -9,32 +9,14 @@ import {
 import { CoverageSchema, RunSchema, UsageSchema } from './runs.ts';
 import { BudgetSchema } from '../task/schema.ts';
 import { ModelDiagnosticSchema } from './diagnostics/model.ts';
+import { StepNameSchema, StepExecutionSchema } from './steps.ts';
+export { StepNameSchema } from './steps.ts';
 
 const CountSchema = Type.Integer({
     minimum: 0,
     maximum: Number.MAX_SAFE_INTEGER,
     description: '非负计数',
 });
-export const StepNameSchema = Type.Union(
-    [
-        Type.Literal('load_context'),
-        Type.Literal('plan'),
-        Type.Literal('search'),
-        Type.Literal('select'),
-        Type.Literal('read'),
-        Type.Literal('verify'),
-        Type.Literal('compare'),
-        Type.Literal('synthesize'),
-        Type.Literal('answer_supplement'),
-        Type.Literal('model_answer'),
-        Type.Literal('model_draft'),
-        Type.Literal('gap_loop'),
-        Type.Literal('conflict_review'),
-        Type.Literal('validate'),
-        Type.Literal('ready_for_delivery'),
-    ],
-    { description: '持久化 Agent 编排节点，不传输逐 token 过程或隐式思维链' },
-);
 const ToolNameSchema = Type.Union(
     [Type.Literal('search'), Type.Literal('read'), Type.Literal('model')],
     { description: '工具类别' },
@@ -104,13 +86,20 @@ export const RunEventSchema = Type.Union(
         ),
         eventSchema(
             'step.started',
-            Type.Object({ step: StepNameSchema }, { additionalProperties: false }),
+            Type.Object(
+                { step: StepNameSchema, execution: Type.Optional(StepExecutionSchema) },
+                { additionalProperties: false },
+            ),
             '编排节点开始',
         ),
         eventSchema(
             'step.completed',
             Type.Object(
-                { step: StepNameSchema, durationMs: CountSchema },
+                {
+                    step: StepNameSchema,
+                    durationMs: CountSchema,
+                    execution: Type.Optional(StepExecutionSchema),
+                },
                 { additionalProperties: false },
             ),
             '编排节点完成',

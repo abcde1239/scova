@@ -7,7 +7,7 @@
 - [本地开发](guides/local-development.md) · [部署与维护](guides/deployment.md)
 - [Web 工作台](guides/web-workbench.md) · [Agent 配置](guides/agent-configuration.md) · [搜索配置](guides/search.md) · [账号头像](guides/account-avatars.md)
 - [手工配置任务](reference/manual-task.md) · [自然语言草稿](reference/task-draft.md) · [执行计划](reference/task-schedule.md) · [任务生命周期](reference/task-lifecycle.md) · [任务中心](reference/task-center.md)
-- [执行详情](reference/frontend-run-detail.md) · [执行控制](reference/run-actions.md) · [执行历史](reference/frontend-run-history.md)
+- [执行详情](reference/frontend-run-detail.md) · [研究运行图](reference/frontend-run-graph.md) · [执行控制](reference/run-actions.md) · [执行历史](reference/frontend-run-history.md)
 
 ## 报告与资料
 

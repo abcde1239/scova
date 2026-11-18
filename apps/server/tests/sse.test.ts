@@ -12,6 +12,7 @@ function page(status: EventPage['run']['status'] = 'queued', events = true): Eve
     return {
         run: {
             conversationContextJson: null,
+            searchConfigurationHash: null,
             id: runId,
             userId: randomUUID(),
             taskId: randomUUID(),

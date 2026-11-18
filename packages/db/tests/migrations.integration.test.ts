@@ -326,7 +326,7 @@ describe('Drizzle SQL 迁移与旧库无损接管', () => {
                         table: tablename,
                         data: (
                             await client.query(
-                                `SELECT md5(coalesce(jsonb_agg(${tablename === 'users' ? "to_jsonb(t) - 'avatar_version'" : tablename === 'runs' ? "to_jsonb(t) - 'conversation_context_json'" : tablename === 'report_questions' ? "to_jsonb(t) - 'revision_run_id' - 'context_json'" : 'to_jsonb(t)'} ORDER BY id)::text,'[]')) AS hash,count(*)::int AS count FROM "${tablename}" t`,
+                                `SELECT md5(coalesce(jsonb_agg(${tablename === 'users' ? "to_jsonb(t) - 'avatar_version'" : tablename === 'runs' ? "to_jsonb(t) - 'conversation_context_json' - 'search_configuration_hash'" : tablename === 'report_questions' ? "to_jsonb(t) - 'revision_run_id' - 'context_json'" : 'to_jsonb(t)'} ORDER BY to_jsonb(t)->>'id', to_jsonb(t)::text)::text,'[]')) AS hash,count(*)::int AS count FROM "${tablename}" t`,
                             )
                         ).rows[0],
                     });
@@ -350,12 +350,23 @@ describe('Drizzle SQL 迁移与旧库无损接管', () => {
                     ])
                 ).rows[0].conversation_context_json,
             ).toBeNull();
-            // Original column values remain identical; new avatar references start at NULL.
+            expect(
+                (
+                    await client.query('SELECT search_configuration_hash FROM runs WHERE id=$1', [
+                        run,
+                    ])
+                ).rows[0].search_configuration_hash,
+            ).toBeNull();
+            // Original column values remain identical; new optional fields start at NULL.
             expect(
                 after.filter((row) => !before.some((previous) => previous.table === row.table)),
             ).toEqual([
                 {
                     table: 'agent_providers',
+                    data: { count: 0, hash: createHash('md5').update('[]').digest('hex') },
+                },
+                {
+                    table: 'run_graph_snapshots',
                     data: { count: 0, hash: createHash('md5').update('[]').digest('hex') },
                 },
                 {

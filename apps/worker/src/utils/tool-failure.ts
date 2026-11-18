@@ -3,13 +3,14 @@ import { ModelDiagnosticSchema, parseContract } from '@scova/models';
 
 export function modelFailureDiagnostic(error: unknown, operation: string) {
     if (!(error instanceof ConnectorError) || !error.modelDiagnostic) return {};
-    const stage = operation.startsWith('plan-')
-        ? 'planning'
-        : operation.startsWith('compare-facts')
-          ? 'comparison'
-          : operation.startsWith('synthesize-')
-            ? 'synthesis'
-            : 'other';
+    const stage =
+        operation.startsWith('plan-') || operation.startsWith('search-rewrite-')
+            ? 'planning'
+            : operation.startsWith('compare-facts')
+              ? 'comparison'
+              : operation.startsWith('synthesize-')
+                ? 'synthesis'
+                : 'other';
     try {
         return {
             modelDiagnostic: parseContract(ModelDiagnosticSchema, {

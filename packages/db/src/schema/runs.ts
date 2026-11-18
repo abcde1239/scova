@@ -115,6 +115,7 @@ export const runs = pgTable(
         outcome: runOutcomeEnum('outcome'),
         failureCode: text('failure_code'),
         checkpointRef: jsonb('checkpoint_ref').$type<JsonValue>(),
+        searchConfigurationHash: char('search_configuration_hash', { length: 64 }),
     },
     (table): PgTableExtraConfigValue[] => [
         index('runs_user_id_task_id_queued_at_idx').on(

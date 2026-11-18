@@ -4,6 +4,7 @@ import {
     ConnectorError,
     SEARXNG_ENGINES,
     withDeadline,
+    searchLanguage,
     type SearchProvider,
     type SearchResponse,
 } from '@scova/connectors';
@@ -19,6 +20,7 @@ export function createManagedSearch(options: {
     const { source, repository } = options;
     return {
         async search(query, context = {}) {
+            const language = searchLanguage(context);
             let attempts = 0;
             const cacheTtl = () =>
                 Math.max(
@@ -70,7 +72,14 @@ export function createManagedSearch(options: {
                             continue;
                         }
                         const key = createHash('sha256')
-                            .update(JSON.stringify([options.scope, query, status.engines]))
+                            .update(
+                                JSON.stringify([
+                                    options.scope,
+                                    query,
+                                    status.engines,
+                                    ...(language ? [language] : []),
+                                ]),
+                            )
                             .digest('hex');
                         let cached: string | null;
                         try {

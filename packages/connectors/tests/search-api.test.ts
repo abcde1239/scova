@@ -35,6 +35,27 @@ function fixture(
 }
 
 describe('raw search API compatibility', () => {
+    it.each(['deepseek', 'tavily', 'perplexity'] as const)(
+        '%s supports source-language queries without inventing unsupported parameters',
+        async (protocol) => {
+            const { source, transport } = fixture(protocol);
+            await source.search('救済 mod 更新履歴', { language: 'ja' });
+            const body = JSON.parse(transport.mock.calls[0][1].body!);
+            expect(body.query).toBe('救済 mod 更新履歴');
+            if (protocol === 'tavily')
+                expect(body).toMatchObject({
+                    language: 'ja',
+                    search_depth: 'basic',
+                    include_answer: false,
+                });
+            else if (protocol === 'perplexity') expect(body.search_language_filter).toEqual(['ja']);
+            else {
+                expect(body).not.toHaveProperty('language');
+                expect(body).not.toHaveProperty('search_language_filter');
+            }
+            expect(transport).toHaveBeenCalledTimes(1);
+        },
+    );
     it.each(['deepseek', 'tavily'] as const)(
         '%s remotely reads a URL with its own key and preserves the configured path prefix',
         async (protocol) => {

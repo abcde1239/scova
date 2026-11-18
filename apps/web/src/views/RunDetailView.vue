@@ -25,6 +25,7 @@ const route = useRoute();
 const router = useRouter();
 const searchSuggestion = useSearchApiSuggestion();
 const execution = useExecution(() => String(route.params.runId ?? ''), {
+    graph: true,
     onEvent: searchSuggestion.onEvent,
     onReset: searchSuggestion.reset,
 });

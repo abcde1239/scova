@@ -7,6 +7,8 @@ import {
 import { createHash } from 'node:crypto';
 import { createPublicDnsResolver } from '../http/dns.ts';
 import { prepareProvider, type ProviderOptions } from '../http/provider.ts';
+import { searchLanguage } from './language.ts';
+import type { CustomJsonSearchTemplate } from './custom.ts';
 import {
     ConnectorError,
     PAGE_TEXT_CHAR_LIMIT,
@@ -17,7 +19,7 @@ import {
     type ReadPage,
 } from '../types.ts';
 
-export type SearchApiProtocol = 'deepseek' | 'perplexity' | 'tavily';
+export type SearchApiProtocol = 'deepseek' | 'perplexity' | 'tavily' | 'custom_json';
 
 export interface SearchApiOptions extends ProviderOptions {
     protocol: SearchApiProtocol;
@@ -27,6 +29,7 @@ export interface SearchApiOptions extends ProviderOptions {
     searchType?: 'web' | 'fast';
     /** Legacy wire values, both now use provider reading exclusively. */
     contentMode?: 'prefer_api' | 'reader';
+    custom?: CustomJsonSearchTemplate;
 }
 
 const record = (value: unknown): value is Record<string, unknown> =>
@@ -183,6 +186,7 @@ export function createSearchApi(options: SearchApiOptions): SearchProvider & Pag
             } satisfies ReadPage;
         },
         async search(query, context = {}) {
+            const language = searchLanguage(context);
             const queryLength = Array.from(query).length;
             if (!query.trim() || queryLength > (options.protocol === 'deepseek' ? 128 : 2000))
                 throw new ConnectorError('configuration', '搜索词为空或超过搜索 API 长度限制');
@@ -206,11 +210,14 @@ export function createSearchApi(options: SearchApiOptions): SearchProvider & Pag
                                     max_results: maxResults,
                                     include_raw_content: true,
                                     include_answer: false,
+                                    search_depth: 'basic',
+                                    ...(language ? { language } : {}),
                                 }
                               : {
                                     query,
                                     max_results: maxResults,
                                     search_type: options.searchType ?? 'web',
+                                    ...(language ? { search_language_filter: [language] } : {}),
                                 },
                     ),
                     signal,
