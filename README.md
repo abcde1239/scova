@@ -76,6 +76,7 @@ vp run verify:mvp-full  # 追加补充页面与完整工作台联合旅程
 
 - [系统架构](docs/public/reference/architecture.md) · [数据模型](docs/public/reference/data-model.md)
 - [接口文档](docs/public/reference/api.md) · [共享契约](packages/models/README.md)
+- [研究循环与完成判定](docs/public/reference/agent-research-loop.md) · [生成提示词](docs/public/reference/research-prompts.md)
 - [本机 SearxNG 部署](docs/public/guides/search.md) · [搜索、模型与安全阅读](packages/connectors/README.md)
 - [Swagger / OpenAPI JSON](swagger.json)（`vp run api:openapi` 重新生成）
 - [两次执行验收](docs/public/examples/two-run-scenarios.md)
