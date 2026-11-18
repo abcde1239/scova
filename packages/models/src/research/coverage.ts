@@ -1,7 +1,7 @@
 import { Type, type Static } from '@sinclair/typebox';
-import type { ReportArtifact } from './report-artifacts.ts';
-import type { ReportValue } from './report-value.ts';
-import { classifyReportDelivery } from './report-delivery.ts';
+import type { ReportArtifact } from '../report/artifacts.ts';
+import type { ReportValue } from '../report/value.ts';
+import { classifyReportDelivery } from '../report/delivery.ts';
 
 const count = Type.Integer({ minimum: 0, maximum: 240 });
 export const ResearchMetricsSchema = Type.Object(

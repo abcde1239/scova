@@ -1,7 +1,7 @@
 import { Type, type Static } from '@sinclair/typebox';
-import { refineSchema } from './common.ts';
-import type { ReportValue } from './report-value.ts';
-import type { ReportArtifact } from './report-artifacts.ts';
+import { refineSchema } from '../common/schema.ts';
+import type { ReportValue } from './value.ts';
+import type { ReportArtifact } from './artifacts.ts';
 
 const count = (description: string) => Type.Integer({ minimum: 0, maximum: 20, description });
 export const ReportDeliverySchema = refineSchema(

@@ -1,5 +1,5 @@
 import { Type, type Static } from '@sinclair/typebox';
-import { refineSchema } from './common.ts';
+import { refineSchema } from '../common/schema.ts';
 
 const text = (maxLength: number, minLength = 0) => Type.String({ minLength, maxLength });
 const ids = Type.Array(text(50, 1), { maxItems: 20, uniqueItems: true });

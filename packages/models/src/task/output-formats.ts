@@ -1,5 +1,5 @@
 import { Type } from '@sinclair/typebox';
-import { OutputFormatSchema } from './common.ts';
+import { OutputFormatSchema } from '../common/schema.ts';
 
 export type OutputFormat = 'brief' | 'list' | 'comparison' | 'research_report';
 export const OutputFormatsSchema = Type.Array(OutputFormatSchema, {

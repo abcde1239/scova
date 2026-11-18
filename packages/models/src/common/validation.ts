@@ -1,6 +1,6 @@
 import { Kind, type Static, type TSchema } from '@sinclair/typebox';
 import { Value, type ValueError } from '@sinclair/typebox/value';
-import { RefinementBase, type ApiError, type FieldError } from './common.ts';
+import { RefinementBase, type ApiError, type FieldError } from './schema.ts';
 
 export class ContractValidationError extends Error {
     readonly code = 'VALIDATION_ERROR';

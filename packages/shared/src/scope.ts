@@ -11,6 +11,7 @@ export interface ResearchScopeConfig {
     outputFormat: string;
     outputFormats?: readonly string[];
     researchMode?: string;
+    collectionDateUnknown?: 'separate' | 'discard';
     searchMode?: string;
 }
 
@@ -42,6 +43,10 @@ export function researchComparisonScopeHash(config: ResearchScopeConfig): string
                     timeRange: config.timeRange,
                     outputFormats: [...(config.outputFormats ?? [config.outputFormat])].sort(),
                     ...(config.researchMode === 'collection' ? { researchMode: 'collection' } : {}),
+                    ...(config.researchMode === 'collection' &&
+                    config.collectionDateUnknown === 'discard'
+                        ? { collectionDateUnknown: 'discard' }
+                        : {}),
                     ...(config.searchMode && config.searchMode !== 'auto'
                         ? { searchMode: config.searchMode }
                         : {}),

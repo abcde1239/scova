@@ -1,5 +1,5 @@
 import { Type, type Static } from '@sinclair/typebox';
-import { OutputFormatSchema } from './common.ts';
+import { OutputFormatSchema } from '../common/schema.ts';
 
 const id = Type.String({ minLength: 1, maxLength: 80 });
 const label = Type.String({ minLength: 1, maxLength: 1000 });

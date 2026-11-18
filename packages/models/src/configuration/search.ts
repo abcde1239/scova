@@ -1,5 +1,5 @@
 import { Type, type Static } from '@sinclair/typebox';
-import { InstantSchema } from './common.ts';
+import { InstantSchema } from '../common/schema.ts';
 
 const SearchApiFields = {
     protocol: Type.Union(

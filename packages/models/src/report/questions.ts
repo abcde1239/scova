@@ -1,6 +1,6 @@
 import { Type, type Static } from '@sinclair/typebox';
-import { UuidSchema, InstantSchema, describeProperties } from './common.ts';
-import { OutputFormatsSchema } from './output-formats.ts';
+import { UuidSchema, InstantSchema, describeProperties } from '../common/schema.ts';
+import { OutputFormatsSchema } from '../task/output-formats.ts';
 const QuestionUsageSchema = Type.Object(
     {
         attempts: Type.Integer({

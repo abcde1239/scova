@@ -1,5 +1,5 @@
 import { Type, type Static } from '@sinclair/typebox';
-import { InstantSchema, UuidSchema } from './common.ts';
+import { InstantSchema, UuidSchema } from '../common/schema.ts';
 
 const ProviderFields = {
     protocol: Type.Union(

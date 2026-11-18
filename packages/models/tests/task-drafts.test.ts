@@ -4,10 +4,55 @@ import {
     TaskDraftInputSchema,
     TaskDraftResponseSchema,
     TaskDraftScopeSchema,
+    TaskConfigSchema,
+    taskDraftScopeMatches,
     parseContract,
 } from '../src/index.ts';
 
 describe('未保存任务草稿契约', () => {
+    it('不限日期只用于分析，采集日期处理必须保留用户确认', () => {
+        const scope = {
+            goal: '解释机制',
+            focusPoints: [],
+            exclusions: [],
+            sourcePreferences: { preferredUrls: [], excludedUrls: [], officialOnly: false },
+            timeRange: { kind: 'unbounded' as const },
+            outputFormat: 'brief' as const,
+            researchMode: 'analysis' as const,
+        };
+        expect(parseContract(TaskDraftScopeSchema, scope)).toEqual(scope);
+        expect(() =>
+            parseContract(TaskDraftScopeSchema, { ...scope, researchMode: 'collection' }),
+        ).toThrow();
+        const config = {
+            ...scope,
+            title: '机制',
+            topic: '机制',
+            timezone: 'UTC',
+            schedule: { frequency: 'manual' as const },
+            budget: {
+                maxSearches: 1,
+                maxPages: 1,
+                maxDurationSeconds: 60,
+                maxInputTokens: 4000,
+                maxOutputTokens: 1000,
+            },
+            notificationPreference: { mode: 'off' as const, runIssues: false },
+        };
+        expect(parseContract(TaskConfigSchema, config)).toEqual(config);
+        expect(taskDraftScopeMatches(scope, config)).toBe(true);
+        expect(() =>
+            parseContract(TaskConfigSchema, { ...config, researchMode: 'collection' }),
+        ).toThrow();
+        const collection = {
+            ...config,
+            researchMode: 'collection' as const,
+            timeRange: { kind: 'rolling' as const, days: 7 },
+        };
+        const confirmed = { ...collection, collectionDateUnknown: 'discard' as const };
+        expect(taskDraftScopeMatches(confirmed, collection)).toBe(false);
+        expect(taskDraftScopeMatches(confirmed, confirmed)).toBe(true);
+    });
     it('AI澄清轮次和回答长度有界，拒绝客户端附带执行权限', () => {
         const input = {
             inputText: '查课程',

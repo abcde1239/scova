@@ -1,7 +1,8 @@
 import { Type, type Static } from '@sinclair/typebox';
-import { OutputFormatsSchema } from './output-formats.ts';
+import { OutputFormatsSchema } from '../task/output-formats.ts';
 import {
     InstantSchema,
+    HttpUrlSchema,
     ModeSchema,
     NonEmptyTextSchema,
     RunOutcomeSchema,
@@ -10,12 +11,12 @@ import {
     UuidSchema,
     refineSchema,
     describeProperties,
-} from './common.ts';
-import { BudgetSchema, SearchModeSchema } from './tasks.ts';
-import { ReportValueSchema } from './report-value.ts';
-import { ReportDeliverySchema } from './report-delivery.ts';
-import { ReportArtifactSchema } from './report-artifacts.ts';
-import { ResearchMetricsSchema, PropositionEvidenceSchema } from './research-coverage.ts';
+} from '../common/schema.ts';
+import { BudgetSchema, SearchModeSchema } from '../task/schema.ts';
+import { ReportValueSchema } from '../report/value.ts';
+import { ReportDeliverySchema } from '../report/delivery.ts';
+import { ReportArtifactSchema } from '../report/artifacts.ts';
+import { ResearchMetricsSchema, PropositionEvidenceSchema } from './coverage.ts';
 
 const CountSchema = Type.Integer({
     minimum: 0,
@@ -34,6 +35,83 @@ export const UsageSchema = Type.Object(
 );
 export const CoverageSchema = Type.Object(
     {
+        baseline: Type.Optional(
+            Type.Object(
+                {
+                    version: Type.Literal(1),
+                    eligible: Type.Boolean(),
+                    reason: Type.Union([
+                        Type.Literal('eligible'),
+                        Type.Literal('external_incomplete'),
+                        Type.Literal('date_unconfirmed'),
+                        Type.Literal('incomplete'),
+                        Type.Literal('comparison_incomplete'),
+                    ]),
+                    modelOnlyFields: CountSchema,
+                },
+                {
+                    additionalProperties: false,
+                    description: '冻结策略判定的比较起点资格，独立于回答完成',
+                },
+            ),
+        ),
+        dateScreening: Type.Optional(
+            Type.Object(
+                {
+                    window: Type.Object(
+                        { start: InstantSchema, end: InstantSchema },
+                        { additionalProperties: false },
+                    ),
+                    accepted: CountSchema,
+                    unconfirmed: CountSchema,
+                    outside: CountSchema,
+                    unconfirmedHandling: Type.Optional(
+                        Type.Union([Type.Literal('separate'), Type.Literal('discard')]),
+                    ),
+                    entries: Type.Array(
+                        Type.Object(
+                            {
+                                pageId: NonEmptyTextSchema,
+                                url: HttpUrlSchema,
+                                title: Type.Union([NonEmptyTextSchema, Type.Null()]),
+                                publishedAt: Type.Union([InstantSchema, Type.Null()]),
+                                status: Type.Union([
+                                    Type.Literal('accepted'),
+                                    Type.Literal('unconfirmed'),
+                                    Type.Literal('outside'),
+                                ]),
+                                dateSource: Type.Union([NonEmptyTextSchema, Type.Null()]),
+                                dateValue: Type.Optional(
+                                    Type.Union([
+                                        Type.String({ minLength: 1, maxLength: 256 }),
+                                        Type.Null(),
+                                    ]),
+                                ),
+                                dateKind: Type.Optional(
+                                    Type.Union([
+                                        Type.Literal('published'),
+                                        Type.Literal('modified'),
+                                    ]),
+                                ),
+                            },
+                            { additionalProperties: false },
+                        ),
+                        { maxItems: 1200 },
+                    ),
+                },
+                {
+                    additionalProperties: false,
+                    description: '日期筛选的来源页面计数，不代表字段已获外部支持',
+                },
+            ),
+        ),
+        sourceRestrictions: Type.Optional(
+            Type.Array(NonEmptyTextSchema, {
+                maxItems: 100,
+                uniqueItems: true,
+                description: '实际观察到的排除来源主机，不扩大来源权限',
+            }),
+        ),
         artifacts: Type.Optional(
             Type.Array(ReportArtifactSchema, {
                 minItems: 1,
@@ -43,6 +121,31 @@ export const CoverageSchema = Type.Object(
         ),
         reportValue: Type.Optional(ReportValueSchema),
         delivery: Type.Optional(ReportDeliverySchema),
+        completion: Type.Optional(
+            Type.Object(
+                {
+                    version: Type.Literal(1),
+                    answerReady: Type.Boolean(),
+                    verificationDone: Type.Boolean(),
+                    externalEvidenceComplete: Type.Boolean(),
+                    stopReason: Type.Optional(
+                        Type.Union([
+                            Type.Literal('verified'),
+                            Type.Literal('no_progress'),
+                            Type.Literal('budget'),
+                            Type.Literal('deadline'),
+                            Type.Literal('provider_unavailable'),
+                            Type.Literal('iteration_limit'),
+                            Type.Literal('source_limited'),
+                        ]),
+                    ),
+                },
+                {
+                    additionalProperties: false,
+                    description: '回答可交付、核验停止及外部完整支持分别判定；停止核验不等于已证实',
+                },
+            ),
+        ),
         metrics: Type.Optional(ResearchMetricsSchema),
         propositions: Type.Optional(PropositionEvidenceSchema),
         notes: Type.Optional(

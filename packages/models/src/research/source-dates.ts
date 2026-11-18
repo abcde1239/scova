@@ -1,5 +1,5 @@
 import { Type } from '@sinclair/typebox';
-import { InstantSchema, refineSchema } from './common.ts';
+import { InstantSchema, refineSchema } from '../common/schema.ts';
 
 export const SourceDateSchema = refineSchema(
     Type.Object(

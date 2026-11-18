@@ -1,5 +1,5 @@
 import { Type, type Static } from '@sinclair/typebox';
-import { UuidSchema, describeProperties } from './common.ts';
+import { UuidSchema, describeProperties } from '../common/schema.ts';
 
 /** Server-owned, frozen context. Messages are discussion, sources alone support citations. */
 export const ReportConversationContextSchema = Type.Object(

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vite-plus/test';
-import { parseContract } from '../src/validation.ts';
-import { ReportArtifactSchema, type ReportArtifact } from '../src/report-artifacts.ts';
-import { validReportArtifacts } from '../src/report-artifact-validation.ts';
-import type { ReportValue } from '../src/report-value.ts';
+import { parseContract } from '../src/common/validation.ts';
+import { ReportArtifactSchema, type ReportArtifact } from '../src/report/artifacts.ts';
+import { validReportArtifacts } from '../src/report/artifact-validation.ts';
+import type { ReportValue } from '../src/report/value.ts';
 
 function fixture() {
     const claims = [

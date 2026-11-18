@@ -5,7 +5,7 @@ import {
     TimezoneSchema,
     UuidSchema,
     describeProperties,
-} from './common.ts';
+} from '../common/schema.ts';
 
 const EmailSchema = Type.String({
     minLength: 3,

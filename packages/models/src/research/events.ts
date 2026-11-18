@@ -5,10 +5,10 @@ import {
     RunOutcomeSchema,
     UuidSchema,
     describeProperties,
-} from './common.ts';
+} from '../common/schema.ts';
 import { CoverageSchema, RunSchema, UsageSchema } from './runs.ts';
-import { BudgetSchema } from './tasks.ts';
-import { ModelDiagnosticSchema } from './model-diagnostics.ts';
+import { BudgetSchema } from '../task/schema.ts';
+import { ModelDiagnosticSchema } from './diagnostics/model.ts';
 
 const CountSchema = Type.Integer({
     minimum: 0,

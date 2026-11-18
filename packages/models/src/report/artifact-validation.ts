@@ -1,5 +1,5 @@
-import type { ReportArtifact } from './report-artifacts.ts';
-import type { ReportValue } from './report-value.ts';
+import type { ReportArtifact } from './artifacts.ts';
+import type { ReportValue } from './value.ts';
 
 type Claim = { kind: string; text: string };
 type Value = { text: string; claimIndexes: number[]; status: string; gap: string };

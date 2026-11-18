@@ -7,7 +7,7 @@ import {
     pageSchema,
     RunStatusSchema,
     UuidSchema,
-} from './common.ts';
+} from './common/schema.ts';
 
 export const NotificationKindSchema = Type.Union(
     [Type.Literal('summary'), Type.Literal('important_change'), Type.Literal('run_issue')],

@@ -1,12 +1,12 @@
 import { Type, type Static } from '@sinclair/typebox';
-import { parseContract } from './validation.ts';
+import { parseContract } from '../common/validation.ts';
 import {
     HttpUrlSchema,
     InstantSchema,
     UuidSchema,
     refineSchema,
     describeProperties,
-} from './common.ts';
+} from '../common/schema.ts';
 
 export const FeedbackKindSchema = Type.Union(
     [Type.Literal('irrelevant'), Type.Literal('known'), Type.Literal('deeper')],

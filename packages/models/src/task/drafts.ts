@@ -1,6 +1,11 @@
 import { Type, type Static } from '@sinclair/typebox';
-import { describeProperties, FieldErrorSchema, TimezoneSchema, refineSchema } from './common.ts';
-import { TaskConfigSchema, type TaskConfig } from './tasks.ts';
+import {
+    describeProperties,
+    FieldErrorSchema,
+    TimezoneSchema,
+    refineSchema,
+} from '../common/schema.ts';
+import { TaskConfigSchema, type TaskConfig } from './schema.ts';
 
 const InputTextSchema = Type.String({
     minLength: 1,
@@ -40,6 +45,7 @@ const TaskDraftScopeObject = Type.Object(
         outputFormat: TaskConfigSchema.properties.outputFormat,
         outputFormats: TaskConfigSchema.properties.outputFormats,
         researchMode: Type.Union([Type.Literal('collection'), Type.Literal('analysis')]),
+        collectionDateUnknown: TaskConfigSchema.properties.collectionDateUnknown,
     },
     {
         additionalProperties: false,
@@ -49,7 +55,9 @@ const TaskDraftScopeObject = Type.Object(
 export const TaskDraftScopeSchema = refineSchema(
     TaskDraftScopeObject,
     'ScovaTaskDraftScope',
-    (value) => !value.outputFormats || value.outputFormats[0] === value.outputFormat,
+    (value) =>
+        (!value.outputFormats || value.outputFormats[0] === value.outputFormat) &&
+        !(value.researchMode === 'collection' && value.timeRange.kind === 'unbounded'),
 );
 export type TaskDraftScope = Static<typeof TaskDraftScopeSchema>;
 export const TaskClarificationsSchema = Type.Array(
@@ -79,15 +87,20 @@ export function taskDraftScopeMatches(scope: TaskDraftScope, config: TaskConfig)
         scope.sourcePreferences.officialOnly === config.sourcePreferences.officialOnly &&
         (scope.timeRange.kind === 'rolling'
             ? config.timeRange.kind === 'rolling' && scope.timeRange.days === config.timeRange.days
-            : config.timeRange.kind === 'fixed' &&
-              scope.timeRange.start === config.timeRange.start &&
-              scope.timeRange.end === config.timeRange.end) &&
+            : scope.timeRange.kind === 'unbounded'
+              ? config.timeRange.kind === 'unbounded'
+              : config.timeRange.kind === 'fixed' &&
+                scope.timeRange.start === config.timeRange.start &&
+                scope.timeRange.end === config.timeRange.end) &&
         scope.outputFormat === config.outputFormat &&
         sameItems(
             scope.outputFormats ?? [scope.outputFormat],
             config.outputFormats ?? [config.outputFormat],
         ) &&
-        scope.researchMode === config.researchMode
+        scope.researchMode === (config.researchMode ?? 'analysis') &&
+        (scope.researchMode !== 'collection' ||
+            (scope.collectionDateUnknown ?? 'separate') ===
+                (config.collectionDateUnknown ?? 'separate'))
     );
 }
 export const TaskDraftInputSchema = Type.Object(

@@ -11,14 +11,14 @@ import {
     refineSchema,
     describeProperties,
     pageSchema,
-} from './common.ts';
-import { CoverageSchema } from './runs.ts';
-import { validReportValueClaims } from './report-value.ts';
-import { classifyReportDelivery } from './report-delivery.ts';
-import { researchCoverageMetrics } from './research-coverage.ts';
-import { validReportArtifacts } from './report-artifact-validation.ts';
-import { SourceDatesSchema } from './source-dates.ts';
-import { FeedbackEffectsSchema } from './feedback.ts';
+} from '../common/schema.ts';
+import { CoverageSchema } from '../research/runs.ts';
+import { validReportValueClaims } from './value.ts';
+import { classifyReportDelivery } from './delivery.ts';
+import { researchCoverageMetrics } from '../research/coverage.ts';
+import { validReportArtifacts } from './artifact-validation.ts';
+import { SourceDatesSchema } from '../research/source-dates.ts';
+import { FeedbackEffectsSchema } from '../task/feedback.ts';
 
 export const EvidenceSelectorSchema = refineSchema(
     Type.Object(
@@ -56,6 +56,7 @@ export const EvidenceSnapshotSchema = Type.Object(
             description: '来源发布时间，未确认时为空',
         }),
         sourceDates: Type.Optional(SourceDatesSchema),
+        dateSource: Type.Optional(Type.Union([NonEmptyTextSchema, Type.Null()])),
         truncated: Type.Boolean({ description: '采集正文是否发生截断' }),
         selector: EvidenceSelectorSchema,
     },
@@ -166,6 +167,16 @@ const ReportObject = Type.Object(
         taskId: UuidSchema,
         taskVersionId: UuidSchema,
         baselineRunId: Type.Union([UuidSchema, Type.Null()]),
+        baseline: Type.Optional(
+            Type.Object(
+                {
+                    runId: UuidSchema,
+                    reportId: UuidSchema,
+                    publishedAt: InstantSchema,
+                },
+                { additionalProperties: false, description: '已通过账号及比较范围鉴权的上次报告' },
+            ),
+        ),
         schemaVersion: Type.Literal(1),
         conversation: Type.Optional(
             Type.Object(
@@ -201,6 +212,7 @@ const ReportObject = Type.Object(
     { additionalProperties: false, description: '包含已生成成果索引、结论及证据的不可变报告 DTO' },
 );
 export const ReportSchema = refineSchema(ReportObject, 'ScovaReport', (value) => {
+    if (value.baseline && value.baseline.runId !== value.baselineRunId) return false;
     if (
         value.coverage.metrics &&
         Object.entries(
@@ -289,7 +301,18 @@ export const ReportSchema = refineSchema(ReportObject, 'ScovaReport', (value) =>
         )
     )
         return false;
-    if (!value.evidence.length && !value.claims.some((claim) => claim.kind === 'model_answer'))
+    const emptyCollection =
+        value.coverage.completeness === 'partial' &&
+        value.coverage.dateScreening?.accepted === 0 &&
+        value.claims.every((claim) => claim.kind === 'insufficient' && !claim.evidenceIds.length) &&
+        value.changes.every(
+            (change) => !change.oldEvidenceIds.length && !change.newEvidenceIds.length,
+        );
+    if (
+        !value.evidence.length &&
+        !value.claims.some((claim) => claim.kind === 'model_answer') &&
+        !emptyCollection
+    )
         return false;
     const artifacts = value.coverage.artifacts;
     if (!validReportArtifacts(artifacts, value.claims, value.coverage.reportValue)) return false;

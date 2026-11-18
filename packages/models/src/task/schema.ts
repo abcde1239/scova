@@ -12,7 +12,7 @@ import {
     UuidSchema,
     refineSchema,
     describeProperties,
-} from './common.ts';
+} from '../common/schema.ts';
 
 /** 新任务初始配额；保存后的任务版本和执行预算不会随默认值改变。 */
 export const DEFAULT_TASK_BUDGET = {
@@ -92,8 +92,15 @@ export const TimeRangeSchema = Type.Union(
             { additionalProperties: false, description: '滚动查阅范围' },
         ),
         FixedTimeRangeSchema,
+        Type.Object(
+            { kind: Type.Literal('unbounded') },
+            {
+                additionalProperties: false,
+                description: '分析研究不限定日期窗口',
+            },
+        ),
     ],
-    { description: '滚动或固定时间范围' },
+    { description: '滚动、固定时间范围或分析研究不限日期' },
 );
 const LocalTimeSchema = Type.String({
     pattern: '^(?:[01][0-9]|2[0-3]):[0-5][0-9]$',
@@ -169,7 +176,12 @@ const TaskConfigObject = Type.Object(
         researchMode: Type.Optional(
             Type.Union([Type.Literal('collection'), Type.Literal('analysis')], {
                 description:
-                    '资料收集汇集当前来源内容；分析研究核对时间、支持关系与条件。省略沿用分析研究',
+                    '资料采集仅收录窗口内有直接出处的值，不使用模型补答；分析研究允许有标记的模型回答。省略沿用分析研究',
+            }),
+        ),
+        collectionDateUnknown: Type.Optional(
+            Type.Union([Type.Literal('separate'), Type.Literal('discard')], {
+                description: '采集任务日期未确认的来源单列或剔除；省略时单列且不计入结果',
             }),
         ),
         agentProviderId: Type.Optional(
@@ -186,7 +198,9 @@ const TaskConfigObject = Type.Object(
 export const TaskConfigSchema = refineSchema(
     TaskConfigObject,
     'ScovaTaskConfig',
-    (value) => !value.outputFormats || value.outputFormats[0] === value.outputFormat,
+    (value) =>
+        (!value.outputFormats || value.outputFormats[0] === value.outputFormat) &&
+        !(value.researchMode === 'collection' && value.timeRange.kind === 'unbounded'),
 );
 export const CreateTaskInputSchema = Type.Object(
     {

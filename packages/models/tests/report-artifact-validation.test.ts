@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test';
-import { validReportArtifacts } from '../src/report-artifact-validation.ts';
-import type { ReportArtifact } from '../src/report-artifacts.ts';
+import { validReportArtifacts } from '../src/report/artifact-validation.ts';
+import type { ReportArtifact } from '../src/report/artifacts.ts';
 
 function fixture() {
     const claims = [

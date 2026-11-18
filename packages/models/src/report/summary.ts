@@ -1,6 +1,6 @@
 type AgentClaim = { kind: string; text: string; citations: readonly { pageId: string }[] };
-import type { Coverage } from './runs.ts';
-import type { ReportValue } from './report-value.ts';
+import type { Coverage } from '../research/runs.ts';
+import type { ReportValue } from './value.ts';
 
 type Selection = ReportValue['selections'][number];
 type SummaryAnswer = {

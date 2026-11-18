@@ -9,8 +9,8 @@ import {
     NonEmptyTextSchema,
     RevisionSchema,
     ModeSchema,
-} from './common.ts';
-import { EvidenceSelectorSchema } from './reports.ts';
+} from './common/schema.ts';
+import { EvidenceSelectorSchema } from './report/schema.ts';
 
 export const LibraryTargetSchema = Type.Union(
     [

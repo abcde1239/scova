@@ -314,6 +314,49 @@ describe('账号与 HTTP 协议', () => {
 });
 
 describe('执行、报告与 SSE 语义', () => {
+    it('零收录采集可交付诚实的部分说明，但不能伪装无证据事实或完成', () => {
+        const empty = {
+            ...report,
+            outcome: 'inconclusive',
+            limitations: ['尚无满足日期和直接出处要求的采集条目'],
+            claims: [{ ...claim, kind: 'insufficient', evidenceIds: [] }],
+            evidence: [],
+            changes: [],
+            coverage: {
+                ...report.coverage,
+                completeness: 'partial',
+                dateScreening: {
+                    window: { start: instant, end: instant },
+                    accepted: 0,
+                    unconfirmed: 0,
+                    outside: 0,
+                    entries: [],
+                },
+            },
+        };
+        expect(parseContract(ReportSchema, empty)).toEqual(empty);
+        for (const invalid of [
+            { ...empty, coverage: { ...empty.coverage, completeness: 'complete' } },
+            { ...empty, claims: [{ ...claim, kind: 'inference', evidenceIds: [] }] },
+            { ...empty, coverage: { ...empty.coverage, dateScreening: undefined } },
+            {
+                ...empty,
+                coverage: {
+                    ...empty.coverage,
+                    dateScreening: { ...empty.coverage.dateScreening, accepted: 1 },
+                },
+            },
+        ])
+            expect(() => parseContract(ReportSchema, invalid)).toThrow();
+    });
+    it('上次报告入口必须与比较执行一致，旧报告可以不含入口', () => {
+        expect(parseContract(ReportSchema, report)).toEqual(report);
+        const baseline = { runId: otherId, reportId: otherId, publishedAt: instant };
+        expect(() => parseContract(ReportSchema, { ...report, baseline })).toThrow();
+        expect(
+            parseContract(ReportSchema, { ...report, baselineRunId: otherId, baseline }).baseline,
+        ).toEqual(baseline);
+    });
     it('真实与演示模式显式存在且拒绝其他模式', () => {
         expect(parseContract(RunSchema, run).mode).toBe('live');
         expect(parseContract(RunSchema, { ...run, mode: 'demo' }).mode).toBe('demo');

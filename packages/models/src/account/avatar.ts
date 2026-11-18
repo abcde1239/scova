@@ -1,5 +1,5 @@
 import { Type, type Static } from '@sinclair/typebox';
-import { UuidSchema, describeProperties } from './common.ts';
+import { UuidSchema, describeProperties } from '../common/schema.ts';
 
 export const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
 export const AVATAR_CONTENT_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'] as const;
