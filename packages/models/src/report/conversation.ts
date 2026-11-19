@@ -1,5 +1,14 @@
 import { Type, type Static } from '@sinclair/typebox';
-import { UuidSchema, describeProperties } from '../common/schema.ts';
+import { RevisionSchema, UuidSchema, describeProperties } from '../common/schema.ts';
+
+export const ReportFollowupSearchSchema = Type.Union([
+    Type.Object(
+        { searchMode: Type.Literal('api'), searchConfigRevision: RevisionSchema },
+        { additionalProperties: false },
+    ),
+    Type.Object({ searchMode: Type.Literal('searxng') }, { additionalProperties: false }),
+]);
+export type ReportFollowupSearch = Static<typeof ReportFollowupSearchSchema>;
 
 /** Server-owned, frozen context. Messages are discussion, sources alone support citations. */
 export const ReportConversationContextSchema = Type.Object(
@@ -8,6 +17,7 @@ export const ReportConversationContextSchema = Type.Object(
         reportId: UuidSchema,
         questionId: UuidSchema,
         operation: Type.Union([Type.Literal('research'), Type.Literal('revise')]),
+        searchSelection: Type.Optional(ReportFollowupSearchSchema),
         merge: Type.Optional(
             Type.Object(
                 {

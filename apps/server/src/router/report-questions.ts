@@ -1,9 +1,13 @@
-import { Elysia } from 'elysia';
+import { Elysia, t } from 'elysia';
 import {
     ApiErrorSchema,
     ReportQuestionInputSchema,
     ReportQuestionSchema,
     QuestionFollowupInputSchema,
+    ReportFollowupInputSchema,
+    IdempotencyHeadersSchema,
+    ReportFollowupResponseSchema,
+    ReportQuestionDetailSchema,
     RunCommandResponseSchema,
     ReportConversationSchema,
     ReportConversationQuerySchema,
@@ -26,6 +30,25 @@ export function createReportQuestionPlugin(services: ApiServices) {
         503: ApiErrorSchema,
     };
     return new Elysia({ name: 'scova-report-questions', prefix: '/api/v1', normalize: false })
+        .post('/reports/:reportId/followup', handlers.requestFollowup, {
+            body: ReportFollowupInputSchema,
+            headers: t.Object({
+                'idempotency-key': t.Optional(
+                    t.String({
+                        description:
+                            IdempotencyHeadersSchema.properties['idempotency-key'].description,
+                    }),
+                ),
+            }),
+            response: { 202: ReportFollowupResponseSchema, ...errors },
+            detail: {
+                operationId: 'requestReportFollowup',
+                tags: ['报告问答'],
+                summary: '确认以未发送的问题启动补查',
+                description:
+                    '须携带会话、CSRF及稳定的Idempotency-Key。明确确认后一次性保存问题和执行，跳过报告问答模型。API模式须提供账号搜索配置版本。相同键和请求返回原问题及执行，不同请求返回409。',
+            },
+        })
         .post('/reports/:reportId/merge', handlers.merge, {
             body: ReportMergeInputSchema,
             response: { 202: RunCommandResponseSchema, ...errors },
@@ -60,7 +83,7 @@ export function createReportQuestionPlugin(services: ApiServices) {
             },
         })
         .get('/reports/:reportId/questions/:questionId', handlers.get, {
-            response: { 200: ReportQuestionSchema, ...errors },
+            response: { 200: ReportQuestionDetailSchema, ...errors },
             detail: {
                 operationId: 'getReportQuestion',
                 tags: ['报告问答'],

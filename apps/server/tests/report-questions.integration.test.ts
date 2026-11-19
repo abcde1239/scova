@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { Redis as RedisClient } from 'ioredis';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vite-plus/test';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 import { createApiApp } from '../src/app/index.ts';
 import { type CallContext, type StructuredInput, type ModelProvider } from '@scova/connectors';
 import {
@@ -14,7 +14,8 @@ import {
     type ApiServiceOverrides,
     type ApiServices,
 } from '../src/app/services.ts';
-import type { TaskConfig } from '@scova/models';
+import type { ReportFollowupInput, TaskConfig } from '@scova/models';
+import { sealCredential } from '@scova/shared/credentials';
 import { effectiveRunScopeHash } from '@scova/shared';
 import { createReportQuestionService } from '../src/service/report-questions.ts';
 import { comparisonScopeHash } from '../src/service/tasks.ts';
@@ -305,6 +306,23 @@ const follow = (auth: Auth, reportId: string, id: string, key = randomUUID(), co
         headers: { ...headers(auth), 'idempotency-key': key },
         body: JSON.stringify({ confirm }),
     });
+const requestFollowup = (
+    auth: Auth,
+    reportId: string,
+    body: ReportFollowupInput,
+    key = randomUUID(),
+) =>
+    request(`/reports/${reportId}/followup`, {
+        method: 'POST',
+        headers: { ...headers(auth), 'idempotency-key': key },
+        body: JSON.stringify(body),
+    });
+const draft = {
+    confirm: true,
+    question: '补查是否有更新的官方公告？',
+    searchMode: 'searxng',
+} as const;
+
 function answer(evidenceId: string, quote: string) {
     return {
         statements: [{ text: quote, citations: [{ evidenceId, quote }] }],
@@ -671,6 +689,7 @@ describe('报告证据问答与明确确认后续研究', () => {
         await redis.connect();
     }, 120000);
     beforeEach(() => {
+        vi.unstubAllEnvs();
         now = new Date('2026-10-26T00:00:00Z');
         calls = 0;
         model = null;
@@ -1034,6 +1053,195 @@ describe('报告证据问答与明确确认后续研究', () => {
             .returning()
             .then(firstRow);
         expect((await follow(a, f.report.id, q.id)).status).toBe(409);
+    });
+    it('explicit report follow-up atomically creates a readable unanswered turn and exactly one run', async () => {
+        configure({ reportQuestionPolicy: { userRequests: 1 } });
+        const owner = await register();
+        const other = await register();
+        const original = await liveFixture(owner, '核对活动日期');
+        model = modelFixture(answer(original.evidence.id, original.quote));
+        const key = randomUUID();
+        const body = { ...draft, afterQuestionId: null, outputFormats: ['brief', 'list'] } as const;
+        const input = { ...body, outputFormats: [...body.outputFormats] };
+        expect((await requestFollowup(other, original.report.id, input, key)).status).toBe(404);
+        const requests = await Promise.all([
+            requestFollowup(owner, original.report.id, input, key),
+            requestFollowup(owner, original.report.id, input, key),
+        ]);
+        for (const response of requests) expect(response.status).toBe(202);
+        const results = await Promise.all(requests.map(json));
+        expect(results.filter((item) => item.reused)).toHaveLength(1);
+        const [created, replay] = results;
+        expect(replay!.question).toEqual(created!.question);
+        expect(replay!.run.id).toBe(created!.run.id);
+        const question = created!.question;
+        expect(question).toMatchObject({
+            question: draft.question,
+            answer: null,
+            followupRunId: created!.run.id,
+            searchSelection: { searchMode: 'searxng' },
+        });
+        const written = await db.query.runs.findFirst({
+            where: eq(tables.runs.id, created!.run.id),
+        });
+        expect(written).toMatchObject({
+            taskVersionId: original.task.currentVersionId,
+            followupConfigJson: {
+                goal: draft.question,
+                searchMode: 'searxng',
+                outputFormats: body.outputFormats,
+            },
+            searchConfigurationHash: null,
+            conversationContextJson: { messages: [{ role: 'user', content: draft.question }] },
+        });
+        expect(
+            await db.query.outbox.findMany({
+                where: eq(tables.outbox.aggregateId, created!.run.id),
+            }),
+        ).toHaveLength(1);
+        expect(
+            (
+                await requestFollowup(
+                    owner,
+                    original.report.id,
+                    { ...input, question: '不同问题' },
+                    key,
+                )
+            ).status,
+        ).toBe(409);
+        expect(
+            await json(
+                await request(`/reports/${original.report.id}/questions/${question.id}`, {
+                    headers: headers(owner),
+                }),
+            ),
+        ).toEqual(question);
+        now = new Date(now.getTime() + 120_000);
+        const conversation = await json(
+            await request(`/reports/${original.report.id}/conversation`, {
+                headers: headers(owner),
+            }),
+        );
+        expect(conversation.turns).toEqual([{ ...question, round: 1 }]);
+        expect(calls).toBe(0);
+        expect((await ask(owner, original.report.id)).status).toBe(201);
+        expect(calls).toBe(1);
+    });
+    it('rolls back a requested turn, run, event and idempotency key if Outbox creation fails', async () => {
+        const owner = await register();
+        const original = await liveFixture(owner, '核对活动日期');
+        const key = randomUUID();
+        await db.execute(
+            querySql.raw(
+                `ALTER TABLE outbox ADD CONSTRAINT request_test_failure CHECK (event_type <> 'run.enqueue') NOT VALID`,
+            ),
+        );
+        try {
+            expect((await requestFollowup(owner, original.report.id, draft, key)).status).toBe(500);
+            expect(
+                await db.query.reportQuestions.findMany({
+                    where: eq(tables.reportQuestions.reportId, original.report.id),
+                }),
+            ).toHaveLength(0);
+            expect(
+                await db.query.runs.findMany({ where: eq(tables.runs.taskId, original.task.id) }),
+            ).toHaveLength(1);
+            expect(
+                await db.query.idempotencyRecords.findFirst({
+                    where: eq(
+                        tables.idempotencyRecords.scope,
+                        `report:${original.report.id}:request-followup`,
+                    ),
+                }),
+            ).toBeUndefined();
+        } finally {
+            await db.execute(
+                querySql.raw('ALTER TABLE outbox DROP CONSTRAINT request_test_failure'),
+            );
+        }
+        expect((await requestFollowup(owner, original.report.id, draft, key)).status).toBe(202);
+    });
+    it('requires an owned usable API revision and preserves the confirmed identity on replay and retry', async () => {
+        vi.stubEnv('AGENT_CREDENTIAL_KEY', Buffer.alloc(32, 83).toString('hex'));
+        const owner = await register();
+        const other = await register();
+        const original = await liveFixture(owner, '核对活动日期');
+        const input = { ...draft, searchMode: 'api', searchConfigRevision: 3 } as const;
+        const key = randomUUID();
+        const save = async (userId: string) => {
+            const id = randomUUID();
+            return db
+                .insert(tables.searchConfigurations)
+                .values({
+                    id,
+                    userId,
+                    defaultMode: 'searxng',
+                    protocol: 'tavily',
+                    revision: 3,
+                    baseUrl: 'https://search.example.test/',
+                    contentMode: 'prefer_api',
+                    encryptedApiKey: sealCredential('fixture-key', userId, id),
+                })
+                .returning()
+                .then(firstRow);
+        };
+        await save(other.userId);
+        const missing = await requestFollowup(owner, original.report.id, input, key);
+        expect([missing.status, (await json(missing)).code]).toEqual([
+            422,
+            'SEARCH_API_NOT_CONFIGURED',
+        ]);
+        const api = await save(owner.userId);
+        const stale = await requestFollowup(
+            owner,
+            original.report.id,
+            { ...input, searchConfigRevision: 2 },
+            key,
+        );
+        expect([stale.status, (await json(stale)).code]).toEqual([
+            409,
+            'SEARCH_CONFIGURATION_CONFLICT',
+        ]);
+        const accepted = await requestFollowup(owner, original.report.id, input, key);
+        expect(accepted.status).toBe(202);
+        const created = await json(accepted);
+        const confirmed = await db.query.runs
+            .findFirst({ where: eq(tables.runs.id, created.run.id) })
+            .then(requireRow);
+        expect(confirmed.searchConfigurationHash).toBe(tables.reportSearchConfigurationHash(api));
+        expect(created.question.searchSelection).toEqual({
+            searchMode: 'api',
+            searchConfigRevision: 3,
+        });
+        await db
+            .delete(tables.searchConfigurations)
+            .where(eq(tables.searchConfigurations.userId, owner.userId));
+        expect(
+            await json(await requestFollowup(owner, original.report.id, input, key)),
+        ).toMatchObject({ reused: true, question: created.question, run: { id: confirmed.id } });
+        await db
+            .update(tables.runs)
+            .set({ status: 'failed', finishedAt: now })
+            .where(eq(tables.runs.id, confirmed.id))
+            .returning()
+            .then(firstRow);
+        const retry = (body: unknown) =>
+            request(`/runs/${confirmed.id}/retry`, {
+                method: 'POST',
+                headers: { ...headers(owner), 'idempotency-key': randomUUID() },
+                body: JSON.stringify(body),
+            });
+        expect((await retry({ searchMode: 'searxng' })).status).toBe(409);
+        const response = await retry({});
+        expect(response.status).toBe(202);
+        const retried = await json(response);
+        expect(
+            await db.query.runs.findFirst({ where: eq(tables.runs.id, retried.run.id) }),
+        ).toMatchObject({
+            searchConfigurationHash: confirmed.searchConfigurationHash,
+            followupConfigJson: confirmed.followupConfigJson,
+            conversationContextJson: confirmed.conversationContextJson,
+        });
     });
     it('Outbox写失败时回滚Run/首事件/问题链接/幂等，重试可成功', async () => {
         const a = await register(),

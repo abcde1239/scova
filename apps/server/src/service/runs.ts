@@ -1,4 +1,9 @@
-import { type Run as StoredRun, type RunEvent as StoredRunEvent } from '@scova/db';
+import {
+    reportSearchConfigurationHash,
+    type Run as StoredRun,
+    type RunEvent as StoredRunEvent,
+} from '@scova/db';
+import { openCredential } from '@scova/shared/credentials';
 import { createHash } from 'node:crypto';
 import { effectiveRunScopeHash } from '@scova/shared';
 import {
@@ -15,10 +20,16 @@ import {
     type ReportConversationContext,
     ReportConversationContextSchema,
     type OutputFormat,
+    type Report,
+    type ReportFollowupInput,
+    type ReportFollowupSearch,
+    QuestionAnswerSchema,
 } from '@scova/models';
 import type { ApiServices } from '@/app/services';
 import { ApiError } from '@/utils/errors.ts';
-import { createRunRepo } from '@/repo/runs.ts';
+import { createRunRepo, type RunStore } from '@/repo/runs.ts';
+import { requireConversationHead } from '@/repo/report-questions.ts';
+import { conversationContext } from '@/utils/report-conversation.ts';
 import { comparisonScopeHash } from '@/service/tasks.ts';
 import { ownedTask } from '@/service/tasks.ts';
 
@@ -112,6 +123,50 @@ export function createRunService(services: ApiServices) {
         return run;
     }
 
+    async function freezeFollowupSearch(
+        store: RunStore,
+        userId: string,
+        selection: ReportFollowupSearch,
+    ) {
+        if (selection.searchMode === 'searxng') return null;
+        const record = await store.findSearchConfiguration(userId);
+        if (!record?.protocol || !record.encryptedApiKey || !record.baseUrl || !record.contentMode)
+            throw new ApiError(
+                422,
+                'SEARCH_API_NOT_CONFIGURED',
+                '请先保存可用的账号 Search API 配置',
+            );
+        if (record.revision !== selection.searchConfigRevision)
+            throw new ApiError(
+                409,
+                'SEARCH_CONFIGURATION_CONFLICT',
+                '搜索配置已更新，请重新读取后再确认',
+            );
+        if (record.protocol === 'perplexity')
+            throw new ApiError(
+                422,
+                'SEARCH_API_READING_UNSUPPORTED',
+                '所选 Search API 不支持独立网页读取',
+            );
+        if (record.protocol === 'custom_json' && !record.customTemplate)
+            throw new ApiError(
+                422,
+                'SEARCH_API_NOT_CONFIGURED',
+                '请先保存可用的自定义 Search API 配置',
+            );
+        try {
+            if (!openCredential(record.encryptedApiKey, userId, record.id).trim())
+                throw new Error();
+        } catch {
+            throw new ApiError(
+                422,
+                'SEARCH_CREDENTIAL_INVALID',
+                '搜索密钥无法读取，请重新保存 Search API',
+            );
+        }
+        return reportSearchConfigurationHash(record);
+    }
+
     async function createRun(
         taskId: string,
         userId: string,
@@ -124,14 +179,21 @@ export function createRunService(services: ApiServices) {
         inheritedScope?: string,
         inheritedContext?: ReportConversationContext,
         merge?: { reportId: string; reportIds: string[] },
+        options?: {
+            draft?: { report: Report; input: ReportFollowupInput; selection: ReportFollowupSearch };
+            inheritedSearchHash?: string | null;
+        },
     ) {
         if (!UUID.test(taskId)) throw new ApiError(404, 'NOT_FOUND', '资源不存在');
         const command = commandBody(input);
-        const scope = merge
-            ? `report:${merge.reportId}:merge`
-            : followup
-              ? `question:${followup.questionId}:${followup.context?.operation === 'revise' ? 'revision' : 'followup'}`
-              : `run:${taskId}:${parentRunId ? 'retry' : 'create'}`;
+        const draft = options?.draft;
+        const scope = draft
+            ? `report:${draft.report.id}:request-followup`
+            : merge
+              ? `report:${merge.reportId}:merge`
+              : followup
+                ? `question:${followup.questionId}:${followup.context?.operation === 'revise' ? 'revision' : 'followup'}`
+                : `run:${taskId}:${parentRunId ? 'retry' : 'create'}`;
         const keyHash = sha256(idempotencyKey);
         const payloadHash = sha256(
             JSON.stringify({
@@ -139,6 +201,13 @@ export function createRunService(services: ApiServices) {
                 parentRunId,
                 ...command,
                 ...(merge ? { merge } : {}),
+                ...(draft
+                    ? {
+                          question: draft.input.question,
+                          afterQuestionId: draft.input.afterQuestionId,
+                          searchSelection: draft.selection,
+                      }
+                    : {}),
                 ...(followup
                     ? {
                           questionId: followup.questionId,
@@ -154,6 +223,7 @@ export function createRunService(services: ApiServices) {
                 // 所有启动命令先锁定同一任务，串行决定幂等重放、活动复用及配置快照。
                 if (!(await store.lockTask(taskId, userId)).length)
                     throw new ApiError(404, 'NOT_FOUND', '资源不存在');
+                if (draft) await store.reportQuestions.lockReport(userId, draft.report.id);
                 const existing = await store.findIdempotency(userId, scope, keyHash);
                 if (existing) {
                     if (existing.payloadHash !== payloadHash)
@@ -175,11 +245,56 @@ export function createRunService(services: ApiServices) {
                             'IDEMPOTENCY_PENDING',
                             '执行命令记录正在恢复，请稍后重试',
                         );
-                    return { run: reused, reused: true };
+                    const question = draft
+                        ? await store.reportQuestions.findResearchRequest(
+                              userId,
+                              draft.report.id,
+                              reused.id,
+                          )
+                        : undefined;
+                    if (draft && !question)
+                        throw new ApiError(409, 'FOLLOWUP_UNAVAILABLE', '补查轮次不可用');
+                    return { run: reused, reused: true, question };
+                }
+                let searchHash = options?.inheritedSearchHash;
+                let draftContext: ReportConversationContext | undefined;
+                let draftQuestion;
+                if (draft) {
+                    const latest = await store.reportQuestions.latest(userId, draft.report.id);
+                    requireConversationHead(latest, draft.input.afterQuestionId);
+                    searchHash = await freezeFollowupSearch(store, userId, draft.selection);
+                    const history = await store.reportQuestions.list(userId, draft.report.id);
+                    draftQuestion = await store.reportQuestions.insert(
+                        userId,
+                        draft.report.id,
+                        draft.input.question,
+                        services.clock(),
+                        latest,
+                    );
+                    draftContext = parseContract(ReportConversationContextSchema, {
+                        ...conversationContext(
+                            draft.report,
+                            draftQuestion.id,
+                            draftQuestion.question,
+                            history.map((row) => ({
+                                id: row.id,
+                                question: row.question,
+                                ...(row.answerJson
+                                    ? {
+                                          answer: parseContract(
+                                              QuestionAnswerSchema,
+                                              row.answerJson,
+                                          ),
+                                      }
+                                    : {}),
+                            })),
+                        ),
+                        searchSelection: draft.selection,
+                    });
                 }
                 const question = followup
                     ? await store.findQuestion(followup.questionId, userId, followup.reportRunId)
-                    : null;
+                    : draftQuestion;
                 if (followup && (!question || !question.answerJson))
                     throw new ApiError(404, 'NOT_FOUND', '问题不存在或尚未完成');
                 const linkedQuestionRun =
@@ -252,7 +367,7 @@ export function createRunService(services: ApiServices) {
                 });
                 const active = await store.findActiveRun(task.id, userId);
                 if (active) {
-                    if (followup || merge)
+                    if (followup || merge || draft || inheritedContext?.searchSelection)
                         throw new ApiError(
                             409,
                             'RUN_ALREADY_ACTIVE',
@@ -271,7 +386,8 @@ export function createRunService(services: ApiServices) {
                         questionId: question?.id,
                     }),
                     mode: command.mode,
-                    trigger: followup || merge ? 'followup' : parentRunId ? 'retry' : 'manual',
+                    trigger:
+                        followup || merge || draft ? 'followup' : parentRunId ? 'retry' : 'manual',
                     ...(question ||
                     merge ||
                     inheritedConfig ||
@@ -284,7 +400,9 @@ export function createRunService(services: ApiServices) {
                     parentRunId,
                     budgetJson: config.budget,
                     feedbackSnapshotJson: await store.feedbackSnapshot(userId, task.id),
-                    conversationContextJson: followup?.context ?? inheritedContext ?? null,
+                    conversationContextJson:
+                        draftContext ?? followup?.context ?? inheritedContext ?? null,
+                    searchConfigurationHash: searchHash,
                     usageJson: usage,
                 });
                 const queued = eventDto(
@@ -308,7 +426,7 @@ export function createRunService(services: ApiServices) {
                         mode: command.mode,
                     },
                 });
-                if (question) {
+                if (question && !draft) {
                     const linked = await store.linkQuestion(
                         question.id,
                         userId,
@@ -319,12 +437,26 @@ export function createRunService(services: ApiServices) {
                         throw new ApiError(409, 'FOLLOWUP_ALREADY_LINKED', '问题已有关联执行');
                 }
                 await store.completeIdempotency(idempotency.id, run.id);
-                return { run, reused: false, queued };
+                const linkedQuestion =
+                    draftQuestion && draftContext
+                        ? await store.reportQuestions.linkResearchRequest(
+                              draftQuestion,
+                              run.id,
+                              draftContext,
+                          )
+                        : undefined;
+                return { run, reused: false, queued, question: linkedQuestion };
             });
         } catch (error) {
             if (!repo.isUniqueConflict(error)) throw error;
             const existing = await repo.findIdempotency(userId, scope, keyHash);
-            if (existing?.payloadHash === payloadHash && existing.resourceId) {
+            if (existing && existing.payloadHash !== payloadHash)
+                throw new ApiError(
+                    409,
+                    'IDEMPOTENCY_PAYLOAD_MISMATCH',
+                    '同一幂等键不能提交不同执行参数',
+                );
+            if (!draft && existing?.payloadHash === payloadHash && existing.resourceId) {
                 const reused = await repo.requireRun(existing.resourceId, userId);
                 return { run: reused, reused: true };
             }
@@ -423,6 +555,36 @@ export function createRunService(services: ApiServices) {
             );
             return { run: toRun(result.run), reused: result.reused };
         },
+        async requestFollowup(
+            userId: string,
+            report: Report,
+            input: ReportFollowupInput,
+            key: string,
+        ) {
+            const parent = await requireRun(userId, report.runId);
+            if (parent.mode !== 'live')
+                throw new ApiError(409, 'LEGACY_DEMO_RUN', '历史演示报告不能创建后续研究');
+            const selection: ReportFollowupSearch =
+                input.searchMode === 'api'
+                    ? { searchMode: 'api', searchConfigRevision: input.searchConfigRevision }
+                    : { searchMode: 'searxng' };
+            const result = await createRun(
+                parent.taskId,
+                userId,
+                { searchMode: input.searchMode, outputFormats: input.outputFormats },
+                key,
+                parent.id,
+                parent.taskVersionId,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                { draft: { report, input, selection } },
+            );
+            if (!result.question) throw new ApiError(409, 'FOLLOWUP_UNAVAILABLE', '补查轮次不可用');
+            return { question: result.question, run: toRun(result.run), reused: result.reused };
+        },
         async get(userId: string, runId: string) {
             return toRun(await requireRun(userId, runId));
         },
@@ -491,6 +653,23 @@ export function createRunService(services: ApiServices) {
             const old = await requireRun(userId, runId);
             if (!(old.status === 'failed' || old.status === 'canceled'))
                 throw new ApiError(409, 'RUN_NOT_RETRYABLE', '当前执行状态不允许重试');
+            const context = old.conversationContextJson
+                ? parseContract(ReportConversationContextSchema, old.conversationContextJson)
+                : undefined;
+            const command = commandBody(input);
+            if (
+                context?.searchSelection &&
+                (command.mode !== old.mode ||
+                    command.searchMode !== undefined ||
+                    command.outputFormat !== undefined ||
+                    command.outputFormats !== undefined ||
+                    command.agentProviderId !== undefined)
+            )
+                throw new ApiError(
+                    409,
+                    'FOLLOWUP_CONFIGURATION_FROZEN',
+                    '补查重试沿用确认时的执行配置',
+                );
             const result = await createRun(
                 old.taskId,
                 userId,
@@ -513,8 +692,10 @@ export function createRunService(services: ApiServices) {
                             }),
                         )
                       : undefined,
-                old.conversationContextJson
-                    ? parseContract(ReportConversationContextSchema, old.conversationContextJson)
+                context,
+                undefined,
+                context?.searchSelection
+                    ? { inheritedSearchHash: old.searchConfigurationHash }
                     : undefined,
             );
             return { run: toRun(result.run), reused: result.reused };

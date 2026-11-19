@@ -19,7 +19,7 @@ export function conversationContext(
     report: Report,
     questionId: string,
     question: string,
-    history: ReportQuestion[],
+    history: (Pick<ReportQuestion, 'id' | 'question'> & { answer?: ReportQuestion['answer'] })[],
 ): ReportConversationContext {
     const recent = history.slice(-12);
     return {
@@ -35,10 +35,9 @@ export function conversationContext(
         messages: [
             ...recent.flatMap((turn) => [
                 { role: 'user' as const, content: turn.question },
-                {
-                    role: 'assistant' as const,
-                    content: conversationAnswer(turn.answer),
-                },
+                ...(turn.answer
+                    ? [{ role: 'assistant' as const, content: conversationAnswer(turn.answer) }]
+                    : []),
             ]),
             { role: 'user', content: question },
         ],
@@ -50,14 +49,20 @@ export function conversationContext(
             observedAt: item.observedAt,
         })),
         omittedTurns: history.length - recent.length,
-        earlierTurns: history.slice(-28, -12).map((turn) => ({
-            questionId: turn.id,
-            question: turn.question.slice(0, 256),
-            answer: turn.answer.statements
-                .map((s) => s.text)
-                .join('\n')
-                .slice(0, 512),
-        })),
+        earlierTurns: history.slice(-28, -12).flatMap((turn) =>
+            turn.answer
+                ? [
+                      {
+                          questionId: turn.id,
+                          question: turn.question.slice(0, 256),
+                          answer: turn.answer.statements
+                              .map((statement) => statement.text)
+                              .join('\n')
+                              .slice(0, 512),
+                      },
+                  ]
+                : [],
+        ),
     };
 }
 
