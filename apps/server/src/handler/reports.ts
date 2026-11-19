@@ -10,6 +10,18 @@ type HttpContext = Pick<Context, 'request' | 'set'>;
 export function createReportHandlers(services: ApiServices) {
     const reports = createReportService(services);
     const exports = createReportExportService(services);
+    function exportHandler<T>(load: (userId: string, reportId: string) => Promise<T>) {
+        return async function (
+            this: void,
+            { request, set, params }: HttpContext & { params: { reportId: string } },
+        ) {
+            set.headers['cache-control'] = 'no-store';
+            const session = await requireSession(request, services);
+            requireCsrf(request, session, services);
+            return load(session.userId, params.reportId);
+        };
+    }
+
     return {
         async list(this: void, { request, query }: HttpContext & { query: ReportListQuery }) {
             const session = await requireSession(request, services);
@@ -19,15 +31,8 @@ export function createReportHandlers(services: ApiServices) {
             const session = await requireSession(request, services);
             return reports.get(session.userId, params.reportId);
         },
-        async exportMarkdown(
-            this: void,
-            { request, set, params }: HttpContext & { params: { reportId: string } },
-        ) {
-            set.headers['cache-control'] = 'no-store';
-            const session = await requireSession(request, services);
-            requireCsrf(request, session, services);
-            return exports.getOrCreate(session.userId, params.reportId);
-        },
+        exportMarkdown: exportHandler(exports.markdown),
+        exportJson: exportHandler(exports.json),
         async inbox(this: void, { request, query }: HttpContext & { query: InboxListQuery }) {
             const session = await requireSession(request, services);
             return reports.inbox(session.userId, query);

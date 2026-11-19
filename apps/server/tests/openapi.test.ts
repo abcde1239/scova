@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { ReportExportSchema, ReportJsonExportSchema } from '@scova/models';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
@@ -12,6 +13,7 @@ import { nodeScriptCommand } from '../../../scripts/process-runtime.mjs';
 type Schema = {
     $ref?: string;
     description?: string;
+    required?: string[];
     properties?: Record<string, Schema>;
 };
 type Operation = {
@@ -77,6 +79,23 @@ describe('中文 OpenAPI 生成与校验', () => {
             await readFile(new URL('../../../swagger.json', import.meta.url), 'utf8'),
         );
         expect(first).toEqual(committed);
+    });
+
+    it('分别记录 Markdown 与 JSON 导出及其响应契约', async () => {
+        const { paths } = (await generateOpenApi()) as Document;
+        const markdown = paths['/api/v1/reports/{reportId}/exports/markdown'].post;
+        const json = paths['/api/v1/reports/{reportId}/exports/json'].post;
+        expect(markdown.operationId).toBe('exportReportMarkdown');
+        expect(json.operationId).toBe('exportReportJson');
+        for (const [operation, contract] of [
+            [markdown, ReportExportSchema],
+            [json, ReportJsonExportSchema],
+        ] as const) {
+            const response = operation.responses['200'].content?.['application/json'].schema;
+            expect(response?.properties).toEqual(JSON.parse(JSON.stringify(contract.properties)));
+            expect(response?.required).toEqual(contract.required);
+        }
+        expect(Object.keys(json.responses)).toEqual(Object.keys(markdown.responses));
     });
 
     it('健康响应字段有中文说明且 schema 描述与真实响应相符', async () => {

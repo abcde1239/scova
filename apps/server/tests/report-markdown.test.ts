@@ -1,6 +1,14 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vite-plus/test';
-import { REPORT_MARKDOWN_MAX_BYTES, type Report } from '@scova/models';
+import {
+    REPORT_JSON_MAX_QUOTE_CHARS,
+    REPORT_MARKDOWN_MAX_BYTES,
+    ReportJsonDocumentSchema,
+    ReportJsonExportSchema,
+    parseContract,
+    type Report,
+} from '@scova/models';
+import { renderReportJson } from '@/service/report-json.ts';
 import { renderReportMarkdown } from '@/service/report-markdown.ts';
 
 const id = '00000000-0000-4000-8000-000000000001';
@@ -68,6 +76,46 @@ describe('报告 Markdown 快照', () => {
     it('拒绝超出 UTF-8 字节上限的输出，不截断引用后假装成功', () => {
         expect(() =>
             renderReportMarkdown({
+                ...sample(),
+                summary: '研'.repeat(REPORT_MARKDOWN_MAX_BYTES / 2),
+            }),
+        ).toThrow(expect.objectContaining({ code: 'REPORT_EXPORT_TOO_LARGE' }));
+    });
+});
+
+describe('报告 JSON 快照', () => {
+    it('截取 Unicode 短引用并且只导出允许的字段，校验引用和文件归属', () => {
+        const report = sample();
+        const prefix = '研' + '📚'.repeat((REPORT_JSON_MAX_QUOTE_CHARS - 2) / 2);
+        report.evidence[0]!.quote = prefix + '📚不导出的引用尾部';
+        const rendered = renderReportJson(report);
+        const document = parseContract(ReportJsonDocumentSchema, JSON.parse(rendered.content));
+        expect(renderReportJson(report)).toEqual(rendered);
+        expect(document.citations[0]).toMatchObject({ quote: prefix, quoteTruncated: true });
+        expect(rendered.content).not.toContain('不导出的引用尾部');
+        expect(document.citations[0]).not.toHaveProperty('snapshotId');
+        expect(() =>
+            parseContract(ReportJsonDocumentSchema, { ...document, citations: [] }),
+        ).toThrow();
+        expect(() =>
+            parseContract(ReportJsonDocumentSchema, { ...document, textBody: '全文' }),
+        ).toThrow();
+        expect(() =>
+            parseContract(ReportJsonExportSchema, {
+                id,
+                reportId: report.id,
+                filename: 'scova-report-00000000-0000-4000-8000-000000000099.json',
+                document,
+                byteLength: rendered.byteLength,
+                sha256: rendered.sha256,
+                expiresAt: date,
+            }),
+        ).toThrow();
+    });
+
+    it('拒绝超出 UTF-8 字节上限的结构化结果', () => {
+        expect(() =>
+            renderReportJson({
                 ...sample(),
                 summary: '研'.repeat(REPORT_MARKDOWN_MAX_BYTES / 2),
             }),

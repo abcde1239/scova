@@ -2,6 +2,8 @@ import {
     ReportSchema,
     ReportExportSchema,
     type ReportExport,
+    ReportJsonExportSchema,
+    type ReportJsonExport,
     ReportListQuerySchema,
     ReportListResponseSchema,
     UuidSchema,
@@ -39,6 +41,16 @@ export const reportExportEndpoint = defineApiEndpoint<{
     path: '/reports/:reportId/exports/markdown',
     inputValidators: { params: reportParamsValidator },
     validator: modelValidator(ReportExportSchema),
+});
+
+export const reportJsonExportEndpoint = defineApiEndpoint<{
+    params: { reportId: string };
+    data: ReportJsonExport;
+}>({
+    method: 'POST',
+    path: '/reports/:reportId/exports/json',
+    inputValidators: { params: reportParamsValidator },
+    validator: modelValidator(ReportJsonExportSchema),
 });
 
 export const reportEndpoint = defineApiEndpoint<{

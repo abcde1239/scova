@@ -338,18 +338,30 @@ describe('真实维护数据库、保留与账号依赖', () => {
             `INSERT INTO "${fixture.checkpointSchema}".checkpoint_blobs (thread_id,checkpoint_ns,channel,version,type,blob) VALUES ($1,'','research','1','json',$2)`,
             [`run-${old.run.id}-epoch-99`, Buffer.from('"unpromoted-body"')],
         );
-        await fixture.db.insert(dbReportExports).values(
-            [1, 2].map((rendererVersion) => ({
+        await fixture.db.insert(dbReportExports).values([
+            {
                 userId: old.user.id,
                 reportId: old.reportId,
-                rendererVersion,
-                markdown: '# Report',
+                rendererVersion: 1,
+                format: 'markdown',
+                content: '# Report',
                 byteLength: 8,
                 sha256: 'a'.repeat(64),
                 createdAt: new Date(0),
-                expiresAt: rendererVersion === 1 ? new Date(1) : new Date(Date.now() + 86400_000),
-            })),
-        );
+                expiresAt: new Date(Date.now() + 86400_000),
+            },
+            {
+                userId: old.user.id,
+                reportId: old.reportId,
+                rendererVersion: 1,
+                format: 'json',
+                content: '{}',
+                byteLength: 2,
+                sha256: 'b'.repeat(64),
+                createdAt: new Date(0),
+                expiresAt: new Date(1),
+            },
+        ]);
         expect(await threadCount(old.run.id)).toBeGreaterThan(1);
         const preview = await repo.retention(false);
         expect(preview.runs).toBeGreaterThan(0);
@@ -372,7 +384,7 @@ describe('真实维护数据库、保留与账号依赖', () => {
             .select()
             .from(dbReportExports)
             .where(eq(dbReportExports.reportId, old.reportId));
-        expect(remainingExports.map((row) => row.rendererVersion)).toEqual([2]);
+        expect(remainingExports.map((row) => row.format)).toEqual(['markdown']);
         expect(await threadCount(old.run.id)).toBe(0);
         expect(
             (

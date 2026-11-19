@@ -87148,6 +87148,2293 @@
                 "tags": ["报告问答"]
             }
         },
+        "/api/v1/reports/{reportId}/exports/json": {
+            "post": {
+                "description": "需要会话与 CSRF，只能导出本人已交付报告。同一版本在有效期内复用；不包含完整采集正文。",
+                "operationId": "exportReportJson",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "reportId",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "byteLength": {
+                                            "description": "JSON 文件的 UTF-8 字节数",
+                                            "maximum": 262144,
+                                            "minimum": 1,
+                                            "type": "integer"
+                                        },
+                                        "document": {
+                                            "additionalProperties": false,
+                                            "description": "已交付报告的结构化 JSON 文件内容",
+                                            "properties": {
+                                                "changes": {
+                                                    "description": "重复、新增与变化列表",
+                                                    "items": {
+                                                        "additionalProperties": false,
+                                                        "description": "可解释差异，不把一次未观测到视为资料撤回",
+                                                        "properties": {
+                                                            "factKey": {
+                                                                "description": "至少包含一个非空白字符的文本",
+                                                                "minLength": 1,
+                                                                "pattern": "\\S",
+                                                                "type": "string"
+                                                            },
+                                                            "id": {
+                                                                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                                                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                                                "type": "string"
+                                                            },
+                                                            "important": {
+                                                                "description": "经确认是否为与任务相关的重要事实变化",
+                                                                "type": "boolean"
+                                                            },
+                                                            "kind": {
+                                                                "anyOf": [
+                                                                    {
+                                                                        "const": "baseline",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "new",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "duplicate",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "duplicate_candidate",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "changed",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "non_material",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "uncertain",
+                                                                        "type": "string"
+                                                                    }
+                                                                ],
+                                                                "description": "基线、新增、重复、疑似转载、实质变化、非实质变化或待核验"
+                                                            },
+                                                            "newEvidenceIds": {
+                                                                "description": "本次观测证据",
+                                                                "items": {
+                                                                    "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                                                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                                                    "type": "string"
+                                                                },
+                                                                "type": "array",
+                                                                "uniqueItems": true
+                                                            },
+                                                            "newValue": {
+                                                                "anyOf": [
+                                                                    {
+                                                                        "description": "至少包含一个非空白字符的文本",
+                                                                        "minLength": 1,
+                                                                        "pattern": "\\S",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "type": "null"
+                                                                    }
+                                                                ],
+                                                                "description": "新事实值，可为空"
+                                                            },
+                                                            "oldEvidenceIds": {
+                                                                "description": "旧值证据，来自合法基线",
+                                                                "items": {
+                                                                    "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                                                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                                                    "type": "string"
+                                                                },
+                                                                "type": "array",
+                                                                "uniqueItems": true
+                                                            },
+                                                            "oldValue": {
+                                                                "anyOf": [
+                                                                    {
+                                                                        "description": "至少包含一个非空白字符的文本",
+                                                                        "minLength": 1,
+                                                                        "pattern": "\\S",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "type": "null"
+                                                                    }
+                                                                ],
+                                                                "description": "旧事实值，可为空"
+                                                            },
+                                                            "reason": {
+                                                                "description": "至少包含一个非空白字符的文本",
+                                                                "minLength": 1,
+                                                                "pattern": "\\S",
+                                                                "type": "string"
+                                                            },
+                                                            "sourceId": {
+                                                                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                                                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                                                "type": "string"
+                                                            }
+                                                        },
+                                                        "required": [
+                                                            "id",
+                                                            "sourceId",
+                                                            "kind",
+                                                            "factKey",
+                                                            "oldValue",
+                                                            "newValue",
+                                                            "oldEvidenceIds",
+                                                            "newEvidenceIds",
+                                                            "important",
+                                                            "reason"
+                                                        ],
+                                                        "type": "object"
+                                                    },
+                                                    "type": "array"
+                                                },
+                                                "citations": {
+                                                    "description": "短引用列表",
+                                                    "items": {
+                                                        "additionalProperties": false,
+                                                        "description": "可定位的短引用",
+                                                        "properties": {
+                                                            "id": {
+                                                                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                                                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                                                "type": "string"
+                                                            },
+                                                            "location": {
+                                                                "description": "原文段落或字符位置的可解释定位，不执行页面选择器代码",
+                                                                "minLength": 1,
+                                                                "type": "string"
+                                                            },
+                                                            "observedAt": {
+                                                                "description": "带 UTC 偏移的 ISO 8601 时间",
+                                                                "format": "scova-instant",
+                                                                "type": "string"
+                                                            },
+                                                            "quote": {
+                                                                "description": "原文引用片段",
+                                                                "maxLength": 500,
+                                                                "minLength": 1,
+                                                                "type": "string"
+                                                            },
+                                                            "quoteTruncated": {
+                                                                "description": "是否仅导出已授权引用的开头片段",
+                                                                "type": "boolean"
+                                                            },
+                                                            "title": {
+                                                                "description": "至少包含一个非空白字符的文本",
+                                                                "minLength": 1,
+                                                                "pattern": "\\S",
+                                                                "type": "string"
+                                                            },
+                                                            "url": {
+                                                                "description": "HTTP/HTTPS 来源原文链接，不包含用户名或密码；实际抓取另行执行网络安全校验",
+                                                                "format": "scova-http-url",
+                                                                "maxLength": 4096,
+                                                                "type": "string"
+                                                            }
+                                                        },
+                                                        "required": [
+                                                            "id",
+                                                            "title",
+                                                            "url",
+                                                            "location",
+                                                            "observedAt",
+                                                            "quote",
+                                                            "quoteTruncated"
+                                                        ],
+                                                        "type": "object"
+                                                    },
+                                                    "type": "array"
+                                                },
+                                                "conclusions": {
+                                                    "description": "结构化结论",
+                                                    "items": {
+                                                        "additionalProperties": false,
+                                                        "description": "结构化结论，事实型结论至少有一条引用",
+                                                        "properties": {
+                                                            "confidenceLabel": {
+                                                                "description": "至少包含一个非空白字符的文本",
+                                                                "minLength": 1,
+                                                                "pattern": "\\S",
+                                                                "type": "string"
+                                                            },
+                                                            "evidenceIds": {
+                                                                "description": "引用的证据 ID，必须出现在报告可访问证据中",
+                                                                "items": {
+                                                                    "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                                                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                                                    "type": "string"
+                                                                },
+                                                                "type": "array",
+                                                                "uniqueItems": true
+                                                            },
+                                                            "id": {
+                                                                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                                                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                                                "type": "string"
+                                                            },
+                                                            "kind": {
+                                                                "anyOf": [
+                                                                    {
+                                                                        "const": "fact",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "inference",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "conflict",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "insufficient",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "model_answer",
+                                                                        "type": "string"
+                                                                    }
+                                                                ],
+                                                                "description": "来源事实、Agent 推断、冲突证据或证据不足"
+                                                            },
+                                                            "text": {
+                                                                "description": "至少包含一个非空白字符的文本",
+                                                                "minLength": 1,
+                                                                "pattern": "\\S",
+                                                                "type": "string"
+                                                            }
+                                                        },
+                                                        "required": [
+                                                            "id",
+                                                            "kind",
+                                                            "text",
+                                                            "confidenceLabel",
+                                                            "evidenceIds"
+                                                        ],
+                                                        "type": "object"
+                                                    },
+                                                    "minItems": 1,
+                                                    "type": "array"
+                                                },
+                                                "coverage": {
+                                                    "additionalProperties": false,
+                                                    "description": "查阅完整度与覆盖缺口",
+                                                    "properties": {
+                                                        "completeness": {
+                                                            "anyOf": [
+                                                                {
+                                                                    "const": "complete",
+                                                                    "type": "string"
+                                                                },
+                                                                {
+                                                                    "const": "partial",
+                                                                    "type": "string"
+                                                                }
+                                                            ],
+                                                            "description": "本次查阅完整性"
+                                                        },
+                                                        "gaps": {
+                                                            "description": "未覆盖子问题、失败来源或未核验冲突",
+                                                            "items": {
+                                                                "description": "至少包含一个非空白字符的文本",
+                                                                "minLength": 1,
+                                                                "pattern": "\\S",
+                                                                "type": "string"
+                                                            },
+                                                            "type": "array"
+                                                        }
+                                                    },
+                                                    "required": ["completeness", "gaps"],
+                                                    "type": "object"
+                                                },
+                                                "format": {
+                                                    "anyOf": [
+                                                        {
+                                                            "const": "brief",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "list",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "comparison",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "research_report",
+                                                            "type": "string"
+                                                        }
+                                                    ],
+                                                    "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
+                                                },
+                                                "limitations": {
+                                                    "description": "查阅限制与证据缺口",
+                                                    "items": {
+                                                        "description": "至少包含一个非空白字符的文本",
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "type": "array"
+                                                },
+                                                "mode": {
+                                                    "anyOf": [
+                                                        {
+                                                            "const": "demo",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "live",
+                                                            "type": "string"
+                                                        }
+                                                    ],
+                                                    "description": "服务模式，演示和真实资料的基线分别保存"
+                                                },
+                                                "outcome": {
+                                                    "anyOf": [
+                                                        {
+                                                            "const": "baseline",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "important_change",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "new_findings",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "no_important_change",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "inconclusive",
+                                                            "type": "string"
+                                                        }
+                                                    ],
+                                                    "description": "执行业务结论；不完整查阅不能声明没有重要变化"
+                                                },
+                                                "publishedAt": {
+                                                    "description": "带 UTC 偏移的 ISO 8601 时间",
+                                                    "format": "scova-instant",
+                                                    "type": "string"
+                                                },
+                                                "reportId": {
+                                                    "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                                    "type": "string"
+                                                },
+                                                "schemaVersion": {
+                                                    "const": 1,
+                                                    "description": "公共结构版本",
+                                                    "type": "number"
+                                                },
+                                                "summary": {
+                                                    "description": "至少包含一个非空白字符的文本",
+                                                    "minLength": 1,
+                                                    "pattern": "\\S",
+                                                    "type": "string"
+                                                },
+                                                "title": {
+                                                    "description": "至少包含一个非空白字符的文本",
+                                                    "minLength": 1,
+                                                    "pattern": "\\S",
+                                                    "type": "string"
+                                                }
+                                            },
+                                            "required": [
+                                                "schemaVersion",
+                                                "reportId",
+                                                "title",
+                                                "summary",
+                                                "publishedAt",
+                                                "format",
+                                                "mode",
+                                                "outcome",
+                                                "coverage",
+                                                "limitations",
+                                                "conclusions",
+                                                "changes",
+                                                "citations"
+                                            ],
+                                            "type": "object"
+                                        },
+                                        "expiresAt": {
+                                            "description": "带 UTC 偏移的 ISO 8601 时间",
+                                            "format": "scova-instant",
+                                            "type": "string"
+                                        },
+                                        "filename": {
+                                            "description": "安全的 JSON 文件名",
+                                            "pattern": "^scova-report-[a-f0-9-]{36}\\.json$",
+                                            "type": "string"
+                                        },
+                                        "id": {
+                                            "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                            "type": "string"
+                                        },
+                                        "reportId": {
+                                            "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                            "type": "string"
+                                        },
+                                        "sha256": {
+                                            "description": "JSON 文件的 SHA-256 指纹",
+                                            "pattern": "^[a-f0-9]{64}$",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "id",
+                                        "reportId",
+                                        "expiresAt",
+                                        "filename",
+                                        "document",
+                                        "byteLength",
+                                        "sha256"
+                                    ],
+                                    "type": "object"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "properties": {
+                                        "byteLength": {
+                                            "description": "JSON 文件的 UTF-8 字节数",
+                                            "maximum": 262144,
+                                            "minimum": 1,
+                                            "type": "integer"
+                                        },
+                                        "document": {
+                                            "additionalProperties": false,
+                                            "description": "已交付报告的结构化 JSON 文件内容",
+                                            "properties": {
+                                                "changes": {
+                                                    "description": "重复、新增与变化列表",
+                                                    "items": {
+                                                        "additionalProperties": false,
+                                                        "description": "可解释差异，不把一次未观测到视为资料撤回",
+                                                        "properties": {
+                                                            "factKey": {
+                                                                "description": "至少包含一个非空白字符的文本",
+                                                                "minLength": 1,
+                                                                "pattern": "\\S",
+                                                                "type": "string"
+                                                            },
+                                                            "id": {
+                                                                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                                                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                                                "type": "string"
+                                                            },
+                                                            "important": {
+                                                                "description": "经确认是否为与任务相关的重要事实变化",
+                                                                "type": "boolean"
+                                                            },
+                                                            "kind": {
+                                                                "anyOf": [
+                                                                    {
+                                                                        "const": "baseline",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "new",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "duplicate",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "duplicate_candidate",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "changed",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "non_material",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "uncertain",
+                                                                        "type": "string"
+                                                                    }
+                                                                ],
+                                                                "description": "基线、新增、重复、疑似转载、实质变化、非实质变化或待核验"
+                                                            },
+                                                            "newEvidenceIds": {
+                                                                "description": "本次观测证据",
+                                                                "items": {
+                                                                    "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                                                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                                                    "type": "string"
+                                                                },
+                                                                "type": "array",
+                                                                "uniqueItems": true
+                                                            },
+                                                            "newValue": {
+                                                                "anyOf": [
+                                                                    {
+                                                                        "description": "至少包含一个非空白字符的文本",
+                                                                        "minLength": 1,
+                                                                        "pattern": "\\S",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "type": "null"
+                                                                    }
+                                                                ],
+                                                                "description": "新事实值，可为空"
+                                                            },
+                                                            "oldEvidenceIds": {
+                                                                "description": "旧值证据，来自合法基线",
+                                                                "items": {
+                                                                    "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                                                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                                                    "type": "string"
+                                                                },
+                                                                "type": "array",
+                                                                "uniqueItems": true
+                                                            },
+                                                            "oldValue": {
+                                                                "anyOf": [
+                                                                    {
+                                                                        "description": "至少包含一个非空白字符的文本",
+                                                                        "minLength": 1,
+                                                                        "pattern": "\\S",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "type": "null"
+                                                                    }
+                                                                ],
+                                                                "description": "旧事实值，可为空"
+                                                            },
+                                                            "reason": {
+                                                                "description": "至少包含一个非空白字符的文本",
+                                                                "minLength": 1,
+                                                                "pattern": "\\S",
+                                                                "type": "string"
+                                                            },
+                                                            "sourceId": {
+                                                                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                                                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                                                "type": "string"
+                                                            }
+                                                        },
+                                                        "required": [
+                                                            "id",
+                                                            "sourceId",
+                                                            "kind",
+                                                            "factKey",
+                                                            "oldValue",
+                                                            "newValue",
+                                                            "oldEvidenceIds",
+                                                            "newEvidenceIds",
+                                                            "important",
+                                                            "reason"
+                                                        ],
+                                                        "type": "object"
+                                                    },
+                                                    "type": "array"
+                                                },
+                                                "citations": {
+                                                    "description": "短引用列表",
+                                                    "items": {
+                                                        "additionalProperties": false,
+                                                        "description": "可定位的短引用",
+                                                        "properties": {
+                                                            "id": {
+                                                                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                                                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                                                "type": "string"
+                                                            },
+                                                            "location": {
+                                                                "description": "原文段落或字符位置的可解释定位，不执行页面选择器代码",
+                                                                "minLength": 1,
+                                                                "type": "string"
+                                                            },
+                                                            "observedAt": {
+                                                                "description": "带 UTC 偏移的 ISO 8601 时间",
+                                                                "format": "scova-instant",
+                                                                "type": "string"
+                                                            },
+                                                            "quote": {
+                                                                "description": "原文引用片段",
+                                                                "maxLength": 500,
+                                                                "minLength": 1,
+                                                                "type": "string"
+                                                            },
+                                                            "quoteTruncated": {
+                                                                "description": "是否仅导出已授权引用的开头片段",
+                                                                "type": "boolean"
+                                                            },
+                                                            "title": {
+                                                                "description": "至少包含一个非空白字符的文本",
+                                                                "minLength": 1,
+                                                                "pattern": "\\S",
+                                                                "type": "string"
+                                                            },
+                                                            "url": {
+                                                                "description": "HTTP/HTTPS 来源原文链接，不包含用户名或密码；实际抓取另行执行网络安全校验",
+                                                                "format": "scova-http-url",
+                                                                "maxLength": 4096,
+                                                                "type": "string"
+                                                            }
+                                                        },
+                                                        "required": [
+                                                            "id",
+                                                            "title",
+                                                            "url",
+                                                            "location",
+                                                            "observedAt",
+                                                            "quote",
+                                                            "quoteTruncated"
+                                                        ],
+                                                        "type": "object"
+                                                    },
+                                                    "type": "array"
+                                                },
+                                                "conclusions": {
+                                                    "description": "结构化结论",
+                                                    "items": {
+                                                        "additionalProperties": false,
+                                                        "description": "结构化结论，事实型结论至少有一条引用",
+                                                        "properties": {
+                                                            "confidenceLabel": {
+                                                                "description": "至少包含一个非空白字符的文本",
+                                                                "minLength": 1,
+                                                                "pattern": "\\S",
+                                                                "type": "string"
+                                                            },
+                                                            "evidenceIds": {
+                                                                "description": "引用的证据 ID，必须出现在报告可访问证据中",
+                                                                "items": {
+                                                                    "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                                                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                                                    "type": "string"
+                                                                },
+                                                                "type": "array",
+                                                                "uniqueItems": true
+                                                            },
+                                                            "id": {
+                                                                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                                                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                                                "type": "string"
+                                                            },
+                                                            "kind": {
+                                                                "anyOf": [
+                                                                    {
+                                                                        "const": "fact",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "inference",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "conflict",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "insufficient",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "model_answer",
+                                                                        "type": "string"
+                                                                    }
+                                                                ],
+                                                                "description": "来源事实、Agent 推断、冲突证据或证据不足"
+                                                            },
+                                                            "text": {
+                                                                "description": "至少包含一个非空白字符的文本",
+                                                                "minLength": 1,
+                                                                "pattern": "\\S",
+                                                                "type": "string"
+                                                            }
+                                                        },
+                                                        "required": [
+                                                            "id",
+                                                            "kind",
+                                                            "text",
+                                                            "confidenceLabel",
+                                                            "evidenceIds"
+                                                        ],
+                                                        "type": "object"
+                                                    },
+                                                    "minItems": 1,
+                                                    "type": "array"
+                                                },
+                                                "coverage": {
+                                                    "additionalProperties": false,
+                                                    "description": "查阅完整度与覆盖缺口",
+                                                    "properties": {
+                                                        "completeness": {
+                                                            "anyOf": [
+                                                                {
+                                                                    "const": "complete",
+                                                                    "type": "string"
+                                                                },
+                                                                {
+                                                                    "const": "partial",
+                                                                    "type": "string"
+                                                                }
+                                                            ],
+                                                            "description": "本次查阅完整性"
+                                                        },
+                                                        "gaps": {
+                                                            "description": "未覆盖子问题、失败来源或未核验冲突",
+                                                            "items": {
+                                                                "description": "至少包含一个非空白字符的文本",
+                                                                "minLength": 1,
+                                                                "pattern": "\\S",
+                                                                "type": "string"
+                                                            },
+                                                            "type": "array"
+                                                        }
+                                                    },
+                                                    "required": ["completeness", "gaps"],
+                                                    "type": "object"
+                                                },
+                                                "format": {
+                                                    "anyOf": [
+                                                        {
+                                                            "const": "brief",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "list",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "comparison",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "research_report",
+                                                            "type": "string"
+                                                        }
+                                                    ],
+                                                    "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
+                                                },
+                                                "limitations": {
+                                                    "description": "查阅限制与证据缺口",
+                                                    "items": {
+                                                        "description": "至少包含一个非空白字符的文本",
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "type": "array"
+                                                },
+                                                "mode": {
+                                                    "anyOf": [
+                                                        {
+                                                            "const": "demo",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "live",
+                                                            "type": "string"
+                                                        }
+                                                    ],
+                                                    "description": "服务模式，演示和真实资料的基线分别保存"
+                                                },
+                                                "outcome": {
+                                                    "anyOf": [
+                                                        {
+                                                            "const": "baseline",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "important_change",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "new_findings",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "no_important_change",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "inconclusive",
+                                                            "type": "string"
+                                                        }
+                                                    ],
+                                                    "description": "执行业务结论；不完整查阅不能声明没有重要变化"
+                                                },
+                                                "publishedAt": {
+                                                    "description": "带 UTC 偏移的 ISO 8601 时间",
+                                                    "format": "scova-instant",
+                                                    "type": "string"
+                                                },
+                                                "reportId": {
+                                                    "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                                    "type": "string"
+                                                },
+                                                "schemaVersion": {
+                                                    "const": 1,
+                                                    "description": "公共结构版本",
+                                                    "type": "number"
+                                                },
+                                                "summary": {
+                                                    "description": "至少包含一个非空白字符的文本",
+                                                    "minLength": 1,
+                                                    "pattern": "\\S",
+                                                    "type": "string"
+                                                },
+                                                "title": {
+                                                    "description": "至少包含一个非空白字符的文本",
+                                                    "minLength": 1,
+                                                    "pattern": "\\S",
+                                                    "type": "string"
+                                                }
+                                            },
+                                            "required": [
+                                                "schemaVersion",
+                                                "reportId",
+                                                "title",
+                                                "summary",
+                                                "publishedAt",
+                                                "format",
+                                                "mode",
+                                                "outcome",
+                                                "coverage",
+                                                "limitations",
+                                                "conclusions",
+                                                "changes",
+                                                "citations"
+                                            ],
+                                            "type": "object"
+                                        },
+                                        "expiresAt": {
+                                            "description": "带 UTC 偏移的 ISO 8601 时间",
+                                            "format": "scova-instant",
+                                            "type": "string"
+                                        },
+                                        "filename": {
+                                            "description": "安全的 JSON 文件名",
+                                            "pattern": "^scova-report-[a-f0-9-]{36}\\.json$",
+                                            "type": "string"
+                                        },
+                                        "id": {
+                                            "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                            "type": "string"
+                                        },
+                                        "reportId": {
+                                            "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                            "type": "string"
+                                        },
+                                        "sha256": {
+                                            "description": "JSON 文件的 SHA-256 指纹",
+                                            "pattern": "^[a-f0-9]{64}$",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "id",
+                                        "reportId",
+                                        "expiresAt",
+                                        "filename",
+                                        "document",
+                                        "byteLength",
+                                        "sha256"
+                                    ],
+                                    "type": "object"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "properties": {
+                                        "byteLength": {
+                                            "description": "JSON 文件的 UTF-8 字节数",
+                                            "maximum": 262144,
+                                            "minimum": 1,
+                                            "type": "integer"
+                                        },
+                                        "document": {
+                                            "additionalProperties": false,
+                                            "description": "已交付报告的结构化 JSON 文件内容",
+                                            "properties": {
+                                                "changes": {
+                                                    "description": "重复、新增与变化列表",
+                                                    "items": {
+                                                        "additionalProperties": false,
+                                                        "description": "可解释差异，不把一次未观测到视为资料撤回",
+                                                        "properties": {
+                                                            "factKey": {
+                                                                "description": "至少包含一个非空白字符的文本",
+                                                                "minLength": 1,
+                                                                "pattern": "\\S",
+                                                                "type": "string"
+                                                            },
+                                                            "id": {
+                                                                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                                                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                                                "type": "string"
+                                                            },
+                                                            "important": {
+                                                                "description": "经确认是否为与任务相关的重要事实变化",
+                                                                "type": "boolean"
+                                                            },
+                                                            "kind": {
+                                                                "anyOf": [
+                                                                    {
+                                                                        "const": "baseline",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "new",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "duplicate",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "duplicate_candidate",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "changed",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "non_material",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "uncertain",
+                                                                        "type": "string"
+                                                                    }
+                                                                ],
+                                                                "description": "基线、新增、重复、疑似转载、实质变化、非实质变化或待核验"
+                                                            },
+                                                            "newEvidenceIds": {
+                                                                "description": "本次观测证据",
+                                                                "items": {
+                                                                    "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                                                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                                                    "type": "string"
+                                                                },
+                                                                "type": "array",
+                                                                "uniqueItems": true
+                                                            },
+                                                            "newValue": {
+                                                                "anyOf": [
+                                                                    {
+                                                                        "description": "至少包含一个非空白字符的文本",
+                                                                        "minLength": 1,
+                                                                        "pattern": "\\S",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "type": "null"
+                                                                    }
+                                                                ],
+                                                                "description": "新事实值，可为空"
+                                                            },
+                                                            "oldEvidenceIds": {
+                                                                "description": "旧值证据，来自合法基线",
+                                                                "items": {
+                                                                    "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                                                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                                                    "type": "string"
+                                                                },
+                                                                "type": "array",
+                                                                "uniqueItems": true
+                                                            },
+                                                            "oldValue": {
+                                                                "anyOf": [
+                                                                    {
+                                                                        "description": "至少包含一个非空白字符的文本",
+                                                                        "minLength": 1,
+                                                                        "pattern": "\\S",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "type": "null"
+                                                                    }
+                                                                ],
+                                                                "description": "旧事实值，可为空"
+                                                            },
+                                                            "reason": {
+                                                                "description": "至少包含一个非空白字符的文本",
+                                                                "minLength": 1,
+                                                                "pattern": "\\S",
+                                                                "type": "string"
+                                                            },
+                                                            "sourceId": {
+                                                                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                                                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                                                "type": "string"
+                                                            }
+                                                        },
+                                                        "required": [
+                                                            "id",
+                                                            "sourceId",
+                                                            "kind",
+                                                            "factKey",
+                                                            "oldValue",
+                                                            "newValue",
+                                                            "oldEvidenceIds",
+                                                            "newEvidenceIds",
+                                                            "important",
+                                                            "reason"
+                                                        ],
+                                                        "type": "object"
+                                                    },
+                                                    "type": "array"
+                                                },
+                                                "citations": {
+                                                    "description": "短引用列表",
+                                                    "items": {
+                                                        "additionalProperties": false,
+                                                        "description": "可定位的短引用",
+                                                        "properties": {
+                                                            "id": {
+                                                                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                                                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                                                "type": "string"
+                                                            },
+                                                            "location": {
+                                                                "description": "原文段落或字符位置的可解释定位，不执行页面选择器代码",
+                                                                "minLength": 1,
+                                                                "type": "string"
+                                                            },
+                                                            "observedAt": {
+                                                                "description": "带 UTC 偏移的 ISO 8601 时间",
+                                                                "format": "scova-instant",
+                                                                "type": "string"
+                                                            },
+                                                            "quote": {
+                                                                "description": "原文引用片段",
+                                                                "maxLength": 500,
+                                                                "minLength": 1,
+                                                                "type": "string"
+                                                            },
+                                                            "quoteTruncated": {
+                                                                "description": "是否仅导出已授权引用的开头片段",
+                                                                "type": "boolean"
+                                                            },
+                                                            "title": {
+                                                                "description": "至少包含一个非空白字符的文本",
+                                                                "minLength": 1,
+                                                                "pattern": "\\S",
+                                                                "type": "string"
+                                                            },
+                                                            "url": {
+                                                                "description": "HTTP/HTTPS 来源原文链接，不包含用户名或密码；实际抓取另行执行网络安全校验",
+                                                                "format": "scova-http-url",
+                                                                "maxLength": 4096,
+                                                                "type": "string"
+                                                            }
+                                                        },
+                                                        "required": [
+                                                            "id",
+                                                            "title",
+                                                            "url",
+                                                            "location",
+                                                            "observedAt",
+                                                            "quote",
+                                                            "quoteTruncated"
+                                                        ],
+                                                        "type": "object"
+                                                    },
+                                                    "type": "array"
+                                                },
+                                                "conclusions": {
+                                                    "description": "结构化结论",
+                                                    "items": {
+                                                        "additionalProperties": false,
+                                                        "description": "结构化结论，事实型结论至少有一条引用",
+                                                        "properties": {
+                                                            "confidenceLabel": {
+                                                                "description": "至少包含一个非空白字符的文本",
+                                                                "minLength": 1,
+                                                                "pattern": "\\S",
+                                                                "type": "string"
+                                                            },
+                                                            "evidenceIds": {
+                                                                "description": "引用的证据 ID，必须出现在报告可访问证据中",
+                                                                "items": {
+                                                                    "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                                                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                                                    "type": "string"
+                                                                },
+                                                                "type": "array",
+                                                                "uniqueItems": true
+                                                            },
+                                                            "id": {
+                                                                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                                                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                                                "type": "string"
+                                                            },
+                                                            "kind": {
+                                                                "anyOf": [
+                                                                    {
+                                                                        "const": "fact",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "inference",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "conflict",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "insufficient",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "model_answer",
+                                                                        "type": "string"
+                                                                    }
+                                                                ],
+                                                                "description": "来源事实、Agent 推断、冲突证据或证据不足"
+                                                            },
+                                                            "text": {
+                                                                "description": "至少包含一个非空白字符的文本",
+                                                                "minLength": 1,
+                                                                "pattern": "\\S",
+                                                                "type": "string"
+                                                            }
+                                                        },
+                                                        "required": [
+                                                            "id",
+                                                            "kind",
+                                                            "text",
+                                                            "confidenceLabel",
+                                                            "evidenceIds"
+                                                        ],
+                                                        "type": "object"
+                                                    },
+                                                    "minItems": 1,
+                                                    "type": "array"
+                                                },
+                                                "coverage": {
+                                                    "additionalProperties": false,
+                                                    "description": "查阅完整度与覆盖缺口",
+                                                    "properties": {
+                                                        "completeness": {
+                                                            "anyOf": [
+                                                                {
+                                                                    "const": "complete",
+                                                                    "type": "string"
+                                                                },
+                                                                {
+                                                                    "const": "partial",
+                                                                    "type": "string"
+                                                                }
+                                                            ],
+                                                            "description": "本次查阅完整性"
+                                                        },
+                                                        "gaps": {
+                                                            "description": "未覆盖子问题、失败来源或未核验冲突",
+                                                            "items": {
+                                                                "description": "至少包含一个非空白字符的文本",
+                                                                "minLength": 1,
+                                                                "pattern": "\\S",
+                                                                "type": "string"
+                                                            },
+                                                            "type": "array"
+                                                        }
+                                                    },
+                                                    "required": ["completeness", "gaps"],
+                                                    "type": "object"
+                                                },
+                                                "format": {
+                                                    "anyOf": [
+                                                        {
+                                                            "const": "brief",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "list",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "comparison",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "research_report",
+                                                            "type": "string"
+                                                        }
+                                                    ],
+                                                    "description": "同一结构化报告的展示形式：简报、主题清单、对比表、研究报告"
+                                                },
+                                                "limitations": {
+                                                    "description": "查阅限制与证据缺口",
+                                                    "items": {
+                                                        "description": "至少包含一个非空白字符的文本",
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "type": "array"
+                                                },
+                                                "mode": {
+                                                    "anyOf": [
+                                                        {
+                                                            "const": "demo",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "live",
+                                                            "type": "string"
+                                                        }
+                                                    ],
+                                                    "description": "服务模式，演示和真实资料的基线分别保存"
+                                                },
+                                                "outcome": {
+                                                    "anyOf": [
+                                                        {
+                                                            "const": "baseline",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "important_change",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "new_findings",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "no_important_change",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "inconclusive",
+                                                            "type": "string"
+                                                        }
+                                                    ],
+                                                    "description": "执行业务结论；不完整查阅不能声明没有重要变化"
+                                                },
+                                                "publishedAt": {
+                                                    "description": "带 UTC 偏移的 ISO 8601 时间",
+                                                    "format": "scova-instant",
+                                                    "type": "string"
+                                                },
+                                                "reportId": {
+                                                    "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                                    "type": "string"
+                                                },
+                                                "schemaVersion": {
+                                                    "const": 1,
+                                                    "description": "公共结构版本",
+                                                    "type": "number"
+                                                },
+                                                "summary": {
+                                                    "description": "至少包含一个非空白字符的文本",
+                                                    "minLength": 1,
+                                                    "pattern": "\\S",
+                                                    "type": "string"
+                                                },
+                                                "title": {
+                                                    "description": "至少包含一个非空白字符的文本",
+                                                    "minLength": 1,
+                                                    "pattern": "\\S",
+                                                    "type": "string"
+                                                }
+                                            },
+                                            "required": [
+                                                "schemaVersion",
+                                                "reportId",
+                                                "title",
+                                                "summary",
+                                                "publishedAt",
+                                                "format",
+                                                "mode",
+                                                "outcome",
+                                                "coverage",
+                                                "limitations",
+                                                "conclusions",
+                                                "changes",
+                                                "citations"
+                                            ],
+                                            "type": "object"
+                                        },
+                                        "expiresAt": {
+                                            "description": "带 UTC 偏移的 ISO 8601 时间",
+                                            "format": "scova-instant",
+                                            "type": "string"
+                                        },
+                                        "filename": {
+                                            "description": "安全的 JSON 文件名",
+                                            "pattern": "^scova-report-[a-f0-9-]{36}\\.json$",
+                                            "type": "string"
+                                        },
+                                        "id": {
+                                            "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                            "type": "string"
+                                        },
+                                        "reportId": {
+                                            "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                            "type": "string"
+                                        },
+                                        "sha256": {
+                                            "description": "JSON 文件的 SHA-256 指纹",
+                                            "pattern": "^[a-f0-9]{64}$",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "id",
+                                        "reportId",
+                                        "expiresAt",
+                                        "filename",
+                                        "document",
+                                        "byteLength",
+                                        "sha256"
+                                    ],
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "账号私有的报告 JSON 快照"
+                    },
+                    "400": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "fieldErrors": {
+                                            "description": "输入校验失败时的字段错误列表",
+                                            "items": {
+                                                "additionalProperties": false,
+                                                "description": "可定位的字段校验错误",
+                                                "properties": {
+                                                    "message": {
+                                                        "description": "至少包含一个非空白字符的文本",
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": ["path", "message"],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "message": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "requestId": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": ["code", "message", "requestId"],
+                                    "type": "object"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "fieldErrors": {
+                                            "description": "输入校验失败时的字段错误列表",
+                                            "items": {
+                                                "additionalProperties": false,
+                                                "description": "可定位的字段校验错误",
+                                                "properties": {
+                                                    "message": {
+                                                        "description": "至少包含一个非空白字符的文本",
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": ["path", "message"],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "message": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "requestId": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": ["code", "message", "requestId"],
+                                    "type": "object"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "fieldErrors": {
+                                            "description": "输入校验失败时的字段错误列表",
+                                            "items": {
+                                                "additionalProperties": false,
+                                                "description": "可定位的字段校验错误",
+                                                "properties": {
+                                                    "message": {
+                                                        "description": "至少包含一个非空白字符的文本",
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": ["path", "message"],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "message": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "requestId": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": ["code", "message", "requestId"],
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "401": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "fieldErrors": {
+                                            "description": "输入校验失败时的字段错误列表",
+                                            "items": {
+                                                "additionalProperties": false,
+                                                "description": "可定位的字段校验错误",
+                                                "properties": {
+                                                    "message": {
+                                                        "description": "至少包含一个非空白字符的文本",
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": ["path", "message"],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "message": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "requestId": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": ["code", "message", "requestId"],
+                                    "type": "object"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "fieldErrors": {
+                                            "description": "输入校验失败时的字段错误列表",
+                                            "items": {
+                                                "additionalProperties": false,
+                                                "description": "可定位的字段校验错误",
+                                                "properties": {
+                                                    "message": {
+                                                        "description": "至少包含一个非空白字符的文本",
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": ["path", "message"],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "message": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "requestId": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": ["code", "message", "requestId"],
+                                    "type": "object"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "fieldErrors": {
+                                            "description": "输入校验失败时的字段错误列表",
+                                            "items": {
+                                                "additionalProperties": false,
+                                                "description": "可定位的字段校验错误",
+                                                "properties": {
+                                                    "message": {
+                                                        "description": "至少包含一个非空白字符的文本",
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": ["path", "message"],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "message": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "requestId": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": ["code", "message", "requestId"],
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "403": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "fieldErrors": {
+                                            "description": "输入校验失败时的字段错误列表",
+                                            "items": {
+                                                "additionalProperties": false,
+                                                "description": "可定位的字段校验错误",
+                                                "properties": {
+                                                    "message": {
+                                                        "description": "至少包含一个非空白字符的文本",
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": ["path", "message"],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "message": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "requestId": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": ["code", "message", "requestId"],
+                                    "type": "object"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "fieldErrors": {
+                                            "description": "输入校验失败时的字段错误列表",
+                                            "items": {
+                                                "additionalProperties": false,
+                                                "description": "可定位的字段校验错误",
+                                                "properties": {
+                                                    "message": {
+                                                        "description": "至少包含一个非空白字符的文本",
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": ["path", "message"],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "message": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "requestId": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": ["code", "message", "requestId"],
+                                    "type": "object"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "fieldErrors": {
+                                            "description": "输入校验失败时的字段错误列表",
+                                            "items": {
+                                                "additionalProperties": false,
+                                                "description": "可定位的字段校验错误",
+                                                "properties": {
+                                                    "message": {
+                                                        "description": "至少包含一个非空白字符的文本",
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": ["path", "message"],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "message": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "requestId": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": ["code", "message", "requestId"],
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "404": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "fieldErrors": {
+                                            "description": "输入校验失败时的字段错误列表",
+                                            "items": {
+                                                "additionalProperties": false,
+                                                "description": "可定位的字段校验错误",
+                                                "properties": {
+                                                    "message": {
+                                                        "description": "至少包含一个非空白字符的文本",
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": ["path", "message"],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "message": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "requestId": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": ["code", "message", "requestId"],
+                                    "type": "object"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "fieldErrors": {
+                                            "description": "输入校验失败时的字段错误列表",
+                                            "items": {
+                                                "additionalProperties": false,
+                                                "description": "可定位的字段校验错误",
+                                                "properties": {
+                                                    "message": {
+                                                        "description": "至少包含一个非空白字符的文本",
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": ["path", "message"],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "message": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "requestId": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": ["code", "message", "requestId"],
+                                    "type": "object"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "fieldErrors": {
+                                            "description": "输入校验失败时的字段错误列表",
+                                            "items": {
+                                                "additionalProperties": false,
+                                                "description": "可定位的字段校验错误",
+                                                "properties": {
+                                                    "message": {
+                                                        "description": "至少包含一个非空白字符的文本",
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": ["path", "message"],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "message": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "requestId": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": ["code", "message", "requestId"],
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "409": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "fieldErrors": {
+                                            "description": "输入校验失败时的字段错误列表",
+                                            "items": {
+                                                "additionalProperties": false,
+                                                "description": "可定位的字段校验错误",
+                                                "properties": {
+                                                    "message": {
+                                                        "description": "至少包含一个非空白字符的文本",
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": ["path", "message"],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "message": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "requestId": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": ["code", "message", "requestId"],
+                                    "type": "object"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "fieldErrors": {
+                                            "description": "输入校验失败时的字段错误列表",
+                                            "items": {
+                                                "additionalProperties": false,
+                                                "description": "可定位的字段校验错误",
+                                                "properties": {
+                                                    "message": {
+                                                        "description": "至少包含一个非空白字符的文本",
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": ["path", "message"],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "message": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "requestId": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": ["code", "message", "requestId"],
+                                    "type": "object"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "fieldErrors": {
+                                            "description": "输入校验失败时的字段错误列表",
+                                            "items": {
+                                                "additionalProperties": false,
+                                                "description": "可定位的字段校验错误",
+                                                "properties": {
+                                                    "message": {
+                                                        "description": "至少包含一个非空白字符的文本",
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": ["path", "message"],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "message": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "requestId": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": ["code", "message", "requestId"],
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "422": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "fieldErrors": {
+                                            "description": "输入校验失败时的字段错误列表",
+                                            "items": {
+                                                "additionalProperties": false,
+                                                "description": "可定位的字段校验错误",
+                                                "properties": {
+                                                    "message": {
+                                                        "description": "至少包含一个非空白字符的文本",
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": ["path", "message"],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "message": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "requestId": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": ["code", "message", "requestId"],
+                                    "type": "object"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "fieldErrors": {
+                                            "description": "输入校验失败时的字段错误列表",
+                                            "items": {
+                                                "additionalProperties": false,
+                                                "description": "可定位的字段校验错误",
+                                                "properties": {
+                                                    "message": {
+                                                        "description": "至少包含一个非空白字符的文本",
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": ["path", "message"],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "message": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "requestId": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": ["code", "message", "requestId"],
+                                    "type": "object"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "fieldErrors": {
+                                            "description": "输入校验失败时的字段错误列表",
+                                            "items": {
+                                                "additionalProperties": false,
+                                                "description": "可定位的字段校验错误",
+                                                "properties": {
+                                                    "message": {
+                                                        "description": "至少包含一个非空白字符的文本",
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": ["path", "message"],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "message": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "requestId": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": ["code", "message", "requestId"],
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    }
+                },
+                "summary": "导出报告结论、覆盖缺口、变化与短引用为 JSON",
+                "tags": ["报告"]
+            }
+        },
         "/api/v1/reports/{reportId}/exports/markdown": {
             "post": {
                 "description": "需要会话与 CSRF，只能导出本人已交付报告。同一报告内容在有效期内复用，不触发研究或外部存储。",

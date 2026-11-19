@@ -214,6 +214,90 @@ describe('Drizzle SQL 迁移与旧库无损接管', () => {
             await client.end();
         }
     });
+    it('升级报告导出格式时保留现有 Markdown 字节与版本占位', async () => {
+        const item = target();
+        await admin.query(`CREATE SCHEMA "${item.namespace}"`);
+        const client = new pg.Client({
+            connectionString: baseUrl,
+            options: `-c search_path=${item.namespace}`,
+        });
+        await client.connect();
+        try {
+            await client.query(`CREATE TABLE _scova_migrations (
+                name text PRIMARY KEY, hash char(64) NOT NULL,
+                applied_at timestamptz NOT NULL DEFAULT clock_timestamp())`);
+            const migrations = await readDatabaseMigrations();
+            const formatMigration = migrations.findIndex(
+                ({ name }) => name === '0011_report_export_formats',
+            );
+            expect(formatMigration).toBeGreaterThan(0);
+            for (const migration of migrations.slice(0, formatMigration)) {
+                await client.query(scopeMigrationSql(migration.sql, item.namespace));
+                await client.query('INSERT INTO _scova_migrations(name,hash) VALUES($1,$2)', [
+                    migration.name,
+                    migration.hash,
+                ]);
+            }
+            const [owner, task, version, run, report, exportId] = Array.from({ length: 6 }, () =>
+                randomUUID(),
+            );
+            await client.query(
+                'INSERT INTO users(id,email,normalized_email,password_hash) VALUES($1,$2,$2,$3)',
+                [owner, 'markdown@test.dev', 'fixture'],
+            );
+            await client.query(
+                "INSERT INTO tasks(id,user_id,title,updated_at) VALUES($1,$2,'fixture',now())",
+                [task, owner],
+            );
+            await client.query(
+                "INSERT INTO task_versions(id,user_id,task_id,version,config_json,comparison_scope_hash) VALUES($1,$2,$3,1,'{}',$4)",
+                [version, owner, task, hash('scope')],
+            );
+            await client.query(
+                "INSERT INTO runs(id,user_id,task_id,task_version_id,comparison_scope_hash,mode,trigger,status,budget_json,coverage_json,outcome) VALUES($1,$2,$3,$4,$5,'demo','manual','succeeded','{}',$6,'baseline')",
+                [run, owner, task, version, hash('scope'), { completeness: 'complete', gaps: [] }],
+            );
+            await client.query(
+                "INSERT INTO reports(id,user_id,run_id,task_id,task_version_id,title,summary,format,completeness) VALUES($1,$2,$3,$4,$5,'fixture','fixture','brief','complete')",
+                [report, owner, run, task, version],
+            );
+            const markdown = '# 已保存的 Markdown\n';
+            const insert = `INSERT INTO report_exports(id,user_id,report_id,renderer_version,markdown,byte_length,sha256,created_at,expires_at)
+                VALUES($1,$2,$3,1,$4,$5,$6,now(),now()+interval '1 day')`;
+            await client.query(insert, [
+                exportId,
+                owner,
+                report,
+                markdown,
+                Buffer.byteLength(markdown),
+                hash(markdown),
+            ]);
+            const before = (await client.query('SELECT * FROM report_exports')).rows[0];
+            expect(await migrateDatabase(item)).toEqual({ migrated: true, current: true });
+            expect((await client.query('SELECT * FROM report_exports')).rows).toEqual([
+                { ...before, format: 'markdown' },
+            ]);
+            const content = '{}';
+            const insertJson = `INSERT INTO report_exports(id,user_id,report_id,renderer_version,markdown,byte_length,sha256,created_at,expires_at,format)
+                VALUES($1,$2,$3,1,$4,$5,$6,now(),now()+interval '1 day','json')`;
+            const values = [
+                randomUUID(),
+                owner,
+                report,
+                content,
+                Buffer.byteLength(content),
+                hash(content),
+            ];
+            await client.query(insertJson, values);
+            await expect(
+                client.query(insertJson, [randomUUID(), ...values.slice(1)]),
+            ).rejects.toMatchObject({ code: '23505' });
+            await verifyDatabase(item);
+        } finally {
+            await client.end();
+        }
+    });
+
     it('只读 readiness 不创建 schema 或迁移账本', async () => {
         const item = target();
         await expect(verifyDatabase(item)).rejects.toThrow('待执行迁移');

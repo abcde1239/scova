@@ -1,6 +1,7 @@
 import { migrateDatabase } from '@scova/db/migrate';
 import { createDatabaseClient, connectDatabase, closeDatabase, and, eq } from '@scova/db';
 import * as tables from '@scova/db';
+import { ReportJsonExportSchema, parseContract, serializeReportJson } from '@scova/models';
 import { createHash, randomUUID } from 'node:crypto';
 
 import { Redis as RedisClient } from 'ioredis';
@@ -270,7 +271,7 @@ describe('报告证据与收件箱 API', () => {
         expect(savedRows[0]).toMatchObject({
             id: first!.id,
             userId: owner.userId,
-            markdown: first!.markdown,
+            content: first!.markdown,
         });
         expect((await exportMarkdown(other)).status).toBe(404);
         await db
@@ -293,7 +294,115 @@ describe('报告证据与收件箱 API', () => {
         ).toHaveLength(0);
     });
 
-    it('导出配额不会淘汰未过期快照，跨账号配额独立', async () => {
+    it('同一报告的 JSON 与 Markdown 分别复用、鉴权和过期', async () => {
+        const owner = await register();
+        const other = await register();
+        const saved = await fixture(owner);
+        const [change] = await db
+            .insert(tables.changeRecords)
+            .values({
+                userId: owner.userId,
+                reportId: saved.report.id,
+                sourceId: saved.source.id,
+                kind: 'new',
+                newSnapshotId: saved.snapshot.id,
+                factKey: '新增资料',
+                newValue: saved.quote,
+                importance: 'important',
+                reason: '本次观测',
+            })
+            .returning();
+        await db.insert(tables.changeEvidence).values({
+            userId: owner.userId,
+            changeRecordId: change!.id,
+            evidenceId: saved.evidence.id,
+            side: 'new',
+        });
+        const download = (format: 'markdown' | 'json', auth?: Auth, csrf = auth?.csrf ?? '') =>
+            request(`/reports/${saved.report.id}/exports/${format}`, {
+                method: 'POST',
+                headers: { ...headers(auth), 'x-csrf-token': csrf },
+            });
+        expect((await download('json')).status).toBe(401);
+        expect((await download('json', owner, '')).status).toBe(403);
+        expect((await download('json', other)).status).toBe(404);
+
+        const responses = await Promise.all([
+            download('markdown', owner),
+            download('json', owner),
+            download('json', owner),
+        ]);
+        for (const response of responses) {
+            expect(response.status).toBe(200);
+            expect(response.headers.get('content-type')).toContain('application/json');
+            expect(response.headers.get('cache-control')).toBe('no-store');
+        }
+        const [markdown, jsonResponse, retry] = await Promise.all(responses.map(json));
+        const exported = parseContract(ReportJsonExportSchema, jsonResponse);
+        expect(retry).toEqual(exported);
+        expect(markdown!.id).not.toBe(exported.id);
+        expect(exported.expiresAt).toBe(new Date(now.getTime() + 86_400_000).toISOString());
+        const { document } = exported;
+        expect(document).toMatchObject({
+            reportId: saved.report.id,
+            mode: 'demo',
+            coverage: { completeness: 'partial', gaps: ['发布时间尚未核验'] },
+            conclusions: [{ id: saved.claim.id, evidenceIds: [saved.evidence.id] }],
+            changes: [{ id: change!.id, oldValue: null, newEvidenceIds: [saved.evidence.id] }],
+            citations: [{ id: saved.evidence.id, quote: saved.quote, quoteTruncated: false }],
+        });
+        const content = serializeReportJson(document);
+        expect(content).not.toContain('活动日期尚需确认。');
+        expect(content).not.toContain('searchedQueries');
+        expect(exported.byteLength).toBe(Buffer.byteLength(content));
+        expect(exported.sha256).toBe(sha(content));
+        const rows = () =>
+            db
+                .select()
+                .from(tables.reportExports)
+                .where(eq(tables.reportExports.userId, owner.userId));
+        expect(await rows()).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    format: 'markdown',
+                    rendererVersion: 1,
+                    id: markdown!.id,
+                }),
+                expect.objectContaining({
+                    format: 'json',
+                    rendererVersion: 1,
+                    id: exported.id,
+                    content,
+                }),
+            ]),
+        );
+        expect(await rows()).toHaveLength(2);
+        expect((await download('json', other)).status).toBe(404);
+
+        // Expire just JSON; the Markdown retry cleans it up without refreshing Markdown's TTL.
+        await db
+            .update(tables.reportExports)
+            .set({ createdAt: new Date(now.getTime() - 86_400_000), expiresAt: now })
+            .where(eq(tables.reportExports.id, exported.id));
+        expect(await json(await download('markdown', owner))).toEqual(markdown);
+        expect((await rows()).map(({ id }) => id)).toEqual([markdown!.id]);
+        const refreshed = await json(await download('json', owner));
+        expect(refreshed.id).not.toBe(exported.id);
+        expect(refreshed.sha256).toBe(exported.sha256);
+
+        // An authorized projection change invalidates JSON even while its old row is live.
+        await db
+            .update(tables.reports)
+            .set({ summary: '修订后的报告摘要' })
+            .where(eq(tables.reports.id, saved.report.id));
+        const revised = await json(await download('json', owner));
+        expect(revised.id).not.toBe(refreshed.id);
+        expect(revised.sha256).not.toBe(refreshed.sha256);
+        expect(revised.document.summary).toBe('修订后的报告摘要');
+        expect((await rows()).map(({ id }) => id)).not.toContain(refreshed.id);
+    });
+
+    it('两种格式共享账号配额，且不会淘汰未过期快照', async () => {
         const owner = await register();
         const another = await register();
         const saved = await fixture(owner);
@@ -304,7 +413,7 @@ describe('报告证据与收件箱 API', () => {
                 userId: owner.userId,
                 reportId: saved.report.id,
                 rendererVersion: index + 2,
-                markdown: content,
+                content,
                 byteLength: Buffer.byteLength(content),
                 sha256: sha(content),
                 createdAt: now,
@@ -317,6 +426,12 @@ describe('报告证据与收件箱 API', () => {
         });
         expect(response.status).toBe(409);
         expect((await json(response)).code).toBe('REPORT_EXPORT_QUOTA');
+        const jsonResponse = await request(`/reports/${saved.report.id}/exports/json`, {
+            method: 'POST',
+            headers: headers(owner),
+        });
+        expect(jsonResponse.status).toBe(409);
+        expect((await json(jsonResponse)).code).toBe('REPORT_EXPORT_QUOTA');
         expect(
             await db
                 .select()
