@@ -8,7 +8,7 @@ import {
     type MaybeRefOrGetter,
 } from 'vue';
 import { useQuery } from '@tanstack/vue-query';
-import type { Report, ReportQuestion, Run, OutputFormat } from '@scova/models';
+import type { Report, Run, OutputFormat } from '@scova/models';
 import {
     followupAttempt,
     followupParent,
@@ -18,17 +18,17 @@ import {
     type FollowupAttempt,
 } from '@/api/followup';
 import { runQueryOptions } from '@/api/runs';
-import { reportQuestionEndpoint } from '@/api/report-questions';
+import { reportQuestionEndpoint, type ReportQuestionDetail } from '@/api/report-questions';
 import { toApiError } from '@/api/errors';
 import type { SessionLifecycle } from '@/api/session';
 import { useSessionLifecycle } from '@/composable/useSessionQuery';
-import { questionResponse, validateQuestion } from '@/utils/report/questions';
+import { questionResponse, validateQuestionDetail } from '@/utils/report/questions';
 
 export function useFollowup(
     reportId: MaybeRefOrGetter<string>,
     questionId: MaybeRefOrGetter<string>,
     report: MaybeRefOrGetter<Report | undefined>,
-    question: MaybeRefOrGetter<ReportQuestion | undefined>,
+    question: MaybeRefOrGetter<ReportQuestionDetail | undefined>,
     lifecycle: SessionLifecycle = useSessionLifecycle(),
     operation: MaybeRefOrGetter<'research' | 'revise'> = 'research',
     outputFormats: MaybeRefOrGetter<OutputFormat[]> = [],
@@ -56,7 +56,7 @@ export function useFollowup(
         )
             return false;
         try {
-            validateQuestion(saved, current, {
+            validateQuestionDetail(saved, current, {
                 id: toValue(questionId),
                 ...(attempt.value ? { question: attempt.value.question } : {}),
             });
@@ -171,6 +171,7 @@ export function useFollowup(
         () =>
             available.value &&
             toValue(report)?.mode === 'live' &&
+            !!toValue(question)?.answer &&
             !attempt.value &&
             !candidateId.value &&
             !pending.value,
@@ -311,7 +312,8 @@ export function useFollowup(
         if (!opened.value || !canOpen.value || !parent.value || parentQuery.isFetching.value)
             return;
         const current = toValue(report)!,
-            saved = toValue(question)!;
+            saved = toValue(question);
+        if (!saved?.answer) return;
         attempt.value = followupAttempt(
             current,
             saved,

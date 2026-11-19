@@ -1,6 +1,11 @@
 import { logoutFromAccount, expectAccountReady } from './support/account-menu.ts';
 import { expect, test, type Page } from '@playwright/test';
-import type { Report, ReportQuestion, Run } from '../../packages/models/src/index.ts';
+import type {
+    Report,
+    ReportQuestion,
+    Run,
+    SearchConfiguration,
+} from '../../packages/models/src/index.ts';
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const reportId = id(1),
@@ -9,6 +14,8 @@ const reportId = id(1),
     childId = id(60);
 const reportPath = `/reports/${reportId}`;
 const questionPath = `${reportPath}/questions/${questionId}`;
+const composerPath = `${reportPath}/followup`;
+const composerQuestionId = id(52);
 const followupPath = `${questionPath}/followup`;
 const instant = '2026-10-31T01:00:00Z';
 const budget = {
@@ -145,6 +152,12 @@ type State = {
     reportReads: number;
     reportWaiting: boolean;
     reportHold?: Promise<number>;
+    searchConfiguration?: SearchConfiguration;
+    composerTurn?: Omit<ReportQuestion, 'answer'> & {
+        answer: null;
+        searchSelection: { searchMode: 'api'; searchConfigRevision: number };
+    };
+    composerCommand?: (call: Call) => Reply | Promise<Reply>;
     command: (call: Call) => Reply | Promise<Reply>;
 };
 const states = new WeakMap<Page, State>();
@@ -216,6 +229,22 @@ async function installApi(page: Page, value = state()) {
             }
             return route.fulfill({ json: value.report });
         }
+        if (path === '/me/search-configuration' && method === 'GET')
+            return route.fulfill({
+                json: { configuration: value.searchConfiguration ?? null, storageReady: true },
+            });
+        if (
+            path === `${reportPath}/questions/${composerQuestionId}` &&
+            method === 'GET' &&
+            value.composerTurn
+        )
+            return route.fulfill({ json: value.composerTurn });
+        if (path === composerPath && method === 'POST' && value.composerCommand) {
+            const reply = await value.composerCommand(call);
+            return reply.abort
+                ? route.abort('failed')
+                : route.fulfill({ status: reply.status ?? 202, json: reply.json ?? failure() });
+        }
         if (path === questionPath && method === 'GET') {
             if (value.owner !== 100) return route.fulfill({ status: 404, json: failure() });
             return value.questionStatus === 200
@@ -229,7 +258,13 @@ async function installApi(page: Page, value = state()) {
         if (path === `${reportPath}/conversation` && method === 'GET') {
             if (value.owner !== 100) return route.fulfill({ status: 404, json: failure() });
             return route.fulfill({
-                json: { reportId: value.report.id, turns: [value.question], hasEarlier: false },
+                json: {
+                    reportId: value.report.id,
+                    turns: value.composerTurn
+                        ? [value.question, value.composerTurn]
+                        : [value.question],
+                    hasEarlier: false,
+                },
             });
         }
         if (path === `${reportPath}/questions` && method === 'POST') {
@@ -634,4 +669,120 @@ test('资料内改写冻结独立形式，未知结果同键恢复且不启动�
     await revision.getByRole('button', { name: '使用同一请求重发', exact: true }).click();
     await expect(revision).toContainText('已完成');
     expect(posts(value)[1]!.key).toBe(first.key);
+});
+
+const composerPosts = (value: State) =>
+    value.calls.filter((call) => call.path === composerPath && call.method === 'POST');
+const composerPlan = (page: Page) => page.getByRole('region', { name: '补查新资料', exact: true });
+const composerTrigger = (page: Page) =>
+    page.getByRole('button', { name: '补查新资料', exact: true });
+
+test('输入区确认可取消，恢复焦点，未配置 API 时仍可选内置搜索', async ({ page }) => {
+    const value = await installApi(page);
+    await open(page);
+    const input = page.getByRole('textbox', { name: '问题', exact: true });
+    await input.fill('查阅新的官方公告');
+    await composerTrigger(page).click();
+    const panel = composerPlan(page);
+    await expect(panel.getByRole('heading')).toBeFocused();
+    await expect(panel.getByText('账号 Search API 尚不可用')).toBeVisible();
+    await expect(panel.getByRole('option', { name: '账号 Search API' })).toBeDisabled();
+    await expect(panel.getByRole('button', { name: '开始补查' })).toBeDisabled();
+    await panel.getByLabel('搜索方式').selectOption('searxng');
+    await expect(panel.getByRole('button', { name: '开始补查' })).toBeEnabled();
+    await panel.getByLabel('搜索方式').press('Escape');
+    await expect(panel).toHaveCount(0);
+    await expect(composerTrigger(page)).toBeFocused();
+    await expect(input).toHaveValue('查阅新的官方公告');
+    expect(value.calls.filter((call) => call.method === 'POST')).toEqual([]);
+});
+
+test('输入区使用选定的账号搜索，未知结果重发原命令并恢复已创建的执行', async ({ page }) => {
+    const value = await installApi(page);
+    const question = '  查阅最新官方公告\n保留提问原文  ';
+    const searchSelection = { searchMode: 'api', searchConfigRevision: 7 } as const;
+    value.searchConfiguration = {
+        revision: 7,
+        defaultMode: 'searxng',
+        api: {
+            protocol: 'tavily',
+            baseUrl: 'https://api.tavily.com',
+            contentMode: 'reader',
+            hasApiKey: true,
+        },
+        updatedAt: instant,
+    };
+    const turn = {
+        id: composerQuestionId,
+        reportId,
+        question,
+        answer: null,
+        followupRunId: childId,
+        revisionRunId: null,
+        createdAt: '2026-10-31T01:01:00Z',
+        searchSelection,
+    };
+    value.composerCommand = () => {
+        if (composerPosts(value).length === 1)
+            return { status: 409, json: failure('IDEMPOTENCY_PENDING') };
+        value.composerTurn = turn;
+        return { json: { question: turn, run: value.linked, reused: true } };
+    };
+    await open(page);
+    const input = page.getByRole('textbox', { name: '问题', exact: true });
+    await input.fill(question);
+    await composerTrigger(page).click();
+    const panel = composerPlan(page);
+    await expect(panel.getByRole('option', { name: '账号 Search API' })).toBeEnabled();
+    await panel.getByLabel('搜索方式').selectOption('api');
+    await panel.getByRole('checkbox', { name: '简报' }).check();
+    await panel.getByRole('button', { name: '开始补查' }).click();
+    const replay = panel.getByRole('button', { name: '使用同一请求重发' });
+    await expect(replay).toBeEnabled();
+    await expect(input).toHaveValue(question);
+    expect(composerPosts(value)).toHaveLength(1);
+    await replay.click();
+    await expect(page).toHaveURL(new RegExp(`questionId=${composerQuestionId}$`));
+    await expect(input).toHaveValue('');
+    await expect(
+        page.locator(`#turn-${composerQuestionId}`).getByRole('region', { name: '补充研究' }),
+    ).toBeVisible();
+    await expect(page.locator(`#turn-${composerQuestionId}`)).not.toContainText(
+        '正在根据报告资料回答',
+    );
+    const calls = composerPosts(value);
+    expect(calls).toHaveLength(2);
+    expect(calls[0]?.key).toBeTruthy();
+    expect(calls[0]?.csrf).toBe(account().csrfToken);
+    expect(calls[1]).toEqual(calls[0]);
+    expect(JSON.parse(calls[0]!.body!)).toEqual({
+        confirm: true,
+        question,
+        afterQuestionId: questionId,
+        outputFormats: ['brief'],
+        ...searchSelection,
+    });
+    expect(
+        value.calls.filter((call) => call.method === 'POST' && call.path !== composerPath),
+    ).toEqual([]);
+});
+
+test('输入区请求中切换账号，迟到回执不能恢复原账号的草稿或执行', async ({ page }) => {
+    const value = await installApi(page);
+    const wait = gate(value);
+    value.composerCommand = async () => {
+        await wait.promise;
+        return { abort: true };
+    };
+    await open(page);
+    await page.getByRole('textbox', { name: '问题', exact: true }).fill('旧账号补查草稿');
+    await composerTrigger(page).click();
+    await composerPlan(page).getByLabel('搜索方式').selectOption('searxng');
+    await composerPlan(page).getByRole('button', { name: '开始补查' }).click();
+    await expect.poll(() => composerPosts(value).length).toBe(1);
+    await switchOwner(page);
+    wait.release();
+    await expect(composerPlan(page)).toHaveCount(0);
+    await expect(page.getByText('旧账号补查草稿')).toHaveCount(0);
+    expect(composerPosts(value)).toHaveLength(1);
 });

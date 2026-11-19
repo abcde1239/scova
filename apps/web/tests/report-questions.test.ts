@@ -422,8 +422,8 @@ describe('report-question action and owner lifecycle', () => {
             expect(state.notice.value).toContain('可能已保存');
             const original = state.attempt.value;
             expect(await state.recover()).toBe(id(30));
-            expect(state.answer.value?.answer.status).toBe('insufficient');
-            expect(state.answer.value?.answer.usage.estimated).toBe(true);
+            expect(state.answer.value?.answer?.status).toBe('insufficient');
+            expect(state.answer.value?.answer?.usage.estimated).toBe(true);
             expect(state.draft.value).toBe('');
             expect(new Headers(fetcher.mock.calls[1]?.[1]?.headers).get('idempotency-key')).toBe(
                 original?.key,

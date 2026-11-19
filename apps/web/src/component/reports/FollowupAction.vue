@@ -9,6 +9,7 @@
             v-if="state.canOpen.value && !state.opened.value"
             type="button"
             class="followup-trigger"
+            :disabled="disabled"
             @click="open"
         >
             {{ revision ? '用已有资料改写' : '据此补查新资料' }}
@@ -162,7 +163,8 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, ref, watch, useId } from 'vue';
-import type { Report, ReportQuestion, OutputFormat, ReportConversation } from '@scova/models';
+import type { Report, OutputFormat, ReportConversation } from '@scova/models';
+import type { ReportQuestionDetail } from '@/api/report-questions';
 import OutputFormatSelect from '@/component/tasks/OutputFormatSelect.vue';
 import ActionButton from '@/component/common/ActionButton.vue';
 import AppIcon from '@/component/common/AppIcon.vue';
@@ -174,7 +176,8 @@ const props = defineProps<{
     reportId: string;
     questionId: string;
     report?: Report;
-    question?: ReportQuestion;
+    question?: ReportQuestionDetail;
+    disabled?: boolean;
     operation?: 'research' | 'revise';
     round?: number;
     latestRunId?: string;
