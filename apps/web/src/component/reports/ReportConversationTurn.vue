@@ -97,30 +97,31 @@
                     }}问答用量单独计量。
                 </p>
             </details>
-            <div class="turn-actions">
-                <followup-action
-                    v-for="operation in operations"
-                    :key="operation"
-                    :report-id="turn.reportId"
-                    :question-id="turn.id"
-                    :report="report"
-                    :question="answered"
-                    :operation="operation"
-                    :round="turn.round"
-                    :latest-run-id="
-                        continuations?.find(
-                            (run) => run.questionId === turn.id && run.operation === operation,
-                        )?.runId
-                    "
-                    @protected-change="updateProtection(operation, $event)"
-                    @active-change="updateActive(operation, $event)"
-                    @artifact="emit('artifact', $event)"
-                    @open-artifact="emit('openArtifact', $event)"
-                    @merge="emit('merge', $event)"
-                />
-            </div>
         </template>
-        <p v-else role="status">正在根据报告资料回答…</p>
+        <p v-else-if="!question" role="status">正在根据报告资料回答…</p>
+        <div v-if="question" class="turn-actions">
+            <followup-action
+                v-for="operation in turn.answer ? operations : (['research'] as const)"
+                :key="operation"
+                :report-id="turn.reportId"
+                :question-id="turn.id"
+                :report="report"
+                :question="question"
+                :disabled="composerOpen"
+                :operation="operation"
+                :round="turn.round"
+                :latest-run-id="
+                    continuations?.find(
+                        (run) => run.questionId === turn.id && run.operation === operation,
+                    )?.runId
+                "
+                @protected-change="updateProtection(operation, $event)"
+                @active-change="updateActive(operation, $event)"
+                @artifact="emit('artifact', $event)"
+                @open-artifact="emit('openArtifact', $event)"
+                @merge="emit('merge', $event)"
+            />
+        </div>
     </article>
 </template>
 
@@ -135,6 +136,7 @@ import { conversationSources } from '@/utils/report/conversation';
 const props = defineProps<{
     turn: ReportConversation['turns'][number];
     report?: Report;
+    composerOpen?: boolean;
     continuations?: ReportConversation['continuations'];
 }>();
 type Artifact = NonNullable<ReportConversation['artifacts']>[number];
@@ -146,9 +148,17 @@ const emit = defineEmits<{
     merge: [reportId: string];
 }>();
 const operations = ['research', 'revise'] as const;
-const answered = computed(() =>
-    props.turn.answer ? { ...props.turn, answer: props.turn.answer } : undefined,
-);
+const question = computed(() => {
+    const { turn } = props;
+    if (turn.answer) return { ...turn, answer: turn.answer };
+    if (turn.searchSelection && turn.followupRunId)
+        return {
+            ...turn,
+            answer: null,
+            followupRunId: turn.followupRunId,
+            searchSelection: turn.searchSelection,
+        };
+});
 const sources = computed(() =>
     props.report ? conversationSources(props.turn.answer, props.report) : [],
 );

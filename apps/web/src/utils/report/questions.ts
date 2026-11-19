@@ -11,6 +11,7 @@ import {
 import { CommunicationError } from 'requestlane';
 import type { ApiResponse } from '@/api/client';
 import { toApiError } from '@/api/errors';
+import type { ReportQuestionDetail } from '@/api/report-questions';
 
 export function invalidQuestion(message: string): never {
     throw new ContractValidationError([{ path: '/answer', message }]);
@@ -50,10 +51,10 @@ export function questionAttempt(
 export type QuestionAttempt = ReturnType<typeof questionAttempt>;
 
 /** Shared DTO validation is necessary but does not prove cross-field or evidence consistency. */
-export function validateQuestion(
-    value: ReportQuestion,
+function validateQuestionIdentity(
+    value: Pick<ReportQuestion, 'id' | 'reportId' | 'question'>,
     report: Report,
-    expected: { id?: string; question?: string } = {},
+    expected: { id?: string; question?: string },
 ) {
     if (
         value.reportId.toLowerCase() !== report.id.toLowerCase() ||
@@ -61,6 +62,25 @@ export function validateQuestion(
         (expected.question !== undefined && value.question !== expected.question)
     )
         invalidQuestion('回答与当前报告、问题或原始问题文本不一致');
+}
+export function validateQuestionDetail<T extends ReportQuestionDetail>(
+    value: T,
+    report: Report,
+    expected: { id?: string; question?: string } = {},
+): T {
+    if ('searchSelection' in value) {
+        validateQuestionIdentity(value, report, expected);
+    } else {
+        validateQuestion(value, report, expected);
+    }
+    return value;
+}
+export function validateQuestion(
+    value: ReportQuestion,
+    report: Report,
+    expected: { id?: string; question?: string } = {},
+) {
+    validateQuestionIdentity(value, report, expected);
     const answer = value.answer;
     if (answer.status === 'answered') {
         if (answer.reason !== 'evidence_answer' || !answer.statements.length)
@@ -89,14 +109,14 @@ export function validateQuestion(
     }
     return value;
 }
-export function questionResponse(
-    response: ApiResponse<ReportQuestion>,
+export function questionResponse<T extends ReportQuestionDetail>(
+    response: ApiResponse<T>,
     report: Report,
     expected: { id?: string; question?: string } = {},
     status = 200,
 ) {
     if (response.status !== status) invalidQuestion('回答 HTTP 状态不一致');
-    validateQuestion(response.data, report, expected);
+    validateQuestionDetail(response.data, report, expected);
     return response;
 }
 export const questionReasons: Record<QuestionAnswer['reason'], string> = {

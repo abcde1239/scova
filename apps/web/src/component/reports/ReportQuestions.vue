@@ -54,6 +54,7 @@
                 :turn="turn"
                 :report="visibleTurn(turn.id) ? report : undefined"
                 :continuations="state.conversationData.value?.continuations"
+                :composer-open="composerOpen"
                 @protected-change="setProtected(turn.id, $event)"
                 @active-change="setActive(turn.id, $event)"
                 @artifact="observeArtifact"
@@ -91,6 +92,16 @@
             {{ state.address.value.error
             }}<button type="button" @click="startNew">提出新问题</button>
         </p>
+        <report-composer-followup
+            ref="composer"
+            :report-id="reportId"
+            :report="report"
+            :after-question-id="state.turns.value.at(-1)?.id ?? null"
+            @opened="composerOpen = $event"
+            @closed="restoreComposerFocus"
+            @refresh="state.conversation.refetch({ cancelRefetch: false })"
+            @saved="onComposerSaved"
+        />
         <form class="question-form" @submit.prevent="submit">
             <label class="sr-only" for="report-question">问题</label>
             <textarea
@@ -98,7 +109,12 @@
                 v-model="state.draft.value"
                 rows="2"
                 placeholder="围绕这份报告继续提问…"
-                :readonly="!!state.attempt.value || state.pending.value || !state.available.value"
+                :readonly="
+                    composerOpen ||
+                    !!state.attempt.value ||
+                    state.pending.value ||
+                    !state.available.value
+                "
                 :aria-invalid="state.draft.value !== '' && !!textError ? 'true' : undefined"
                 aria-describedby="question-input-help"
                 @keydown.enter="onEnter"
@@ -118,12 +134,20 @@
                     <button
                         v-if="state.attempt.value || state.draft.value"
                         type="button"
-                        :disabled="state.pending.value"
+                        :disabled="composerOpen || state.pending.value"
                         @click="startNew"
                     >
                         {{ state.attempt.value ? '结束本次请求' : '清空问题' }}</button
                     ><button v-if="state.pending.value" type="button" @click="state.cancelPending">
                         停止等待</button
+                    ><button
+                        v-if="report?.mode === 'live'"
+                        ref="composerTrigger"
+                        type="button"
+                        :disabled="!state.canSubmit.value || followupProtected"
+                        @click="openComposer"
+                    >
+                        补查新资料</button
                     ><action-button
                         v-if="!state.attempt.value"
                         attr-type="submit"
@@ -148,6 +172,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router';
 import type { Report, ReportConversation } from '@scova/models';
 import ActionButton from '@/component/common/ActionButton.vue';
+import ReportComposerFollowup from '@/component/reports/ReportComposerFollowup.vue';
 import ReportConversationTurn from '@/component/reports/ReportConversationTurn.vue';
 import { useReportQuestions } from '@/composable/useReportQuestions';
 import { useSessionLifecycle } from '@/composable/useSessionQuery';
@@ -183,8 +208,11 @@ const timeline = ref<HTMLElement>();
 const protectedTurns = ref<Record<string, boolean>>({});
 const runningTurns = ref<Record<string, boolean>>({});
 const observedArtifacts = ref<Artifact[]>([]);
+const composer = ref<InstanceType<typeof ReportComposerFollowup>>();
+const composerTrigger = ref<HTMLButtonElement>();
+const composerOpen = ref(false);
 const followupProtected = computed(
-    () => props.blocked || Object.values(protectedTurns.value).some(Boolean),
+    () => composerOpen.value || props.blocked || Object.values(protectedTurns.value).some(Boolean),
 );
 const protectedState = computed(() => state.protectedState.value || followupProtected.value);
 const activeTurns = computed(() =>
@@ -252,7 +280,7 @@ function setActive(id: string, value: boolean) {
 const textError = computed(() => questionTextError(state.draft.value));
 const suggestions = computed(() => (props.report ? conversationSuggestions(props.report) : []));
 async function prepareQuestion(question: string) {
-    if (state.attempt.value || state.pending.value) return;
+    if (composerOpen.value || state.attempt.value || state.pending.value) return;
     state.draft.value = question;
     await nextTick();
     panel.value?.querySelector<HTMLTextAreaElement>('textarea')?.focus({ preventScroll: true });
@@ -295,6 +323,24 @@ async function perform(action: () => Promise<string | undefined>) {
     if (pinned && view) view.scrollTop = view.scrollHeight;
     panel.value?.querySelector<HTMLTextAreaElement>('textarea')?.focus({ preventScroll: true });
 }
+function openComposer() {
+    if (state.canSubmit.value && !followupProtected.value)
+        void composer.value?.open(state.draft.value, state.turns.value.at(-1)?.id ?? null);
+}
+async function restoreComposerFocus() {
+    await nextTick();
+    if (!composerTrigger.value?.disabled) composerTrigger.value?.focus();
+    else panel.value?.querySelector('textarea')?.focus();
+}
+function onComposerSaved(id: string) {
+    void perform(async () => {
+        const scope = lifecycle.capture();
+        const reportId = props.reportId;
+        state.draft.value = '';
+        await state.conversation.refetch({ cancelRefetch: false });
+        if (scope.isCurrent() && props.reportId === reportId) return id;
+    });
+}
 function submit() {
     if (!followupProtected.value) return perform(state.submit);
 }
@@ -317,7 +363,7 @@ function confirmDiscard() {
     );
 }
 async function startNew() {
-    if (state.pending.value || !confirmDiscard()) return;
+    if (composerOpen.value || state.pending.value || !confirmDiscard()) return;
     await selectSaved();
     state.newQuestion();
     await nextTick();

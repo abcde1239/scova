@@ -1,6 +1,10 @@
 import {
     ReportQuestionInputSchema,
     ReportQuestionSchema,
+    ReportQuestionDetailSchema,
+    ReportFollowupInputSchema,
+    ReportFollowupResponseSchema,
+    type ReportFollowupInput,
     UuidSchema,
     parseContract,
     type ReportQuestion,
@@ -31,9 +35,23 @@ export const createReportQuestionEndpoint = defineApiEndpoint<{
     inputValidators: { params: reportParams, body: modelValidator(ReportQuestionInputSchema) },
     validator: modelValidator(ReportQuestionSchema),
 });
+export type ReportQuestionDetail = ReturnType<
+    typeof parseContract<typeof ReportQuestionDetailSchema>
+>;
+export const requestReportFollowupEndpoint = defineApiEndpoint<{
+    params: { reportId: string };
+    body: ReportFollowupInput;
+    data: ReturnType<typeof parseContract<typeof ReportFollowupResponseSchema>>;
+}>({
+    method: 'POST',
+    path: '/reports/:reportId/followup',
+    inputValidators: { params: reportParams, body: modelValidator(ReportFollowupInputSchema) },
+    validator: modelValidator(ReportFollowupResponseSchema),
+});
+
 export const reportQuestionEndpoint = defineApiEndpoint<{
     params: { reportId: string; questionId: string };
-    data: ReportQuestion;
+    data: ReportQuestionDetail;
 }>({
     method: 'GET',
     path: '/reports/:reportId/questions/:questionId',
@@ -48,7 +66,7 @@ export const reportQuestionEndpoint = defineApiEndpoint<{
             },
         },
     },
-    validator: modelValidator(ReportQuestionSchema),
+    validator: modelValidator(ReportQuestionDetailSchema),
 });
 
 export const reportConversationEndpoint = defineApiEndpoint<{

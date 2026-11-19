@@ -27,6 +27,7 @@ import {
     questionSelection,
     questionTextError,
     validateQuestion,
+    validateQuestionDetail,
     type QuestionAttempt,
 } from '@/utils/report/questions';
 
@@ -86,6 +87,11 @@ export function useReportQuestions(
                         invalidQuestion('会话轮次身份重复或不匹配');
                     ids.add(turn.id);
                     if (turn.answer) validateQuestion({ ...turn, answer: turn.answer }, current);
+                    if (
+                        turn.searchSelection &&
+                        (turn.answer || !turn.followupRunId || turn.revisionRunId)
+                    )
+                        invalidQuestion('确认补查轮次的执行关联不一致');
                 }
                 if (response.data.artifacts?.some((artifact) => !ids.has(artifact.questionId)))
                     invalidQuestion('成果不属于当前会话轮次');
@@ -110,7 +116,9 @@ export function useReportQuestions(
                 state: { data?: { pages: { data: ReportConversation }[] } };
             }) =>
                 query.state.data?.pages.some(
-                    (page) => page.data.activeRun || page.data.turns.some((turn) => !turn.answer),
+                    (page) =>
+                        page.data.activeRun ||
+                        page.data.turns.some((turn) => !turn.answer && !turn.followupRunId),
                 )
                     ? 3000
                     : false,
@@ -190,7 +198,7 @@ export function useReportQuestions(
         )
             return undefined;
         try {
-            return validateQuestion(result, current, { id: selectedId.value });
+            return validateQuestionDetail(result, current, { id: selectedId.value });
         } catch {
             return undefined;
         }
@@ -205,7 +213,7 @@ export function useReportQuestions(
             !attempt.value &&
             conversation.isSuccess.value &&
             !conversation.isFetching.value &&
-            !turns.value.some((turn) => !turn.answer) &&
+            !turns.value.some((turn) => !turn.answer && !turn.followupRunId) &&
             !address.value.error &&
             !questionTextError(draft.value),
     );
