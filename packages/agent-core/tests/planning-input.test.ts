@@ -34,8 +34,8 @@ describe('planning input preflight', () => {
             'Geographic scope:',
         );
         const { prompt } = fitPlanningInput(input, scoped, ['brief'], 2);
-        expect(prompt).toContain('Do not infer the user’s location');
-        expect(prompt).toContain('Preserve any geographic scope explicitly requested');
+        expect(prompt).toContain('Never infer region from language or time zone');
+        expect(prompt).toContain('Preserve explicit regions');
         expect(prompt).toContain(JSON.stringify(scoped));
     });
     it('returns already bounded input unchanged', () => {

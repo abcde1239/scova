@@ -17,6 +17,7 @@ import {
 import { expect, it } from 'vite-plus/test';
 import { createAgentRuntime } from '../../src/service/agent.ts';
 import { RunService } from '../../src/service/runs.ts';
+import { prepareTestCheckpointSchema } from '../support/checkpoint-schema.ts';
 import { setup, sessionFixture, fixture, usage, expireAfterEvidence, runs } from './fixture.ts';
 
 export function registerDeadline() {
@@ -99,7 +100,7 @@ export function registerDeadline() {
             const runtime = createAgentRuntime({
                 database: fixture.db,
                 databaseUrl: fixture.databaseUrl,
-                checkpointSchema: new URL(fixture.databaseUrl).searchParams.get('schema')!,
+                checkpointSchema: fixture.checkpointSchema,
                 env: {},
                 async deliver(context, candidate, deadline) {
                     expect(deadline).toBe(true);
@@ -109,6 +110,7 @@ export function registerDeadline() {
                 },
             });
             try {
+                await prepareTestCheckpointSchema(fixture.databaseUrl, fixture.checkpointSchema);
                 await runtime.connect();
                 const service = new RunService({
                     repository: runs,
