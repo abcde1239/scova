@@ -34,7 +34,7 @@ __pycache__/
 !.vscode/extensions.json
 
 # Harness output and development material kept local in any repository visibility
-artifacts/
+/artifacts/
 coverage/
 /build/
 Thumbs.db
