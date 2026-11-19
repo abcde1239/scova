@@ -1,7 +1,8 @@
 import { and, count, eq, lte, reportExports, users, type DatabaseClient } from '@scova/db';
 
 const maxExportsPerAccount = 32;
-type NewExport = typeof reportExports.$inferInsert;
+type ExportRow = typeof reportExports.$inferSelect;
+type NewExport = typeof reportExports.$inferInsert & { format: ExportRow['format'] };
 
 export function createReportExportRepo(database: () => DatabaseClient) {
     return {
@@ -26,6 +27,7 @@ export function createReportExportRepo(database: () => DatabaseClient) {
                         and(
                             account,
                             eq(reportExports.reportId, input.reportId),
+                            eq(reportExports.format, input.format),
                             eq(reportExports.rendererVersion, input.rendererVersion),
                         ),
                     );

@@ -44,6 +44,10 @@
         {
             "name": "0010_report_exports",
             "hash": "9a3d8ac59498435bb1cfff64ca6c8b6defa1c7231b372a3c71ef7e1cd201322a"
+        },
+        {
+            "name": "0011_report_export_formats",
+            "hash": "654faab91290c4844a43feaf3a4ae1617557af732054dd6d21827355ac97ea47"
         }
     ],
     "signature": {
@@ -1608,6 +1612,17 @@
                 "identity": "",
                 "generated": "",
                 "collation": null
+            },
+            {
+                "table_name": "report_exports",
+                "name": "format",
+                "position": 10,
+                "type": "text",
+                "not_null": true,
+                "default_value": "'markdown'::text",
+                "identity": "",
+                "generated": "",
+                "collation": "default"
             },
             {
                 "table_name": "report_questions",
@@ -4141,6 +4156,13 @@
             },
             {
                 "table_name": "report_exports",
+                "name": "report_exports_format_valid",
+                "type": "c",
+                "definition": "CHECK (format = ANY (ARRAY['markdown'::text, 'json'::text]))",
+                "validated": true
+            },
+            {
+                "table_name": "report_exports",
                 "name": "report_exports_lifetime_valid",
                 "type": "c",
                 "definition": "CHECK (renderer_version > 0 AND expires_at > created_at)",
@@ -5039,8 +5061,8 @@
             },
             {
                 "table_name": "report_exports",
-                "name": "report_exports_owner_report_version",
-                "definition": "CREATE UNIQUE INDEX report_exports_owner_report_version ON report_exports USING btree (user_id, report_id, renderer_version)",
+                "name": "report_exports_owner_report_format_version",
+                "definition": "CREATE UNIQUE INDEX report_exports_owner_report_format_version ON report_exports USING btree (user_id, report_id, format, renderer_version)",
                 "valid": true,
                 "ready": true
             },

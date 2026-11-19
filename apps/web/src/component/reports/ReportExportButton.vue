@@ -5,7 +5,7 @@
             :loading="pending"
             :disabled="pending"
             @click="download"
-            >导出 Markdown</n-button
+            >导出 {{ format === 'json' ? 'JSON' : 'Markdown' }}</n-button
         >
         <span v-if="message" class="report-export-error" role="alert">{{ message }}</span>
     </div>
@@ -14,11 +14,12 @@
 <script setup lang="ts">
 import { onUnmounted, ref } from 'vue';
 import { NButton } from 'naive-ui';
-import { reportExportEndpoint } from '@/api/reports';
+import { serializeReportJson } from '@scova/models';
+import { reportExportEndpoint, reportJsonExportEndpoint } from '@/api/reports';
 import { toApiError } from '@/api/errors';
 import { useSessionLifecycle } from '@/composable/useSessionQuery';
 
-const props = defineProps<{ reportId: string }>();
+const props = defineProps<{ reportId: string; format: 'markdown' | 'json' }>();
 const lifecycle = useSessionLifecycle();
 const pending = ref(false);
 const message = ref('');
@@ -32,17 +33,24 @@ async function download() {
     pending.value = true;
     message.value = '';
     try {
-        const { data } = await scope.request(
-            reportExportEndpoint,
-            { params: { reportId } },
-            { signal: controller.signal },
-        );
+        const json = props.format === 'json';
+        const input = { params: { reportId } };
+        const options = { signal: controller.signal };
+        const { data } = json
+            ? await scope.request(reportJsonExportEndpoint, input, options)
+            : await scope.request(reportExportEndpoint, input, options);
         if (!scope.isCurrent() || controller.signal.aborted) return;
-        if (data.reportId !== reportId || data.filename !== `scova-report-${reportId}.md`) {
+        if (
+            data.reportId !== reportId ||
+            data.filename !== `scova-report-${reportId}.${json ? 'json' : 'md'}`
+        ) {
             message.value = '导出与当前报告不匹配，请重试。';
             return;
         }
-        const blob = new Blob([data.markdown], { type: 'text/markdown;charset=utf-8' });
+        const blob =
+            'document' in data
+                ? new Blob([serializeReportJson(data.document)], { type: 'application/json' })
+                : new Blob([data.markdown], { type: 'text/markdown;charset=utf-8' });
         if (blob.size !== data.byteLength) {
             message.value = '导出文件长度校验失败，请重试。';
             return;

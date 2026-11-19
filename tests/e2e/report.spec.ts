@@ -2,7 +2,13 @@ import { logoutFromAccount, expectAccountReady } from './support/account-menu.ts
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
-import { classifyReportDelivery, type Report } from '@scova/models';
+import { createHash } from 'node:crypto';
+import {
+    classifyReportDelivery,
+    serializeReportJson,
+    type Report,
+    type ReportJsonDocument,
+} from '@scova/models';
 import { reportFormatSample } from '../../apps/web/tests/fixtures/reports/report-format-sample.ts';
 
 // Local HTTP samples exercise the real Web bundle; database delivery is verified separately.
@@ -139,6 +145,99 @@ for (const width of [320, 1440]) {
         expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
             width,
         );
+    });
+}
+
+for (const width of [320, 1440]) {
+    test(`键盘重试后下载 JSON，校验 MIME 与实际文件 / ${width}`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 850 });
+        await samples(page);
+        await page.addInitScript(() => {
+            const createObjectURL = URL.createObjectURL.bind(URL);
+            URL.createObjectURL = (payload) => {
+                if (payload instanceof Blob)
+                    document.documentElement.dataset.exportMime = payload.type;
+                return createObjectURL(payload);
+            };
+        });
+        const savedReport = report() as Report;
+        const { title, summary, publishedAt, format, mode, outcome, limitations, changes } =
+            savedReport;
+        const reportDocument: ReportJsonDocument = {
+            schemaVersion: 1,
+            reportId: savedReport.id,
+            title,
+            summary,
+            publishedAt,
+            format,
+            mode,
+            outcome,
+            coverage: {
+                completeness: savedReport.coverage.completeness,
+                gaps: savedReport.coverage.gaps,
+            },
+            limitations,
+            changes,
+            conclusions: savedReport.claims,
+            citations: savedReport.evidence.map(
+                ({ id, title, url, location, observedAt, quote }) => ({
+                    id,
+                    title,
+                    url,
+                    location,
+                    observedAt,
+                    quote,
+                    quoteTruncated: false,
+                }),
+            ),
+        };
+        const expected = serializeReportJson(reportDocument);
+        const filename = `scova-report-${savedReport.id}.json`;
+        let attempts = 0;
+        await page.route(`**/api/v1${reportPath}/exports/json`, (route) => {
+            attempts++;
+            if (attempts === 1) return route.fulfill({ status: 503, json: failure() });
+            if (attempts === 2)
+                return route.fulfill({ json: { document: reportDocument, filename } });
+            return route.fulfill({
+                json: {
+                    id: id(61),
+                    reportId: savedReport.id,
+                    filename,
+                    document: reportDocument,
+                    byteLength: Buffer.byteLength(expected),
+                    sha256: createHash('sha256').update(expected).digest('hex'),
+                    expiresAt: '2026-11-19T00:00:00Z',
+                },
+            });
+        });
+        await page.goto(reportPath);
+        const button = page.getByRole('button', { name: '导出 JSON' });
+        const markdown = page.getByRole('button', { name: '导出 Markdown' });
+        await expect(markdown).toBeEnabled();
+        const alert = page.getByRole('alert').filter({ hasText: '暂时无法导出报告，请重试。' });
+        await button.press('Enter');
+        await expect(alert).toBeVisible();
+        await button.press('Enter');
+        await expect.poll(() => attempts).toBe(2);
+        await expect(alert).toBeVisible();
+        const request = page.waitForRequest((req) => req.url().endsWith('/exports/json'));
+        const download = page.waitForEvent('download');
+        await button.press('Enter');
+        expect((await request).method()).toBe('POST');
+        expect((await request).headers()['x-csrf-token']).toBe(account().csrfToken);
+        const result = await download;
+        expect(attempts).toBe(3);
+        expect(result.suggestedFilename()).toBe(filename);
+        expect(await result.failure()).toBeNull();
+        const file = await readFile(await result.path(), 'utf8');
+        expect(file).toBe(expected);
+        expect(JSON.parse(file)).toEqual(reportDocument);
+        await expect(page.locator('html')).toHaveAttribute('data-export-mime', 'application/json');
+        await expect(alert).toHaveCount(0);
+        expect(
+            await page.evaluate(() => window.document.documentElement.scrollWidth),
+        ).toBeLessThanOrEqual(width);
     });
 }
 

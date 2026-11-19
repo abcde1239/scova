@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { REPORT_MARKDOWN_MAX_BYTES } from '@scova/models';
+import { REPORT_EXPORT_MAX_BYTES } from '@scova/models';
 import { sql } from 'drizzle-orm';
 import {
     check,
@@ -22,18 +22,24 @@ export const reportExports = pgTable(
         userId: uuid('user_id').notNull(),
         reportId: uuid('report_id').notNull(),
         rendererVersion: integer('renderer_version').notNull(),
-        markdown: text('markdown').notNull(),
+        format: text('format', { enum: ['markdown', 'json'] })
+            .notNull()
+            .default('markdown'),
+        // Keep the original payload column so stored Markdown survives the format migration.
+        content: text('markdown').notNull(),
         byteLength: integer('byte_length').notNull(),
         sha256: text('sha256').notNull(),
         createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull(),
         expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'date' }).notNull(),
     },
     (table) => [
-        uniqueIndex('report_exports_owner_report_version').on(
+        uniqueIndex('report_exports_owner_report_format_version').on(
             table.userId,
             table.reportId,
+            table.format,
             table.rendererVersion,
         ),
+        check('report_exports_format_valid', sql.raw("format IN ('markdown', 'json')")),
         index('report_exports_expires_at_id_idx').on(table.expiresAt, table.id),
         foreignKey({
             name: 'report_exports_owner_report_fkey',
@@ -43,7 +49,7 @@ export const reportExports = pgTable(
         check(
             'report_exports_payload_valid',
             sql.raw(
-                `byte_length BETWEEN 1 AND ${REPORT_MARKDOWN_MAX_BYTES} AND byte_length = octet_length(markdown) AND sha256 ~ '^[a-f0-9]{64}$'`,
+                `byte_length BETWEEN 1 AND ${REPORT_EXPORT_MAX_BYTES} AND byte_length = octet_length(markdown) AND sha256 ~ '^[a-f0-9]{64}$'`,
             ),
         ),
         check(

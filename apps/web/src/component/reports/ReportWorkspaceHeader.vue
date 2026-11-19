@@ -23,7 +23,14 @@
             <navigation-button v-if="report" :to="`/runs/${report.runId}`" icon="tasks"
                 >执行详情</navigation-button
             >
-            <report-export-button v-if="report" :key="report.id" :report-id="report.id" />
+            <template v-if="report">
+                <report-export-button
+                    v-for="format in exportFormats"
+                    :key="`${report.id}:${format}`"
+                    :report-id="report.id"
+                    :format="format"
+                />
+            </template>
             <button
                 v-if="report"
                 type="button"
@@ -42,6 +49,7 @@ import type { inboxReturn } from '@/composable/useInbox';
 import NavigationButton from '@/component/common/NavigationButton.vue';
 import AppIcon from '@/component/common/AppIcon.vue';
 import ReportExportButton from '@/component/reports/ReportExportButton.vue';
+const exportFormats = ['markdown', 'json'] as const;
 const props = defineProps<{ report?: Report; returnTo?: ReturnType<typeof inboxReturn> }>();
 const inboxDestination = computed(() =>
     props.returnTo

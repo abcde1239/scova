@@ -9,6 +9,7 @@ import {
     ReportListResponseSchema,
     ReportSchema,
     ReportExportSchema,
+    ReportJsonExportSchema,
 } from '@scova/models';
 import type { ApiServices } from '@/app/services';
 import { createReportHandlers } from '@/handler/reports.ts';
@@ -80,6 +81,16 @@ export function createReportPlugin(services: ApiServices) {
                 summary: '导出报告摘要、结论与引用为 Markdown',
                 description:
                     '需要会话与 CSRF，只能导出本人已交付报告。同一报告内容在有效期内复用，不触发研究或外部存储。',
+            },
+        })
+        .post('/reports/:reportId/exports/json', handlers.exportJson, {
+            response: { 200: ReportJsonExportSchema, ...errors },
+            detail: {
+                operationId: 'exportReportJson',
+                tags: ['报告'],
+                summary: '导出报告结论、覆盖缺口、变化与短引用为 JSON',
+                description:
+                    '需要会话与 CSRF，只能导出本人已交付报告。同一版本在有效期内复用；不包含完整采集正文。',
             },
         })
         .get('/inbox', handlers.inbox, {
