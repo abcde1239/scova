@@ -65,7 +65,7 @@ export function deliverySupplementResponse<T>(
     if (Object.hasOwn((input.schema.properties ?? {}) as object, 'answers')) {
         const canAnswer =
             !!options.modelAnswers &&
-            (!input.prompt.startsWith('Draft reliable') || !!options.draftAnswers);
+            (!/^Draft reliable Chinese answers/m.test(input.prompt) || !!options.draftAnswers);
         const schema = input.schema as {
             properties: {
                 answers: {

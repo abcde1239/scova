@@ -54,7 +54,7 @@ export function registerGapRepairs() {
             expect(seed.candidate.claims.some((c) => c.kind === 'model_answer')).toBe(true);
             expect(seed.candidate.coverage.delivery?.answeredQuestions).toBe(2);
             if (tampered) {
-                await fixture.db
+                const invalidated = await fixture.db
                     .update(dbToolCalls)
                     .set({ status: 'unknown' })
                     .where(
@@ -64,7 +64,9 @@ export function registerGapRepairs() {
                                 ? sql`${dbToolCalls.operationKey} LIKE 'model-draft-%'`
                                 : sql`${dbToolCalls.operationKey} LIKE 'model-answer-%'`,
                         ),
-                    );
+                    )
+                    .returning({ id: dbToolCalls.id });
+                expect(invalidated.length).toBeGreaterThan(0);
                 await expect(
                     delivery.deliver(seed.claimed.token, seed.candidate),
                 ).rejects.toMatchObject({ code: 'INVALID_DELIVERY_EVIDENCE' });
