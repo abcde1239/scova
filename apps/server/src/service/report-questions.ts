@@ -9,6 +9,9 @@ import {
     parseContract,
     ReportQuestionInputSchema,
     ReportQuestionSchema,
+    ReportRequestedQuestionSchema,
+    ReportFollowupInputSchema,
+    ReportFollowupResponseSchema,
     QuestionAnswerSchema,
     type QuestionAnswer,
     ReportConversationSchema,
@@ -46,6 +49,20 @@ function dto(row: StoredQuestion) {
         createdAt: row.createdAt.toISOString(),
     });
 }
+function requestedDto(row: StoredQuestion) {
+    const context = parseContract(ReportConversationContextSchema, row.contextJson);
+    return parseContract(ReportRequestedQuestionSchema, {
+        id: row.id,
+        reportId: row.reportId,
+        question: row.question,
+        answer: null,
+        followupRunId: row.followupRunId,
+        revisionRunId: row.revisionRunId,
+        searchSelection: context.searchSelection,
+        createdAt: row.createdAt.toISOString(),
+    });
+}
+
 export function createReportQuestionService(services: ApiServices) {
     const repo = createReportQuestionRepo(services),
         budgets = createQuestionBudgetRepo(services),
@@ -231,8 +248,23 @@ export function createReportQuestionService(services: ApiServices) {
             if (publicError) throw publicError;
             return dto(row);
         },
+        async requestFollowup(userId: string, reportId: string, body: unknown, key: string) {
+            const input = parseContract(ReportFollowupInputSchema, body);
+            const report = await reports.get(userId, reportId);
+            const result = await createRunService(services).requestFollowup(
+                userId,
+                report,
+                input,
+                key,
+            );
+            return parseContract(ReportFollowupResponseSchema, {
+                ...result,
+                question: requestedDto(result.question),
+            });
+        },
         async get(userId: string, reportId: string, id: string) {
-            return dto(await owned(userId, reportId, id));
+            const row = await owned(userId, reportId, id);
+            return !row.answerJson && row.followupRunId ? requestedDto(row) : dto(row);
         },
         async conversation(userId: string, reportId: string, beforeQuestionId?: string) {
             await reports.get(userId, reportId);
@@ -349,15 +381,17 @@ export function createReportQuestionService(services: ApiServices) {
                 turns: page.map((row) => ({
                     ...(row.answerJson
                         ? dto(row)
-                        : {
-                              id: row.id,
-                              reportId,
-                              question: row.question,
-                              answer: null,
-                              followupRunId: row.followupRunId,
-                              revisionRunId: row.revisionRunId,
-                              createdAt: row.createdAt.toISOString(),
-                          }),
+                        : row.followupRunId
+                          ? requestedDto(row)
+                          : {
+                                id: row.id,
+                                reportId,
+                                question: row.question,
+                                answer: null,
+                                followupRunId: row.followupRunId,
+                                revisionRunId: row.revisionRunId,
+                                createdAt: row.createdAt.toISOString(),
+                            }),
                     round: rounds.get(row.id),
                 })),
             });

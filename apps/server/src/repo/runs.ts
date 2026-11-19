@@ -1,3 +1,4 @@
+import { createReportQuestionStore } from '@/repo/report-questions.ts';
 import {
     queryRows,
     isUniqueConflict,
@@ -21,6 +22,12 @@ import { firstRow, requireRow } from '@/utils/database.ts';
 function createRunStore(database: DatabaseExecutor) {
     const tasks = createTaskStore(database);
     return {
+        reportQuestions: createReportQuestionStore(database),
+        findSearchConfiguration(userId: string) {
+            return database.query.searchConfigurations.findFirst({
+                where: eq(tables.searchConfigurations.userId, userId),
+            });
+        },
         findAgentProvider: (userId: string, providerId: string) =>
             tasks.findAgentProvider(userId, providerId),
         feedbackSnapshot(userId: string, taskId: string) {

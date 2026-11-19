@@ -1,5 +1,7 @@
 import { Type, type Static } from '@sinclair/typebox';
 import { UuidSchema, InstantSchema, describeProperties } from '../common/schema.ts';
+import { RunCommandResponseSchema } from '../research/runs.ts';
+import { ReportFollowupSearchSchema } from './conversation.ts';
 import { OutputFormatsSchema } from '../task/output-formats.ts';
 const QuestionUsageSchema = Type.Object(
     {
@@ -90,6 +92,53 @@ export const ReportQuestionSchema = Type.Object(
     },
     { additionalProperties: false },
 );
+export const ReportRequestedQuestionSchema = describeProperties(
+    Type.Object(
+        {
+            ...ReportQuestionSchema.properties,
+            answer: Type.Null(),
+            followupRunId: UuidSchema,
+            searchSelection: ReportFollowupSearchSchema,
+        },
+        { additionalProperties: false },
+    ),
+);
+export const ReportQuestionDetailSchema = Type.Union([
+    ReportQuestionSchema,
+    ReportRequestedQuestionSchema,
+]);
+const followupProperties = {
+    ...ReportQuestionInputSchema.properties,
+    confirm: Type.Literal(true),
+    outputFormats: Type.Optional(OutputFormatsSchema),
+};
+export const ReportFollowupInputSchema = Type.Union([
+    describeProperties(
+        Type.Object(
+            {
+                ...followupProperties,
+                ...ReportFollowupSearchSchema.anyOf[0].properties,
+            },
+            { additionalProperties: false },
+        ),
+    ),
+    describeProperties(
+        Type.Object(
+            {
+                ...followupProperties,
+                ...ReportFollowupSearchSchema.anyOf[1].properties,
+            },
+            { additionalProperties: false },
+        ),
+    ),
+]);
+export type ReportFollowupInput = Static<typeof ReportFollowupInputSchema>;
+export const ReportFollowupResponseSchema = describeProperties(
+    Type.Object(
+        { question: ReportRequestedQuestionSchema, ...RunCommandResponseSchema.properties },
+        { additionalProperties: false },
+    ),
+);
 export const QuestionFollowupInputSchema = Type.Object(
     {
         confirm: Type.Literal(true, { description: '明确同意使用原报告执行预算生成新成果' }),
@@ -132,6 +181,7 @@ export const ReportConversationSchema = Type.Object(
                 {
                     ...ReportQuestionSchema.properties,
                     round: Type.Optional(Type.Integer({ minimum: 1 })),
+                    searchSelection: Type.Optional(ReportFollowupSearchSchema),
                     answer: Type.Union([QuestionAnswerSchema, Type.Null()]),
                 },
                 { additionalProperties: false },

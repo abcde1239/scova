@@ -1,4 +1,4 @@
-import { type DatabaseClient } from '@scova/db';
+import { reportSearchConfigurationHash, type DatabaseClient } from '@scova/db';
 import { openProviderCredentials } from '@scova/shared/credentials';
 import { activeAgentProvider } from '@/repo/agent-providers.ts';
 import { accountSearchConfiguration } from '@/repo/search-configuration.ts';
@@ -64,6 +64,25 @@ export function createAgentRuntime(options: AgentRuntimeOptions) {
     let closing: Promise<void> | undefined;
     async function bundle(context: RunExecutionContext, token: RunLeaseToken) {
         const { mode, userId } = context;
+        const selection = context.conversation?.searchSelection;
+        if (
+            selection &&
+            (context.conversation?.operation !== 'research' ||
+                selection.searchMode !== context.config.searchMode)
+        )
+            throw new RunExecutionError('INVALID_RUN_CONFIGURATION');
+        const confirmedAccount =
+            selection?.searchMode === 'api'
+                ? await accountSearchConfiguration(options.database, userId)
+                : null;
+        const confirmedHash =
+            confirmedAccount &&
+            selection?.searchMode === 'api' &&
+            confirmedAccount.revision === selection.searchConfigRevision
+                ? reportSearchConfigurationHash(confirmedAccount)
+                : null;
+        if (selection?.searchMode === 'api')
+            await freezeSearchConfiguration(options.database, token, confirmedHash, true);
         if (options.bundle) return options.bundle;
         if (mode !== 'live') throw new RunExecutionError('AGENT_CONFIGURATION_INVALID');
         {
@@ -96,18 +115,20 @@ export function createAgentRuntime(options: AgentRuntimeOptions) {
                 const savedSearch =
                     context.config.searchMode === 'searxng'
                         ? null
-                        : await accountSearchConfiguration(options.database, userId);
+                        : selection
+                          ? confirmedAccount
+                          : await accountSearchConfiguration(options.database, userId);
                 const searchConfig = accountSearchConfig(
                     env,
                     savedSearch,
                     userId,
                     context.config.searchMode,
                 );
-                const frozenSearchHash = customConfigurationHash(
-                    savedSearch,
-                    searchConfig.searchProvider,
-                );
-                await freezeSearchConfiguration(options.database, token, frozenSearchHash);
+                const frozenSearchHash = selection
+                    ? confirmedHash
+                    : customConfigurationHash(savedSearch, searchConfig.searchProvider);
+                if (!selection)
+                    await freezeSearchConfiguration(options.database, token, frozenSearchHash);
                 usesSearxng =
                     'searchProvider' in searchConfig && searchConfig.searchProvider === 'searxng';
                 liveBundle = createConnectorBundle({

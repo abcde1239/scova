@@ -10,6 +10,7 @@ import {
     lt,
     or,
     type ReportQuestion,
+    type DatabaseExecutor,
 } from '@scova/db';
 import * as tables from '@scova/db';
 import { createHash } from 'node:crypto';
@@ -59,6 +60,110 @@ export function createQuestionBudgetRepo(services: ApiServices) {
     };
 }
 
+export function createReportQuestionStore(database: DatabaseExecutor) {
+    return {
+        async lockReport(userId: string, reportId: string) {
+            const rows = await queryRows<{ id: string }>(
+                database,
+                querySql`SELECT id FROM reports WHERE id=${reportId}::uuid AND user_id=${userId}::uuid FOR NO KEY UPDATE`,
+            );
+            if (!rows.length) throw new ApiError(404, 'NOT_FOUND', '资源不存在');
+        },
+        latest(userId: string, reportId: string) {
+            return database.query.reportQuestions.findFirst({
+                where: and(
+                    eq(tables.reportQuestions.userId, userId),
+                    eq(tables.reportQuestions.reportId, reportId),
+                ),
+                orderBy: [desc(tables.reportQuestions.createdAt), desc(tables.reportQuestions.id)],
+            });
+        },
+        insert(
+            userId: string,
+            reportId: string,
+            question: string,
+            now: Date,
+            latest?: ReportQuestion,
+        ) {
+            return database
+                .insert(tables.reportQuestions)
+                .values({
+                    userId,
+                    reportId,
+                    question,
+                    createdAt: new Date(
+                        Math.max(now.getTime(), (latest?.createdAt.getTime() ?? 0) + 1),
+                    ),
+                })
+                .returning()
+                .then(firstRow);
+        },
+        linkResearchRequest(
+            row: ReportQuestion,
+            runId: string,
+            context: ReportConversationContext,
+        ) {
+            return database
+                .update(tables.reportQuestions)
+                .set({ followupRunId: runId, contextJson: context })
+                .where(
+                    and(
+                        eq(tables.reportQuestions.id, row.id),
+                        eq(tables.reportQuestions.userId, row.userId),
+                    ),
+                )
+                .returning()
+                .then(firstRow);
+        },
+        findResearchRequest(userId: string, reportId: string, runId: string) {
+            return database.query.reportQuestions.findFirst({
+                where: and(
+                    eq(tables.reportQuestions.userId, userId),
+                    eq(tables.reportQuestions.reportId, reportId),
+                    eq(tables.reportQuestions.followupRunId, runId),
+                    isNull(tables.reportQuestions.answerJson),
+                ),
+            });
+        },
+        list(userId: string, reportId: string, limit = 101, before?: ReportQuestion) {
+            return database.query.reportQuestions
+                .findMany({
+                    where: and(
+                        eq(tables.reportQuestions.userId, userId),
+                        eq(tables.reportQuestions.reportId, reportId),
+                        ...(before
+                            ? [
+                                  or(
+                                      lt(tables.reportQuestions.createdAt, before.createdAt),
+                                      and(
+                                          eq(tables.reportQuestions.createdAt, before.createdAt),
+                                          lt(tables.reportQuestions.id, before.id),
+                                      ),
+                                  ),
+                              ]
+                            : []),
+                    ),
+                    orderBy: [
+                        desc(tables.reportQuestions.createdAt),
+                        desc(tables.reportQuestions.id),
+                    ],
+                    limit,
+                })
+                .then((rows) => rows.reverse());
+        },
+    };
+}
+
+export function requireConversationHead(
+    latest: ReportQuestion | undefined,
+    afterQuestionId?: string | null,
+) {
+    if (latest && !latest.answerJson && !latest.followupRunId)
+        throw new ApiError(409, 'CONVERSATION_BUSY', '上一轮仍在处理中，请先读取会话');
+    if (afterQuestionId !== undefined && (latest?.id ?? null) !== afterQuestionId)
+        throw new ApiError(409, 'CONVERSATION_CHANGED', '会话已有新消息，请刷新历史后再发送');
+}
+
 export function createReportQuestionRepo(services: Pick<ApiServices, 'db' | 'clock'>) {
     return {
         async round(userId: string, reportId: string, row: ReportQuestion) {
@@ -92,6 +197,7 @@ export function createReportQuestionRepo(services: Pick<ApiServices, 'db' | 'clo
                         eq(tables.reportQuestions.userId, userId),
                         eq(tables.reportQuestions.reportId, reportId),
                         isNull(tables.reportQuestions.answerJson),
+                        isNull(tables.reportQuestions.followupRunId),
                         lte(
                             tables.reportQuestions.createdAt,
                             new Date(services.clock().getTime() - timeoutMs - 30_000),
@@ -117,11 +223,8 @@ export function createReportQuestionRepo(services: Pick<ApiServices, 'db' | 'clo
             );
             return services.db().transaction(async (tx) => {
                 // 锁报告仅串行化幂等认领，不持锁等待模型。
-                const locked = await queryRows<{ id: string }>(
-                    tx,
-                    querySql`SELECT id FROM reports WHERE id=${reportId}::uuid AND user_id=${userId}::uuid FOR NO KEY UPDATE`,
-                );
-                if (!locked.length) throw new ApiError(404, 'NOT_FOUND', '资源不存在');
+                const store = createReportQuestionStore(tx);
+                await store.lockReport(userId, reportId);
                 const old = await tx.query.idempotencyRecords
                     .findFirst({
                         where: and(
@@ -159,39 +262,15 @@ export function createReportQuestionRepo(services: Pick<ApiServices, 'db' | 'clo
                         );
                     return { row, reused: true };
                 }
-                const latest = await tx.query.reportQuestions.findFirst({
-                    where: and(
-                        eq(tables.reportQuestions.userId, userId),
-                        eq(tables.reportQuestions.reportId, reportId),
-                    ),
-                    orderBy: [
-                        desc(tables.reportQuestions.createdAt),
-                        desc(tables.reportQuestions.id),
-                    ],
-                });
-                if (latest && !latest.answerJson)
-                    throw new ApiError(409, 'CONVERSATION_BUSY', '上一轮仍在处理中，请先读取会话');
-                if (afterQuestionId !== undefined && (latest?.id ?? null) !== afterQuestionId)
-                    throw new ApiError(
-                        409,
-                        'CONVERSATION_CHANGED',
-                        '会话已有新消息，请刷新历史后再发送',
-                    );
-                const row = await tx
-                    .insert(tables.reportQuestions)
-                    .values({
-                        userId,
-                        reportId,
-                        question,
-                        createdAt: new Date(
-                            Math.max(
-                                services.clock().getTime(),
-                                (latest?.createdAt.getTime() ?? 0) + 1,
-                            ),
-                        ),
-                    })
-                    .returning()
-                    .then(firstRow);
+                const latest = await store.latest(userId, reportId);
+                requireConversationHead(latest, afterQuestionId);
+                const row = await store.insert(
+                    userId,
+                    reportId,
+                    question,
+                    services.clock(),
+                    latest,
+                );
                 await tx
                     .insert(tables.idempotencyRecords)
                     .values({
@@ -208,31 +287,7 @@ export function createReportQuestionRepo(services: Pick<ApiServices, 'db' | 'clo
             });
         },
         list(userId: string, reportId: string, limit = 101, before?: ReportQuestion) {
-            return services
-                .db()
-                .query.reportQuestions.findMany({
-                    where: and(
-                        eq(tables.reportQuestions.userId, userId),
-                        eq(tables.reportQuestions.reportId, reportId),
-                        ...(before
-                            ? [
-                                  or(
-                                      lt(tables.reportQuestions.createdAt, before.createdAt),
-                                      and(
-                                          eq(tables.reportQuestions.createdAt, before.createdAt),
-                                          lt(tables.reportQuestions.id, before.id),
-                                      ),
-                                  ),
-                              ]
-                            : []),
-                    ),
-                    orderBy: [
-                        desc(tables.reportQuestions.createdAt),
-                        desc(tables.reportQuestions.id),
-                    ],
-                    limit,
-                })
-                .then((rows) => rows.reverse());
+            return createReportQuestionStore(services.db()).list(userId, reportId, limit, before);
         },
         artifacts(userId: string, runIds: string[]) {
             if (!runIds.length) return Promise.resolve([]);

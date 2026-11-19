@@ -28,8 +28,14 @@ export function freezeSearchConfiguration(
     database: DatabaseClient,
     token: RunLeaseToken,
     hash: string | null,
+    confirmed = false,
 ): Promise<void> {
     return withRunFence(database, token, 'work', async (tx, run) => {
+        if (confirmed) {
+            if (!hash || hash !== run.searchConfigurationHash)
+                throw new RunExecutionError('SEARCH_CONFIGURATION_CHANGED');
+            return;
+        }
         if (run.searchConfigurationHash) {
             if (hash !== run.searchConfigurationHash)
                 throw new RunExecutionError('SEARCH_CONFIGURATION_CHANGED');
