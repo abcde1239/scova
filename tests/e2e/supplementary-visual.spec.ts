@@ -1,4 +1,4 @@
-import { openReportTool } from './support/report-tools.ts';
+import { askReportQuestion, expectReportEvidence, openReportTool } from './support/report-tools.ts';
 import { expect, test } from './support/environment.ts';
 import { deliveryCounts } from './support/two-rounds.ts';
 
@@ -45,16 +45,13 @@ test('补充入口六宽/文字放大、四主题浅暗与已保存报告形式�
     await expect(page.locator('.note-body').filter({ hasText: '六宽联合验收笔记' })).toBeVisible();
     await page.getByRole('button', { name: '取消编辑', exact: true }).press('Enter');
     const deliveryBefore = await deliveryCounts(environment, owner, prepared.task.id);
-    await page.getByLabel('问题', { exact: true }).fill('这些证据还缺少哪些独立核验？');
-    await page.getByRole('button', { name: '提问', exact: true }).press('Enter');
+    const questionId = await askReportQuestion(page, report.id, '这些证据还缺少哪些独立核验？');
     await expect(
         page
             .locator('.assistant-message')
             .getByText('未配置可用的问答模型，暂时无法提取回答。', { exact: true }),
     ).toBeVisible();
     const questionUrl = page.url();
-    const questionId = new URL(questionUrl).searchParams.get('questionId');
-    expect(questionId).toBeTruthy();
     expect(await deliveryCounts(environment, owner, prepared.task.id)).toEqual(deliveryBefore);
     const records: unknown[] = [];
     const writes: string[] = [];
@@ -93,6 +90,11 @@ test('补充入口六宽/文字放大、四主题浅暗与已保存报告形式�
                             scheme === 'dark' ? /scova-theme--dark/ : /^scova-theme$/,
                         );
                         await layout(page, scale);
+                        await page
+                            .getByRole('button', { name: '成果', exact: true })
+                            .press('Enter');
+                        const panel = page.locator('#report-artifact');
+                        await expect(panel).toBeVisible();
                         for (const format of saved.coverage.artifacts?.map(
                             (artifact) => artifact.format,
                         ) ?? [saved.format]) {
@@ -112,27 +114,22 @@ test('补充入口六宽/文字放大、四主题浅暗与已保存报告形式�
                                     .click();
                             const frame = page.locator('.report-frame');
                             await expect(frame).toBeVisible();
-                            expect(
-                                await frame
-                                    .locator('.evidence-entry')
-                                    .evaluateAll((elements) =>
-                                        elements.map((element) => element.id),
-                                    ),
-                            ).toEqual(saved.evidence.map((evidence) => `evidence-${evidence.id}`));
+                            await expectReportEvidence(page, saved.evidence);
                             if (saved.coverage.completeness === 'partial')
                                 await expect(
                                     page.getByRole('note', { name: '查阅范围说明' }),
                                 ).toBeVisible();
                             await layout(page, scale);
-                            const evidence = frame.locator('.evidence-entry').first();
-                            const quote = evidence
-                                .locator(
-                                    'xpath=ancestor::details[contains(@class, "evidence-source-group")]',
-                                )
-                                .locator(':scope > summary');
-                            await quote.press('Enter');
-                            await expect(evidence.locator('blockquote')).toBeVisible();
-                            await quote.press('Enter');
+                            const source = panel
+                                .locator('.evidence-appendix .evidence-source-group')
+                                .first();
+                            const disclosure = source.locator(':scope > summary');
+                            const quote = source.locator('blockquote').first();
+                            await expect(quote).toBeHidden();
+                            await disclosure.press('Enter');
+                            await expect(quote).toBeVisible();
+                            await disclosure.press('Enter');
+                            await expect(quote).toBeHidden();
                             if (
                                 accent === 'blue' &&
                                 ((width === 1440 && scale === 100) ||
@@ -217,10 +214,17 @@ test('补充入口六宽/文字放大、四主题浅暗与已保存报告形式�
                                 report.title,
                             );
                         } else if (path === '/tasks') {
-                            const history = page.locator(
-                                `a.task-history-link[href="/tasks/reports?taskId=${prepared.task.id}"]`,
+                            const taskCard = page.getByRole('article').filter({
+                                has: page.locator(`a[href^="/tasks/${prepared.task.id}?"]`),
+                            });
+                            const history = taskCard.getByRole('link', {
+                                name: '报告历史',
+                                exact: true,
+                            });
+                            await expect(history).toHaveAttribute(
+                                'href',
+                                `/tasks/reports?taskId=${prepared.task.id}`,
                             );
-                            await expect(history).toHaveText('报告历史');
                             await layout(page, scale);
                             await history.press('Enter');
                             await expect(page).toHaveURL(

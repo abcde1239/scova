@@ -1,5 +1,11 @@
-import { openReportTool } from './support/report-tools.ts';
-import type { Report, ReportQuestion, Run, TaskDetailResponse } from '@scova/models';
+import { askReportQuestion, expectReportEvidence, openReportTool } from './support/report-tools.ts';
+import {
+    DEFAULT_TASK_BUDGET,
+    type Report,
+    type ReportQuestion,
+    type Run,
+    type TaskDetailResponse,
+} from '@scova/models';
 import { expect, test } from './support/environment.ts';
 import {
     assertChangeCitations,
@@ -18,7 +24,11 @@ test('完整工作台：反馈后的重要变化、收藏笔记真实冲突、�
     const owner = await environment.owner();
     const other = await environment.owner();
     const page = owner.page;
-    const task = await environment.task(owner);
+    const config = environment.config();
+    const task = await environment.task(owner, {
+        ...config,
+        budget: { ...DEFAULT_TASK_BUDGET, maxDurationSeconds: config.budget.maxDurationSeconds },
+    });
     const originalTask = await environment.request<TaskDetailResponse>(
         owner,
         `/api/v1/tasks/${task.id}`,
@@ -168,26 +178,22 @@ test('完整工作台：反馈后的重要变化、收藏笔记真实冲突、�
                 .click();
         expect(new URL(page.url()).pathname).toBe(`/reports/${second.report.id}`);
         await expect(page.locator('.report-frame')).toContainText(second.report.summary);
-        expect(
-            await page
-                .locator('.evidence-entry')
-                .evaluateAll((elements) => elements.map((element) => element.id)),
-        ).toEqual(second.report.evidence.map((evidence) => `evidence-${evidence.id}`));
+        await expectReportEvidence(page, second.report.evidence);
     }
     page.off('request', onRequest);
     expect(writes).toEqual([]);
     const beforeQuestions = await deliveryCounts(environment, owner, task.id);
-    await page.getByLabel('问题', { exact: true }).fill('费用变化是否需要进一步查证？');
-    const ask = page.getByRole('button', { name: '提问', exact: true });
-    await expect(ask).toBeEnabled();
-    await ask.press('Enter');
+    const insufficientId = await askReportQuestion(
+        page,
+        second.report.id,
+        '费用变化是否需要进一步查证？',
+    );
     await expect(
         page
             .locator('.assistant-message')
             .getByText('未配置可用的问答模型，暂时无法提取回答。', { exact: true }),
     ).toBeVisible();
     expect(await deliveryCounts(environment, owner, task.id)).toEqual(beforeQuestions);
-    const insufficientId = new URL(page.url()).searchParams.get('questionId');
     const insufficient = await environment.request<ReportQuestion>(
         owner,
         `/api/v1/reports/${second.report.id}/questions/${insufficientId}`,
@@ -197,13 +203,14 @@ test('完整工作台：反馈后的重要变化、收藏笔记真实冲突、�
     // The API entry changes explicitly; no production feature flag or remote model.
     await environment.services.useQuestionModel(true);
     await page.goto(`/reports/${second.report.id}`);
-    await page.getByLabel('问题', { exact: true }).fill('请引用本报告原文说明费用。');
-    await expect(ask).toBeEnabled();
-    await ask.press('Enter');
+    const questionId = await askReportQuestion(
+        page,
+        second.report.id,
+        '请引用本报告原文说明第一课有哪些音频和字幕。',
+    );
     await expect(
         page.locator('.conversation-turn').last().locator('.answer-paragraph').first(),
     ).toBeVisible();
-    const questionId = new URL(page.url()).searchParams.get('questionId');
     const questionPath = `/api/v1/reports/${second.report.id}/questions/${questionId}`;
     const answered = await environment.request<ReportQuestion>(owner, questionPath);
     expect(answered.answer.reason).toBe('evidence_answer');
@@ -262,7 +269,10 @@ test('完整工作台：反馈后的重要变化、收藏笔记真实冲突、�
     const response = await confirmation;
     expect(response.status()).toBe(202);
     const linked = ((await response.json()) as { run: Run }).run;
-    expect(followupWrites).toEqual([{ confirm: true, operation: 'research' }]);
+    expect(followupWrites).toEqual([{ confirm: true }]);
+    expect((await environment.request<ReportQuestion>(owner, questionPath)).followupRunId).toBe(
+        linked.id,
+    );
     expect(linked.parentRunId).toBe(second.run.id);
     expect(linked.taskVersionId).toBe(second.run.taskVersionId);
     expect(linked.budget).toEqual(second.run.budget);
@@ -275,7 +285,14 @@ test('完整工作台：反馈后的重要变化、收藏笔记真实冲突、�
     const final = await waitForDelivery(environment, owner, linked);
     const linkedScope = await runScope(linked.id);
     expect(linkedScope).not.toBe(originalScope);
+    await info.attach('followup-report', {
+        body: JSON.stringify(final.report),
+        contentType: 'application/json',
+    });
     expect(final.run.status).toBe('succeeded');
+    expect(
+        final.report.evidence.some(({ quote }) => quote.includes('free B1 audio with subtitles')),
+    ).toBe(true);
     const afterBaselines = await baselines();
     expect(afterBaselines.filter((row) => row.scope === originalScope)).toEqual(beforeBaselines);
     const followupBaselines = afterBaselines.filter((row) => row.scope !== originalScope);
