@@ -149,15 +149,16 @@ export async function assertChangeCitations(
         const row = page.locator(`.change-record[aria-labelledby="change-${entry.id}"]`);
         await expect(row).toBeVisible();
         await expect(row).toContainText(entry.reason);
+        const oldValue = row.locator('.old-value');
+        if (entry.oldValue === null) await expect(oldValue).toHaveCount(0);
+        else await expect(oldValue).toHaveText(entry.oldValue);
+        await expect(row.locator('.new-value')).toHaveText(entry.newValue ?? '未提供新值');
         for (const side of ['old', 'new'] as const) {
-            const section = row.locator(`.${side}-side`);
-            await expect(section.locator('.change-value')).toHaveText(
-                entry[`${side}Value`] ?? `未提供${side === 'old' ? '旧' : '新'}值`,
-            );
             const evidenceIds = entry[`${side}EvidenceIds`];
-            await expect(section.locator('.evidence-link')).toHaveCount(evidenceIds.length);
+            const links = row.locator(`a[id^="comparison-${entry.id}-${side}-"]`);
+            await expect(links).toHaveCount(evidenceIds.length);
             for (const [index, evidenceId] of evidenceIds.entries()) {
-                const reference = section.locator('.evidence-link').nth(index);
+                const reference = links.nth(index);
                 await expect(reference).toHaveAttribute('href', `#evidence-${evidenceId}`);
                 await reference.focus();
                 await reference.press('Enter');
