@@ -15,7 +15,7 @@ import {
     type Run,
     type SseMessage,
 } from '@scova/models';
-import { graphNodeState } from '@/models/run-graph';
+import { graphNodeState } from '@/utils/run/graph';
 import { runGraphQueryOptions } from '@/api/run-graph';
 import { createSessionLifecycle } from '@/api/session';
 import { subscribeRunEvents } from '@/api/run-events';
@@ -109,7 +109,7 @@ beforeAll(async () => {
         server: { middlewareMode: true, watch: null, hmr: false },
         appType: 'custom',
     });
-    graph = (await server.ssrLoadModule('/src/components/run/ExecutionGraph.vue')).default;
+    graph = (await server.ssrLoadModule('/src/component/run/ExecutionGraph.vue')).default;
 });
 afterAll(async () => server?.close());
 

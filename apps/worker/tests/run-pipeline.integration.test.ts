@@ -1,3 +1,5 @@
+import { createRunControl } from '../../server/src/app/run-control.ts';
+import { readRunControlConfig } from '../../server/src/app/run-control-config.ts';
 import { requiredDatabaseValue } from '@/utils/database.ts';
 import {
     runs as dbRuns,
@@ -30,10 +32,11 @@ import { nodeScriptCommand } from '../../../scripts/process-runtime.mjs';
 import { createRunRepository, withRunFence, type ClaimedRun } from '../src/repo/runs.ts';
 import { RunService, type RunExecutionContext } from '../src/service/runs.ts';
 import { createRunHandler } from '../src/handler/runs.ts';
-import { createRunConsumer, enqueueRecoverableRuns } from '../src/queue/runs.ts';
-import { createOutboxQueue } from '../src/queue/outbox.ts';
-import { createOutboxRepository } from '../src/repo/outbox.ts';
-import { OutboxService } from '../src/service/outbox.ts';
+import { createRunConsumer } from '../src/app/queue/runs.ts';
+import { enqueueRecoverableRuns } from '../../server/src/repo/queue/recoverable-runs.ts';
+import { createOutboxQueue } from '../../server/src/repo/queue/outbox.ts';
+import { createOutboxRepository } from '../../server/src/repo/outbox.ts';
+import { OutboxService } from '../../server/src/service/outbox.ts';
 import { outboxDatabase } from './support/outbox-database.ts';
 import { emptyUsage, seedRun } from './support/run-database.ts';
 
@@ -1038,6 +1041,16 @@ describe('真实进程崩溃与IPC停止', () => {
             const seed = await seedRun(fixture.db, { mode: 'live' });
             const queueName = `scova-crash-${runtime}-${randomUUID()}`;
             const queue = new Queue(queueName, { connection: redis });
+            const control = createRunControl(
+                readRunControlConfig({
+                    DATABASE_URL: fixture.databaseUrl,
+                    REDIS_URL: fixture.redisUrl,
+                    WORKER_QUEUE_NAME: queueName,
+                    WORKER_POLL_INTERVAL_MS: '20',
+                    WORKER_FAILURE_DELAY_MS: '50',
+                }),
+            );
+            control.start();
             const first = launch(runtime, queueName);
             let second: ReturnType<typeof launch> | undefined;
             try {
@@ -1085,6 +1098,7 @@ describe('真实进程崩溃与IPC停止', () => {
             } finally {
                 if (!first.exit) await endProcess(first, false);
                 if (second && !second.exit) await endProcess(second, false);
+                await control.stop();
                 await queue.obliterate({ force: true });
                 await queue.close();
             }

@@ -20,7 +20,6 @@ describe('monorepo importer 的 @ 别名隔离', () => {
                 'shared',
                 'agent-core',
                 'connectors',
-                'image-storage',
                 'object-storage',
             ];
             for (const workspace of workspaces) {

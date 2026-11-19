@@ -48,8 +48,12 @@ release. Add a tool name to select part of the graph. For example, run
 
 每个 `apps/*`、`packages/*` 工作区均以 `src` 保存源码，配置本工作区的 `@/* → ./src/*` 别名。应用内部使用 `@/`，跨包通过包名和 exports 引用；直接导出源码的共享包内部保留相对引用，避免消费方 TypeScript 将 `@/` 解析到错误工作区。Vite/Vitest 开启按导入文件解析 tsconfig paths；Node.js 入口通过 `vpx` 执行。
 
-Server 按 `main → app → router → handler → service → repo` 调用：`app` 装配 Elysia、Node 兼容层和生命周期；`router` 声明接口契约与中文文档；`handler` 处理 HTTP、会话与响应；`service` 组织业务规则与事务；`repo` 执行数据库和 Redis 访问；`utils` 仅放小工具。PostgreSQL 的 Drizzle schema、行类型、客户端和迁移统一放在 `packages/db`，Server/Worker 通过 `@scova/db` 引用；公开 DTO 与事件 schema 由 `@scova/models` 管理，不依赖数据库客户端。业务查询使用原生 Drizzle；历史 SQL 保持不可变，存量库接管先验证实际结构与迁移状态，不重置用户数据库。
+Web 的 `src/` 顶层目录仅用 `component`（仅 `.vue`：复用 UI、应用级 UI provider）、`layout`（应用页面外壳及其专用导航、菜单和面包屑）、`composable`（复用交互和响应式流程）、`utils`（通用辅助，以及按领域分组的纯函数、展示类型和静态配置）、`store`（Pinia 客户端状态）、`api`（requestlane、SSE 与接口契约适配）、`view`（页面）、`router`（Vue Router 装配、路由登记和元数据）。使用这些单数目录名；报告等专用辅助模块放在 `utils` 的对应领域子目录，不在 `component` 存放独立 `.ts` 文件，也不另设顶层目录。
 
-Worker 按 `main/node → app → handler → service → repo + queue` 调用：app 管配置、依赖及串行循环，handler 是后台批次入口，service 编排租约与投递规则，repo 执行数据库 CAS，queue 适配 BullMQ。停止时先阻止新领取、等待在途批次，再关闭队列、Redis 和数据库；不在 service 或导入模块时连接外部服务。Worker 调用 agent-core，不能把队列投递或技术实验当作 Agent 已完成执行。
+Server 的 `src/` 顶层目录仅用 `repo`、`handler`、`service`、`model`、`utils`、`app`、`router`。调用链为 `main → app → router → handler → service → repo`：`app` 装配 Elysia、Node 适配和生命周期；`router` 声明接口与中文文档；`handler` 适配 HTTP/会话/响应；`service` 组织规则和事务；`repo` 执行 PostgreSQL/Redis 访问及队列投递；`model` 保存 Server 专用 schema 与框架契约注册；`utils` 仅放辅助代码。PostgreSQL 的 Drizzle schema、行类型、客户端和迁移统一放在 `packages/db`；共享 DTO 和事件 schema 由 `@scova/models` 管理，不在应用内复制。业务查询使用原生 Drizzle；历史 SQL 保持不可变，存量库接管先验证实际结构与迁移状态，不重置用户数据库。
 
-Server 的 `http` 放跨接口复用的 HTTP 适配能力：Cookie、Origin/CSRF 与会话认证桥接，以及 SSE 流的背压、心跳和连接清理。`handler` 保留具体接口入口，`service` 保留业务认证与授权规则，`utils` 仅放编码、哈希等小工具；流注册与应用停止仍由 `app` 管理。
+Server 的 `handler/http` 放 Cookie、Origin/CSRF、会话桥接、请求体限制与 SSE 背压/心跳/连接清理，`repo` 包含 Redis 客户端适配及数据访问，`repo/queue` 放 BullMQ 发布、回补和维护操作；长期连接由 `app` 装配并关闭。Server 后台控制由 `app` 装配独立批次和资源，负责调度、Outbox 投递及可恢复 Run 回补，不暴露 HTTP 路由；停止先阻止新批次并等待在途工作，再关闭资源。
+
+Worker 复用后端分层的实际子集，不建空 `router` 或 `model`：只消费 BullMQ 作业、管理执行并运行 agent-core，禁止周期调度、发布 Run 或扫描回补。`app/queue` 承载运行时消费适配，`handler` 接收作业，`service` 编排，`repo` 目前仍负责执行绑定的租约、工具账本、checkpoint 和交付。停止先中断并等待在途执行收敛，再释放消费者及执行依赖；导入模块不连接外部服务。队列确认不能视为 Agent 已完成执行。
+
+以上限制只针对应用 `src/` 的一级目录，不限制层内按职责分组、工作区根级的测试/静态资源/工具配置，或 `src/` 顶层真实入口文件（如 Web 的 `main.ts`、`App.vue`、`main.css`、`env.d.ts`，后端的 `main.ts`、`node.ts` 及部署实际调用的健康检查/维护 CLI）。不给入口增加纯转发文件或空目录；如确需额外一级目录，在变更说明中写明现有层为何不适合、边界和使用方，并同步公开架构文档。

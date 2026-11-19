@@ -1,13 +1,15 @@
 import type { Context } from 'elysia';
 import type { InboxListQuery, InboxPatchInput, ReportListQuery } from '@scova/models';
 import type { ApiServices } from '@/app/services';
-import { requireCsrf, requireSession } from '@/http/session.ts';
+import { requireCsrf, requireSession } from '@/handler/http/session.ts';
 import { createReportService } from '@/service/reports.ts';
+import { createReportExportService } from '@/service/report-exports.ts';
 
 type HttpContext = Pick<Context, 'request' | 'set'>;
 
 export function createReportHandlers(services: ApiServices) {
     const reports = createReportService(services);
+    const exports = createReportExportService(services);
     return {
         async list(this: void, { request, query }: HttpContext & { query: ReportListQuery }) {
             const session = await requireSession(request, services);
@@ -16,6 +18,15 @@ export function createReportHandlers(services: ApiServices) {
         async get(this: void, { request, params }: HttpContext & { params: { reportId: string } }) {
             const session = await requireSession(request, services);
             return reports.get(session.userId, params.reportId);
+        },
+        async exportMarkdown(
+            this: void,
+            { request, set, params }: HttpContext & { params: { reportId: string } },
+        ) {
+            set.headers['cache-control'] = 'no-store';
+            const session = await requireSession(request, services);
+            requireCsrf(request, session, services);
+            return exports.getOrCreate(session.userId, params.reportId);
         },
         async inbox(this: void, { request, query }: HttpContext & { query: InboxListQuery }) {
             const session = await requireSession(request, services);

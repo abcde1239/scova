@@ -6,13 +6,13 @@
 
 需要 Docker Engine/Desktop Linux 容器与 Compose v2。为此项目使用独立数据库，不与其他应用共用数据库或 Redis 队列名称。
 
-1. 复制 `.env.example` 为 `.env`，把数据库密码和搜索密钥替换为随机值。数据库密码使用随机十六进制文本，避免连接 URL 的转义歧义；不要提交 `.env`。
+1. 复制 `.env.example` 为 `.env`，把数据库密码替换为随机值。只有启用内置 SearXNG 时才需要设置随机搜索密钥。数据库密码使用随机十六进制文本，避免连接 URL 的转义歧义；不要提交 `.env`。
 2. 执行 `docker compose up --build -d`，再用 `docker compose ps` 查看健康状态。
-3. 默认只绑定 `127.0.0.1:8080`。打开 `http://localhost:8080/tasks` 访问工作台。`GET /health` 是 API 存活检查；API/Worker 容器健康检查另外核验 PostgreSQL、Redis、全部业务迁移和 saver 版本，代理健康检查验证 Web 入口可读。Worker 还必须持续更新就绪心跳。
+3. 默认只绑定 `127.0.0.1:8080`。打开 `http://localhost:8080/tasks` 访问工作台。`GET /health` 是 API 存活检查；API 容器健康检查另外核验 PostgreSQL、Redis、业务迁移和 saver 版本；Worker 容器健康检查读取 Worker 完成启动和后台轮询后更新的心跳；代理健康检查验证 Web 入口可读。
 
 `Dockerfile` 的 `build` 阶段在 Linux 内安装锁定依赖并运行全部工作区构建；`web` 目标从 `apps/web/dist` 复制静态产物，Compose 的 `proxy` 服务使用该目标，`runtime` 目标保留 API/维护工具，`worker-runtime` 额外安装锁定版本 Chromium 及系统依赖。构建不从宿主机复制 dist 或 node_modules，也不将后端模型凭据作为前端构建参数。更新源码后执行 `docker compose up --build -d` 才会重新构建 Web 资源。
 
-启动先执行一次性 `migrate` 服务。Drizzle 业务迁移和 LangGraph saver 迁移均成功后，API/Worker 才启动。迁移服务再次运行时若核验当前全部版本已齐，仅返回只读的 current 结果；需要 DDL 时仍要求 API/Worker 已停止。容器中的 `AGENT_CHECKPOINT_MIGRATION=external` 禁止 Worker 自动建表；本地开发默认保留启动时初始化 saver 的行为。升级前先使用旧版本镜像完成备份并验证恢复；保持应用停止，再构建新镜像、执行迁移并启动：
+启动先执行一次性 `migrate` 服务。Drizzle 业务迁移和 LangGraph saver 迁移均成功后，API/Worker 才启动。迁移服务再次运行时若核验当前全部版本已齐，仅返回只读的 current 结果；需要 DDL 时仍要求 API/Worker 已停止。迁移和离线维护由 Server 的 CLI 处理；Worker 仅检查已安装的 checkpoint 版本，不会在启动时建表。本地亦须先完成 `vp run db:migrate`。升级前先使用旧版本镜像完成备份并验证恢复；保持应用停止，再构建新镜像、执行迁移并启动：
 
 ```sh
 vp run operations backup
@@ -49,6 +49,14 @@ docker compose --profile live-search up -d
 
 设置 `MODEL_API_KEY`、`MODEL_NAME` 和必要的 `MODEL_BASE_URL` 作为部署默认模型，或配置 `AGENT_CREDENTIAL_KEY` 后让各账号在界面添加个人供应商，详见[Agent 配置](agent-configuration.md)。加密主密钥在 Server/Worker 中必须一致，并独立备份。搜索服务、搜索密钥与正文策略仅在账号的独立搜索区域配置，服务器没有默认搜索 Agent；旧 SEARCH_PROVIDER、SEARCH_API_*、TAVILY_API_KEY 不再生效。`SEARXNG_BASE_URL` 仅为内置工具基础设施地址，容器使用 `http://searxng:8080`，不使用宿主机的 localhost。见[搜索说明](search.md)。手动、重试和调度统一创建 live 执行，旧 `WORKER_SCHEDULED_RUN_MODE` 已移除，设置该变量不再改变调度行为。缺凭据或调用失败不会从 live 静默切成演示、付费渠道或其他供应商。真实烟测单独 opt-in，未执行时应记录“未执行”，不能用 fixture 通过冒充真实服务成功。
 
+## Worker 并发
+
+Server 的 `api` 服务同时运行定时调度、Outbox 投递和可恢复 Run 回补；Worker 可横向扩容，只消费和执行，现阶段仍需要 PostgreSQL 处理执行租约、checkpoint、工具账本及交付。`WORKER_QUEUE_NAME` 由双方和维护命令共用。`WORKER_POLL_INTERVAL_MS`、`WORKER_FAILURE_DELAY_MS`、`WORKER_BATCH_SIZE`、`WORKER_LEASE_SECONDS`、`WORKER_SCHEDULER_INTERVAL_MS` 和 `WORKER_SCHEDULER_CONCURRENCY` 保留原变量名，现配置在 `api` 而非 Worker。默认分别为 `1000`、`5000`、`50`、`30`、`30000` 和 `2`（间隔为毫秒，租约为秒）。升级时先停旧 Worker，再以同一版本更新 `api` 和 Worker，避免旧 Worker 与新 Server 同时扫描、投递；迁移期间已保存的 Run/Outbox 不丢失。
+
+`WORKER_RUN_CONCURRENCY` 控制每个 Worker 同时消费的 Run 数，默认 `2`，范围 `1–32`。有排队且资源未饱和时，可先把 `.env` 中的值提高到 `4`，等在途任务结束，再用 `docker compose up -d --no-deps worker` 按新配置重建 Worker。宿主机开发则修改 `.env.local` 并重启 Worker。观察队列等待时间、Run 错误和超时率、数据库连接等待、Worker 内存及供应商 429，再决定是否继续提高。调度扫描并发和 Outbox 批大小不增加执行槽位。
+
+同一个任务最多有一个活跃 Run；不同账号共享队列和执行槽位，目前没有按账号保留槽位或公平轮转。部署多 Worker 实例会叠加消费槽位，并增加数据库连接、Chromium 和供应商资源消耗；不要把设定上限当成实测容量。面向多租户时，应先设计整队列并发上限、按账号排队及运行配额，再扩大实例数。
+
 ## 维护窗口
 
 仓库根目录的 `vp run operations ...` 先停止代理/API/Worker，再运行一次性维护容器。它不会自动恢复应用，以便操作者检查结果。所有维护使用同一 Compose 项目与 `.env`，完成后执行 `docker compose up -d`。不要手动同时启动应用和维护；维护 CLI 需要 `SCOVA_MAINTENANCE=1` 并拒绝仍带生产应用名称的数据库连接。可通过 `docker compose --profile maintenance run --rm operations ...` 在已经确认停止应用后直接调用。
@@ -84,7 +92,7 @@ vp run operations retention --apply
 docker compose up -d
 ```
 
-默认仅预览。每批最多清理 100 个旧终态 Run 和 100 个到期正文快照，重复执行至计数为 0。Run 按 `finishedAt` 超过 30 天筛选，快照使用持久化 `textExpiresAt`。清理包括 Snapshot 正文、ToolCall 完整输出，以及 saver 的 checkpoints、blobs、pending writes 中所有 epoch/未提升线程；同步清空已清理终态 Run 的 checkpoint 引用。
+默认仅预览。每批最多清理 100 个旧终态 Run、100 个到期正文快照和 100 份到期报告 Markdown 暂存，重复执行至计数为 0。导出暂存清理不会删除原报告，账号再次导出时也会清理该账号的到期暂存。Run 按 `finishedAt` 超过 30 天筛选，快照使用持久化 `textExpiresAt`。清理包括 Snapshot 正文、ToolCall 完整输出，以及 saver 的 checkpoints、blobs、pending writes 中所有 epoch/未提升线程；同步清空已清理终态 Run 的 checkpoint 引用。
 
 活跃/待恢复 Run 的工具结果和 checkpoint 不清理；被活跃 Run 观测引用的 Snapshot 正文也保留。报告、短引用、定位、指纹、元数据、用量账本及基线事实清单继续保留。清理后历史引用仍可解释，后续比较不依赖旧完整正文。这里不删除 RunEvent；维护事件保留策略时必须保留每个 Run 最新事件，避免当前序号分配器重用历史 seq。
 

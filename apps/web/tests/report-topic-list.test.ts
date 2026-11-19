@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test';
 import { ReportSchema, parseContract, type Report } from '@scova/models';
-import { claimEvidence, reportIntegrity, reportSections } from '@/composables/useReport';
+import { claimEvidence, reportIntegrity, reportSections } from '@/utils/report/summary';
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 function fixture(): Report {

@@ -32,6 +32,7 @@ services:
             retries: 30
         logging: *logging
     searxng:
+        profiles: [live-search]
         extends:
             file: compose.search.yaml
             service: searxng

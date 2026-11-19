@@ -315,8 +315,6 @@ describe('整体后端：真实 HTTP → PostgreSQL Outbox → BullMQ → Run co
                     .findFirst({ where: and(eq(tables.outbox.aggregateId, first.run.id)) })
                     .then(requireRow);
                 expect(initial.userId).toBe(owner.userId);
-                expect(initial.sentAt).toBeNull();
-                worker = launch('worker', workerRuntime, env);
                 await waitUntil(
                     async () =>
                         (
@@ -324,7 +322,7 @@ describe('整体后端：真实 HTTP → PostgreSQL Outbox → BullMQ → Run co
                                 .findFirst({ where: and(eq(tables.outbox.id, initial.id)) })
                                 .then(requireRow)
                         ).sentAt !== null,
-                    worker,
+                    api,
                 );
                 const delivered = await fixture.db.query.outbox
                     .findFirst({ where: and(eq(tables.outbox.id, initial.id)) })
@@ -332,11 +330,13 @@ describe('整体后端：真实 HTTP → PostgreSQL Outbox → BullMQ → Run co
                 expect(delivered.attempts).toBe(1);
                 expect(delivered.leaseExpiresAt).toBeNull();
                 const job = await queue.getJob(`run-${first.run.id}`);
+                expect(await job?.getState()).toBe('waiting');
                 expect(job?.name).toBe('run.enqueue');
                 expect(job?.data).toMatchObject({
                     runId: first.run.id,
                     taskVersionId: task.currentVersionId,
                 });
+                worker = launch('worker', workerRuntime, env);
                 await waitUntil(async () => {
                     const run = await fixture.db.query.runs
                         .findFirst({ where: and(eq(tables.runs.id, first.run.id)) })

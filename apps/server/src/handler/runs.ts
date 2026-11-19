@@ -1,11 +1,11 @@
 import type { Context } from 'elysia';
 import type { RunCommandInput } from '@scova/models';
 import type { ApiServices } from '@/app/services';
-import { requireCsrf, requireSession } from '@/http/session.ts';
+import { requireCsrf, requireSession } from '@/handler/http/session.ts';
 import { createRunService } from '@/service/runs.ts';
 import { ApiError } from '@/utils/errors.ts';
 import { createRunEventService } from '@/service/run-events.ts';
-import { createSseBody } from '@/http/sse.ts';
+import { createSseBody } from '@/handler/http/sse.ts';
 import { createRunGraphService } from '@/service/run-graph.ts';
 
 type HttpContext = Pick<Context, 'request' | 'set'>;

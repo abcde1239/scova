@@ -33,7 +33,7 @@ export interface AgentTools {
 
 /** Worker-authored metadata, outside model-generated content and provider schemas. */
 export interface ResearchPolicy {
-    searchDirectionPolicy?: 1;
+    searchDirectionPolicy?: 1 | 2 | 3;
     pagePolicy?: 1;
     collectionPolicy?: 1;
     baselinePolicy?: 1;

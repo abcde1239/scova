@@ -8,7 +8,12 @@ import {
     GAP_LOOP_PASSES,
 } from '../gap-loop.ts';
 import { fieldSynthesisBatches } from '../synthesis-batches.ts';
-import { gapSearchQuery, sameSearch, rewriteGapSearch } from '../../search/direction.ts';
+import {
+    gapSearchQuery,
+    sameSearch,
+    needsSearchDiversity,
+    rewriteGapSearch,
+} from '../../search/direction.ts';
 import { frozenRequirements, needsConflictReview } from '../claims.ts';
 import { candidate } from '../candidate.ts';
 import type { ResearchState } from '../state.ts';
@@ -71,6 +76,11 @@ export function gapLoopNode(rt: AgentRuntime) {
                           : 'budget',
             );
         const requirements = frozenRequirements(state);
+        const v3 = state.searchDirectionPolicy === 3 && context.mode === 'live';
+        const hasQuery = (a: Parameters<typeof gapSearchQuery>[0]) =>
+            state.queries.some((q) => sameSearch(q, gapSearchQuery(a, rt)));
+        const canChangeDirection = (a: Parameters<typeof gapSearchQuery>[0]) =>
+            a.action === 'search' && needsSearchDiversity(rt, state, a);
         const discoveryIndex = memory.history.findLastIndex(
             (h) =>
                 (h.action === 'search' || h.action === 'read') &&
@@ -93,13 +103,13 @@ export function gapLoopNode(rt: AgentRuntime) {
                 : discoveryIndex >= 0 && state.queries.some((q) => sameSearch(q, query));
             if (a.action === 'search' && reuseBody)
                 return { ...a, action: 'rebind' as const, query: '' };
-            if (state.loopQualityPolicy && a.action === 'search' && !a.language) {
+            if (state.loopQualityPolicy && a.action === 'search' && (v3 || !a.language)) {
                 const observed = observedReadTarget(context, state, a, deps.tools.providerReads);
                 if (observed) return { ...a, action: 'read' as const, url: observed.url };
             }
             return a;
         });
-        const eligible = actions.filter((a) => {
+        const isEligible = (a: (typeof actions)[number]) => {
             if (a.action === 'read')
                 return (
                     context.deadlineAt.getTime() - now() >= 20_000 &&
@@ -107,7 +117,6 @@ export function gapLoopNode(rt: AgentRuntime) {
                     context.usage.pages < context.budget.maxPages
                 );
             if (a.action === 'search') {
-                const query = gapSearchQuery(a, rt);
                 return (
                     !state.searchBlocked &&
                     context.deadlineAt.getTime() - now() >= 45_000 &&
@@ -115,18 +124,16 @@ export function gapLoopNode(rt: AgentRuntime) {
                     context.usage.searches < context.budget.maxSearches &&
                     state.readIndex < Math.min(20, context.budget.maxPages) &&
                     context.usage.pages < context.budget.maxPages &&
-                    (!state.queries.some((q) => sameSearch(q, query)) ||
-                        (!!state.searchDirectionPolicy && !a.language))
+                    (!hasQuery(a) ||
+                        (!!state.searchDirectionPolicy && !a.language) ||
+                        canChangeDirection(a))
                 );
             }
             return a.action !== 'conflict' || !!state.conflictReviewPolicy;
-        });
-        const selected = chooseGap(
-            eligible,
-            memory,
-            progress,
-            (state.claimIssues ?? []).map((i) => i.code),
-        );
+        };
+        const eligible = actions.filter(isEligible);
+        const errors = (state.claimIssues ?? []).map((i) => i.code);
+        let selected = chooseGap(eligible, memory, progress, errors, canChangeDirection);
         if (!selected) {
             const retrievalBudget =
                 !eligible.length &&
@@ -140,24 +147,39 @@ export function gapLoopNode(rt: AgentRuntime) {
                 actions.length ? (retrievalBudget ? 'budget' : 'no_progress') : 'verified',
             );
         }
-        let target = selected.action;
-        if (target.action === 'search') {
-            const rewritten = await rewriteGapSearch(rt, state, target);
+        if (selected.action.action === 'search') {
+            const rewritten = await rewriteGapSearch(rt, state, selected.action);
             if (state.modelBlocked) return finish('改写模型不可用', 'provider_unavailable');
-            if (
-                !rewritten ||
-                state.queries.some((q) => sameSearch(q, gapSearchQuery(rewritten, rt)))
-            )
-                return finish('补搜未产生新的查询与语言组合', 'no_progress');
-            target = rewritten;
-            selected.fingerprint = gapFingerprint(
-                target,
-                progress,
-                (state.claimIssues ?? []).map((i) => i.code),
-            );
-            if (memory.history.some((h) => h.fingerprint === selected.fingerprint))
-                return finish('补搜方向已尝试', 'no_progress');
+            const next =
+                rewritten && !hasQuery(rewritten)
+                    ? {
+                          action: rewritten,
+                          fingerprint: gapFingerprint(rewritten, progress, errors),
+                      }
+                    : undefined;
+            if (!next || memory.history.some((h) => h.fingerprint === next.fingerprint)) {
+                const reason = next ? '补搜方向已尝试' : '补搜未产生新的查询与语言组合';
+                if (!v3) return finish(reason, 'no_progress');
+                // Do not spend another rewrite on the same pass or block other fields.
+                const rejected = selected.action;
+                selected = chooseGap(
+                    eligible.filter(
+                        (a) =>
+                            a !== rejected &&
+                            isEligible(a) &&
+                            (a.action !== 'search' || (!hasQuery(a) && !canChangeDirection(a))),
+                    ),
+                    memory,
+                    progress,
+                    errors,
+                );
+                if (!selected) return finish(reason, 'no_progress');
+                state.notes!.push(`跳过缺口 ${rejected.requirementId}：${reason}`);
+            } else {
+                selected = next;
+            }
         }
+        const target = selected.action;
         memory.target = target;
         memory.pending = memory.history.length;
         memory.history.push({

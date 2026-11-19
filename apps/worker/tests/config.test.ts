@@ -12,14 +12,8 @@ describe('Worker 配置与脱敏校验', () => {
             databaseUrl: base.DATABASE_URL,
             redisUrl: base.REDIS_URL,
             queueName: 'scova-runs',
-            pollIntervalMs: 1000,
-            failureDelayMs: 5000,
-            batchSize: 50,
-            leaseSeconds: 30,
             runLeaseSeconds: 30,
             runConcurrency: 2,
-            schedulerIntervalMs: 30_000,
-            schedulerConcurrency: 2,
         });
         expect(
             readWorkerConfig({
@@ -30,14 +24,8 @@ describe('Worker 配置与脱敏校验', () => {
     });
 
     it.each([
-        ['WORKER_POLL_INTERVAL_MS', 'pollIntervalMs', 300_000],
-        ['WORKER_FAILURE_DELAY_MS', 'failureDelayMs', 300_000],
-        ['WORKER_BATCH_SIZE', 'batchSize', 1000],
-        ['WORKER_LEASE_SECONDS', 'leaseSeconds', 3600],
         ['WORKER_RUN_LEASE_SECONDS', 'runLeaseSeconds', 3600],
         ['WORKER_RUN_CONCURRENCY', 'runConcurrency', 32],
-        ['WORKER_SCHEDULER_INTERVAL_MS', 'schedulerIntervalMs', 300_000],
-        ['WORKER_SCHEDULER_CONCURRENCY', 'schedulerConcurrency', 8],
     ] as const)('%s 接受边界并拒绝非整数、越界和空值', (variable, field, maximum) => {
         for (const accepted of [1, maximum])
             expect(readWorkerConfig({ ...base, [variable]: String(accepted) })[field]).toBe(
@@ -72,9 +60,14 @@ describe('Worker 配置与脱敏校验', () => {
             );
     });
 
-    it('旧执行模式环境变量不再控制调度', () => {
-        expect(readWorkerConfig({ ...base, WORKER_SCHEDULED_RUN_MODE: 'demo' })).toEqual(
-            readWorkerConfig(base),
-        );
+    it('消费进程不读取 Server 批次配置', () => {
+        expect(
+            readWorkerConfig({
+                ...base,
+                WORKER_BATCH_SIZE: 'invalid',
+                WORKER_POLL_INTERVAL_MS: 'invalid',
+                WORKER_SCHEDULER_CONCURRENCY: 'invalid',
+            }),
+        ).toEqual(readWorkerConfig(base));
     });
 });

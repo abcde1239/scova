@@ -22,7 +22,7 @@ export interface Selection {
     reason?: 'priority' | 'topic_and_coverage';
 }
 export interface ResearchState {
-    searchDirectionPolicy?: 1;
+    searchDirectionPolicy?: 1 | 2 | 3;
     /** The graph stores pages without text and hydrates them before running any domain node. */
     pagePolicy?: 1;
     collectionPolicy?: 1;

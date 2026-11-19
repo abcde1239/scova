@@ -1,10 +1,11 @@
+import { deferred } from './support/deferred';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 import { effectScope, nextTick } from 'vue';
 import type { SessionResponse, UpdatePreferencesInput } from '@scova/models';
 import { createSessionLifecycle } from '@/api/session';
 import { currentSessionEndpoint } from '@/api/endpoints';
-import { createPreferencesController } from '@/composables/usePreferences';
-import { useSessionQuery } from '@/composables/useSessionQuery';
+import { createPreferencesController } from '@/composable/usePreferences';
+import { useSessionQuery } from '@/composable/useSessionQuery';
 
 const account: SessionResponse = {
     user: {
@@ -39,13 +40,6 @@ function failure(status: number, fieldErrors?: { path: string; message: string }
         },
         { status },
     );
-}
-function deferred<T>() {
-    let resolve!: (value: T) => void;
-    const promise = new Promise<T>((complete) => {
-        resolve = complete;
-    });
-    return { promise, resolve };
 }
 afterEach(() => disposals.splice(0).forEach((dispose) => dispose()));
 

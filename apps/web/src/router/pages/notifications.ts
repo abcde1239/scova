@@ -4,7 +4,7 @@ export default [
     {
         path: '/notifications',
         name: 'notifications',
-        component: () => import('@/views/NotificationsView.vue'),
-        meta: { title: '通知', section: 'notifications', navigation: 'tool' },
+        component: () => import('@/view/NotificationsView.vue'),
+        meta: { titleKey: 'notifications', section: 'notifications', navigation: 'tool' },
     },
 ] satisfies RouteRecordRaw[];

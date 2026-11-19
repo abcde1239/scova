@@ -1,6 +1,6 @@
 # 图标使用
 
-Web 使用 community 同源的 `@vicons/ionicons5`（0.13.0），集中在 `components/common/icons.ts` 显式导入 outline 图标。导航和重要动作用图标，正文和状态保留文字，不在每句或标签前添加装饰。
+Web 使用 community 同源的 `@vicons/ionicons5`（0.13.0），集中在 `utils/icons.ts` 显式导入 outline 图标。导航和重要动作用图标，正文和状态保留文字，不在每句或标签前添加装饰。
 
 ```vue
 <button type="button"><app-icon name="create" />新建任务</button>

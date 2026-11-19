@@ -10,9 +10,14 @@ const commands: Record<string, string[]> = {
     down: ['down'],
     status: ['ps'],
 };
-const action = process.argv[2];
-if (!action || (action !== 'init' && !Object.hasOwn(commands, action)))
-    throw new Error('Expected init, up, down or status');
+const [action, ...flags] = process.argv.slice(2);
+const withSearch = action === 'up' && flags.length === 1 && flags[0] === '--search';
+if (
+    !action ||
+    (action !== 'init' && !Object.hasOwn(commands, action)) ||
+    (flags.length && !withSearch)
+)
+    throw new Error('Expected init, up [--search], down or status');
 
 if (!existsSync(envPath)) {
     if (action !== 'init' && action !== 'up') throw new Error('Run vp run local:init first');
@@ -71,6 +76,8 @@ if (action === 'init') {
             'compose.local.yaml',
             '-p',
             'scova-local',
+            // Status/down also see a previously enabled search service.
+            ...(withSearch || action !== 'up' ? ['--profile', 'live-search'] : []),
             ...commands[action],
         ],
         { cwd: root, stdio: 'inherit', windowsHide: true },
@@ -78,5 +85,7 @@ if (action === 'init') {
     if (result.error) throw result.error;
     process.exitCode = result.status ?? 1;
     if (result.status === 0 && action === 'up')
-        console.log('Local dependencies ready. Next: vp run db:migrate, then vp run dev.');
+        console.log(
+            `Local dependencies ready (${withSearch ? 'with' : 'without starting'} SearXNG). Next: vp run db:migrate, then vp run dev.`,
+        );
 }

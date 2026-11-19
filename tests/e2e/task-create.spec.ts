@@ -1,7 +1,7 @@
 import { chooseOption, chooseOutputFormats, chooseTimezone } from './support/select.ts';
 import { fillList } from './support/list-input.ts';
 import { expect, test, type Page } from '@playwright/test';
-import type { taskInput } from '../../apps/web/src/composables/useCreateTask.ts';
+import type { taskInput } from '../../apps/web/src/composable/useCreateTask.ts';
 type CreateTaskInput = ReturnType<typeof taskInput>;
 
 // Explicit local contract samples, not production accounts or backend evidence.

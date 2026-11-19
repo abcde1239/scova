@@ -82,7 +82,7 @@ export async function runResearchAgent(
                                           ? {
                                                 gapLoopPolicy: 1 as const,
                                                 loopQualityPolicy: 1 as const,
-                                                searchDirectionPolicy: 1 as const,
+                                                searchDirectionPolicy: 3 as const,
                                             }
                                           : {}),
                                       ...(!collection &&

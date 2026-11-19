@@ -16,7 +16,7 @@ import {
     useBookmark,
     useBookmarks,
     validateBookmarkPage,
-} from '@/composables/useBookmarks';
+} from '@/composable/useBookmarks';
 import { collectPages, createWorkbenchRouter } from '@/router';
 import libraryRoutes from '@/router/pages/library';
 import workbenchRoutes from '@/router/pages/workbench';

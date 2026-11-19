@@ -20,8 +20,8 @@ import {
     artifactReport,
     savedArtifactDocument,
     savedArtifactFormats,
-} from '@/utils/report-artifacts';
-import { groupEvidence } from '@/utils/evidence-groups';
+} from '@/utils/report/artifacts';
+import { groupEvidence } from '@/utils/report/sources';
 import {
     reportFormatSample,
     reportLongFormatSample,
@@ -544,14 +544,14 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
             research_report: 'ResearchReport',
         }))
             components[format as Report['format']] = (
-                await server.ssrLoadModule(`/src/components/reports/${name}.vue`)
+                await server.ssrLoadModule(`/src/component/reports/${name}.vue`)
             ).default as Component;
-        themeProvider = (await server.ssrLoadModule('/src/theme/AppThemeProvider.vue'))
+        themeProvider = (await server.ssrLoadModule('/src/component/theme/AppThemeProvider.vue'))
             .default as Component;
-        detail = (await server.ssrLoadModule('/src/views/ReportDetailView.vue'))
+        detail = (await server.ssrLoadModule('/src/view/ReportDetailView.vue'))
             .default as Component;
         structuredValue = (
-            await server.ssrLoadModule('/src/components/reports/ReportStructuredValue.vue')
+            await server.ssrLoadModule('/src/component/reports/ReportStructuredValue.vue')
         ).default as Component;
         sessionModule = (await server.ssrLoadModule('/src/api/session.ts')) as typeof sessionModule;
         reportModule = (await server.ssrLoadModule('/src/api/reports.ts')) as typeof reportModule;
@@ -757,7 +757,7 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
             const before = structuredClone(report);
             const document = await render(format, report);
             const paragraphs = document.querySelectorAll(
-                `#claim-${report.claims[1]!.id} .claim-text`,
+                `#claim-${report.claims[1]!.id} .claim-copy`,
             );
             expect([...paragraphs].map((paragraph) => paragraph.textContent?.trim())).toEqual([
                 '第一段说明具体安排。',
@@ -1360,7 +1360,7 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
             );
             for (const claim of report.claims) {
                 const node = document.getElementById(`claim-${claim.id}`)!;
-                expect(text(node, '.claim-text')).toBe(claim.text);
+                expect(text(node, '.claim-copy')).toBe(claim.text);
                 const provenance = document.getElementById(`claim-support-${claim.id}`)!;
                 expect(provenance.textContent).toContain(claim.confidenceLabel);
                 expect(node.querySelectorAll('.citation')).toHaveLength(0);

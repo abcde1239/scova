@@ -7,14 +7,14 @@ import { fileURLToPath } from 'node:url';
 import { createSSRApp, h, type Component } from 'vue';
 import { renderToString } from 'vue/server-renderer';
 import type { ArtifactDocument, Report } from '@scova/models';
-import { reportTableLayout } from '@/utils/report-layout';
+import { reportTableLayout } from '@/utils/report/widths';
 import {
     documentSectionNumbers,
     groupRuns,
     splitStructuredDocument,
     tabularList,
     visibleFields,
-} from '@/utils/report-artifacts';
+} from '@/utils/report/artifacts';
 
 type Content = NonNullable<NonNullable<Report['coverage']['artifacts']>[number]['content']>;
 type List = NonNullable<Content['list']>;
@@ -35,10 +35,10 @@ beforeAll(async () => {
         server: { middlewareMode: true, watch: null, hmr: false },
         appType: 'custom',
     });
-    documentView = (await server.ssrLoadModule('/src/components/reports/ReportDocument.vue'))
+    documentView = (await server.ssrLoadModule('/src/component/reports/ReportDocument.vue'))
         .default;
     structuredView = (
-        await server.ssrLoadModule('/src/components/reports/ReportStructuredContent.vue')
+        await server.ssrLoadModule('/src/component/reports/ReportStructuredContent.vue')
     ).default;
 });
 afterAll(async () => server?.close());

@@ -295,7 +295,9 @@ for (const width of [1440, 320]) {
         await expect(page.locator('.provider-models')).toContainText('已读取 2 个模型');
         await page.getByLabel('模型', { exact: true }).click();
         await page.getByRole('combobox', { name: '搜索模型', exact: true }).fill('model-b');
-        await expect(page.getByRole('option')).toHaveCount(1);
+        await expect(
+            page.getByRole('listbox', { name: '模型', exact: true }).getByRole('option'),
+        ).toHaveCount(1);
         await page.screenshot({
             path: info.outputPath(`models-search-${width}.png`),
             // 全页截图会滚动长表单，使离开视口的固定下拉浮层按设计关闭。

@@ -27,8 +27,8 @@ beforeAll(async () => {
         server: { middlewareMode: true, watch: null, hmr: false },
         appType: 'custom',
     });
-    panel = (await server.ssrLoadModule('/src/components/common/StatePanel.vue')).default;
-    filters = (await server.ssrLoadModule('/src/components/tasks/TaskFilters.vue')).default;
+    panel = (await server.ssrLoadModule('/src/component/common/StatePanel.vue')).default;
+    filters = (await server.ssrLoadModule('/src/component/tasks/TaskFilters.vue')).default;
 });
 afterAll(async () => server?.close());
 

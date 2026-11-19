@@ -1,3 +1,4 @@
+import { prepareTestCheckpointSchema } from './support/checkpoint-schema.ts';
 import { requiredDatabaseValue } from '@/utils/database.ts';
 import {
     type Run,
@@ -35,7 +36,7 @@ import { createRunService } from '../../server/src/service/runs.ts';
 import { csrfForSession, tokenHash } from '../../server/src/utils/security.ts';
 import { createRunRepository } from '../src/repo/runs.ts';
 import { createAgentRepository } from '../src/repo/agent.ts';
-import { createSchedulerRepository } from '../src/repo/scheduler.ts';
+import { createSchedulerRepository } from '../../server/src/repo/scheduler.ts';
 import { createAgentSession, createAgentRuntime } from '../src/service/agent.ts';
 import { RunService } from '../src/service/runs.ts';
 import { createDeliveryService } from '../src/service/delivery.ts';
@@ -68,7 +69,7 @@ const bodyOld = '申请截止日期为2026-11-15。',
 const published = new Date(Date.now() - 86400000).toISOString();
 beforeAll(async () => {
     await fixture.setup();
-    await saver.setup();
+    await prepareTestCheckpointSchema(fixture.databaseUrl, fixture.checkpointSchema);
 }, 120000);
 afterAll(async () => {
     await services.close();

@@ -1,3 +1,4 @@
+import { deferred } from './support/deferred';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 import {
     LoginInputSchema,
@@ -41,14 +42,6 @@ function setup(fetcher = vi.fn<typeof fetch>(async () => Response.json(session))
     const api = createApi({ fetcher });
     clients.push(api);
     return { api, fetcher };
-}
-
-function deferred<T>() {
-    let resolve!: (value: T) => void;
-    const promise = new Promise<T>((done) => {
-        resolve = done;
-    });
-    return { promise, resolve };
 }
 
 afterEach(() => {

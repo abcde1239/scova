@@ -5,8 +5,20 @@ services:
         user: '977:977'
         ports:
             - '127.0.0.1:${SCOVA_SEARXNG_PORT:-8080}:8080'
+        # An inactive Compose profile must be renderable without a search secret.
+        entrypoint:
+            - /bin/sh
+            - -ec
+            - |
+                case "$${SEARXNG_SECRET:-}" in
+                    ''|ultrasecretkey|replace_with_a_random_search_secret)
+                        echo 'Set a random SEARXNG_SECRET before enabling SearXNG.' >&2
+                        exit 1 ;;
+                esac
+                exec /usr/local/searxng/entrypoint.sh "$$@"
+            - --
         environment:
-            SEARXNG_SECRET: '${SEARXNG_SECRET:?Run vp run search:up to generate the local secret}'
+            SEARXNG_SECRET: '${SEARXNG_SECRET:-}'
             SEARXNG_BIND_ADDRESS: '0.0.0.0'
             SEARXNG_PORT: '8080'
             FORCE_OWNERSHIP: 'false'

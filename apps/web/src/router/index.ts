@@ -1,9 +1,11 @@
+import zh from '@/utils/i18n/messages/zh-CN';
 import { createRouter, createWebHistory } from 'vue-router';
 import type { RouteLocationNormalizedLoaded, RouteRecordRaw, RouterHistory } from 'vue-router';
 
 declare module 'vue-router' {
     interface RouteMeta {
         title?: string;
+        titleKey?: keyof typeof zh.pages;
         layout?: 'auth' | 'status';
         contentWidth?: 'form';
         section?: string;
@@ -43,8 +45,15 @@ export function collectPages(groups: RouteRecordRaw[][]): RouteRecordRaw[] {
     return [...pages.values()];
 }
 
-export function pageTitle(route: Pick<RouteLocationNormalizedLoaded, 'meta'>): string {
-    return `${route.meta.title ?? '页面'} · 知巡 Scova`;
+type RouteWithMeta = Pick<RouteLocationNormalizedLoaded, 'meta'>;
+
+export function routeTitle(route: RouteWithMeta, translate?: (key: string) => string): string {
+    const key = route.meta.titleKey ?? 'page';
+    return route.meta.title ?? (translate ? translate(`pages.${key}`) : zh.pages[key]);
+}
+
+export function pageTitle(route: RouteWithMeta, translate?: (key: string) => string): string {
+    return `${routeTitle(route, translate)} · ${translate ? translate('shell.brand') : zh.shell.brand}`;
 }
 
 export function createWorkbenchRouter(
@@ -61,14 +70,14 @@ export function createWorkbenchRouter(
             {
                 path: '/service-unavailable',
                 name: 'service-unavailable',
-                component: () => import('@/views/ServiceUnavailableView.vue'),
-                meta: { title: '暂时无法连接服务', layout: 'status' },
+                component: () => import('@/view/ServiceUnavailableView.vue'),
+                meta: { titleKey: 'unavailable', layout: 'status' },
             },
             {
                 path: '/:pathMatch(.*)*',
                 name: 'not-found',
-                component: () => import('@/views/RouteStatusView.vue'),
-                meta: { title: '页面未找到' },
+                component: () => import('@/view/RouteStatusView.vue'),
+                meta: { titleKey: 'notFound' },
             },
         ],
     });

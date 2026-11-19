@@ -16,7 +16,6 @@ COPY packages/connectors/package.json packages/connectors/package.json
 COPY packages/models/package.json packages/models/package.json
 COPY packages/db/package.json packages/db/package.json
 COPY packages/shared/package.json packages/shared/package.json
-COPY packages/image-storage/package.json packages/image-storage/package.json
 COPY packages/object-storage/package.json packages/object-storage/package.json
 RUN VP_GIT_HOOKS=0 vp install --frozen-lockfile
 
@@ -33,7 +32,7 @@ COPY --from=node /usr/local/bin/node /usr/local/bin/node
 # The pinned Bun Debian image uses Trixie, which ships the required PostgreSQL 17 client.
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates postgresql-client-17 && \
     rm -rf /var/lib/apt/lists/* && mkdir -p /backups && chown bun:bun /backups
-ENV NODE_ENV=production AGENT_CHECKPOINT_MIGRATION=external
+ENV NODE_ENV=production
 
 FROM runtime-base AS runtime
 COPY --from=build --chown=bun:bun /app /app

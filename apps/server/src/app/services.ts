@@ -1,6 +1,4 @@
 import { createDatabaseClient, closeDatabase, type DatabaseClient } from '@scova/db';
-import { createRequire } from 'node:module';
-import type { Redis } from 'ioredis';
 import { listProviderModels, readProviderBalance, type ModelProvider } from '@scova/connectors';
 import {
     createTaskDraftModel,
@@ -10,11 +8,12 @@ import {
 import { createStreamRegistry, type ApiStreamRegistry } from '@/app/streams.ts';
 import { DEFAULT_SSE_POLICY, type SsePolicy } from '@/utils/sse.ts';
 import { createAgentProviderService } from '@/service/agent-providers';
-import { createImageStorageView, type ImageStorageClient } from '@scova/image-storage';
+import { createImageStorageView, type ImageStorageClient } from '@scova/object-storage/image';
 import type { ObjectStorage } from '@scova/object-storage';
 import { createBucketStorage } from '@/app/object-storage';
+import { createRedisConnection } from '@/repo/redis.ts';
 
-const require = createRequire(import.meta.url);
+type Redis = ReturnType<typeof createRedisConnection>;
 
 export interface AuthRateLimitConfig {
     windowSeconds: number;
@@ -154,16 +153,7 @@ export function createDefaultServices(overrides: ApiServiceOverrides = {}): ApiS
             (() => {
                 if (!cache) {
                     if (!process.env.REDIS_URL) throw new Error('尚未配置 Redis');
-                    const { Redis: Client } = require('ioredis') as typeof import('ioredis');
-                    cache = new Client(process.env.REDIS_URL, {
-                        lazyConnect: true,
-                        maxRetriesPerRequest: 1,
-                        connectTimeout: 5000,
-                        commandTimeout: 5000,
-                        enableOfflineQueue: false,
-                    });
-                    // 错误由发起请求的认证服务转为脱敏 503；避免默认日志输出连接凭据。
-                    cache.on('error', () => undefined);
+                    cache = createRedisConnection(process.env.REDIS_URL);
                 }
                 return cache;
             }),

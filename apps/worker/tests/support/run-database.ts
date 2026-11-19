@@ -42,8 +42,12 @@ export const emptyUsage = () => ({
 });
 
 /** Each scenario owns an independent user/task/run; never flush the shared Redis. */
-export async function seedRun(db: DatabaseClient, options: { mode?: 'live' | 'demo' } = {}) {
+export async function seedRun(
+    db: DatabaseClient,
+    options: { mode?: 'live' | 'demo'; maxInputTokens?: number } = {},
+) {
     const config = runConfig();
+    if (options.maxInputTokens !== undefined) config.budget.maxInputTokens = options.maxInputTokens;
     const email = `${randomUUID()}@example.test`;
     const user = await db
         .insert(dbUsers)

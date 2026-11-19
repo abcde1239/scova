@@ -6,24 +6,25 @@
 
 ```text
 apps/web/src/
-  api/           # requestlane 客户端、领域 service、SSE 桥接
-  views/         # TaskCenterView 等路由页面，负责组合
-  components/    # 按页面/功能拆分；common 放跨页面 UI
-  layout/        # 工作台、登录及编辑布局
-  composables/   # useXxx：交互、查询、订阅与生命周期
-  store/         # Pinia 客户端状态，沿用 community 的单数目录
-  models/        # 共享 DTO 的类型导出与前端专用视图模型
-  router/        # 路由、meta、布局与守卫
-  utils/         # 无框架依赖的通用纯逻辑
-  client/utils/  # 浏览器启动辅助；不依赖 Vue、API 或应用样式
+  component/     # 仅 .vue：可复用 UI 和主题 provider
+  layout/        # 认证、工作台和状态外壳及其专用导航、菜单和面包屑
+  composable/    # useXxx：交互、查询、订阅与生命周期
+  utils/         # 跨功能辅助、领域辅助（如 report/）、主题、国际化和启动辅助
+  store/         # Pinia 客户端状态
+  api/           # requestlane 客户端、领域接口、SSE 桥接
+  view/          # 页面组件
+  router/        # Vue Router 装配、路由元数据；pages/ 按领域登记路由
 ```
 
+顶层只使用上述八个源码目录。框架装配和全局基础文件 `main.ts`、`bootstrap.ts`、`App.vue`、`main.css` 与 `env.d.ts` 留在 `src/` 根；测试、构建配置和静态资源不在此限制内。若要新增一级目录，需解释为何无法归入现有层。
+
 - 使用 Vue 3 `<script setup lang="ts">`，SFC 按 template、script、必要时 style 排列。组件文件 PascalCase，模板组件 kebab-case，composable 命名 useXxx，`@/` 指向 src。
-- 页面保持薄层，把独立展示单元移入按功能组织的 components，把复用交互放 composables，远程调用放 api。Props/emits、路由参数使用明确类型，不照搬参考项目中的 any 或弱类型 Props。
+- `component/` 及其子目录只存放 `.vue`。单个组件的简短私有逻辑可内联在 SFC；需要独立文件的纯投影、展示类型或预设放在 `utils/`，按领域分组（如 `utils/report/sources.ts`），文件名不重复领域前缀。
+- 页面保持薄层，把独立展示单元移入按功能组织的 `component`，把复用交互放 `composable`，远程调用放 `api`。Props/emits、路由参数使用明确类型，不照搬参考项目中的 any 或弱类型 Props。
 - 采用 naive-ui 显式组件导入，UnoCSS 维护 page-container、卡片、表单和空态等语义 shortcut；集中处理主题，不在页面复制大段全局 CSS。
 - 样式默认使用 UnoCSS 模板原子类，hover、focus、显隐、简单动画、过渡和响应式效果也沿用 UnoCSS。配置统一放在 `apps/web/unocss.config.ts`；高频组合提取用途明确的 shortcuts，状态或断点组合可使用 variant group。shortcut 命名避免与预设已有规则或变体冲突。
 - 站内普通跳转用 `internal-link`，辅助前进入口用 `navigation-link` 配尾部 chevron，宽度随内容、左对齐；站外来源用 `external-link` 配常显外部打开图标，保留新窗口说明。普通链接无常驻下划线、底色或胶囊边框，悬停变色，前进入口的尾部 chevron 在允许动效时右移 0.125rem；按下显示下划线，键盘有清晰焦点；标题用 `title-link` 保持正文色，文末页内引用用轻量 `reference-link`。目录、面包屑不统一加箭头；菜单选中态、整卡片和按钮保留各自用途样式。
-- `main.ts` 只安装独立启动保护并动态加载 `bootstrap.ts`；全局 CSS 仅由 `bootstrap.ts` 引入 `@/main.css`，集中保存字体声明、基础重置、结构性排版和第三方弹层适配。`index.html` 中仅保留不依赖脚本、外部 CSS 和字体的启动界面及最小样式，保证入口下载期间可读；启动失败提供保留原 URL 的重新加载。`styles/reading-fonts.css` 是阅读字体按需加载的性能例外，不承载页面样式。复杂动画可保留 scoped CSS；类名组合过长、拆分后难以阅读的局部控件也允许 scoped，优先使用简短的 UnoCSS `@apply` 规则或语义 shortcuts，不强行堆叠长类名。
+- `main.ts` 是框架装配入口，引入集中存放基础样式的 `main.css`。`index.html` 保留不依赖外部脚本、CSS 和字体的启动界面；`utils/startup.ts` 负责装配失败时恢复可重试的界面。阅读字体样式与加载逻辑同在 `composable/`，仍按需加载，不承载页面样式。复杂动画可保留 scoped CSS；类名组合过长、拆分后难以阅读的局部控件也允许 scoped，优先使用简短的 UnoCSS `@apply` 规则或语义 shortcuts，不强行堆叠长类名。
 - 全仓格式统一由根 Vite+ fmt 管理：4 空格缩进、单引号、100 字符行宽，分号沿用工具默认规则；前端不另设格式覆盖。文本由根 `.gitattributes` 统一检出为 LF，避免 Windows 的 `core.autocrlf` 与格式检查冲突；自动识别的二进制文件保持原始字节。Vue/TS 使用 import type 分离类型。
 - 字号、间距、圆角、控件尺寸与响应式断点默认使用 `rem`，保留浏览器默认根字号，行高使用无单位值。容器结合百分比、弹性布局和 `min/max/clamp` 自适应；局部图标等需要随当前文字缩放时可使用 `em`。`px` 仅用于确有需要的特殊情况，并在代码或变更说明中解释用途；测试视口和图片原始分辨率的像素不属于页面布局尺寸。避免固定高度裁切放大后的文字，并验证窄屏及 200% 文字放大。
 - 保持 loading/empty/error/success 状态、可重试错误、键盘焦点和移动端基础适配。异步读取可取消，卸载/换参数时终止旧请求，防止迟到响应覆盖新状态。
@@ -65,7 +66,7 @@ EOF 不代替空行，不输出部分消息；错误或 finish 后不能复用�
 
 ## 5. 验收
 
-应用与共享包的测试实现放各工作区 `tests/`，固定输入和辅助代码放 `tests/fixtures/` 或 `tests/support/`。Web 组件展示页、素材、报告 HTML 与测试路由定义统一位于 `apps/web/tests/fixtures/`，仅在 test 构建启用；`src/` 保存生产应用代码。根 `tests/` 负责跨工作区与浏览器验证，运行产物写入忽略的 `artifacts/`。
+应用与共享包的测试实现放各工作区 `tests/`，固定输入和辅助代码放 `tests/fixtures/` 或 `tests/support/`。Web 组件展示页、素材、报告 HTML 与测试路由定义统一位于 `apps/web/tests/fixtures/`，仅在 test 构建启用；`src/` 保存生产应用代码。根 `tests/` 负责跨工作区与浏览器验证，运行产物写入忽略的 `artifacts/`。竞态测试可复用 `tests/support/deferred.ts` 控制响应顺序，不用固定延时替代明确的异步条件。
 
 新增的 apps/web 配置、示例页面和通信测试应通过 `vp check`、`vp test` 与 `vp run -r build`。重点测试 Cookie、CSRF/幂等头、校验失败、401/403、取消、Query 失效、换号迟到响应，以及 SSE 分片/重连；Playwright 检查页面状态、键盘操作与两账号隔离。
 

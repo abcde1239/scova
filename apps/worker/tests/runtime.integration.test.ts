@@ -1,3 +1,6 @@
+import { setTimeout as delay } from 'node:timers/promises';
+import { createRunControl } from '../../server/src/app/run-control.ts';
+import { readRunControlConfig } from '../../server/src/app/run-control-config.ts';
 import { requiredDatabaseValue } from '@/utils/database.ts';
 import {
     outbox as dbOutbox,
@@ -18,9 +21,10 @@ import { fileURLToPath } from 'node:url';
 import { Redis } from 'ioredis';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vite-plus/test';
 import { nodeScriptCommand } from '../../../scripts/process-runtime.mjs';
-import { createOutboxQueue } from '../src/queue/outbox.ts';
+import { createOutboxQueue } from '../../server/src/repo/queue/outbox.ts';
 import { outboxDatabase } from './support/outbox-database.ts';
 import { seedRun } from './support/run-database.ts';
+import { prepareTestCheckpointSchema } from './support/checkpoint-schema.ts';
 
 const fixture = outboxDatabase();
 const workerRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -94,7 +98,10 @@ async function ended(process: ReturnType<typeof launch>) {
 }
 
 describe('Worker Bun/Node 真实进程', () => {
-    beforeAll(() => fixture.setup(), 120_000);
+    beforeAll(async () => {
+        await fixture.setup();
+        await prepareTestCheckpointSchema(fixture.databaseUrl, fixture.checkpointSchema);
+    }, 120_000);
     afterAll(() => fixture.cleanup());
     beforeEach(() =>
         fixture.db
@@ -104,7 +111,7 @@ describe('Worker Bun/Node 真实进程', () => {
     );
 
     it.each(['bun', 'node'] as const)(
-        '%s 实际投递并拒绝未配置演示执行，IPC 停止并释放连接',
+        '%s 只消费 Server 投递，拒绝未配置演示执行并正常关闭',
         async (runtime) => {
             const { outbox: item } = await seedRun(fixture.db);
             const queueName = `scova-runtime-${runtime}-${randomUUID()}`;
@@ -116,6 +123,14 @@ describe('Worker Bun/Node 真实进程', () => {
             connection.on('error', () => undefined);
             await connection.connect();
             const publisher = createOutboxQueue(connection, queueName);
+            const control = createRunControl(
+                readRunControlConfig({
+                    DATABASE_URL: fixture.databaseUrl,
+                    REDIS_URL: fixture.redisUrl,
+                    WORKER_QUEUE_NAME: queueName,
+                    WORKER_POLL_INTERVAL_MS: '20',
+                }),
+            );
             const process = launch(runtime, {
                 DATABASE_URL: fixture.databaseUrl,
                 AGENT_CHECKPOINT_SCHEMA: fixture.checkpointSchema,
@@ -125,6 +140,17 @@ describe('Worker Bun/Node 真实进程', () => {
             });
             try {
                 await waitUntil(
+                    async () => process.output.includes('Run consumer running'),
+                    process,
+                );
+                await delay(100);
+                expect(
+                    (await fixture.db.query.outbox.findFirst({ where: eq(dbOutbox.id, item.id) }))
+                        ?.sentAt,
+                ).toBeNull();
+                expect(await publisher.queue.getJob(`run-${item.aggregateId}`)).toBeUndefined();
+                control.start();
+                await waitUntil(
                     async () =>
                         (
                             await fixture.db.query.outbox
@@ -133,7 +159,6 @@ describe('Worker Bun/Node 真实进程', () => {
                         ).sentAt !== null,
                     process,
                 );
-                expect(process.output).toContain('Outbox dispatcher running');
                 expect((await publisher.queue.getJob(`run-${item.aggregateId}`))?.data).toEqual({
                     runId: item.aggregateId,
                 });
@@ -179,6 +204,7 @@ describe('Worker Bun/Node 真实进程', () => {
                         process.child.kill();
                     }
                 }
+                await control.stop();
                 await publisher.queue.obliterate({ force: true });
                 await publisher.close();
                 connection.disconnect();
@@ -196,7 +222,7 @@ describe('Worker Bun/Node 真实进程', () => {
             expect(process.exit?.code).toBe(1);
             expect(process.output).toContain('Worker 启动或运行失败');
             expect(process.output).not.toContain('credential-must-not-be-logged');
-            expect(process.output).not.toContain('dispatcher running');
+            expect(process.output).not.toContain('Run consumer running');
         } finally {
             if (!process.exit) process.child.kill();
         }
@@ -211,7 +237,7 @@ describe('Worker Bun/Node 真实进程', () => {
             await ended(process);
             expect(process.exit?.code).toBe(1);
             expect(process.output).toContain('Worker 启动或运行失败');
-            expect(process.output).not.toContain('dispatcher running');
+            expect(process.output).not.toContain('Run consumer running');
         } finally {
             if (!process.exit) process.child.kill();
         }

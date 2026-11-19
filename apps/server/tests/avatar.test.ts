@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vite-plus/test';
 import sharp from 'sharp';
 import { AVATAR_MAX_BYTES } from '@scova/models';
 import { normalizeAvatar } from '../src/service/avatar';
-import { readAvatarBody } from '../src/http/avatar-body';
+import { readAvatarBody } from '../src/handler/http/avatar-body';
 import { createAvatarStorage } from '../src/app/avatar-storage';
 
 describe('头像输入边界', () => {

@@ -6,7 +6,7 @@ import { Elysia } from 'elysia';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 import { connectDatabase, createDatabaseClient, closeDatabase, eq, users } from '@scova/db';
 import { migrateDatabase } from '@scova/db/migrate';
-import type { ImageStorage } from '@scova/image-storage';
+import type { ImageStorage } from '@scova/object-storage/image';
 import { createDefaultServices } from '../src/app/services';
 import { createApiErrorPlugin } from '../src/app/errors';
 import { createAuthPlugin } from '../src/router/auth';

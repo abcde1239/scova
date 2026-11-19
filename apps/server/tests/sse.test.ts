@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test'
 import { createStreamRegistry } from '../src/app/streams.ts';
 import type { EventPage } from '../src/repo/run-events.ts';
 import { parseEventCursor } from '../src/service/run-events.ts';
-import { createSseBody } from '../src/http/sse.ts';
+import { createSseBody } from '../src/handler/http/sse.ts';
 import { DEFAULT_SSE_POLICY } from '../src/utils/sse.ts';
 
 const runId = randomUUID();

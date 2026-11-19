@@ -25,25 +25,31 @@
             v-if="open"
             :id="panelId"
             class="account-panel absolute [top:100%] [right:0] z-[20] grid gap-1 w-[min(19rem,_calc(100vw_-_2rem))] border-theme rounded-3 bg-surface break-anywhere p-3 [&.account-panel_.n-button]:(justify-start w-full min-h-11 h-auto whitespace-normal)"
-            aria-label="账号操作"
+            :aria-label="t('shell.accountActions')"
             @click="navigateInside"
         >
             <div class="account-identity layout-grid gap-1.5 pt-2 pb-3.5 px-2">
-                <span class="identity-label text-muted">当前账号</span>
+                <span class="identity-label text-muted">{{ t('shell.currentAccount') }}</span>
                 <strong class="[.account-identity_&:is(strong)]:(text-[1rem] font-medium)">{{
                     session.user.value.email
                 }}</strong>
             </div>
-            <navigation-button to="/account" icon="account">账号</navigation-button>
-            <navigation-button to="/account/agent" icon="settings">Agent 配置</navigation-button>
-            <navigation-button to="/account/appearance" icon="appearance">外观</navigation-button>
+            <navigation-button to="/account" icon="account">{{
+                t('pages.account')
+            }}</navigation-button>
+            <navigation-button to="/account/agent" icon="settings">{{
+                t('pages.agent')
+            }}</navigation-button>
+            <navigation-button to="/account/appearance" icon="appearance">{{
+                t('pages.appearance')
+            }}</navigation-button>
             <action-button
                 quaternary
                 class="logout-action [&&]:(mt-2 [border:0] bg-transparent)"
                 :busy="session.logoutPending.value"
                 @click="session.logout"
             >
-                <app-icon name="logout" />退出登录
+                <app-icon name="logout" />{{ t('shell.logout') }}
             </action-button>
         </nav>
     </div>
@@ -52,27 +58,30 @@
         class="account-login [@media(max-width:_53.999rem)]:[&&]:hidden"
         to="/login"
         icon="account"
-        >登录</navigation-button
+        >{{ t('pages.login') }}</navigation-button
     >
 </template>
 
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
 import { computed, nextTick, onMounted, onUnmounted, ref, useId, watch } from 'vue';
 import { NButton } from 'naive-ui';
 import { useRoute } from 'vue-router';
-import ActionButton from '@/components/common/ActionButton.vue';
-import AppIcon from '@/components/common/AppIcon.vue';
-import NavigationButton from '@/components/common/NavigationButton.vue';
-import { useSession } from '@/composables/useSession';
-import AccountAvatar from '@/components/account/AccountAvatar.vue';
+import ActionButton from '@/component/common/ActionButton.vue';
+import AppIcon from '@/component/common/AppIcon.vue';
+import NavigationButton from '@/component/common/NavigationButton.vue';
+import { useSession } from '@/composable/useSession';
+import AccountAvatar from '@/component/account/AccountAvatar.vue';
 
 const session = useSession();
 const route = useRoute();
+const { t } = useI18n({ useScope: 'global' });
+
 const root = ref<HTMLElement>();
 const open = ref(false);
 const panelId = `account-panel-${useId()}`;
 const triggerAccessibility = computed(() => ({
-    'aria-label': '账号菜单',
+    'aria-label': t('shell.accountMenu'),
     'aria-current': route.meta.section === 'account' ? 'true' : undefined,
     'aria-expanded': open.value,
     'aria-controls': panelId,

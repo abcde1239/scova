@@ -1,3 +1,7 @@
+import { Redis } from 'ioredis';
+import { createRunControl } from '../../server/src/app/run-control.ts';
+import { readRunControlConfig } from '../../server/src/app/run-control-config.ts';
+import { createOutboxQueue } from '../../server/src/repo/queue/outbox.ts';
 import { requiredDatabaseValue } from '@/utils/database.ts';
 import {
     createDatabaseClient,
@@ -28,9 +32,9 @@ import {
     researchComparisonScopeHash,
     resolveScheduledDate,
 } from '@scova/shared';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vite-plus/test';
-import { createSchedulerRepository } from '../src/repo/scheduler.ts';
-import { SchedulerService } from '../src/service/scheduler.ts';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vite-plus/test';
+import { createSchedulerRepository } from '../../server/src/repo/scheduler.ts';
+import { SchedulerService } from '../../server/src/service/scheduler.ts';
 import { outboxDatabase } from './support/outbox-database.ts';
 import { emptyUsage, runConfig } from './support/run-database.ts';
 import { nodeScriptCommand } from '../../../scripts/process-runtime.mjs';
@@ -129,6 +133,57 @@ async function activeRun(
 }
 
 describe('PostgreSQL 周期调度事务', () => {
+    it('Server 无 Worker 也能创建定时 Run 并投递，控制面可幂等关闭', async () => {
+        const { task } = await seed();
+        const queueName = `scova-schedule-control-${randomUUID()}`;
+        const control = createRunControl(
+            readRunControlConfig({
+                DATABASE_URL: fixture.databaseUrl,
+                REDIS_URL: fixture.redisUrl,
+                WORKER_QUEUE_NAME: queueName,
+                WORKER_POLL_INTERVAL_MS: '20',
+                WORKER_SCHEDULER_INTERVAL_MS: '20',
+            }),
+        );
+        const redis = new Redis(fixture.redisUrl, {
+            lazyConnect: true,
+            enableOfflineQueue: false,
+            maxRetriesPerRequest: 1,
+        });
+        redis.on('error', () => undefined);
+        await redis.connect();
+        const publisher = createOutboxQueue(redis, queueName);
+        try {
+            control.start();
+            control.start();
+            await vi.waitFor(
+                async () => {
+                    const run = await db.query.runs.findFirst({
+                        where: eq(dbRuns.taskId, task.id),
+                    });
+                    expect(run).toMatchObject({ trigger: 'scheduled', status: 'queued' });
+                    const row = await db.query.outbox.findFirst({
+                        where: eq(dbOutbox.aggregateId, run!.id),
+                    });
+                    expect(row?.sentAt).toBeInstanceOf(Date);
+                    expect(await (await publisher.queue.getJob(`run-${run!.id}`))?.getState()).toBe(
+                        'waiting',
+                    );
+                },
+                { timeout: 5_000 },
+            );
+            const stopping = control.stop();
+            expect(control.stop()).toBe(stopping);
+            await stopping;
+            expect(() => control.start()).toThrow('已停止');
+        } finally {
+            await control.stop();
+            await publisher.queue.obliterate({ force: true });
+            await publisher.close();
+            redis.disconnect();
+        }
+    });
+
     it('固定 DST 时点：缺失当地时分顺延首个有效时刻，重复只取较早一次', () => {
         const spring = {
             timezone: 'America/New_York',

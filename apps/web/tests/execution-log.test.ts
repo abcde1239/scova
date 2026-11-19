@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test';
 import { parseContract, RunEventSchema, type RunEvent } from '@scova/models';
-import { appendExecutionLog, emptyExecutionLog } from '@/utils/execution-log';
+import { appendExecutionLog, emptyExecutionLog } from '@/utils/run/log';
 
 const common = {
     schemaVersion: 1 as const,

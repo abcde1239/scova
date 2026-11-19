@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 import { createSessionLifecycle } from '@/api/session';
-import { createRegisterController } from '@/composables/useRegister';
+import { createRegisterController } from '@/composable/useRegister';
 
 const input = {
     email: 'new@example.test',

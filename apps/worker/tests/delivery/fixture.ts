@@ -1,3 +1,4 @@
+import { prepareTestCheckpointSchema } from '../support/checkpoint-schema.ts';
 import {
     reports as dbReports,
     eq,
@@ -35,7 +36,7 @@ export const sha = (value: string) => createHash('sha256').update(value).digest(
 
 beforeAll(async () => {
     await fixture.setup();
-    await saver.setup();
+    await prepareTestCheckpointSchema(fixture.databaseUrl, schema);
 }, 120_000);
 
 afterAll(async () => {

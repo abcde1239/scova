@@ -10,7 +10,7 @@ import {
     conflictReviewRepairPrompt,
 } from '../conflict-review.ts';
 import { requireGapKinds } from '../../evidence/support.ts';
-import { gapKindPrompt } from '../../model/prompts.ts';
+import { gapKindPrompt, geographicScopeInstructions } from '../../model/prompts.ts';
 import { batchSynthesisSchema } from '../synthesis-batches.ts';
 import { mergeFieldClaims } from '../../report/field-answers.ts';
 import { evidenceLinksSchema, evidenceLinkInstructions } from '../../evidence/links.ts';
@@ -97,7 +97,7 @@ export function conflictReviewNode(rt: AgentRuntime) {
             (schema.properties as Record<string, unknown>).claims as Record<string, unknown>
         ).minItems = 0;
         const input: StructuredInput = {
-            prompt: `${conflictReviewPrompt}\n${evidenceLinkInstructions}\nUntrusted frozen data: ${JSON.stringify({ task: { topic: context.config.topic, goal: context.config.goal }, questions: state.questions.filter((q) => requirement.questionIds.includes(q.id)), requirement, prior: prior.map((c) => ({ hash: conflictFingerprint(c), claim: c })), pages: state.pages.filter((p) => prior.some((c) => c.citations.some((q) => q.pageId === p.id))).map((p) => ({ id: p.id, title: p.title, questionIds: p.questionIds, passages: prior.flatMap((c) => c.citations.filter((q) => q.pageId === p.id).map((q) => q.quote)) })) })}\nUse outputFormat on the claim; artifacts:[{format,requirements:[{id,text,claimIndexes}],document:null}]. Include all assessment fields.${state.gapKindPolicy ? `\n${gapKindPrompt}` : ''} ${attempt ? conflictReviewRepairPrompt : ''}`,
+            prompt: `${geographicScopeInstructions(state.searchDirectionPolicy)}${conflictReviewPrompt}\n${evidenceLinkInstructions}\nUntrusted frozen data: ${JSON.stringify({ task: { topic: context.config.topic, goal: context.config.goal }, questions: state.questions.filter((q) => requirement.questionIds.includes(q.id)), requirement, prior: prior.map((c) => ({ hash: conflictFingerprint(c), claim: c })), pages: state.pages.filter((p) => prior.some((c) => c.citations.some((q) => q.pageId === p.id))).map((p) => ({ id: p.id, title: p.title, questionIds: p.questionIds, passages: prior.flatMap((c) => c.citations.filter((q) => q.pageId === p.id).map((q) => q.quote)) })) })}\nUse outputFormat on the claim; artifacts:[{format,requirements:[{id,text,claimIndexes}],document:null}]. Include all assessment fields.${state.gapKindPolicy ? `\n${gapKindPrompt}` : ''} ${attempt ? conflictReviewRepairPrompt : ''}`,
             schema,
             maxInputTokens: Math.min(16000, context.budget.maxInputTokens),
             maxOutputTokens: Math.min(4000, context.budget.maxOutputTokens),

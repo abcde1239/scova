@@ -1,6 +1,6 @@
 # 本地开发环境
 
-前端、Server、Worker 在宿主机运行并监听源码变化。`compose.local.yaml` 将 PostgreSQL 17、Redis 7、SearXNG 放在同一个 `scova-local` Compose 项目中，使用官方镜像、独立持久卷和健康检查。
+前端、Server、Worker 在宿主机运行并监听源码变化。`compose.local.yaml` 默认只启动 PostgreSQL 17 和 Redis 7；SearXNG 是同一个 `scova-local` Compose 项目中的可选服务。
 
 ## 启动与停止
 
@@ -13,9 +13,11 @@ vp run db:migrate
 vp run dev
 ```
 
-`local:up` 首次自动生成被 Git 和 Docker 构建上下文忽略的 `.env.local`，数据库密码与搜索密钥随机生成，不覆盖已有配置。也可先运行 `vp run local:init` 仅生成配置。`db:migrate`、Server 和 Worker 的开发命令自动读取根 `.env.local`；已注入进程的环境变量优先。正式 start 命令仍由部署环境提供配置。
+`local:up` 首次自动生成被 Git 和 Docker 构建上下文忽略的 `.env.local`，数据库密码与搜索密钥随机生成，不覆盖已有配置。也可先运行 `vp run local:init` 仅生成配置。`db:migrate` 由 Server 同时迁移业务库和 checkpoint schema；Worker 不再在启动时自动建表。`db:migrate`、Server 和 Worker 的开发命令自动读取根 `.env.local`；已注入进程的环境变量优先。正式 start 命令仍由部署环境提供配置。
 
-使用 `local:up` 启动整套依赖，不要在 Docker Desktop 的 Images 页分别点击 Run；单独运行镜像不会自动应用 Compose 的密码、端口和数据卷。手动调用 Compose 时须指定根环境文件：`docker compose --env-file .env.local -f compose.local.yaml -p scova-local up -d --wait`。Compose 默认不会自动读取 `.env.local`。
+需要内置搜索时运行 `vp run local:up --search`。不启用 SearXNG 时，在应用的账号搜索设置里配置 Search API，并将需要联网检索的任务设为 Search API 或跟随账号默认；显式选择内置搜索的任务不会自动改用付费供应商。
+
+使用 `local:up` 启动基础依赖，不要在 Docker Desktop 的 Images 页分别点击 Run；单独运行镜像不会自动应用 Compose 的密码、端口和数据卷。手动调用 Compose 时须指定根环境文件：`docker compose --env-file .env.local -f compose.local.yaml -p scova-local up -d --wait`。启用搜索时在 `up` 前加 `--profile live-search`。Compose 默认不会自动读取 `.env.local`。
 
 Server/Worker 的 Bun 开发与 start 入口通过 `scripts/run-bun.mjs` 启动，优先使用 `BUN_BIN`，其次使用用户目录 `~/.bun/bin/bun`（Windows 为 `bun.exe`），最后查找 PATH。使用独立安装的 Bun，可避免 Vite+ 的同名 shim 尝试联网安装包管理器。Bun 安装在其他位置时，将 `BUN_BIN` 环境变量设为其可执行文件绝对路径后再运行；该变量须在启动命令前设置，不能仅写入由 Bun 随后加载的 `.env.local`。
 
@@ -42,22 +44,22 @@ Vite 从仓库根目录加载环境文件：本机连接写入 `.env.local`（�
 ```sh
 vp run dev:frontend       # 仅前端
 vp run dev:server         # 仅 Server
-vp run dev:worker         # 仅 Worker
+vp run dev:worker         # 仅执行进程；投递与调度需要 Server
 vp run local:status
 vp run local:down
 ```
 
-退出 `vp run dev` 后基础服务继续运行；`local:down` 只停止并移除本项目容器和网络，保留三个数据卷和 `.env.local`。再次 `local:up` 会恢复原数据。修改数据库迁移前先停止 Server/Worker，运行迁移后再启动；已有卷的数据库密码不会随环境文件自动重置。
+退出 `vp run dev` 后基础服务继续运行；`local:down` 只停止并移除本项目容器和网络，保留数据卷和 `.env.local`。再次 `local:up` 会恢复基础服务；要恢复 SearXNG 则加 `--search`。不带 `--search` 的 `local:up` 不会停止已经在运行的 SearXNG。修改数据库迁移前先停止 Server/Worker，运行迁移后再启动；已有卷的数据库密码不会随环境文件自动重置。
 
 ## 本机连接
 
-| 服务       | 地址                                   | 配置                                                       |
-| ---------- | -------------------------------------- | ---------------------------------------------------------- |
-| PostgreSQL | `127.0.0.1:15432`，用户/数据库 `scova` | `DATABASE_URL`、`POSTGRES_PASSWORD`、`SCOVA_LOCAL_PG_PORT` |
-| Redis      | `127.0.0.1:16379`                      | `REDIS_URL`、`SCOVA_LOCAL_REDIS_PORT`                      |
-| SearXNG    | `http://127.0.0.1:18080`               | `SEARXNG_BASE_URL`、`SCOVA_SEARXNG_PORT`                   |
+| 服务            | 地址                                   | 配置                                                       |
+| --------------- | -------------------------------------- | ---------------------------------------------------------- |
+| PostgreSQL      | `127.0.0.1:15432`，用户/数据库 `scova` | `DATABASE_URL`、`POSTGRES_PASSWORD`、`SCOVA_LOCAL_PG_PORT` |
+| Redis           | `127.0.0.1:16379`                      | `REDIS_URL`、`SCOVA_LOCAL_REDIS_PORT`                      |
+| SearXNG（可选） | `http://127.0.0.1:18080`               | `SEARXNG_BASE_URL`、`SCOVA_SEARXNG_PORT`                   |
 
-所有端口仅绑定回环地址。修改基础服务发布端口时，同时修改对应连接 URL，再运行 `local:up`。本项目与 `compose.test.yaml` 的临时测试服务、`compose.yaml` 的正式部署、`search:up` 的独立搜索项目各自隔离；使用本地整套环境时无需另外运行 `search:up`。
+所有端口仅绑定回环地址。修改基础服务发布端口时，同时修改对应连接 URL，再运行 `local:up`。本项目与 `compose.test.yaml` 的临时测试服务、`compose.yaml` 的正式部署、`search:up` 的独立搜索项目各自隔离；使用 `local:up --search` 时无需另外运行 `search:up`。
 
 Windows 在 D 盘仓库目录执行这些命令。镜像、容器与命名卷的实际存储位置由 Docker Desktop 的磁盘映像位置决定，需将其设置在 D 盘；命令工作目录不会自动迁移 Docker 存储。不要为开发删除既有 Docker 磁盘或卷。
 
@@ -65,7 +67,7 @@ Windows 的 `local:up` 会先检查 Docker 引擎，必要时启动 Desktop 并�
 
 ## 搜索和模型
 
-研究任务的调用链为 Worker → agent-core → connectors → SearXNG。Server 接收执行命令并持久化 Run/Outbox，Worker 从 BullMQ 消费；资料库搜索仅查询已保存的数据库内容。新 Run 统一真实研究，历史演示报告仍标示其固定资料来源。
+研究任务的调用链为 Worker → agent-core → connectors → SearXNG。Server 接收执行命令并持久化 Run/Outbox，后台负责调度、发布及恢复扫描；Worker 只从 BullMQ 消费并执行 Agent；资料库搜索仅查询已保存的数据库内容。新 Run 统一真实研究，历史演示报告仍标示其固定资料来源。
 
 单独验证真实搜索，不调用模型：
 

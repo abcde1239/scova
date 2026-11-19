@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vite-plus/test';
-import { createRunConsumer } from '../src/queue/runs.ts';
+import { createRunConsumer } from '../src/app/queue/runs.ts';
 import { createWorkerApp } from '../src/app/index.ts';
 import { readWorkerConfig } from '../src/app/config.ts';
 
@@ -104,21 +104,14 @@ describe('Run consumer意外退出与停止的故障传播', () => {
         expect(mock.close).toHaveBeenCalledTimes(1);
     });
 
-    it('consumer故障传到app.finished并停止新poll，清理仍会完成', async () => {
+    it('consumer 故障传给 app.finished，停止与清理仍会执行', async () => {
         let fail!: (error: Error) => void;
-        let release!: () => void;
-        const dispatching = new Promise<void>((resolve) => {
-            release = resolve;
-        });
         const finished = new Promise<void>((_resolve, reject) => {
             fail = reject;
         });
         const resources = {
             connect: vi.fn(async () => {}),
-            dispatch: vi.fn(async () => {
-                await dispatching;
-                return 0;
-            }),
+            isReady: () => true,
             finished: () => finished,
             stop: vi.fn(async () => {}),
             close: vi.fn(async () => {}),
@@ -129,20 +122,14 @@ describe('Run consumer意外退出与停止的故障传播', () => {
                 REDIS_URL: 'redis://localhost',
             }),
             resources,
-            logger: { info() {}, error() {} },
+            logger: { info() {} },
         });
         await app.start();
         const assertion = expect(app.finished()).rejects.toThrow('consumer failed');
         fail(new Error('consumer failed'));
         await assertion;
-        const stopping = app.stop();
-        const rejected = expect(stopping).rejects.toThrow('Worker 在途操作停止失败');
-        await Promise.resolve();
-        expect(resources.close).not.toHaveBeenCalled();
-        release();
-        await rejected;
-        expect(resources.stop).toHaveBeenCalledTimes(1);
-        expect(resources.close).toHaveBeenCalledTimes(1);
-        expect(resources.dispatch).toHaveBeenCalledTimes(1);
+        await expect(app.stop()).rejects.toThrow('Worker 在途操作停止失败');
+        expect(resources.stop).toHaveBeenCalledOnce();
+        expect(resources.close).toHaveBeenCalledOnce();
     });
 });

@@ -4,7 +4,7 @@ export default [
     {
         path: '/reports/:reportId',
         name: 'report-detail',
-        component: () => import('@/views/ReportDetailView.vue'),
-        meta: { title: '报告', section: 'inbox' },
+        component: () => import('@/view/ReportDetailView.vue'),
+        meta: { titleKey: 'report', section: 'inbox' },
     },
 ] satisfies RouteRecordRaw[];

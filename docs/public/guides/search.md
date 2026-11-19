@@ -37,7 +37,7 @@ DeepSeek/Tavily 远程读取最多45秒，本地 Reader与普通搜索最多15�
 
 协议参考：[DeepSeek Search](https://api-docs.deepseek.com/api/search)、[DeepSeek Fetch](https://api-docs.deepseek.com/api/fetch)、[Tavily Search](https://docs.tavily.com/documentation/api-reference/endpoint/search)、[Tavily Extract](https://docs.tavily.com/documentation/api-reference/endpoint/extract)。Perplexity 的 [Fetch URL 工具](https://docs.perplexity.ai/docs/agent-api/tools/fetch-url-content)属于另行计费的生成式 Agent API，当前不作为独立 Search API 读取使用。
 
-完整本地开发使用 `vp run local:up` 将 PostgreSQL、Redis、SearXNG 一起启动，搜索地址为 `http://127.0.0.1:18080`，配置统一在根 `.env.local`，见[本地开发环境](local-development.md)。下面的 `search:up` 是仅启动搜索的独立方案，使用自己的配置、端口和 Compose 项目。
+需要内置搜索的本地开发使用 `vp run local:up --search` 将 PostgreSQL、Redis、SearXNG 一起启动，搜索地址为 `http://127.0.0.1:18080`，配置统一在根 `.env.local`，见[本地开发环境](local-development.md)。下面的 `search:up` 是仅启动搜索的独立方案，使用自己的配置、端口和 Compose 项目。
 
 ## 自定义 HTTP JSON 搜索
 

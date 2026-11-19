@@ -1,3 +1,5 @@
+import { createRunControl } from '../../src/app/run-control.ts';
+import { readRunControlConfig } from '../../src/app/run-control-config.ts';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { nodeScriptCommand } from '../../../../scripts/process-runtime.mjs';
@@ -14,6 +16,15 @@ export async function startAcceptanceWorker(options: {
     queryForGoal?: boolean;
 }) {
     const { databaseUrl, redisUrl, name, phase, queueName } = options;
+    const control = createRunControl(
+        readRunControlConfig({
+            DATABASE_URL: databaseUrl,
+            REDIS_URL: redisUrl,
+            WORKER_QUEUE_NAME: queueName,
+            WORKER_POLL_INTERVAL_MS: '25',
+            WORKER_FAILURE_DELAY_MS: '25',
+        }),
+    );
     const command = nodeScriptCommand('tests/support/acceptance-scenario-process.ts');
     const child = spawn(command.executable, command.args, {
         cwd: fileURLToPath(new URL('../../../worker/', import.meta.url)),
@@ -22,8 +33,6 @@ export async function startAcceptanceWorker(options: {
             DATABASE_URL: databaseUrl,
             REDIS_URL: redisUrl,
             WORKER_QUEUE_NAME: queueName,
-            WORKER_POLL_INTERVAL_MS: '25',
-            WORKER_FAILURE_DELAY_MS: '25',
             SCOVA_ACCEPTANCE_SCENARIO: name,
             SCOVA_ACCEPTANCE_PHASE: phase,
             SCOVA_ACCEPTANCE_QUERY_FOR_GOAL: options.queryForGoal ? '1' : '0',
@@ -31,6 +40,7 @@ export async function startAcceptanceWorker(options: {
         stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
         windowsHide: true,
     });
+    control.start();
     let output = '';
     for (const stream of [child.stdout!, child.stderr!])
         stream.on('data', (chunk) => {
@@ -56,6 +66,7 @@ export async function startAcceptanceWorker(options: {
             if (code !== 0) throw new Error('Acceptance worker exited: ' + code + ' ' + output);
         } finally {
             clearTimeout(timer);
+            await control.stop();
         }
     };
     try {

@@ -29,10 +29,10 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import ActionButton from '@/components/common/ActionButton.vue';
-import AppIcon from '@/components/common/AppIcon.vue';
-import StatePanel from '@/components/common/StatePanel.vue';
-import { useCommand } from '@/composables/useCommand';
+import ActionButton from '@/component/common/ActionButton.vue';
+import AppIcon from '@/component/common/AppIcon.vue';
+import StatePanel from '@/component/common/StatePanel.vue';
+import { useCommand } from '@/composable/useCommand';
 const state = ref<'error' | 'loading' | 'success'>('error');
 const message = computed(() =>
     state.value === 'error'

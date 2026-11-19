@@ -1,5 +1,5 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
-import type { taskInput } from '../../apps/web/src/composables/useCreateTask.ts';
+import type { taskInput } from '../../apps/web/src/composable/useCreateTask.ts';
 import { fillList } from './support/list-input.ts';
 import { chooseOption, chooseOutputFormats } from './support/select.ts';
 

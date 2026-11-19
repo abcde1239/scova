@@ -4,7 +4,7 @@
 
 ```ts
 import { computed } from 'vue';
-import { useRunEvents } from '@/composables/useRunEvents';
+import { useRunEvents } from '@/composable/useRunEvents';
 
 const subscription = useRunEvents(() => props.runId, {
     onEvent(event) {

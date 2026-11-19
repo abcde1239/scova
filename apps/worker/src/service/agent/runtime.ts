@@ -6,7 +6,7 @@ import {
     customConfigurationHash,
     freezeSearchConfiguration,
 } from '@/repo/search-configuration-freeze.ts';
-import { installedCheckpointVersion } from '@/utils/checkpoint-version.ts';
+import { installedCheckpointVersion } from '@scova/shared/checkpoint-version';
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import pg from 'pg';
 import { Redis } from 'ioredis';
@@ -43,11 +43,6 @@ export interface AgentRuntimeOptions {
 /** Construction is offline. App lifecycle explicitly owns setup and pool shutdown. */
 export function createAgentRuntime(options: AgentRuntimeOptions) {
     const env = options.env ?? process.env;
-    if (
-        env.AGENT_CHECKPOINT_MIGRATION !== undefined &&
-        !['external', 'startup'].includes(env.AGENT_CHECKPOINT_MIGRATION)
-    )
-        throw new Error('AGENT_CHECKPOINT_MIGRATION 无效');
     const schema = options.checkpointSchema ?? env.AGENT_CHECKPOINT_SCHEMA ?? 'scova_agent';
     if (!/^[a-z][a-z0-9_]{0,62}$/.test(schema)) throw new Error('AGENT_CHECKPOINT_SCHEMA 无效');
     const connection = new URL(options.databaseUrl);
@@ -174,30 +169,21 @@ export function createAgentRuntime(options: AgentRuntimeOptions) {
                 ownsRedis = true;
                 await searchRedis.connect();
             }
-            const client = await pool.connect();
-            try {
-                // Serialize saver migrations across worker processes; no business transaction spans setup.
-                await client.query('SELECT pg_advisory_lock(hashtext($1))', [
-                    `scova-agent-schema:${schema}`,
-                ]);
-                if (env.AGENT_CHECKPOINT_MIGRATION === 'external') {
-                    const version = await client.query(
-                        `SELECT version FROM "${schema}".scova_schema_version WHERE id=1`,
-                    );
-                    if (version.rows[0]?.version !== installedCheckpointVersion())
-                        throw new Error('先执行独立图状态迁移');
-                } else {
-                    await saver.setup();
-                }
-                ready = true;
-            } finally {
-                await client
-                    .query('SELECT pg_advisory_unlock(hashtext($1))', [
-                        `scova-agent-schema:${schema}`,
-                    ])
-                    .catch(() => undefined);
-                client.release();
-            }
+            const version = await pool
+                .query(`SELECT version FROM "${schema}".scova_schema_version WHERE id=1`)
+                .catch((error: unknown) => {
+                    if (
+                        error &&
+                        typeof error === 'object' &&
+                        'code' in error &&
+                        (error.code === '42P01' || error.code === '3F000')
+                    )
+                        throw new Error('先执行 Server 图状态迁移');
+                    throw error;
+                });
+            if (version.rows[0]?.version !== installedCheckpointVersion(import.meta.url))
+                throw new Error('先执行 Server 图状态迁移');
+            ready = true;
         },
         executorFactory(token: RunLeaseToken): RunExecutor {
             let session: ReturnType<typeof createAgentSession> | undefined;

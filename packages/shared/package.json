@@ -5,7 +5,9 @@
     "type": "module",
     "exports": {
         ".": "./src/index.ts",
-        "./credentials": "./src/credentials.ts"
+        "./credentials": "./src/credentials.ts",
+        "./checkpoint-version": "./src/checkpoint-version.ts",
+        "./outbox-job": "./src/outbox-job.ts"
     },
     "scripts": {
         "build": "tsc --noEmit",

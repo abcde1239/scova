@@ -236,6 +236,103 @@ async function fixture(
 }
 
 describe('报告证据与收件箱 API', () => {
+    it('导出原始报告：会话、CSRF、Owner、并发复用及过期回收', async () => {
+        const owner = await register();
+        const other = await register();
+        const saved = await fixture(owner);
+        const path = '/reports/' + saved.report.id + '/exports/markdown';
+        const exportMarkdown = (auth?: Auth, override?: Record<string, string>) =>
+            request(path, { method: 'POST', headers: { ...headers(auth), ...override } });
+        expect((await exportMarkdown()).status).toBe(401);
+        expect((await exportMarkdown(owner, { 'x-csrf-token': '' })).status).toBe(403);
+        expect((await exportMarkdown(owner, { origin: 'https://other.test' })).status).toBe(403);
+        expect((await exportMarkdown(other)).status).toBe(404);
+        expect(await db.select().from(tables.reportExports)).toHaveLength(0);
+
+        const attempts = await Promise.all([exportMarkdown(owner), exportMarkdown(owner)]);
+        expect(attempts.map((response) => response.status)).toEqual([200, 200]);
+        expect(attempts[0]!.headers.get('cache-control')).toBe('no-store');
+        const [first, second] = await Promise.all(attempts.map(json));
+        expect(first).toEqual(second);
+        expect(first).toMatchObject({
+            filename: 'scova-report-' + saved.report.id + '.md',
+            reportId: saved.report.id,
+            expiresAt: new Date(now.getTime() + 86_400_000).toISOString(),
+        });
+        expect(first!.markdown).toContain('演示（非真实研究）');
+        expect(first!.markdown).toContain('覆盖：部分');
+        expect(first!.markdown).toContain(saved.quote);
+        expect(first!.markdown).not.toContain('活动日期尚需确认。');
+        expect(first!.byteLength).toBe(Buffer.byteLength(first!.markdown));
+        expect(first!.sha256).toBe(sha(first!.markdown));
+        const savedRows = await db.select().from(tables.reportExports);
+        expect(savedRows).toHaveLength(1);
+        expect(savedRows[0]).toMatchObject({
+            id: first!.id,
+            userId: owner.userId,
+            markdown: first!.markdown,
+        });
+        expect((await exportMarkdown(other)).status).toBe(404);
+        await db
+            .update(tables.reportExports)
+            .set({
+                createdAt: new Date(now.getTime() - 86_400_000),
+                expiresAt: now,
+            })
+            .where(eq(tables.reportExports.id, first!.id));
+        const newResponse = await exportMarkdown(owner);
+        expect(newResponse.status).toBe(200);
+        const fresh = await json(newResponse);
+        expect(fresh.id).not.toBe(first!.id);
+        expect(fresh.sha256).toBe(first!.sha256);
+        expect(
+            await db
+                .select()
+                .from(tables.reportExports)
+                .where(eq(tables.reportExports.id, first!.id)),
+        ).toHaveLength(0);
+    });
+
+    it('导出配额不会淘汰未过期快照，跨账号配额独立', async () => {
+        const owner = await register();
+        const another = await register();
+        const saved = await fixture(owner);
+        const anotherReport = await fixture(another);
+        const content = '已有快照';
+        await db.insert(tables.reportExports).values(
+            Array.from({ length: 32 }, (_, index) => ({
+                userId: owner.userId,
+                reportId: saved.report.id,
+                rendererVersion: index + 2,
+                markdown: content,
+                byteLength: Buffer.byteLength(content),
+                sha256: sha(content),
+                createdAt: now,
+                expiresAt: new Date(now.getTime() + 86_400_000),
+            })),
+        );
+        const response = await request('/reports/' + saved.report.id + '/exports/markdown', {
+            method: 'POST',
+            headers: headers(owner),
+        });
+        expect(response.status).toBe(409);
+        expect((await json(response)).code).toBe('REPORT_EXPORT_QUOTA');
+        expect(
+            await db
+                .select()
+                .from(tables.reportExports)
+                .where(eq(tables.reportExports.userId, owner.userId)),
+        ).toHaveLength(32);
+        expect(
+            (
+                await request('/reports/' + anotherReport.report.id + '/exports/markdown', {
+                    method: 'POST',
+                    headers: headers(another),
+                })
+            ).status,
+        ).toBe(200);
+    });
+
     beforeAll(async () => {
         await admin.connect();
         await admin.query(`CREATE SCHEMA "${schema}"`);

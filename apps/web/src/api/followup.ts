@@ -13,7 +13,7 @@ import {
 import { defineApiEndpoint } from '@/api/endpoints';
 import { modelValidator } from '@/api/validator';
 import type { SessionLifecycle } from '@/api/session';
-import { validateQuestion } from '@/utils/report-questions';
+import { validateQuestion } from '@/utils/report/questions';
 
 export function invalidFollowup(message: string): never {
     throw new ContractValidationError([{ path: '/followup', message }]);

@@ -15,7 +15,7 @@ import {
     patchNoteEndpoint,
     type Note,
 } from '@/api/notes';
-import { useNoteEditor, useNotes } from '@/composables/useNotes';
+import { useNoteEditor, useNotes } from '@/composable/useNotes';
 import {
     createdNoteResponse,
     noteAttempt,

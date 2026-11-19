@@ -21,6 +21,8 @@ import {
     manualDraft,
     normalizeDraft,
     draftModelSchema,
+    draftPrompt,
+    draftQuestionPrompt,
     resolveDraftTimezone,
 } from '../src/utils/task-drafts.ts';
 import { draftConfig, draftExamples } from './support/task-drafts.ts';
@@ -851,4 +853,17 @@ describe('真实模型适配器的本地HTTP契约', () => {
         expect(() => createTaskDraftPolicy({ userRequests: 0 })).toThrow();
         expect(() => createTaskDraftPolicy({ keyPrefix: '' })).toThrow();
     });
+});
+
+describe('draft geographic scope', () => {
+    it.each([draftPrompt, draftQuestionPrompt])(
+        'does not conflate location with language or scheduling time zone',
+        (prompt) => {
+            expect(prompt).toContain(
+                'Do not infer the user’s location, market or jurisdiction from language or timezone.',
+            );
+            expect(prompt).toContain('Use timezone only for dates and scheduling.');
+            expect(prompt).toContain('Retain explicitly requested geographic scope.');
+        },
+    );
 });

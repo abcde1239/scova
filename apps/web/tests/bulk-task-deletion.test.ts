@@ -2,8 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 import { effectScope, ref } from 'vue';
 import type { SessionResponse, TaskDetailResponse } from '@scova/models';
 import { createSessionLifecycle } from '@/api/session';
-import { initialTaskDraft, taskInput } from '@/composables/useCreateTask';
-import { bulkTaskLimit, useBulkTaskDeletion } from '@/composables/useBulkTaskDeletion';
+import { initialTaskDraft, taskInput } from '@/composable/useCreateTask';
+import { bulkTaskLimit, useBulkTaskDeletion } from '@/composable/useBulkTaskDeletion';
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const instant = '2026-11-09T00:00:00Z';

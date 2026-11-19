@@ -40,6 +40,10 @@
         {
             "name": "0009_vengeful_senator_kelly",
             "hash": "6bbb58a18b702d8128d03ca367c858be58e0c3f62da18e3a2ad73b5604875f65"
+        },
+        {
+            "name": "0010_report_exports",
+            "hash": "9a3d8ac59498435bb1cfff64ca6c8b6defa1c7231b372a3c71ef7e1cd201322a"
         }
     ],
     "signature": {
@@ -144,6 +148,13 @@
             },
             {
                 "name": "question_evidence",
+                "kind": "r",
+                "persistence": "p",
+                "row_security": false,
+                "force_row_security": false
+            },
+            {
+                "name": "report_exports",
                 "kind": "r",
                 "persistence": "p",
                 "row_security": false,
@@ -1493,6 +1504,105 @@
                 "name": "evidence_id",
                 "position": 4,
                 "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "report_exports",
+                "name": "id",
+                "position": 1,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "report_exports",
+                "name": "user_id",
+                "position": 2,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "report_exports",
+                "name": "report_id",
+                "position": 3,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "report_exports",
+                "name": "renderer_version",
+                "position": 4,
+                "type": "integer",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "report_exports",
+                "name": "markdown",
+                "position": 5,
+                "type": "text",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "report_exports",
+                "name": "byte_length",
+                "position": 6,
+                "type": "integer",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "report_exports",
+                "name": "sha256",
+                "position": 7,
+                "type": "text",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "report_exports",
+                "name": "created_at",
+                "position": 8,
+                "type": "timestamp with time zone",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "report_exports",
+                "name": "expires_at",
+                "position": 9,
+                "type": "timestamp with time zone",
                 "not_null": true,
                 "default_value": null,
                 "identity": "",
@@ -4030,6 +4140,34 @@
                 "validated": true
             },
             {
+                "table_name": "report_exports",
+                "name": "report_exports_lifetime_valid",
+                "type": "c",
+                "definition": "CHECK (renderer_version > 0 AND expires_at > created_at)",
+                "validated": true
+            },
+            {
+                "table_name": "report_exports",
+                "name": "report_exports_owner_report_fkey",
+                "type": "f",
+                "definition": "FOREIGN KEY (user_id, report_id) REFERENCES reports(user_id, id) ON DELETE CASCADE",
+                "validated": true
+            },
+            {
+                "table_name": "report_exports",
+                "name": "report_exports_payload_valid",
+                "type": "c",
+                "definition": "CHECK (byte_length >= 1 AND byte_length <= 262144 AND byte_length = octet_length(markdown) AND sha256 ~ '^[a-f0-9]{64}$'::text)",
+                "validated": true
+            },
+            {
+                "table_name": "report_exports",
+                "name": "report_exports_pkey",
+                "type": "p",
+                "definition": "PRIMARY KEY (id)",
+                "validated": true
+            },
+            {
                 "table_name": "report_questions",
                 "name": "report_questions_pkey",
                 "type": "p",
@@ -4889,6 +5027,27 @@
                 "table_name": "question_evidence",
                 "name": "question_evidence_user_id_id_key",
                 "definition": "CREATE UNIQUE INDEX question_evidence_user_id_id_key ON question_evidence USING btree (user_id, id)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "report_exports",
+                "name": "report_exports_expires_at_id_idx",
+                "definition": "CREATE INDEX report_exports_expires_at_id_idx ON report_exports USING btree (expires_at, id)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "report_exports",
+                "name": "report_exports_owner_report_version",
+                "definition": "CREATE UNIQUE INDEX report_exports_owner_report_version ON report_exports USING btree (user_id, report_id, renderer_version)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "report_exports",
+                "name": "report_exports_pkey",
+                "definition": "CREATE UNIQUE INDEX report_exports_pkey ON report_exports USING btree (id)",
                 "valid": true,
                 "ready": true
             },
@@ -5877,6 +6036,18 @@
                 "enabled": "O"
             },
             {
+                "table_name": "report_exports",
+                "constraint_name": "report_exports_owner_report_fkey",
+                "event": 5,
+                "enabled": "O"
+            },
+            {
+                "table_name": "report_exports",
+                "constraint_name": "report_exports_owner_report_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
                 "table_name": "report_questions",
                 "constraint_name": "question_evidence_user_id_question_id_fkey",
                 "event": 9,
@@ -5993,6 +6164,18 @@
             {
                 "table_name": "reports",
                 "constraint_name": "notifications_user_id_run_id_report_id_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "reports",
+                "constraint_name": "report_exports_owner_report_fkey",
+                "event": 9,
+                "enabled": "O"
+            },
+            {
+                "table_name": "reports",
+                "constraint_name": "report_exports_owner_report_fkey",
                 "event": 17,
                 "enabled": "O"
             },

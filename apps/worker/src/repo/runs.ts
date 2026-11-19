@@ -67,7 +67,6 @@ export interface RunRepository {
     finish(token: RunLeaseToken, failure: { code: string }): Promise<boolean>;
     emit(token: RunLeaseToken, event: RunProgressEvent): Promise<void>;
     assertActive(token: RunLeaseToken): Promise<void>;
-    listRecoverable(limit: number): Promise<{ id: string; leaseEpoch: number }[]>;
 }
 
 async function lockRun(tx: DatabaseTransaction, runId: string) {
@@ -417,19 +416,5 @@ export function createRunRepository(db: DatabaseClient): RunRepository {
                 await appendEvent(tx, run, now, event);
             }),
         assertActive: (token) => withRunFence(db, token, 'work', async () => undefined),
-        async listRecoverable(limit) {
-            if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1000)
-                throw new Error('Run 恢复扫描上限必须为 1 至 1000 的整数');
-            const rows = await queryRows<{ id: string; lease_epoch: number }>(
-                db,
-                sql`
-        SELECT id, lease_epoch FROM runs
-        WHERE status IN ('queued', 'running', 'recovering', 'cancel_requested')
-          AND (lease_expires_at IS NULL OR lease_expires_at <= clock_timestamp())
-        ORDER BY queued_at, id LIMIT ${limit}
-      `,
-            );
-            return rows.map((row) => ({ id: row.id, leaseEpoch: row.lease_epoch }));
-        },
     };
 }

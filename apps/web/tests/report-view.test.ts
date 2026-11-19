@@ -4,15 +4,9 @@ import { createMemoryHistory } from 'vue-router';
 import { ReportSchema, parseContract, type Report, type SessionResponse } from '@scova/models';
 import { createSessionLifecycle } from '@/api/session';
 import { reportEndpoint } from '@/api/reports';
-import {
-    claimEvidence,
-    reportError,
-    reportIntegrity,
-    reportSections,
-    sourceLink,
-    useReport,
-    validReportId,
-} from '@/composables/useReport';
+import { reportError, useReport, validReportId } from '@/composable/useReport';
+import { claimEvidence, reportIntegrity, reportSections } from '@/utils/report/summary';
+import { sourceLink } from '@/utils/source/link';
 import { createWorkbenchRouter } from '@/router';
 import reportRoutes from '@/router/pages/reports';
 

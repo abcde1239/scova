@@ -14,8 +14,8 @@ import {
     initialTaskDraft,
     taskDraftFromConfig,
     taskInput,
-} from '@/composables/useCreateTask';
-import { useNaturalLanguageDraft } from '@/composables/useNaturalLanguageDraft';
+} from '@/composable/useCreateTask';
+import { useNaturalLanguageDraft } from '@/composable/useNaturalLanguageDraft';
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const instant = '2026-10-31T00:00:00Z';

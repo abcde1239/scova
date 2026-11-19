@@ -1,3 +1,4 @@
+import { deferred } from './support/deferred';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vite-plus/test';
 import { createServer, type ViteDevServer } from 'vite-plus';
 import vue from '@vitejs/plugin-vue';
@@ -15,7 +16,7 @@ import {
     searchTarget,
     type SearchHit,
 } from '@/api/library-search';
-import { librarySearchError, useLibrarySearch } from '@/composables/useLibrarySearch';
+import { librarySearchError, useLibrarySearch } from '@/composable/useLibrarySearch';
 import libraryRoutes from '@/router/pages/library';
 import { createWorkbenchRouter } from '@/router';
 
@@ -80,13 +81,6 @@ function mount(fetcher: typeof fetch) {
     const state = scope.run(() => useLibrarySearch(lifecycle))!;
     disposals.push(lifecycle.dispose, () => scope.stop());
     return { lifecycle, state, stop: () => scope.stop() };
-}
-function deferred<T>() {
-    let resolve!: (value: T) => void;
-    const promise = new Promise<T>((done) => {
-        resolve = done;
-    });
-    return { promise, resolve };
 }
 afterEach(() => {
     for (const dispose of disposals.splice(0).reverse()) dispose();
@@ -442,7 +436,7 @@ describe('actual results SFC plain excerpt', () => {
             server: { middlewareMode: true, watch: null, hmr: false },
             appType: 'custom',
         });
-        component = (await server.ssrLoadModule('/src/components/library/LibrarySearchResults.vue'))
+        component = (await server.ssrLoadModule('/src/component/library/LibrarySearchResults.vue'))
             .default as Component;
     });
     afterAll(async () => server?.close());

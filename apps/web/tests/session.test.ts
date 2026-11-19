@@ -7,7 +7,7 @@ import {
     createSessionController,
     installSessionRouting,
     sessionReturnTarget,
-} from '@/composables/useSession';
+} from '@/composable/useSession';
 
 const account: SessionResponse = {
     user: {

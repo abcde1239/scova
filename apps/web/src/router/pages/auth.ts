@@ -3,13 +3,13 @@ export default [
     {
         path: '/register',
         name: 'register',
-        component: () => import('@/views/RegisterView.vue'),
-        meta: { title: '注册', layout: 'auth' },
+        component: () => import('@/view/RegisterView.vue'),
+        meta: { titleKey: 'register', layout: 'auth' },
     },
     {
         path: '/login',
         name: 'login',
-        component: () => import('@/views/LoginView.vue'),
-        meta: { title: '登录', layout: 'auth' },
+        component: () => import('@/view/LoginView.vue'),
+        meta: { titleKey: 'login', layout: 'auth' },
     },
 ] satisfies RouteRecordRaw[];

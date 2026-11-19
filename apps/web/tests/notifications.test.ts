@@ -1,3 +1,4 @@
+import { deferred } from './support/deferred';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 import { effectScope, nextTick, ref } from 'vue';
 import { createMemoryHistory } from 'vue-router';
@@ -14,7 +15,7 @@ import {
     useNotifications,
     visibleNotifications,
     type NotificationFilters,
-} from '@/composables/useNotifications';
+} from '@/composable/useNotifications';
 import { createWorkbenchRouter } from '@/router';
 import notificationRoutes from '@/router/pages/notifications';
 import workbenchRoutes from '@/router/pages/workbench';
@@ -51,13 +52,6 @@ function requestUrl(value: Parameters<typeof fetch>[0] | undefined) {
 }
 function failure(status: number, code = 'TEST_FAILURE') {
     return Response.json({ code, message: 'sample', requestId: 'sample' }, { status });
-}
-function deferred<T>() {
-    let resolve!: (value: T) => void;
-    const promise = new Promise<T>((done) => {
-        resolve = done;
-    });
-    return { resolve, promise };
 }
 const disposals: (() => void)[] = [];
 function setup(fetcher: typeof fetch, initial: NotificationFilters = { kind: 'all', read: 'all' }) {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test';
 import type { Report, QuestionAnswer } from '@scova/models';
-import { conversationSources, conversationSuggestions } from '@/utils/report-conversation';
+import { conversationSources, conversationSuggestions } from '@/utils/report/conversation';
 
 describe('report conversation presentation', () => {
     it('groups each webpage once and preserves distinct exact quotes and paragraph provenance', () => {

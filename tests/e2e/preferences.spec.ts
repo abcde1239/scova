@@ -125,8 +125,12 @@ test('账号下拉框：浅暗主题、搜索、提醒选中和细焦点', async
         await timezone.click();
         const search = page.getByRole('combobox', { name: '搜索默认时区' });
         await search.fill('北京');
-        await expect(page.getByRole('option')).toHaveCount(1);
-        await expect(page.getByRole('option')).toContainText('Asia/Shanghai');
+        await expect(
+            page.getByRole('listbox', { name: '默认时区', exact: true }).getByRole('option'),
+        ).toHaveCount(1);
+        await expect(
+            page.getByRole('listbox', { name: '默认时区', exact: true }).getByRole('option'),
+        ).toContainText('Asia/Shanghai');
         await page.screenshot({
             path: testInfo.outputPath(`account-timezone-${colorScheme}.png`),
             animations: 'disabled',
@@ -134,7 +138,11 @@ test('账号下拉框：浅暗主题、搜索、提醒选中和细焦点', async
         });
         await search.press('Escape');
         await notification.click();
-        await expect(page.getByRole('option', { selected: true })).toContainText('每次汇总');
+        await expect(
+            page
+                .getByRole('listbox', { name: '结果提醒', exact: true })
+                .getByRole('option', { selected: true }),
+        ).toContainText('每次汇总');
         await page.screenshot({
             path: testInfo.outputPath(`account-notification-${colorScheme}.png`),
             animations: 'disabled',

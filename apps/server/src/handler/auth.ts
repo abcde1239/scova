@@ -13,7 +13,7 @@ import {
     requireSession,
     serializeSession,
     sessionCookie,
-} from '@/http/session.ts';
+} from '@/handler/http/session.ts';
 
 export function createAuthHandlers(services: ApiServices) {
     const auth = createAuthService(services);

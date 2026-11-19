@@ -1,3 +1,4 @@
+import { listRecoverableRuns } from '../../server/src/repo/recoverable-runs.ts';
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vite-plus/test';
 import { runs as dbRuns, eq, sql } from '@scova/db';
@@ -24,7 +25,7 @@ describe('Worker reliability PostgreSQL regressions', () => {
         let current = await claim(seed.run.id);
         for (let attempt = 0; attempt < 5; attempt++) {
             expect(await repository.release(current.token)).toBe(true);
-            expect(await repository.listRecoverable(1000)).toContainEqual({
+            expect(await listRecoverableRuns(fixture.db, 1000)).toContainEqual({
                 id: seed.run.id,
                 leaseEpoch: current.token.leaseEpoch,
             });

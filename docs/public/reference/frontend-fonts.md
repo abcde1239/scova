@@ -18,7 +18,7 @@
 
 `main.ts` 统一导入 `@/main.css`，保存界面字体声明与结构性排版；用途类由 `unocss.config.ts` 的 shortcuts 管理。naive-ui 与根界面均使用 `var(--scova-font-interface)`。界面回退依次为 Inter、Noto Sans SC、PingFang SC、Microsoft YaHei、system-ui、sans-serif。实际 Fontsource 族名包含 `Variable`，不要另写不匹配的字体族名。
 
-内容标题、报告或笔记组件在 setup 中调用 `useReadingTypography()`，挂载时经共享 `loadReadingFonts()` 动态导入 `@/styles/reading-fonts.css`；非组件入口可直接调用后者。加载共享同一个 Promise，失败时保留系统回退并允许后续挂载重试。`ready` 只表示 CSS 加载完成，实际字形完成需等待浏览器字体加载。阅读字体回退为 Noto Serif SC、Songti SC、STSong、SimSun、serif。纯操作页不提前加载阅读 CSS；外观页因包含内容预览而加载。
+内容标题、报告或笔记组件在 setup 中调用 `useReadingTypography()`，挂载时经共享 `loadReadingFonts()` 动态导入 `@/composable/reading-fonts.css`；非组件入口可直接调用后者。加载共享同一个 Promise，失败时保留系统回退并允许后续挂载重试。`ready` 只表示 CSS 加载完成，实际字形完成需等待浏览器字体加载。阅读字体回退为 Noto Serif SC、Songti SC、STSong、SimSun、serif。纯操作页不提前加载阅读 CSS；外观页因包含内容预览而加载。
 
 | 用途                      | 共享 class                                        | 字体与字重                                           |
 | ------------------------- | ------------------------------------------------- | ---------------------------------------------------- |

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 import type { SessionResponse } from '@scova/models';
 import { createSessionLifecycle } from '@/api/session';
-import { createLoginController } from '@/composables/useLogin';
+import { createLoginController } from '@/composable/useLogin';
 
 const account: SessionResponse = {
     user: {

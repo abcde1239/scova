@@ -50,13 +50,13 @@
 <script setup lang="ts">
 import { useRoute } from 'vue-router';
 import { NButton } from 'naive-ui';
-import ActionButton from '@/components/common/ActionButton.vue';
-import AppIcon from '@/components/common/AppIcon.vue';
-import IconButton from '@/components/common/IconButton.vue';
-import StatePanel from '@/components/common/StatePanel.vue';
+import ActionButton from '@/component/common/ActionButton.vue';
+import AppIcon from '@/component/common/AppIcon.vue';
+import IconButton from '@/component/common/IconButton.vue';
+import StatePanel from '@/component/common/StatePanel.vue';
 import { useAppearanceStore } from '@/store/appearance';
-import { accentOptions } from '@/theme/tokens';
-import '@/styles/reading-fonts.css';
+import { accentOptions } from '@/utils/theme/tokens';
+import '@/composable/reading-fonts.css';
 
 const query = useRoute().query;
 const appearance = useAppearanceStore();

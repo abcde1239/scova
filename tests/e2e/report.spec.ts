@@ -1,6 +1,7 @@
 import { logoutFromAccount, expectAccountReady } from './support/account-menu.ts';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
 import { classifyReportDelivery, type Report } from '@scova/models';
 import { reportFormatSample } from '../../apps/web/tests/fixtures/reports/report-format-sample.ts';
 
@@ -105,6 +106,62 @@ async function samples(page: Page) {
     await page.route('**/api/v1/me', (route) => route.fulfill({ json: account() }));
     await page.route(`**/api/v1/reports/${id(1)}`, (route) => route.fulfill({ json: report() }));
 }
+for (const width of [320, 1440]) {
+    test(`下载报告 Markdown 保存实际 UTF-8 文件 / ${width}`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 850 });
+        await samples(page);
+        const markdown = '# 已交付报告\n\n仅包含已保存的结论和引用。\n';
+        const filename = `scova-report-${id(1)}.md`;
+        const routePath = `**/api/v1${reportPath}/exports/markdown`;
+        await page.route(routePath, (route) =>
+            route.fulfill({
+                json: {
+                    id: id(60),
+                    reportId: id(1),
+                    filename,
+                    markdown,
+                    byteLength: Buffer.byteLength(markdown),
+                    sha256: 'a'.repeat(64),
+                    expiresAt: '2026-11-19T00:00:00Z',
+                },
+            }),
+        );
+        await page.goto(reportPath);
+        const request = page.waitForRequest((req) => req.url().endsWith('/exports/markdown'));
+        const download = page.waitForEvent('download');
+        await page.getByRole('button', { name: '导出 Markdown' }).click();
+        expect((await request).method()).toBe('POST');
+        expect((await request).headers()['x-csrf-token']).toBe(account().csrfToken);
+        const saved = await download;
+        expect(saved.suggestedFilename()).toBe(filename);
+        expect(await saved.failure()).toBeNull();
+        expect(await readFile(await saved.path(), 'utf8')).toBe(markdown);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+            width,
+        );
+    });
+}
+
+test('报告 Markdown 导出失败可感知，可再次提交', async ({ page }) => {
+    await samples(page);
+    let attempts = 0;
+    await page.route(`**/api/v1${reportPath}/exports/markdown`, (route) => {
+        attempts++;
+        return route.fulfill({
+            status: 422,
+            json: { ...failure('REPORT_EXPORT_TOO_LARGE'), message: '报告超过 256 KiB 导出上限' },
+        });
+    });
+    await page.goto(reportPath);
+    const button = page.getByRole('button', { name: '导出 Markdown' });
+    await button.click();
+    await expect(
+        page.getByRole('alert').filter({ hasText: '报告超过 256 KiB 导出上限' }),
+    ).toBeVisible();
+    await button.click();
+    await expect.poll(() => attempts).toBe(2);
+});
+
 async function readOnMobile(page: Page) {
     if ((page.viewportSize()?.width ?? 1440) < 1024)
         await page.getByRole('button', { name: '成果', exact: true }).click();
@@ -880,7 +937,7 @@ test('仅展示已保存的两份独立成果，阅读切换与刷新不会生�
     await expect(nav.getByRole('button', { name: '主题清单', exact: true })).toHaveCount(0);
     await expect(nav.getByRole('button', { name: '研究报告', exact: true })).toHaveCount(0);
     await expect(page.getByLabel('报告形式', { exact: true })).toHaveCount(0);
-    const claims = page.locator('.artifact-document .claim-text');
+    const claims = page.locator('.artifact-document .claim-copy');
     await expect(claims).toHaveText([saved.claims[0]!.text]);
     await generatedFormat(page, 'comparison').click();
     await expect(claims).toHaveText([saved.claims[1]!.text]);
@@ -1124,6 +1181,89 @@ test('同一页面的多句话共用文末来源，结论依据可展开并定�
     expect(state.unexpected).toEqual([]);
 });
 
+const sourcePreviewCases = [
+    { width: 320, scheme: 'light', scale: 100 },
+    { width: 320, scheme: 'dark', scale: 100 },
+    { width: 320, scheme: 'dark', scale: 200 },
+    { width: 1440, scheme: 'light', scale: 100 },
+    { width: 1440, scheme: 'dark', scale: 100 },
+] as const;
+for (const { width, scheme, scale } of sourcePreviewCases) {
+    test(`小字来源可预览且定位保存引用 / ${width} ${scheme} ${scale}%`, async ({ page }, info) => {
+        await page.setViewportSize({ width, height: 820 });
+        await page.emulateMedia({ colorScheme: scheme });
+        const saved = questionReport();
+        const first = saved.evidence[0]!;
+        saved.evidence = [
+            { ...first, url: 'https://zh.wikipedia.org/wiki/研究', snapshot: undefined },
+            {
+                ...first,
+                id: id(25),
+                url: 'https://zh.wikipedia.org/wiki/研究#section',
+                snapshot: undefined,
+            },
+            {
+                ...first,
+                id: id(26),
+                sourceId: id(28),
+                snapshotId: id(29),
+                title: '独立来源',
+                url: 'https://example.org/reference',
+                snapshot: undefined,
+            },
+            ...saved.evidence.slice(1),
+        ];
+        saved.claims[0]!.evidenceIds = saved.evidence.slice(0, 3).map((entry) => entry.id);
+        const state = await formatSamples(page, saved);
+        await page.goto(reportPath);
+        await readOnMobile(page);
+        if (scale === 200) await page.addStyleTag({ content: 'html { font-size: 200%; }' });
+        const chip = page
+            .getByRole('button', { name: '查看引用来源：维基百科，共 2 个网页', exact: true })
+            .first();
+        const panel = page.getByRole('region', { name: '引用来源', exact: true });
+        await expect(page.locator('.scova-theme--dark')).toHaveCount(scheme === 'dark' ? 1 : 0);
+        await expect(chip).toHaveText(/^W\s*维基百科\s*\+1$/);
+        await expect(chip.locator('.source-mark')).toHaveAttribute('aria-hidden', 'true');
+        await expect(panel).toBeHidden();
+        await chip.scrollIntoViewIfNeeded();
+        await chip.press('Enter');
+        await expect(chip).toHaveAttribute('aria-expanded', 'true');
+        await expect(panel.locator('.source-preview-entry')).toHaveCount(2);
+        await expect(panel.locator('.source-excerpt').first()).toHaveText(first.quote);
+        await expect(panel.getByRole('link', { name: /独立来源/ })).toHaveAttribute(
+            'target',
+            '_blank',
+        );
+        const bounds = (await panel.boundingBox())!;
+        expect(bounds.x).toBeGreaterThanOrEqual(0);
+        expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
+        expect(bounds.y).toBeGreaterThanOrEqual(0);
+        expect(bounds.y + bounds.height).toBeLessThanOrEqual(820);
+        if (width === 320 && scale === 100) {
+            const chipBounds = (await chip.boundingBox())!;
+            expect(bounds.y).toBeGreaterThanOrEqual(chipBounds.y + chipBounds.height);
+        }
+        await page.screenshot({
+            path: info.outputPath(`source-preview-${width}-${scheme}-${scale}.png`),
+        });
+        await chip.press('Tab');
+        const close = panel.getByRole('button', { name: '关闭引用来源', exact: true });
+        await expect(close).toBeFocused();
+        await close.press('Escape');
+        await expect(chip).toBeFocused();
+        await expect(chip).toHaveAttribute('aria-expanded', 'false');
+        await expect(page.locator('#report-artifact')).toBeVisible();
+        await chip.click();
+        await panel.getByRole('link', { name: '查看保存引用' }).first().click();
+        await expect(panel).toBeHidden();
+        await expect(page.locator(`#evidence-${first.id}`)).toBeFocused();
+        expect(await page.evaluate(() => Reflect.get(window, 'sourceExecuted'))).toBeUndefined();
+        expect(state.calls.filter((call) => call.method !== 'GET')).toEqual([]);
+        expect(state.unexpected).toEqual([]);
+    });
+}
+
 for (const width of [320, 1440]) {
     test(`结构化对象交付 ${width}：真实矩阵、缺字段首屏和集中引用`, async ({ page }, info) => {
         const saved = multiFormatReport(questionReport());
@@ -1244,7 +1384,7 @@ for (const width of [320, 1440]) {
             const claimLink = provenance.locator(`a[href="#claim-${currentClaim.id}"]`);
             await claimLink.click();
             await expect(page.locator(`#claim-${currentClaim.id}`)).toBeFocused();
-            await expect(page.locator(`#claim-${currentClaim.id} .claim-text`)).toHaveText(
+            await expect(page.locator(`#claim-${currentClaim.id} .claim-copy`)).toHaveText(
                 currentClaim.text,
             );
             const sourceLink = provenance.locator('a[href^="#evidence-"]').first();
@@ -1321,7 +1461,7 @@ async function assertFormatContent(page: Page, expected: Report) {
                     .closest('li')!;
                 return {
                     id: element.id.slice('claim-'.length),
-                    text: element.querySelector('.claim-text')!.textContent,
+                    text: element.querySelector('.claim-copy')!.textContent,
                     confidence: attribution.querySelector('p')!.textContent,
                     evidenceIds: [...attribution.querySelectorAll('a[href^="#evidence-"]')].map(
                         (entry) => entry.id.split('-evidence-')[1],

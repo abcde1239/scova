@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import type { useTaskRunHistory } from '../../apps/web/src/composables/useTaskRunHistory.ts';
+import type { useTaskRunHistory } from '../../apps/web/src/composable/useTaskRunHistory.ts';
 type Run = ReturnType<typeof useTaskRunHistory>['items']['value'][number];
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const instant = '2026-10-31T00:00:00Z';

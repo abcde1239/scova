@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { createStorageKey } from '@scova/object-storage';
 import sharp from 'sharp';
 import { AVATAR_CONTENT_TYPES, AVATAR_MAX_BYTES } from '@scova/models';
-import type { ImageStorageClient } from '@scova/image-storage';
+import type { ImageStorageClient } from '@scova/object-storage/image';
 import type { ApiServices } from '@/app/services';
 import type { AuthenticatedSession } from '@/service/auth';
 import { createAvatarRepository } from '@/repo/avatar';

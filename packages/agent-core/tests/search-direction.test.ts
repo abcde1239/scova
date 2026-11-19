@@ -8,6 +8,7 @@ import { searchNode } from '../src/research/nodes/search.ts';
 import { planNode } from '../src/research/nodes/plan.ts';
 import { deterministicClaims } from '../src/research/claims.ts';
 import { verifyIdentity } from '../src/research/identity.ts';
+import { sourceDirectoryHints } from '../src/search/source-directory.ts';
 import { diversifyQueries } from '../src/search/recovery.ts';
 import { rewriteGapSearch, gapSearchQuery, sameSearch } from '../src/search/direction.ts';
 import type { ResearchState } from '../src/research/state.ts';
@@ -292,6 +293,191 @@ describe('source-language search correction', () => {
         f.state.queries[0].language = 'invalid' as 'en';
         expect(() => verifyIdentity(f.state, f.context)).toThrow();
     });
+
+    it.each([1, 2, 3] as const)(
+        'keeps geographic guidance versioned for planning and gap rewrite (%s)',
+        async (policy) => {
+            const f = fixture();
+            f.state.searchDirectionPolicy = policy;
+            const planning = f.state.planningExtraction!.response;
+            f.model.mockImplementationOnce(async (_key, input) => ({
+                ...planning,
+                researchPolicy: input.researchPolicy,
+                data: {
+                    ...(planning.data as object),
+                    knowledgePlan: [],
+                    queries: [{ ...f.state.queries[0] }],
+                },
+            }));
+            await planNode(f.runtime)(f.state);
+            expect(f.model.mock.calls[0][1].prompt.includes('Geographic scope:')).toBe(
+                policy !== 1,
+            );
+            expect(f.model.mock.calls[0][1].researchPolicy?.searchDirectionPolicy).toBe(policy);
+            expect(() => verifyIdentity(f.state, f.context)).not.toThrow();
+            if (policy === 3) {
+                f.state.planningExtraction!.response.researchPolicy!.searchDirectionPolicy = 2;
+                expect(() => verifyIdentity(f.state, f.context)).toThrow('规划回执不一致');
+                f.state.planningExtraction!.response.researchPolicy!.searchDirectionPolicy = 3;
+            }
+            await rewriteGapSearch(f.runtime, f.state, target);
+            expect(f.model.mock.calls[1][1].prompt.includes('Geographic scope:')).toBe(
+                policy !== 1,
+            );
+        },
+    );
+
+    it('uses a second publisher language after a source-free search yields no evidence', async () => {
+        const f = fixture();
+        f.state.searchDirectionPolicy = 3;
+        await gapLoopNode(f.runtime)(f.state);
+        await searchNode(f.runtime)(f.state);
+        f.model.mockResolvedValueOnce({
+            mode: 'live',
+            usage: { inputTokens: 1, outputTokens: 1, estimated: false },
+            data: { query: 'Node.js 24 リリースノート', language: 'ja', reason: '尝试日文资料' },
+        });
+        await gapLoopNode(f.runtime)(f.state);
+        expect(f.model.mock.calls[1]?.[0]).toBe('search-rewrite-2-1');
+        const prompt = f.model.mock.calls[1]?.[1].prompt;
+        expect(prompt).toContain('"changeDirection":true');
+        expect(prompt).toContain('Node.js 24 release notes site:nodejs.org');
+        expect(prompt).toContain('wikipedia.org');
+        await searchNode(f.runtime)(f.state);
+        expect(f.search).toHaveBeenLastCalledWith('search-2', 'Node.js 24 リリースノート', {
+            language: 'ja',
+        });
+        await gapLoopNode(f.runtime)(f.state);
+        expect(f.state.gapLoop?.history.map((h) => h.gain)).toEqual([false, false]);
+        expect(f.state.gapLoop?.stopped).toBe(true);
+        expect(f.model).toHaveBeenCalledTimes(2);
+    });
+
+    it('reuses an already diagnosed new language but rejects a same-language rephrase', async () => {
+        const f = fixture();
+        f.state.searchDirectionPolicy = 3;
+        const tried = { ...target, language: 'zh' as const };
+        expect(
+            await rewriteGapSearch(f.runtime, f.state, { ...target, language: 'ja' }),
+        ).toMatchObject({
+            language: 'ja',
+        });
+        expect(f.model).not.toHaveBeenCalled();
+        const data = { query: 'Node.js 24 的版本发布说明', language: 'zh', reason: '改写' };
+        f.model.mockResolvedValueOnce({
+            mode: 'live',
+            data,
+            usage: { inputTokens: 1, outputTokens: 1, estimated: false },
+        });
+        expect(await rewriteGapSearch(f.runtime, f.state, tried)).toBeUndefined();
+        f.state.searchDirectionPolicy = 2;
+        expect(await rewriteGapSearch(f.runtime, f.state, tried)).toBe(tried);
+        expect(f.model).toHaveBeenCalledTimes(1);
+    });
+
+    it('uses a relevant regional directory without switching language or changing jurisdiction', async () => {
+        const f = fixture();
+        f.state.searchDirectionPolicy = 3;
+        f.context.config.topic = 'UK Employment Rights Act 1996';
+        f.context.config.goal = '英国法条';
+        const regional = {
+            ...target,
+            query: 'UK Employment Rights Act 1996 section 1',
+            language: 'en' as const,
+        };
+        f.state.queries[0] = regional;
+        const data = {
+            query: regional.query + ' site:legislation.gov.uk',
+            language: 'en',
+            reason: '转查英国法条库',
+        };
+        f.model.mockResolvedValue({
+            mode: 'live',
+            data,
+            usage: { inputTokens: 1, outputTokens: 1, estimated: false },
+        });
+        expect(await rewriteGapSearch(f.runtime, f.state, regional)).toMatchObject(data);
+        expect(f.model.mock.calls[0][1].prompt).toContain('not country filters');
+        expect(f.model.mock.calls[0][1].prompt).toContain('"region":"United Kingdom"');
+        f.state.queries.push({ ...regional, query: data.query });
+        expect(await rewriteGapSearch(f.runtime, f.state, regional)).toBeUndefined();
+    });
+
+    it('limits directory suggestions and honors excluded sites and official-only mode', async () => {
+        const f = fixture();
+        f.state.searchDirectionPolicy = 3;
+        const hints = sourceDirectoryHints(f.context, '浏览器 DOM API');
+        expect(hints.map((h) => h.site)).toEqual([
+            'developer.mozilla.org',
+            'wikipedia.org',
+            'wikidata.org',
+        ]);
+        expect(hints[1].use).toContain('not primary evidence');
+        const prefs = f.context.config.sourcePreferences;
+        prefs.excludedUrls = ['https://wikipedia.org/'];
+        const data = {
+            query: 'Node.js 24 release site:en.wikipedia.org',
+            language: 'en',
+            reason: '查词条',
+        };
+        f.model.mockResolvedValue({
+            mode: 'live',
+            data,
+            usage: { inputTokens: 1, outputTokens: 1, estimated: false },
+        });
+        expect(await rewriteGapSearch(f.runtime, f.state, target)).toBeUndefined();
+        expect(
+            sourceDirectoryHints(f.context, '浏览器 DOM API').some(
+                (h) => h.site === 'wikipedia.org',
+            ),
+        ).toBe(false);
+        prefs.excludedUrls = [];
+        prefs.officialOnly = true;
+        prefs.preferredUrls = ['https://nodejs.org/'];
+        expect(sourceDirectoryHints(f.context, '浏览器 DOM API')).toEqual([]);
+        expect(await rewriteGapSearch(f.runtime, f.state, target)).toBeUndefined();
+    });
+
+    it('prefers an observed URL over rewriting and never reads a catalog homepage', async () => {
+        const f = fixture();
+        f.state.searchDirectionPolicy = 3;
+        const query = f.state.queries[0];
+        const response = await f.search('initial', query.query, { language: 'zh' });
+        const url = 'https://nodejs.org/en/blog/release/v24.0.0';
+        response.results.push({
+            kind: 'search_snippet',
+            url,
+            originalUrl: url,
+            title: 'Node.js 24 发布说明',
+            snippet: 'Node.js 24 发布说明',
+        });
+        f.state.searches.push({ query, response });
+        await gapLoopNode(f.runtime)(f.state);
+        expect(f.state.gapLoop?.target).toMatchObject({ action: 'read', url });
+        expect(f.state.selections.map((s) => s.url)).toEqual([url]);
+        expect(f.model).not.toHaveBeenCalled();
+    });
+
+    it.each(['search', 'read', 'deadline', 'input', 'output'] as const)(
+        'does not pay for a diversity rewrite after the %s gate closes',
+        async (limit) => {
+            const f = fixture();
+            f.state.searchDirectionPolicy = 3;
+            await gapLoopNode(f.runtime)(f.state);
+            await searchNode(f.runtime)(f.state);
+            if (limit === 'search') f.context.usage.searches = f.context.budget.maxSearches;
+            if (limit === 'read') f.context.usage.pages = f.context.budget.maxPages;
+            if (limit === 'deadline') f.context.deadlineAt = new Date(Date.now() + 30_000);
+            if (limit === 'input')
+                f.context.usage.inputTokens = f.context.budget.maxInputTokens - 7999;
+            if (limit === 'output')
+                f.context.usage.outputTokens = f.context.budget.maxOutputTokens - 1599;
+            await gapLoopNode(f.runtime)(f.state);
+            expect(f.state.gapLoop?.stopped).toBe(true);
+            expect(f.model).toHaveBeenCalledTimes(1);
+            expect(f.search).toHaveBeenCalledTimes(1);
+        },
+    );
 
     it('distinguishes identical text with different languages when deduplicating', () => {
         const queries = ['en', 'ja', 'en'].map((language) => ({

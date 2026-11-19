@@ -1656,9 +1656,15 @@ describe('persisted gap loop', () => {
         for (const key of previous) expect(f.calls.filter((k) => k === key)).toHaveLength(1);
         const state = (await f.saver.get(f.checkpoint()))!.channel_values
             .research as import('../src/research/state.ts').ResearchState;
-        expect(f.context.usage.searches).toBe(2);
-        expect(state.gapLoop?.history).toHaveLength(1);
-        expect(state.gapLoop?.history[0]).toMatchObject({ action: 'search', gain: false });
+        expect(f.context.usage.searches).toBe(3);
+        expect(state.searchDirectionPolicy).toBe(3);
+        expect(state.gapLoop?.history).toMatchObject([
+            { action: 'search', gain: false },
+            { action: 'search', gain: false },
+        ]);
+        expect(state.queries).toContainEqual(expect.objectContaining({ language: 'en' }));
+        expect(new Set(state.gapLoop?.history.map((h) => h.requirementId)).size).toBe(2);
+        expect(state.notes?.some((note) => note.startsWith('跳过缺口 '))).toBe(true);
         expect(state.gapLoop?.stopped).toBe(true);
         expect(result.coverage.completeness).toBe('partial');
         expect(f.calls.some((k) => k === 'synthesize-2')).toBe(false);

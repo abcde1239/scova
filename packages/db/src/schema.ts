@@ -53,6 +53,7 @@ export {
 } from './schema/tasks.ts';
 export { baselines, type Baseline, runs, type Run } from './schema/runs.ts';
 export { runGraphSnapshots } from './schema/run-graph.ts';
+export { reportExports } from './schema/report-exports.ts';
 export {
     toolCalls,
     type ToolCall,

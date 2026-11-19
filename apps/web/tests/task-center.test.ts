@@ -3,7 +3,7 @@ import { effectScope, nextTick, ref } from 'vue';
 import { InfiniteQueryObserver } from '@tanstack/vue-query';
 import type { SessionResponse, Task } from '@scova/models';
 import { createSessionLifecycle } from '@/api/session';
-import { taskListOptions, visibleTasks, useTasks, localTaskTime } from '@/composables/useTasks';
+import { taskListOptions, visibleTasks, useTasks, localTaskTime } from '@/composable/useTasks';
 
 const session: SessionResponse = {
     user: {
