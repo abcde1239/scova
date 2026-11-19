@@ -178,7 +178,9 @@ test('完整工作台：反馈后的重要变化、收藏笔记真实冲突、�
     expect(writes).toEqual([]);
     const beforeQuestions = await deliveryCounts(environment, owner, task.id);
     await page.getByLabel('问题', { exact: true }).fill('费用变化是否需要进一步查证？');
-    await page.getByRole('button', { name: '提问', exact: true }).press('Enter');
+    const ask = page.getByRole('button', { name: '提问', exact: true });
+    await expect(ask).toBeEnabled();
+    await ask.press('Enter');
     await expect(
         page
             .locator('.assistant-message')
@@ -196,7 +198,8 @@ test('完整工作台：反馈后的重要变化、收藏笔记真实冲突、�
     await environment.services.useQuestionModel(true);
     await page.goto(`/reports/${second.report.id}`);
     await page.getByLabel('问题', { exact: true }).fill('请引用本报告原文说明费用。');
-    await page.getByRole('button', { name: '提问', exact: true }).press('Enter');
+    await expect(ask).toBeEnabled();
+    await ask.press('Enter');
     await expect(
         page.locator('.conversation-turn').last().locator('.answer-paragraph').first(),
     ).toBeVisible();
