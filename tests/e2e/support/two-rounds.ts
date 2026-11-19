@@ -5,6 +5,13 @@ import type { Phase, Scenario } from './compose.ts';
 import { fillList } from './list-input.ts';
 import { chooseOption, chooseTimezone } from './select.ts';
 
+const formatNames = {
+    brief: '简报',
+    list: '主题清单',
+    comparison: '对比表',
+    research_report: '研究报告',
+};
+
 export async function createTaskThroughUI(owner: Owner, config: TaskConfig) {
     const page = owner.page;
     await page.goto('/tasks/new');
@@ -16,13 +23,7 @@ export async function createTaskThroughUI(owner: Owner, config: TaskConfig) {
     ])
         await page.getByLabel(label!, { exact: true }).fill(value!);
     await chooseTimezone(page, config.timezone, '任务时区');
-    await chooseOption(
-        page,
-        '输出形式',
-        { brief: '简报', list: '主题清单', comparison: '对比表', research_report: '研究报告' }[
-            config.outputFormat
-        ],
-    );
+    await chooseOption(page, '输出形式', formatNames[config.outputFormat]);
     await page.getByText('关注范围与来源偏好', { exact: true }).click();
     await fillList(page, '重点关注（可选）', config.focusPoints);
     await fillList(page, '排除主题或条件（可选）', config.exclusions);
@@ -131,7 +132,9 @@ export async function openReport(page: Page, report: Report) {
     await expect(page.locator('#report-title')).toHaveText(report.title);
     await expect(page.locator('.metadata')).toContainText(report.taskVersionId);
     await expect(page.locator('.mode')).toHaveText(
-        report.mode === 'demo' ? '演示报告：来自演示数据，不代表真实查阅成果。' : '研究报告',
+        report.mode === 'demo'
+            ? '演示报告：来自演示数据，不代表真实查阅成果。'
+            : formatNames[report.format],
     );
 }
 

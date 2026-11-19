@@ -79,7 +79,11 @@ test('完整工作台：反馈后的重要变化、收藏笔记真实冲突、�
     );
     await page.getByRole('button', { name: '保存笔记', exact: true }).press('Enter');
     expect((await conflict).status()).toBe(409);
-    await expect(page.locator('.note-editor')).toContainText('修订冲突：本地稿已保留');
+    await expect(
+        page
+            .locator('.scova-notifications .n-notification')
+            .filter({ hasText: '修订冲突：本地稿已保留' }),
+    ).toBeVisible();
     await expect(page.getByLabel('本地笔记正文', { exact: true })).toHaveValue(localDraft);
     await page.getByRole('button', { name: '重新读取服务端副本', exact: true }).press('Enter');
     await expect(page.locator('.server-copy')).toContainText('另一编辑器已经保存的服务端版本');
@@ -88,7 +92,9 @@ test('完整工作台：反馈后的重要变化、收藏笔记真实冲突、�
         .getByRole('button', { name: '保留本地稿，按此版本整理', exact: true })
         .press('Enter');
     await page.getByRole('button', { name: '保存笔记', exact: true }).press('Enter');
-    await expect(page.locator('.note-editor')).toContainText('笔记已保存。');
+    await expect(
+        page.locator('.scova-notifications .n-notification').filter({ hasText: '笔记已保存。' }),
+    ).toBeVisible();
     await page.getByRole('button', { name: '取消编辑', exact: true }).press('Enter');
 
     await page.goto('/library');
@@ -174,7 +180,9 @@ test('完整工作台：反馈后的重要变化、收藏笔记真实冲突、�
     await page.getByLabel('问题', { exact: true }).fill('费用变化是否需要进一步查证？');
     await page.getByRole('button', { name: '提问', exact: true }).press('Enter');
     await expect(
-        page.getByRole('heading', { name: '未获得可核验回答', exact: true }),
+        page
+            .locator('.assistant-message')
+            .getByText('未配置可用的问答模型，暂时无法提取回答。', { exact: true }),
     ).toBeVisible();
     expect(await deliveryCounts(environment, owner, task.id)).toEqual(beforeQuestions);
     const insufficientId = new URL(page.url()).searchParams.get('questionId');
@@ -189,17 +197,25 @@ test('完整工作台：反馈后的重要变化、收藏笔记真实冲突、�
     await page.goto(`/reports/${second.report.id}`);
     await page.getByLabel('问题', { exact: true }).fill('请引用本报告原文说明费用。');
     await page.getByRole('button', { name: '提问', exact: true }).press('Enter');
-    await expect(page.getByRole('heading', { name: '证据回答', exact: true })).toBeVisible();
+    await expect(
+        page.locator('.conversation-turn').last().locator('.answer-paragraph').first(),
+    ).toBeVisible();
     const questionId = new URL(page.url()).searchParams.get('questionId');
     const questionPath = `/api/v1/reports/${second.report.id}/questions/${questionId}`;
     const answered = await environment.request<ReportQuestion>(owner, questionPath);
     expect(answered.answer.reason).toBe('evidence_answer');
+    const turn = page.locator(`#turn-${questionId}`);
+    const sources = turn.getByLabel('本轮来源', { exact: true });
+    for (const summary of await sources.locator('.source-group > summary').all())
+        await summary.press('Enter');
     for (const statement of answered.answer.statements) {
         for (const citation of statement.citations) {
             const evidence = second.report.evidence.find((item) => item.id === citation.evidenceId);
             expect(evidence?.quote).toContain(citation.quote);
             await expect(
-                page.locator('.question-citation > blockquote').filter({ hasText: citation.quote }),
+                sources
+                    .locator('.source-quotes > div > blockquote')
+                    .filter({ hasText: citation.quote }),
             ).toBeVisible();
         }
     }
@@ -209,11 +225,12 @@ test('完整工作台：反馈后的重要变化、收藏笔记真实冲突、�
         if (request.method() === 'POST' && request.url().endsWith('/followup'))
             followupWrites.push(request.postDataJSON());
     });
-    const open = page.getByRole('button', { name: '确认后建立独立后续执行', exact: true });
+    const open = turn.getByRole('button', { name: '据此补查新资料', exact: true });
     await open.press('Enter');
-    const dialog = page.getByRole('dialog', { name: '确认建立独立后续执行', exact: true });
-    await expect(dialog).toBeVisible();
-    await page.keyboard.press('Escape');
+    const plan = turn.getByRole('region', { name: '补查新资料', exact: true });
+    await expect(plan.getByRole('heading', { name: '补查新资料', exact: true })).toBeFocused();
+    await plan.getByRole('button', { name: '收起执行计划', exact: true }).press('Enter');
+    await expect(plan).toHaveCount(0);
     await expect(open).toBeFocused();
     expect(followupWrites).toEqual([]);
     expect(await deliveryCounts(environment, owner, task.id)).toEqual(beforeQuestions);
@@ -236,17 +253,19 @@ test('完整工作台：反馈后的重要变化、收藏笔记真实冲突、�
         (response) =>
             response.url().endsWith('/followup') && response.request().method() === 'POST',
     );
-    await dialog.getByRole('button', { name: '确认并建立后续执行', exact: true }).press('Enter');
+    const start = plan.getByRole('button', { name: '开始执行', exact: true });
+    await expect(start).toBeEnabled();
+    await start.press('Enter');
     const response = await confirmation;
     expect(response.status()).toBe(202);
     const linked = ((await response.json()) as { run: Run }).run;
-    expect(followupWrites).toEqual([{ confirm: true }]);
+    expect(followupWrites).toEqual([{ confirm: true, operation: 'research' }]);
     expect(linked.parentRunId).toBe(second.run.id);
     expect(linked.taskVersionId).toBe(second.run.taskVersionId);
     expect(linked.budget).toEqual(second.run.budget);
     expect(linked.mode).toBe(second.run.mode);
     expect(linked.trigger).toBe('followup');
-    await expect(page.getByRole('link', { name: '查看关联执行', exact: true })).toHaveAttribute(
+    await expect(turn.getByRole('link', { name: '执行详情', exact: true })).toHaveAttribute(
         'href',
         `/runs/${linked.id}`,
     );
@@ -289,7 +308,9 @@ test('完整工作台：反馈后的重要变化、收藏笔记真实冲突、�
     await expect(other.page.locator('.results-region')).toContainText('没有已存资料命中');
     await expect(other.page.locator('.search-result')).toHaveCount(0);
     await other.page.goto(`/reports/${second.report.id}?questionId=${questionId}`);
-    await expect(other.page.locator('.report-frame,.question-result,.notes-panel')).toHaveCount(0);
+    await expect(other.page.locator('.report-frame,.conversation-turn,.notes-panel')).toHaveCount(
+        0,
+    );
     await expect(other.page.locator('body')).not.toContainText(localDraft);
     await attachProvenance(info, environment, [first, second, final]);
     await info.attach('question-supplier-boundary', {

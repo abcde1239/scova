@@ -48,7 +48,9 @@ test('补充入口六宽/文字放大、四主题浅暗与已保存报告形式�
     await page.getByLabel('问题', { exact: true }).fill('这些证据还缺少哪些独立核验？');
     await page.getByRole('button', { name: '提问', exact: true }).press('Enter');
     await expect(
-        page.getByRole('heading', { name: '未获得可核验回答', exact: true }),
+        page
+            .locator('.assistant-message')
+            .getByText('未配置可用的问答模型，暂时无法提取回答。', { exact: true }),
     ).toBeVisible();
     const questionUrl = page.url();
     const questionId = new URL(questionUrl).searchParams.get('questionId');
@@ -269,44 +271,41 @@ test('补充入口六宽/文字放大、四主题浅暗与已保存报告形式�
                     await expect(feedback.locator('.selected-target')).toContainText(
                         '当前反馈：未设置',
                     );
-                    const open = page.getByRole('button', {
-                        name: '确认后建立独立后续执行',
+                    const turn = page.locator(`#turn-${questionId}`);
+                    const open = turn.getByRole('button', {
+                        name: '据此补查新资料',
                         exact: true,
                     });
                     await expect(open).toBeEnabled();
                     await open.press('Enter');
-                    const dialog = page.getByRole('dialog', { name: '确认建立独立后续执行' });
-                    await expect(dialog).toBeVisible();
-                    await expect(
-                        dialog.getByRole('button', { name: '确认并建立后续执行', exact: true }),
-                    ).toBeEnabled();
+                    const plan = turn.getByRole('region', { name: '补查新资料', exact: true });
+                    const start = plan.getByRole('button', { name: '开始执行', exact: true });
+                    await expect(start).toBeEnabled();
+                    await start.scrollIntoViewIfNeeded();
+                    await expect(start).toBeInViewport({ ratio: 1 });
                     await layout(page, scale);
-                    const bounds = await dialog.evaluate((element) => {
+                    const bounds = await plan.evaluate((element) => {
                         const rect = element.getBoundingClientRect();
-                        const footer = element.querySelector('footer')!.getBoundingClientRect();
                         return {
                             left: rect.left,
                             right: rect.right,
-                            bottom: rect.bottom,
-                            footerBottom: footer.bottom,
                             width: innerWidth,
-                            height: innerHeight,
                             overflow: element.scrollWidth > element.clientWidth + 1,
                         };
                     });
                     expect(bounds.left).toBeGreaterThanOrEqual(-1);
                     expect(bounds.right).toBeLessThanOrEqual(bounds.width + 1);
-                    expect(bounds.bottom).toBeLessThanOrEqual(bounds.height + 1);
-                    expect(bounds.footerBottom).toBeLessThanOrEqual(bounds.height + 1);
                     expect(bounds.overflow).toBe(false);
                     if (accent === 'blue' && width === 320 && scale === 200)
-                        await info.attach(`${scheme}-320-200-followup-dialog`, {
+                        await info.attach(`${scheme}-320-200-followup-plan`, {
                             body: await page.screenshot(),
                             contentType: 'image/png',
                         });
                     const beforeCancel = writes.length;
-                    await page.keyboard.press('Escape');
-                    await expect(dialog).not.toBeVisible();
+                    await plan
+                        .getByRole('button', { name: '收起执行计划', exact: true })
+                        .press('Enter');
+                    await expect(plan).toHaveCount(0);
                     await expect(open).toBeFocused();
                     expect(writes.length).toBe(beforeCancel);
                 }
