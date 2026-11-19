@@ -2,7 +2,7 @@
     <nav
         v-if="items.length > 1"
         class="breadcrumbs text-muted text-[0.875rem] break-anywhere"
-        aria-label="面包屑导航"
+        :aria-label="t('shell.breadcrumbs')"
     >
         <ol
             class="[.breadcrumbs_&:is(ol)]:(flex flex-wrap items-center gap-1.5 min-w-0 list-none mt-0 mb-1.5 mx-0 p-0)"
@@ -26,36 +26,41 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
+import { routeTitle } from '@/router';
 import { computed, inject } from 'vue';
 import { breadcrumbContext } from '@/layout/breadcrumbs';
 import { RouterLink, useRoute } from 'vue-router';
-import AppIcon from '@/components/common/AppIcon.vue';
+import AppIcon from '@/component/common/AppIcon.vue';
 
 const route = useRoute();
+const { t } = useI18n({ useScope: 'global' });
+
 const context = inject(breadcrumbContext, undefined);
-const sections: Record<string, { label: string; to: string }> = {
-    tasks: { label: '任务', to: '/tasks' },
-    inbox: { label: '收件箱', to: '/inbox' },
-    library: { label: '资料库', to: '/library' },
-    account: { label: '账号', to: '/account' },
-    notifications: { label: '通知', to: '/notifications' },
+const sections: Record<string, { key: string; to: string }> = {
+    tasks: { key: 'pages.tasks', to: '/tasks' },
+    inbox: { key: 'pages.inbox', to: '/inbox' },
+    library: { key: 'pages.library', to: '/library' },
+    account: { key: 'pages.account', to: '/account' },
+    notifications: { key: 'pages.notifications', to: '/notifications' },
 };
 const items = computed(() => {
     const parent = sections[String(route.meta.section)];
     const result: { label: string; to?: string }[] = [];
     if (parent && route.path !== parent.to) {
+        const link = { label: t(parent.key), to: parent.to };
         const status = route.meta.section === 'tasks' ? route.query.status : undefined;
         result.push(
             typeof status === 'string'
-                ? { ...parent, to: `${parent.to}?status=${encodeURIComponent(status)}` }
-                : parent,
+                ? { ...link, to: `${parent.to}?status=${encodeURIComponent(status)}` }
+                : link,
         );
     }
     if (route.name === 'task-edit' && typeof route.params.taskId === 'string')
-        result.push({ label: '任务摘要', to: `/tasks/${route.params.taskId}` });
+        result.push({ label: t('pages.taskSummary'), to: `/tasks/${route.params.taskId}` });
     if (route.name === 'run-detail' && context?.value?.path === route.fullPath)
         result.push({ label: context.value.label, to: context.value.to });
-    result.push({ label: route.meta.title ?? '页面' });
+    result.push({ label: routeTitle(route, t) });
     return result;
 });
 </script>

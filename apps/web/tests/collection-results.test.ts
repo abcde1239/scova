@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test';
 import type { Report } from '@scova/models';
-import { collectionRows, dateSourceLabel } from '@/utils/source-dates';
+import { collectionRows, dateSourceLabel } from '@/utils/report/sources';
 
 describe('collection source dates', () => {
     it('joins redirected canonical pages without converting day precision to an instant', () => {

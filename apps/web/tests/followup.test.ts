@@ -1,3 +1,4 @@
+import { deferred } from './support/deferred';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 import { effectScope, nextTick, ref } from 'vue';
 import {
@@ -19,7 +20,7 @@ import {
     requestFollowup,
 } from '@/api/followup';
 import { runQueryOptions } from '@/api/runs';
-import { useFollowup } from '@/composables/useFollowup';
+import { useFollowup } from '@/composable/useFollowup';
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const time = '2026-10-31T00:00:00Z';
@@ -179,13 +180,6 @@ const command = (run = nextFixture(), reused = false, status = 202) =>
     Response.json({ run, reused }, { status });
 const failure = (status: number, code = 'TEST_FAILURE') =>
     Response.json({ code, message: 'sample', requestId: 'sample' }, { status });
-function deferred<T>() {
-    let resolve!: (value: T) => void;
-    const promise = new Promise<T>((done) => {
-        resolve = done;
-    });
-    return { promise, resolve };
-}
 async function open(state: ReturnType<typeof useFollowup>) {
     state.open();
     await vi.waitFor(() => expect(state.parent.value).toBeDefined());

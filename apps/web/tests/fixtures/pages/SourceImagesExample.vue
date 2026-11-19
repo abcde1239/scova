@@ -27,10 +27,10 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import ActionButton from '@/components/common/ActionButton.vue';
-import SourceItem from '@/components/source/SourceItem.vue';
-import SourceImage from '@/components/source/SourceImage.vue';
-import type { SourceImageInput } from '@/models/source-image';
+import ActionButton from '@/component/common/ActionButton.vue';
+import SourceItem from '@/component/source/SourceItem.vue';
+import SourceImage from '@/component/source/SourceImage.vue';
+import type { SourceImageInput } from '@/utils/source/image';
 import mapUrl from './source-map.svg?url&no-inline';
 
 const map: SourceImageInput = {

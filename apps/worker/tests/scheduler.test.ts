@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vite-plus/test';
-import { SchedulerService } from '../src/service/scheduler.ts';
-import { SchedulerTaskError } from '../src/utils/scheduler.ts';
+import { SchedulerService } from '../../server/src/service/scheduler.ts';
+import { SchedulerTaskError } from '../../server/src/utils/scheduler.ts';
 
 describe('Scheduler 批次有界并发与故障隔离', () => {
     it('坏任务本批跳过，其他任务仍推进，随后报告失败以触发退避', async () => {

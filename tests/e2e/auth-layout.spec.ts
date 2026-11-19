@@ -50,7 +50,9 @@ test('时区下拉框：搜索与空态不改值，确认选择不提交表单',
     await expect(timezone).toBeFocused();
     await timezone.click();
     await search.fill('伦敦');
-    await expect(page.getByRole('option')).toHaveCount(1);
+    await expect(
+        page.getByRole('listbox', { name: '默认时区', exact: true }).getByRole('option'),
+    ).toHaveCount(1);
     await search.press('Enter');
     await expect(timezone).toContainText('Europe/London');
     await expect(timezone).toBeFocused();
@@ -72,8 +74,10 @@ test('下拉浮层：320宽与200%文字不越界，外点关闭', async ({ page
     expect(bounds!.y).toBeGreaterThanOrEqual(0);
     expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(844);
     await page.getByRole('combobox', { name: '搜索默认时区', exact: true }).fill('东京');
-    await expect(page.getByRole('option')).toContainText('Asia/Tokyo');
-    await page.getByRole('option').click();
+    await expect(
+        page.getByRole('listbox', { name: '默认时区', exact: true }).getByRole('option'),
+    ).toContainText('Asia/Tokyo');
+    await page.getByRole('listbox', { name: '默认时区', exact: true }).getByRole('option').click();
     await expect(page.getByLabel('默认时区', { exact: true })).toContainText('Asia/Tokyo');
     await page.getByLabel('默认时区', { exact: true }).click();
     await page.mouse.click(2, 2);

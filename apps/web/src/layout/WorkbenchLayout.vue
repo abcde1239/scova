@@ -3,7 +3,7 @@
         <a
             class="skip-link inline-flex items-center gap-[0.5em] min-h-11 text-default no-underline cursor-pointer fixed [top:0.5rem] [left:0.5rem] z-[10] bg-surface [transform:translateY(-200%)] py-2 px-4 keyboard-focus-wide [nav_&:is(a)]:(rounded-2 py-2 px-3.5) [nav_&:is(a):hover]:([background:var(--scova-selected)] text-primary) focus:[transform:translateY(0)]"
             href="#main-content"
-            >跳到主内容</a
+            >{{ t('shell.skip') }}</a
         >
         <div
             class="workbench-header-bar [border-bottom:0.0625rem_solid_color-mix(in_srgb,_var(--scova-border)_30%,_transparent)]"
@@ -15,14 +15,14 @@
                 <router-link
                     class="brand inline-flex items-center gap-[0.5em] min-h-11 text-inherit no-underline cursor-pointer keyboard-focus-wide [&&]:(text-[1.25rem] [font-weight:650] whitespace-nowrap) [nav_&:is(a)]:(rounded-2 py-2 px-3.5) [nav_&:is(a):hover]:([background:var(--scova-selected)] text-primary)"
                     to="/tasks"
-                    aria-label="Scova，任务首页"
+                    :aria-label="t('shell.taskHome')"
                 >
                     <img src="/favicon.ico?v=ebde566c" alt="" class="w-6 h-6 object-contain" />
                     <span lang="en">Scova</span>
                 </router-link>
                 <nav
                     class="primary-navigation flex flex-wrap gap-2 [@media(max-width:_53.999rem)]:hidden"
-                    aria-label="主导航"
+                    :aria-label="t('shell.primaryNav')"
                 >
                     <router-link
                         class="inline-flex items-center gap-[0.5em] min-h-11 text-inherit no-underline cursor-pointer keyboard-focus-wide [nav_&:is(a)]:(rounded-2 py-2 px-3.5) [nav_&:is(a):hover]:([background:var(--scova-selected)] text-primary) [&.selected]:([background:var(--scova-selected)] text-primary font-semibold)"
@@ -36,12 +36,12 @@
                             class="[.page-heading_>_&]:(min-w-0 max-w-full break-anywhere)"
                             :name="navigationIcon(item.meta.section)"
                         />
-                        {{ item.meta.title }}
+                        {{ routeTitle(item, t) }}
                     </router-link>
                 </nav>
                 <nav
                     class="tool-navigation flex flex-wrap gap-2 ml-auto [@media(max-width:_53.999rem)]:hidden"
-                    aria-label="全局工具"
+                    :aria-label="t('shell.toolsNav')"
                 >
                     <template v-for="item in tools" :key="String(item.name)">
                         <notification-menu
@@ -59,10 +59,11 @@
                                 class="[.page-heading_>_&]:(min-w-0 max-w-full break-anywhere)"
                                 :name="navigationIcon(item.meta.section)"
                             />
-                            {{ item.meta.title }}
+                            {{ routeTitle(item, t) }}
                         </router-link>
                     </template>
                 </nav>
+                <interface-language-select class="[@media(max-width:_53.999rem)]:ml-auto" />
                 <account-menu />
             </header>
         </div>
@@ -87,18 +88,22 @@
                     {{ title }}
                 </h1>
                 <div
+                    lang="zh-CN"
                     class="page-tools min-w-0 max-w-full break-anywhere [.page-heading_>_&]:(min-w-0 max-w-full break-anywhere)"
                 >
                     <slot name="tools" />
                 </div>
             </div>
             <div
+                lang="zh-CN"
                 class="page-context min-w-0 max-w-full break-anywhere [.page-heading_>_&]:(min-w-0 max-w-full break-anywhere) [&.page-context:not(:empty)]:(mt-4 mb-4)"
             >
                 <slot name="context" />
             </div>
-            <slot />
+            <div v-if="route.name !== 'not-found'" lang="zh-CN"><slot /></div>
+            <slot v-else />
             <div
+                lang="zh-CN"
                 class="reading-tools min-w-0 max-w-full break-anywhere [.page-heading_>_&]:(min-w-0 max-w-full break-anywhere) [&.reading-tools:not(:empty)]:(mt-4 mb-4)"
             >
                 <slot name="reading" />
@@ -108,20 +113,25 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
+import InterfaceLanguageSelect from '@/component/common/InterfaceLanguageSelect.vue';
+import { routeTitle } from '@/router';
 import { computed, provide, shallowRef } from 'vue';
 import { breadcrumbContext, type BreadcrumbContext } from '@/layout/breadcrumbs';
 import { RouterLink, useRoute } from 'vue-router';
 import type { RouteRecordNormalized } from 'vue-router';
-import AppIcon from '@/components/common/AppIcon.vue';
-import type { IconName } from '@/components/common/icons';
+import AppIcon from '@/component/common/AppIcon.vue';
+import type { IconName } from '@/utils/icons';
 import MobileNavigation from '@/layout/MobileNavigation.vue';
 import PageBreadcrumbs from '@/layout/PageBreadcrumbs.vue';
 import AccountMenu from '@/layout/AccountMenu.vue';
-import NotificationMenu from '@/components/notifications/NotificationMenu.vue';
+import NotificationMenu from '@/component/notifications/NotificationMenu.vue';
 
 const props = defineProps<{ title: string; navigation: RouteRecordNormalized[] }>();
 defineSlots<{ default(): unknown; context(): unknown; tools(): unknown; reading(): unknown }>();
 const route = useRoute();
+const { t } = useI18n({ useScope: 'global' });
+
 provide(breadcrumbContext, shallowRef<BreadcrumbContext>());
 const primary = computed(() =>
     props.navigation.filter((item) => item.meta.navigation === 'primary'),
@@ -152,10 +162,10 @@ const mobileItems = computed(() => [
         )
         .map((item) => ({
             path: item.path,
-            label: String(item.meta.title),
+            label: routeTitle(item, t),
             icon: navigationIcon(item.meta.section),
         })),
-    { path: '/account/agent', label: 'Agent 配置', icon: 'settings' as const },
-    { path: '/account/appearance', label: '外观', icon: 'appearance' as const },
+    { path: '/account/agent', label: t('pages.agent'), icon: 'settings' as const },
+    { path: '/account/appearance', label: t('pages.appearance'), icon: 'appearance' as const },
 ]);
 </script>

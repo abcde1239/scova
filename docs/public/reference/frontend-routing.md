@@ -1,12 +1,12 @@
 # 工作台路由与插槽
 
-`apps/web/src/main.ts` 装配 Pinia 和 Vue Router，先安装会话守卫，再挂载 App。首次路由尚未确认或会话恢复中，只显示独立加载布局；守卫完成后才显示工作台或认证布局，并组合 SessionBoundary 与 RouterView。401 在进入业务页前转至登录，服务不可达转至 /service-unavailable 独立错误页；重试成功后回到原站内地址。App 不发起领域请求。
+`apps/web/src/main.ts` 在启动恢复逻辑内动态加载 `bootstrap.ts`；应用或其样式加载失败时，保留 HTML 启动提示，并可按原 URL 重载。`bootstrap.ts` 装配 Pinia、Vue Router 和会话守卫，再挂载 App。首次路由尚未确认或会话恢复中，只显示独立加载布局；守卫完成后才显示工作台或认证布局，并组合 SessionBoundary 与 RouterView。401 在进入业务页前转至登录，服务不可达转至 /service-unavailable 独立错误页；重试成功后回到原站内地址。App 不发起领域请求。
 
 当前入口为 `/tasks`、`/inbox`、`/library`、`/notifications`、`/account`，已有各自业务页面；任务、执行、报告和来源详情按领域路由登记。`/login`、`/register` 提供会话表单；统一守卫处理恢复、退出和安全返回。`/account/appearance` 提供本地主题与阅读偏好，服务端账号偏好使用独立页面。未知地址显示未找到页并保留 URL。
 
 ## 登记领域页面
 
-在 `apps/web/src/router/pages/` 新增独立领域文件，默认导出 `RouteRecordRaw[]`，由入口自动收集。页面必须有唯一名称。实现已有入口时使用其名称（如 `tasks`），提供真实 component 和 meta；收集器会替换壳层的 pending 入口并继承导航信息，两个真实实现重名会报错。新增详情使用独立名称和 `meta.section`（如 `tasks`），保持所属导航高亮。页面标题由 `meta.title` 指定。
+在 `apps/web/src/router/pages/` 新增独立领域文件，默认导出 `RouteRecordRaw[]`，由入口自动收集。页面必须有唯一名称。实现已有入口时使用其名称（如 `tasks`），提供真实 component 和 meta；收集器会替换壳层的 pending 入口并继承导航信息，两个真实实现重名会报错。新增详情使用独立名称和 `meta.section`（如 `tasks`），保持所属导航高亮。标题通过 `meta.titleKey` 翻译，必要时可用 `meta.title` 显式覆盖。
 
 路由可以使用 `components: { default, context, tools, reading }`：default 为主体，context 为详情分区，tools 为标题旁工具，reading 为阅读控件。布局还提供同名 Vue 插槽，集中维护容器。页面无需修改 App 或主路由表，也不要在壳层发起请求。
 

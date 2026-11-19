@@ -10,6 +10,7 @@ export * from './task/drafts.ts';
 export * from './library.ts';
 export * from './research/runs.ts';
 export * from './report/schema.ts';
+export * from './report/export.ts';
 export * from './report/value.ts';
 export * from './report/delivery.ts';
 export * from './research/coverage.ts';

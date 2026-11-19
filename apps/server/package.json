@@ -15,21 +15,24 @@
     "dependencies": {
         "@elysiajs/node": "catalog:",
         "@elysiajs/swagger": "^1.2.1",
+        "@langchain/langgraph-checkpoint-postgres": "catalog:",
         "@node-rs/argon2": "catalog:",
         "@scova/connectors": "workspace:*",
         "@scova/db": "workspace:*",
-        "@scova/image-storage": "workspace:*",
         "@scova/models": "workspace:*",
         "@scova/object-storage": "workspace:*",
         "@scova/shared": "workspace:*",
+        "bullmq": "catalog:",
         "elysia": "^1.4.7",
         "ioredis": "catalog:",
+        "pg": "catalog:",
         "sharp": "catalog:",
         "srvx": "0.11.22"
     },
     "devDependencies": {
         "@types/bun": "^1.2.0",
         "@types/node": "catalog:",
+        "@types/pg": "catalog:",
         "typescript": "catalog:"
     }
 }

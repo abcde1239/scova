@@ -4,7 +4,7 @@ PostgreSQL 表与关系定义在 `packages/db/src/schema.ts`，Server/Worker 通
 
 ## 初始化与升级
 
-配置 `DATABASE_URL` 后运行 `vp run db:migrate`，成功后启动 API/Worker，无需生成客户端。迁移使用 `packages/db/drizzle/` 的 SQL/journal 和 `_scova_migrations` 账本，在事务及按数据库/schema 隔离的 advisory lock 内执行，重复执行安全。
+配置 `DATABASE_URL` 后运行 `vp run db:migrate`，成功后启动 API/Worker，无需生成客户端。Server 维护 CLI 同时安装业务和图状态 schema。业务迁移使用 `packages/db/drizzle/` 的 SQL/journal 与 `_scova_migrations` 账本，在事务及按数据库/schema 隔离的 advisory lock 内执行，重复执行安全。
 
 已有 Prisma 数据库先验证备份、停止 API/Worker，再运行同一命令。接管前校验八组原迁移的名称、完成状态、已知 checksum，以及实际表、列、类型、默认值、枚举、外键、CHECK、索引与触发器；一致后才登记初始基线，不在存量表重放建表 SQL。原 `_prisma_migrations` 与 `packages/db/legacy/migrations/` 保留审计，不再维护旧 ORM schema 或工具配置。只有已知 LF/CRLF 两种行尾校验和等价，其他内容变化仍拒绝。未知、失败、不完整历史或结构漂移会回滚报错，不清库、不自动放行。
 
@@ -26,7 +26,7 @@ UUID 与 Task/Baseline/Feedback/Note 的更新时间有显式应用默认值；�
 
 客户端工厂只构造连接池，应用负责显式连接及停止。URL 中 `schema` 是应用约定，工厂校验后设置 PostgreSQL search_path，并保留 application_name。连接池与超时见 [db 包说明](../../../packages/db/README.md)。
 
-LangGraph checkpoint 保持独立 schema、版本账本、连接池和迁移，由原 saver 管理，不进入业务 Drizzle 迁移。Worker 按配置启动或外部维护模式核验 saver；Run.checkpointRef 仅保存经租约 fencing 提升的引用。备份、保留期与账号删除共同处理业务和 checkpoint 数据，不能仅删除业务表就认为研究内容已清除。
+LangGraph checkpoint 保持独立 schema、版本账本、连接池和迁移，由原 saver 管理，不进入业务 Drizzle 迁移。Worker 启动只核验 saver 版本，不安装或更新 schema；Run.checkpointRef 仅保存经租约 fencing 提升的引用。备份、保留期与账号删除共同处理业务和 checkpoint 数据，不能仅删除业务表就认为研究内容已清除。
 
 ## 验证
 

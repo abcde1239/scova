@@ -17,7 +17,6 @@ x-app: &app
         APP_ORIGIN: ${APP_ORIGIN:-http://localhost:8080}
         REGISTRATION_ENABLED: ${REGISTRATION_ENABLED:-true}
         AGENT_CHECKPOINT_SCHEMA: scova_agent
-        AGENT_CHECKPOINT_MIGRATION: external
         SEARCH_DNS_RESOLVER: ${SEARCH_DNS_RESOLVER:-auto}
         SEARCH_ENGINE_INTERVAL_MS: ${SEARCH_ENGINE_INTERVAL_MS:-10000}
         SEARCH_CONFIG_VERSION: ${SEARCH_CONFIG_VERSION:-1}
@@ -31,6 +30,7 @@ x-app: &app
         MODEL_DNS_RESOLVER: ${MODEL_DNS_RESOLVER:-auto}
         READER_DNS_RESOLVER: ${READER_DNS_RESOLVER:-auto}
         AGENT_CREDENTIAL_KEY: ${AGENT_CREDENTIAL_KEY:-}
+        WORKER_QUEUE_NAME: ${WORKER_QUEUE_NAME:-scova-runs}
     logging: &logging
         driver: json-file
         options: { max-size: 5m, max-file: '2' }
@@ -63,7 +63,7 @@ services:
     migrate:
         <<: *app
         restart: 'no'
-        working_dir: /app/apps/worker
+        working_dir: /app/apps/server
         environment:
             <<: *environment
             SCOVA_MAINTENANCE: '1'
@@ -75,6 +75,12 @@ services:
         environment:
             <<: *environment
             DATABASE_URL: postgresql://scova:${POSTGRES_PASSWORD}@postgres:5432/scova?application_name=scova-api
+            WORKER_POLL_INTERVAL_MS: ${WORKER_POLL_INTERVAL_MS:-1000}
+            WORKER_FAILURE_DELAY_MS: ${WORKER_FAILURE_DELAY_MS:-5000}
+            WORKER_BATCH_SIZE: ${WORKER_BATCH_SIZE:-50}
+            WORKER_LEASE_SECONDS: ${WORKER_LEASE_SECONDS:-30}
+            WORKER_SCHEDULER_INTERVAL_MS: ${WORKER_SCHEDULER_INTERVAL_MS:-30000}
+            WORKER_SCHEDULER_CONCURRENCY: ${WORKER_SCHEDULER_CONCURRENCY:-2}
             STORAGE_PROVIDER: ${STORAGE_PROVIDER:-}
             STORAGE_BUCKET: ${STORAGE_BUCKET:-}
             STORAGE_ACCESS_KEY_ID: ${STORAGE_ACCESS_KEY_ID:-}
@@ -99,7 +105,7 @@ services:
             migrate: { condition: service_completed_successfully }
             redis: { condition: service_healthy }
         healthcheck:
-            test: [CMD-SHELL, 'cd /app/apps/worker && bun run src/health.ts api']
+            test: [CMD, bun, run, src/health.ts]
             interval: 15s
             timeout: 12s
             retries: 5
@@ -117,6 +123,7 @@ services:
             <<: *environment
             DATABASE_URL: postgresql://scova:${POSTGRES_PASSWORD}@postgres:5432/scova?application_name=scova-worker
             WORKER_HEARTBEAT_PATH: /tmp/scova-worker-ready
+            WORKER_RUN_CONCURRENCY: ${WORKER_RUN_CONCURRENCY:-2}
             READER_RENDER_WAIT_MS: ${READER_RENDER_WAIT_MS:-1000}
             # Chromium sandbox requires additional host support; this image uses the restricted container.
             READER_CHROMIUM_SANDBOX: ${READER_CHROMIUM_SANDBOX:-false}
@@ -125,7 +132,7 @@ services:
             migrate: { condition: service_completed_successfully }
             redis: { condition: service_healthy }
         healthcheck:
-            test: [CMD, bun, run, src/health.ts, worker]
+            test: [CMD, bun, run, src/health.ts]
             interval: 15s
             timeout: 12s
             retries: 5
@@ -185,7 +192,7 @@ services:
         <<: *app
         profiles: [maintenance]
         restart: 'no'
-        working_dir: /app/apps/worker
+        working_dir: /app/apps/server
         environment:
             <<: *environment
             SCOVA_MAINTENANCE: '1'

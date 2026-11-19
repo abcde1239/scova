@@ -73,13 +73,6 @@
             "id": "packages-shared"
         },
         {
-            "root": "packages/image-storage",
-            "id": "packages-image-storage",
-            "tests": {
-                "requireConfiguredTask": true
-            }
-        },
-        {
             "root": "packages/object-storage",
             "id": "packages-object-storage",
             "tests": { "requireConfiguredTask": true }
@@ -192,7 +185,6 @@
                 "packages-db",
                 "packages-agent-core",
                 "packages-connectors",
-                "packages-image-storage",
                 "packages-object-storage"
             ],
             "timeoutMs": 120000,

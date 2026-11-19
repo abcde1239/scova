@@ -1,6 +1,6 @@
 import type { Context } from 'elysia';
 import type { ApiServices } from '@/app/services';
-import { requireSession, requireCsrf } from '@/http/session.ts';
+import { requireSession, requireCsrf } from '@/handler/http/session.ts';
 import { createTaskDraftService } from '@/service/task-drafts.ts';
 
 export function createTaskDraftHandlers(services: ApiServices) {

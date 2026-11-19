@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 import { effectScope, nextTick, ref } from 'vue';
 import type { Run, SessionResponse } from '@scova/models';
 import { createSessionLifecycle } from '@/api/session';
-import { useTaskRunHistory, validHistoryTaskId } from '@/composables/useTaskRunHistory';
+import { useTaskRunHistory, validHistoryTaskId } from '@/composable/useTaskRunHistory';
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const instant = '2026-10-31T00:00:00Z';

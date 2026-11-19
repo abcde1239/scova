@@ -1,11 +1,12 @@
+import { deferred } from './support/deferred';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 import { createApp, effectScope, nextTick, ref } from 'vue';
 import type { Run, RunGraphSnapshot, RunEvent, SessionResponse, SseMessage } from '@scova/models';
 import { createSessionLifecycle, sessionLifecycleKey } from '@/api/session';
-import { useExecution, executionFailure } from '@/composables/useExecution';
-import { useRunGraph } from '@/composables/useRunGraph';
+import { useExecution, executionFailure } from '@/composable/useExecution';
+import { useRunGraph } from '@/composable/useRunGraph';
 import { runGraphQueryOptions } from '@/api/run-graph';
-import { appendExecutionLog, emptyExecutionLog } from '@/utils/execution-log';
+import { appendExecutionLog, emptyExecutionLog } from '@/utils/run/log';
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const instant = '2026-11-18T00:00:00Z';
@@ -66,13 +67,6 @@ const snapshot = (seq: number, runId = id(1)): RunGraphSnapshot => ({
 });
 function frame(message: SseMessage) {
     return `${'eventId' in message ? `id: ${message.eventId}\n` : ''}event: ${message.type}\ndata: ${JSON.stringify(message)}\n\n`;
-}
-function deferred<T>() {
-    let resolve!: (value: T) => void;
-    const promise = new Promise<T>((done) => {
-        resolve = done;
-    });
-    return { promise, resolve };
 }
 const cleanups: (() => void)[] = [];
 function setup(fetcher: typeof fetch) {

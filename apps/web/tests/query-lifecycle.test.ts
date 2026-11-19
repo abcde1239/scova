@@ -1,10 +1,11 @@
+import { deferred } from './support/deferred';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 import { effectScope, nextTick } from 'vue';
 import { MutationObserver, QueryObserver } from '@tanstack/vue-query';
 import type { SessionResponse } from '@scova/models';
 import { currentSessionEndpoint, loginEndpoint, updatePreferencesEndpoint } from '@/api/endpoints';
 import { createSessionLifecycle } from '@/api/session';
-import { useSessionMutation, useSessionQuery } from '@/composables/useSessionQuery';
+import { useSessionMutation, useSessionQuery } from '@/composable/useSessionQuery';
 
 const accountA: SessionResponse = {
     user: {
@@ -23,14 +24,6 @@ const accountB: SessionResponse = {
     user: { ...accountA.user, id: '00000000-0000-4000-8000-000000000002', email: 'b@example.org' },
     csrfToken: 'csrf-b',
 };
-
-function deferred<T>() {
-    let resolve!: (value: T) => void;
-    const promise = new Promise<T>((done) => {
-        resolve = done;
-    });
-    return { promise, resolve };
-}
 
 const lifecycles: ReturnType<typeof createSessionLifecycle>[] = [];
 function setup(fetcher: typeof fetch = async () => Response.json(accountB)) {

@@ -1,3 +1,4 @@
+import { geographicScopeInstructions } from '../../model/prompts.ts';
 import { invalidModelOutput } from '../../model/errors.ts';
 import { repairableModelOutput, modelStageLimited } from '../../model/errors.ts';
 import { type PlannedRequirement } from '../../report/artifacts/index.ts';
@@ -81,7 +82,7 @@ export function modelAnswerNode(rt: AgentRuntime) {
         if (targets.length !== ids.length)
             throw new AgentError('INVALID_STATE', '模型自回答目标不属于冻结计划');
         let input: StructuredInput = {
-            prompt: `${modelAnswerPrompt}\nTask data: ${JSON.stringify({ topic: context.config.topic, goal: context.config.goal, exclusions: context.config.exclusions, questions: state.questions, fields: targets })}`,
+            prompt: `${geographicScopeInstructions(state.searchDirectionPolicy)}${modelAnswerPrompt}\nTask data: ${JSON.stringify({ topic: context.config.topic, goal: context.config.goal, exclusions: context.config.exclusions, questions: state.questions, fields: targets })}`,
             schema: modelAnswerSchema(ids),
             maxInputTokens: Math.min(12_000, context.budget.maxInputTokens),
             maxOutputTokens: Math.min(4000, context.budget.maxOutputTokens),

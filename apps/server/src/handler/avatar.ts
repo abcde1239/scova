@@ -1,7 +1,7 @@
 import { AvatarVersionQuerySchema, parseContract } from '@scova/models';
 import type { ApiServices } from '@/app/services';
-import { requireCsrf, requireSession, serializeSession } from '@/http/session';
-import { readAvatarBody } from '@/http/avatar-body';
+import { requireCsrf, requireSession, serializeSession } from '@/handler/http/session';
+import { readAvatarBody } from '@/handler/http/avatar-body';
 import { createAvatarService } from '@/service/avatar';
 
 export function createAvatarHandlers(services: ApiServices) {

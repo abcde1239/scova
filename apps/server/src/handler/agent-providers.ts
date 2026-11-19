@@ -1,5 +1,5 @@
 import type { ApiServices } from '@/app/services';
-import { requireSession, requireCsrf } from '@/http/session';
+import { requireSession, requireCsrf } from '@/handler/http/session';
 import { createAgentProviderService } from '@/service/agent-providers';
 
 export function createAgentProviderHandlers(services: ApiServices) {

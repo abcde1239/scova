@@ -2,6 +2,7 @@ import { requiredDatabaseValue } from '@/utils/database.ts';
 import {
     type DatabaseClient,
     reports as dbReports,
+    reportExports as dbReportExports,
     eq,
     baselines as dbBaselines,
     evidence as dbEvidence,
@@ -30,7 +31,7 @@ import { join } from 'node:path';
 import pg from 'pg';
 import { Queue } from 'bullmq';
 import { Redis } from 'ioredis';
-import { outboxJobId } from '../src/utils/outbox.ts';
+import { outboxJobId } from '@scova/shared/outbox-job';
 
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import {
@@ -41,10 +42,10 @@ import {
     type CallContext,
 } from '@scova/connectors';
 import { afterAll, beforeAll, describe, expect, it } from 'vite-plus/test';
-import { operationConfig, operationPool } from '../src/app/operations.ts';
-import { createOperationService } from '../src/service/operations.ts';
-import { createOperationRepository } from '../src/repo/operations.ts';
-import { parseOperation } from '../src/utils/operations.ts';
+import { operationConfig, operationPool } from '../../server/src/app/operations.ts';
+import { createOperationService } from '../../server/src/service/operations.ts';
+import { createOperationRepository } from '../../server/src/repo/operations.ts';
+import { parseOperation } from '../../server/src/utils/operations.ts';
 import { createAgentRepository } from '../src/repo/agent.ts';
 import { createRunRepository } from '../src/repo/runs.ts';
 import { createAgentSession, createAgentRuntime } from '../src/service/agent.ts';
@@ -74,6 +75,25 @@ afterAll(async () => {
     await pool.end();
     await fixture.cleanup();
 });
+it('Worker refuses an unprovisioned checkpoint schema without creating it', async () => {
+    const schema = `scova_missing_${randomUUID().replaceAll('-', '')}`;
+    const runtime = createAgentRuntime({
+        database: fixture.db,
+        databaseUrl: fixture.databaseUrl,
+        checkpointSchema: schema,
+        bundle: createConnectorBundle(),
+        // A legacy environment value may exist locally but cannot re-enable DDL in Worker.
+        env: { AGENT_CHECKPOINT_MIGRATION: 'startup' },
+    });
+    try {
+        await expect(runtime.connect()).rejects.toThrow('先执行 Server 图状态迁移');
+        const { rows } = await pool.query('SELECT to_regnamespace($1) AS schema', [schema]);
+        expect(rows[0]?.schema).toBeNull();
+    } finally {
+        await runtime.close();
+    }
+});
+
 // Deterministic live-mode connector fixture exercises complete delivery and genuine baseline promotion.
 // It does not call a remote provider and is not a live-service acceptance result.
 function completeBundle(): ConnectorBundle {
@@ -168,7 +188,11 @@ function completeBundle(): ConnectorBundle {
     };
 }
 async function prepare(db: DatabaseClient, checkpointer: PostgresSaver, complete = false) {
-    const seed = await seedRun(db, { mode: complete ? 'live' : 'demo' });
+    const seed = await seedRun(db, {
+        mode: complete ? 'live' : 'demo',
+        // Complete delivery fixtures must fit modern planning and synthesis envelopes.
+        ...(complete ? { maxInputTokens: 80_000 } : {}),
+    });
     const runs = createRunRepository(db);
     const claimed = await runs.claim(seed.run.id, 'operations-test', 60_000);
     if (claimed.kind !== 'claimed') throw new Error('Expected claim');
@@ -314,8 +338,28 @@ describe('真实维护数据库、保留与账号依赖', () => {
             `INSERT INTO "${fixture.checkpointSchema}".checkpoint_blobs (thread_id,checkpoint_ns,channel,version,type,blob) VALUES ($1,'','research','1','json',$2)`,
             [`run-${old.run.id}-epoch-99`, Buffer.from('"unpromoted-body"')],
         );
+        await fixture.db.insert(dbReportExports).values(
+            [1, 2].map((rendererVersion) => ({
+                userId: old.user.id,
+                reportId: old.reportId,
+                rendererVersion,
+                markdown: '# Report',
+                byteLength: 8,
+                sha256: 'a'.repeat(64),
+                createdAt: new Date(0),
+                expiresAt: rendererVersion === 1 ? new Date(1) : new Date(Date.now() + 86400_000),
+            })),
+        );
         expect(await threadCount(old.run.id)).toBeGreaterThan(1);
-        expect((await repo.retention(false)).runs).toBeGreaterThan(0);
+        const preview = await repo.retention(false);
+        expect(preview.runs).toBeGreaterThan(0);
+        expect(preview.exports).toBe(1);
+        expect(
+            await fixture.db
+                .select()
+                .from(dbReportExports)
+                .where(eq(dbReportExports.reportId, old.reportId)),
+        ).toHaveLength(2);
         expect(
             (
                 await fixture.db.query.runs
@@ -323,7 +367,12 @@ describe('真实维护数据库、保留与账号依赖', () => {
                     .then((row) => requiredDatabaseValue(row))
             ).checkpointRef,
         ).not.toBeNull();
-        await repo.retention(true);
+        expect((await repo.retention(true)).exports).toBe(1);
+        const remainingExports = await fixture.db
+            .select()
+            .from(dbReportExports)
+            .where(eq(dbReportExports.reportId, old.reportId));
+        expect(remainingExports.map((row) => row.rendererVersion)).toEqual([2]);
         expect(await threadCount(old.run.id)).toBe(0);
         expect(
             (
@@ -679,7 +728,6 @@ it('真实pg_dump/pg_restore恢复报告和checkpoint，并从备份恢复未交
             database: target,
             databaseUrl: configs[1]!.databaseUrl,
             checkpointSchema: 'scova_agent',
-            env: { AGENT_CHECKPOINT_MIGRATION: 'external' },
             enableDelivery: true,
             bundle: {
                 mode: 'demo',

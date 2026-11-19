@@ -15,9 +15,9 @@ flowchart LR
   API --> PG[(PostgreSQL)]
   PG -->|持久化事件回放| API
   API -->|SSE| Web
-  Worker[Worker: 调度 / Outbox / BullMQ consumer] --> PG
-  Worker --> Queue[(Redis / BullMQ)]
-  Queue --> Worker
+  API -->|Outbox 发布和恢复回补| Queue[(Redis / BullMQ)]
+  Queue --> Worker[Worker: BullMQ 消费 / Agent 执行]
+  Worker -->|执行态持久化| PG
   Worker --> Graph[LangGraph.js Agent]
   Graph --> CP[(PostgreSQL checkpoints)]
   Graph --> Search[SearXNG / 账号独立搜索 API]
@@ -26,32 +26,33 @@ flowchart LR
   Graph -->|结构化候选成果| Worker
 ```
 
-API、worker 分别作为两个进程，PostgreSQL 和 Redis 是唯一首版基础服务。同机 Compose 通过反向代理提供同源网页、`/api` 和 `/api/.../events`；不引入独立调度集群、搜索集群或额外向量数据库。
+API 和 Worker 是分别运行的后端进程，PostgreSQL 和 Redis 是唯一首版基础服务。同机 Compose 通过反向代理提供同源网页、`/api` 和 `/api/.../events`；不引入独立调度集群、搜索集群或额外向量数据库。
 
 ## 2. 工作区与职责
 
-| 目标目录                | 职责                                                                        | 依赖方向                                                 |
-| ----------------------- | --------------------------------------------------------------------------- | -------------------------------------------------------- |
-| apps/web                | Vue 3、Router、Pinia、TanStack Vue Query、UnoCSS、naive-ui；页面与 SSE 订阅 | models                                                   |
-| apps/server             | 认证、资源授权、任务版本、执行命令、报告/资料管理、事件读取                 | models、db                                               |
-| apps/worker             | 调度器、outbox dispatcher、BullMQ worker、租约、交付事务                    | models、db、agent-core、connectors                       |
-| packages/models         | 可运行时校验的请求/响应、事件版本、枚举与错误码；不暴露 ORM 实体            | 不依赖应用                                               |
-| packages/shared         | Server/Worker 共用的纯调度计算与执行范围指纹                                | 不依赖应用                                               |
-| packages/db             | Drizzle 表与关系、迁移与服务端客户端；反馈持久化子入口                      | 不依赖应用；反馈投影使用 models                          |
-| packages/agent-core     | LangGraph 状态图、有限研究策略、候选和原文引用校验                          | models、connectors 类型、LangGraph；不使用 Elysia/BullMQ |
-| packages/connectors     | SearXNG、搜索 API、模型协议、HTTP 抓取与 Readability                        | 向 agent-core 提供工具接口                               |
-| packages/object-storage | R2 / S3 通用文件、目录作用域、大小与 MIME 策略、对象管理和签名 URL          | 官方 AWS S3 SDK；不依赖应用                              |
-| packages/image-storage  | JPEG/PNG/GIF/WebP 图片校验与扩展名，供 API 账号头像复用                     | @scova/object-storage                                    |
+| 目标目录                | 职责                                                                                    | 依赖方向                                                 |
+| ----------------------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| apps/web                | Vue 3、Router、Pinia、TanStack Vue Query、UnoCSS、naive-ui；页面与 SSE 订阅             | models                                                   |
+| apps/server             | 认证、资源授权、任务版本、执行命令、报告/资料管理、事件读取、调度与队列投递、数据库维护 | models、db、BullMQ                                       |
+| apps/worker             | BullMQ 消费、Agent 执行、执行租约和交付事务                                             | models、db、agent-core、connectors                       |
+| packages/models         | 可运行时校验的请求/响应、事件版本、枚举与错误码；不暴露 ORM 实体                        | 不依赖应用                                               |
+| packages/shared         | Server/Worker 共用的纯调度计算与执行范围指纹                                            | 不依赖应用                                               |
+| packages/db             | Drizzle 表与关系、迁移与服务端客户端；反馈持久化子入口                                  | 不依赖应用；反馈投影使用 models                          |
+| packages/agent-core     | LangGraph 状态图、有限研究策略、候选和原文引用校验                                      | models、connectors 类型、LangGraph；不使用 Elysia/BullMQ |
+| packages/connectors     | SearXNG、搜索 API、模型协议、HTTP 抓取与 Readability                                    | 向 agent-core 提供工具接口                               |
+| packages/object-storage | R2 / S3 通用文件、目录作用域、大小与 MIME 策略、签名 URL 和图片签名校验                 | 官方 AWS S3 SDK；不依赖应用                              |
 
-API 不负责执行长任务，worker 不提供账号管理入口；Agent 没有通用 SQL、文件系统或任意脚本工具。`packages/db/src/schema.ts` 与 `packages/db/drizzle` 维护业务结构和迁移；Server/Worker 从 `@scova/db` 引用持久化类型，公开接口仍使用 `@scova/models`。
+Server 在独立于 HTTP 请求的后台循环运行周期调度、Outbox 投递和可恢复 Run 回补；Worker 不管理任务计划、不发布队列作业，也不提供账号管理入口；Agent 没有通用 SQL、文件系统或任意脚本工具。`packages/db/src/schema.ts` 与 `packages/db/drizzle` 维护业务结构和迁移；Server/Worker 从 `@scova/db` 引用持久化类型，公开接口仍使用 `@scova/models`。迁移、备份、恢复、留存清理和账号数据清理均为 Server 离线 CLI，不挂到公开 HTTP 路由。Worker 运行态仍直接读写 PostgreSQL 的租约、checkpoint、工具账本和交付事务；启动时不执行迁移。
 
 报告连续对话以 Report 为锚点，`report_questions` 保存有序轮次和服务端授权构建的上下文。普通问答独立限流、计量并核对引用；生成新版或联网补研需显式确认，Run 冻结报告、讨论、成果形式与预算，重试沿用快照。修订工具只读取保存证据，禁止联网搜索和重新抓取。连接器按各供应商协议保留原生 user/assistant 角色；历史回答只能作讨论，不能成为事实证据。该会话记忆与单次 Run 的 LangGraph checkpoint 恢复分别维护。
 
-Server 源码分层为 `main → app → router → handler → service → repo`：app 装配 Elysia、Node 适配与生命周期，router 声明路由和中文 OpenAPI，handler 处理 HTTP/会话/响应，service 编排业务规则及事务，repo 完成数据库与 Redis 访问。utils 放纯工具。Task CAS 与 Run/事件/Outbox 仍在同一事务中完成。
+Web `src/` 只设 `component`、`layout`、`composable`、`utils`、`store`、`api`、`view` 和 `router`。页面组件在 `view`，路由登记在 `router/pages`，应用外壳及其专用导航在 `layout`，`component` 只放 `.vue`，报告等领域辅助和独立展示类型归入 `utils` 下对应领域。详见[前端约定](frontend-conventions.md)。
 
-`http/session.ts` 承载 Cookie、Origin/CSRF 与会话认证桥接，`http/sse.ts` 承载事件流背压、心跳、超时与断连清理，供具体 handler 调用。纯 SSE 帧编码仍在 utils，事件读取和业务规则仍在 service，流注册表与停机清理由 app 装配。
+Server `src/` 只设 `repo`、`handler`、`service`、`model`、`utils`、`app` 和 `router`。调用链为 `main → app → router → handler → service → repo`；`model` 保存本应用的 schema 与 Elysia 的契约注册，跨端 DTO 仍来自 `@scova/models`。`handler/http` 包含会话、Origin/CSRF、请求体和 SSE 适配；流注册和终止仍由 `app` 管理。Redis 客户端适配和实际访问在 `repo`，BullMQ 的发布、恢复回补和维护操作归 `repo/queue`，长期连接的生命周期由 `app` 管理。Task CAS 与 Run/事件/Outbox 仍同事务提交。
 
-Worker 使用 `main/node → app → handler → service → repo + queue`：app 管配置、资源和串行轮询，handler 接收后台批次和 Run 消息，service 编排 Outbox、Run、Agent 与交付，repo 执行 PostgreSQL 条件写，queue 适配 BullMQ。已实现 Run 消费、续期、有限接管、取消及持久化研究候选；交付服务复核已提升 checkpoint、成功工具正文与逐字引用后，原子保存报告、收件箱和终态。停止先阻止新领取、中断执行并等待在途领域写/checkpoint/交付，再关闭 consumer、队列、Redis、saver 和数据库。
+Worker 沿用后端分层的子集：没有 HTTP `router`，也不复制共享 `model`。`app/queue` 的 BullMQ 消费器交给 `handler`，由 `service` 执行 Run、Agent 与交付，`repo` 执行当前 Run 的持久化条件写。交付复核已提升的 checkpoint 和原文后原子提交报告、收件箱和终态。停止先阻止新领取、中断执行并等待在途写入，再关闭消费者与执行连接。
+
+顶层入口文件不属于业务分层：Web 保留框架装配和基础样式，后端保留 Bun/Node 入口及部署调用的健康检查和维护 CLI；不增设只转发到现有入口的文件。
 
 Outbox 每次领取的 `attempts + leaseExpiresAt` 作为本次持有凭据，领取和确认/退避均使用 CAS。过期持有者不能覆盖接管后的状态；发送成功但确认失败保留租约，到期后用同一 jobId 重投。这一边界保证至少一次传递，后续业务执行仍须幂等。
 
@@ -80,7 +81,7 @@ sequenceDiagram
   participant UI as 用户 / 定时扫描
   participant API as API / Scheduler
   participant DB as PostgreSQL
-  participant D as Outbox dispatcher
+  participant D as Server 后台投递
   participant Q as BullMQ
   participant W as Worker
   UI->>API: 立即执行 / 到期任务
@@ -99,7 +100,7 @@ sequenceDiagram
 
 Outbox 防止“数据库已有执行但队列丢失”。发送后宕机可能重复入队，数据库仍是事实源：已终结执行直接 ACK；同一任务的活动执行受部分唯一索引保护。BullMQ jobId 使用 UUID 前缀，不含冒号；队列去重只作优化，不替代数据库幂等。
 
-worker 默认每 30 秒扫描到期任务，以 `FOR NO KEY UPDATE SKIP LOCKED` 领取到期项；更新 `nextRunAt`、创建 Occurrence、执行/跳过记录、首事件和 outbox 在同一事务内完成。Task 非键行锁兼容交付写入 Baseline 时的外键检查，避免归档 Task→Run 与交付 Run→Task 锁环。调度和 Run 消费默认并发各为 2，可分别配置；周期执行固定为真实研究（live），缺少模型或搜索必要配置时明确失败。
+Server 默认每 30 秒扫描到期任务，以 `FOR NO KEY UPDATE SKIP LOCKED` 领取到期项；更新 `nextRunAt`、创建 Occurrence、执行/跳过记录、首事件和 outbox 在同一事务内完成。Task 非键行锁兼容交付写入 Baseline 时的外键检查，避免归档 Task→Run 与交付 Run→Task 锁环。调度和 Run 消费默认并发各为 2，可分别配置；周期执行固定为真实研究（live），缺少模型或搜索必要配置时明确失败。
 
 频率为手动/每日/每周，持久化当地时间、IANA timezone 和 UTC `nextRunAt`。共享 Temporal 日历计算将不存在的当地时刻顺延到首个有效时刻，重复时刻只选择较早一次；下一次从原始当地时分重建。停机后最多补最近一次时点，更早记录为 `missedCount`；活动执行时记 `skipped_overlap`。修改计划或时区在锁内重算 nextRunAt 并增加 scheduleRevision，普通标题等编辑保留原到期时点。暂停清空下一时点，恢复只安排未来时点，归档请求取消已有活动执行。
 

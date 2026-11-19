@@ -16,15 +16,28 @@
             <button
                 class="auth-motion grid place-items-center w-11 min-h-11 [border:0.0625rem_solid_color-mix(in_srgb,_var(--scova-border)_22%,_transparent)] rounded-3 bg-surface text-muted font-inherit cursor-pointer keyboard-focus hover:([background:var(--scova-selected)] text-primary) [@media(prefers-reduced-motion:_reduce)]:hidden [@media(prefers-reduced-transparency:_reduce)]:hidden"
                 type="button"
-                :aria-label="motionPaused ? '播放背景动画' : '暂停背景动画'"
+                :aria-label="t(motionPaused ? 'auth.play' : 'auth.pause')"
                 :aria-pressed="motionPaused"
-                :title="motionPaused ? '播放背景动画' : '暂停背景动画'"
+                :title="t(motionPaused ? 'auth.play' : 'auth.pause')"
                 @click="motionPaused = !motionPaused"
             >
                 <app-icon :name="motionPaused ? 'run' : 'pause'" />
             </button>
-            <app-select id="auth-accent" v-model="accent" label="主题" :options="themes" compact />
-            <app-select id="auth-appearance" v-model="mode" label="外观" :options="modes" compact />
+            <app-select
+                id="auth-accent"
+                v-model="accent"
+                :label="t('auth.theme')"
+                :options="themes"
+                compact
+            />
+            <app-select
+                id="auth-appearance"
+                v-model="mode"
+                :label="t('pages.appearance')"
+                :options="modes"
+                compact
+            />
+            <interface-language-select />
         </div>
         <div class="auth-panel w-[min(100%,_28rem)] min-w-0 m-[auto]">
             <div
@@ -44,11 +57,7 @@
                         {{ title }}
                     </h1>
                     <p class="[.auth-heading_&:is(p)]:text-muted">
-                        {{
-                            title === '注册'
-                                ? '创建账号，开始持续追踪与研究。'
-                                : '继续你的追踪与研究。'
-                        }}
+                        {{ t(register ? 'auth.start' : 'auth.resume') }}
                     </p>
                 </header>
                 <slot />
@@ -58,23 +67,34 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
+import InterfaceLanguageSelect from '@/component/common/InterfaceLanguageSelect.vue';
 import { computed, ref } from 'vue';
-import AuthBackdrop from '@/components/auth/AuthBackdrop.vue';
-import AppIcon from '@/components/common/AppIcon.vue';
-import AppSelect from '@/components/common/AppSelect.vue';
+import AuthBackdrop from '@/component/auth/AuthBackdrop.vue';
+import AppIcon from '@/component/common/AppIcon.vue';
+import AppSelect from '@/component/common/AppSelect.vue';
 import { useAppearanceStore } from '@/store/appearance';
-import { accentOptions, modeOptions, themeTokens } from '@/theme/tokens';
+import { accentOptions, modeOptions, themeTokens } from '@/utils/theme/tokens';
 
-defineProps<{ title: string }>();
+defineProps<{ title: string; register: boolean }>();
 const appearance = useAppearanceStore();
+const { t } = useI18n({ useScope: 'global' });
+
 const motionPaused = ref(false);
 const themes = computed(() =>
     accentOptions.map((option) => ({
         ...option,
+        label: t(`colors.${option.value}`),
         color: themeTokens(option.value, appearance.scheme).primary,
     })),
 );
-const modes = modeOptions.map((option) => ({ ...option, icon: option.value }));
+const modes = computed(() =>
+    modeOptions.map((option) => ({
+        ...option,
+        label: t(`modes.${option.value}`),
+        icon: option.value,
+    })),
+);
 const accent = computed({
     get: () => appearance.accent,
     set: (value: string) => {

@@ -7,9 +7,9 @@ import {
     type Report,
     type SessionResponse,
 } from '@scova/models';
-import { changeKinds, changeSummary, mapReportChanges } from '@/utils/report-changes';
+import { changeKinds, changeSummary, mapReportChanges } from '@/utils/report/changes';
 import { createSessionLifecycle } from '@/api/session';
-import { useReport } from '@/composables/useReport';
+import { useReport } from '@/composable/useReport';
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 function evidence(n: number, quote: string): Evidence {

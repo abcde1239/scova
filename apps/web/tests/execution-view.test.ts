@@ -14,7 +14,7 @@ import {
     executionStates,
     updateTools,
     useExecution,
-} from '@/composables/useExecution';
+} from '@/composable/useExecution';
 import { runQueryOptions } from '@/api/runs';
 
 const runId = '00000000-0000-4000-8000-000000000001';

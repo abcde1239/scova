@@ -16,7 +16,9 @@ import { randomUUID } from 'node:crypto';
 
 import { Redis as RedisClient } from 'ioredis';
 import { afterAll, beforeAll, describe, expect, it } from 'vite-plus/test';
-import { OutboxDispatcher } from '../src/outbox.ts';
+import { OutboxService } from '../../server/src/service/outbox.ts';
+import { createOutboxRepository } from '../../server/src/repo/outbox.ts';
+import { createOutboxQueue } from '../../server/src/repo/queue/outbox.ts';
 
 const require = createRequire(import.meta.url);
 const baseUrl =
@@ -46,7 +48,6 @@ describe('BullMQ 事务 Outbox 投递器', () => {
         await migrateDatabase({ connectionString: scopedUrl.toString() });
         await connectDatabase(db);
         await redis.connect();
-        await redis.flushdb();
     }, 120000);
     afterAll(async () => {
         await closeDatabase(db);
@@ -113,20 +114,21 @@ describe('BullMQ 事务 Outbox 投递器', () => {
             })
             .returning()
             .then((rows) => requiredDatabaseValue(rows[0]));
-        const dispatcher = new OutboxDispatcher({ db: db, redis, queueName });
+        const publisher = createOutboxQueue(redis, queueName);
+        const dispatcher = new OutboxService({ repository: createOutboxRepository(db), publisher });
         try {
-            expect(await dispatcher.dispatchOnce()).toBe(1);
+            expect(await dispatcher.dispatchOnce(50)).toBe(1);
             const stored = await db.query.outbox
                 .findFirst({ where: eq(dbOutbox.id, outbox.id) })
                 .then((row) => requiredDatabaseValue(row));
             expect(stored.sentAt).not.toBeNull();
             expect(stored.leaseExpiresAt).toBeNull();
             expect(stored.attempts).toBe(1);
-            const job = await dispatcher.queue.getJob(`run-${run.id}`);
+            const job = await publisher.queue.getJob(`run-${run.id}`);
             expect(job?.data).toEqual({ runId: run.id });
-            expect(await dispatcher.dispatchOnce()).toBe(0);
+            expect(await dispatcher.dispatchOnce(50)).toBe(0);
         } finally {
-            await dispatcher.close();
+            await publisher.close();
         }
     });
 });

@@ -8,7 +8,7 @@
 
 ```ts
 import { createObjectStorage, createStorageKey } from '@scova/object-storage';
-import { createImageStorageView } from '@scova/image-storage';
+import { createImageStorageView } from '@scova/object-storage/image';
 
 const bucket = createObjectStorage({
     provider: 'r2',
@@ -67,12 +67,20 @@ bucket.destroy();
 ## 文件策略与访问
 
 - 默认上限 50 MiB，支持空文件。可在根配置或 `scope(directory, policy)` 设置 `maxSizeBytes` 和 `allowedContentTypes`。子目录只能降低大小上限或缩小类型集合；配置中的数组会复制，不受后续外部修改影响。
-- MIME 必须是小写、无参数的类型，如 `application/pdf`、`text/plain`、`application/octet-stream`；不接受 `*/*` 或包含换行的头。通用模块按声明的 MIME 校验，不解析内容；图片签名识别由 [image-storage](../image-storage/README.md) 负责，头像完整解码/裁剪由 API 业务层负责。
+- MIME 必须是小写、无参数的类型，如 `application/pdf`、`text/plain`、`application/octet-stream`；不接受 `*/*` 或包含换行的头。通用模块按声明的 MIME 校验，不解析内容；图片签名识别由 [图片适配](#图片适配) 负责，头像完整解码/裁剪由 API 业务层负责。
 - 不传 key 时生成无扩展名 UUID；传入同名 key 会覆盖对象。key 按 UTF-8 限制为 1024 字节，拒绝空段、`.`、`..`、反斜杠、控制字符和无效 UTF-16；`createStorageKey` 的每个组件只允许单段，扩展名只允许字母数字。
 - 未配置公共域名时，`url/getPublicUrl` 返回 `null`。配置域名不会修改 bucket 权限。默认不设置 ACL。
 - `presignUpload({ key?, contentType, size, expiresIn? })` 绑定精确 Content-Length 和 Content-Type；签名仅校验声明，后续内容校验与业务登记由消费方完成。浏览器直传需配置 bucket CORS，并通过应用统一通信层上传原始文件。当前头像仍通过 API 上传。
 - 签名默认 900 秒，可设 1–3600 秒。签名 URL 属于临时凭证，避免记录到日志。私有下载需先由应用鉴权。
 - `head` 仅在 HTTP 404 时返回 `null`，其他错误抛出脱敏的 `ObjectStorageError`。`code` 为 `invalid_config/invalid_key/invalid_file/file_too_large/invalid_expiry/storage_closed/request_aborted/storage_request_failed`。上游错误只保留 HTTP 状态，不保留原文或 cause。删除遵守 S3 版本管理语义。
+
+## 图片适配
+
+从 `@scova/object-storage/image` 导入 `createImageStorageView(scope, options?)`，在现有作用域上识别 JPEG、PNG、GIF 和 WebP 的文件签名，检查声明的类型并生成带扩展名的默认 key。默认上限为 10 MiB，根作用域更严格的文件策略仍然生效。图片视图借用同一客户端，不单独关闭它。需要独占客户端时，可用 `createImageStorage(config)`，并在业务停止后调用 `destroy()`。
+
+签名校验不等于完整解码或安全检测，不支持 SVG/HTML。上传签名只检查声明，浏览器应直接发送原始文件而非 FormData；内容校验、访问权限及归属记录由业务负责。头像仍由 Server 完整解码、裁切和上传。[头像配置与旧环境变量兼容](../../docs/public/guides/account-avatars.md)不变。
+
+图片接口抛出 `ImageStorageError`；对象错误中的 `invalid_file`、`file_too_large` 分别映射为 `invalid_image`、`image_too_large`，其他错误码保持一致。
 
 ## 提供商与结构
 
@@ -84,4 +92,4 @@ API 优先读取整组 `STORAGE_*`，未设置 `STORAGE_PROVIDER` 时兼容整�
 
 ## 验证
 
-仓库根执行 `vp test packages/object-storage/tests packages/image-storage/tests`、`vp run object-storage#build` 和 `vp check`。测试使用受控 SDK 与真实 SDK 离线签名，不访问云端。
+仓库根执行 `vp test packages/object-storage/tests`、`vp run object-storage#build` 和 `vp check`。测试使用受控 SDK 与真实 SDK 离线签名，不访问云端。

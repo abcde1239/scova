@@ -1,3 +1,4 @@
+import { deferred } from './support/deferred';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 import { effectScope, nextTick, ref } from 'vue';
 import {
@@ -23,7 +24,7 @@ import {
     sourceHistoryError,
     useSourceHistory,
     type SnapshotRead,
-} from '@/composables/useSourceHistory';
+} from '@/composable/useSourceHistory';
 import libraryRoutes from '@/router/pages/library';
 import { createWorkbenchRouter } from '@/router';
 
@@ -122,13 +123,6 @@ function mount(
 }
 function failure(status: number, code = 'TEST_FAILURE') {
     return Response.json({ code, message: 'sample', requestId: 'sample' }, { status });
-}
-function deferred<T>() {
-    let resolve!: (value: T) => void;
-    const promise = new Promise<T>((done) => {
-        resolve = done;
-    });
-    return { promise, resolve };
 }
 function defaultResponse(url: string) {
     return Response.json(

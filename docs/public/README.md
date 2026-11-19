@@ -25,7 +25,7 @@
 - [HTTP 接口](reference/api.md) · [共享契约与事件](reference/contracts.md) · [OpenAPI JSON](../../swagger.json)
 - [研究循环与完成判定](reference/agent-research-loop.md) · [生成提示词](reference/research-prompts.md)
 - [Agent Core](../../packages/agent-core/README.md) · [搜索与阅读连接器](../../packages/connectors/README.md) · [共享模型](../../packages/models/README.md) · [数据库包](../../packages/db/README.md) · [共享逻辑](../../packages/shared/README.md)
-- [Worker](../../apps/worker/README.md) · [对象存储](../../packages/object-storage/README.md) · [图片存储](../../packages/image-storage/README.md)
+- [Worker](../../apps/worker/README.md) · [对象存储](../../packages/object-storage/README.md)
 
 ## 前端实现
 

@@ -1,13 +1,9 @@
-import { operations } from '@/handler/operations.ts';
+import { stat } from 'node:fs/promises';
+
 try {
-    const role = process.argv[2] ?? 'worker';
-    if (role === 'api') {
-        const response = await fetch('http://127.0.0.1:3000/health', {
-            signal: AbortSignal.timeout(5000),
-        });
-        if (!response.ok) throw new Error('API 未响应');
-    }
-    await operations(['ready', '--role=' + role]);
+    // A fresh heartbeat proves the Worker connected and can still advance its background loop.
+    const file = await stat(process.env.WORKER_HEARTBEAT_PATH ?? '/tmp/scova-worker-ready');
+    if (!file.isFile() || Date.now() - file.mtimeMs > 45_000) throw new Error('Worker 心跳已过期');
 } catch {
     process.exitCode = 1;
 }

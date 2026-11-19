@@ -4,7 +4,7 @@
             ref="trigger"
             type="button"
             class="menu-trigger"
-            :aria-label="signedIn ? '打开个人侧栏' : '打开导航菜单'"
+            :aria-label="t(signedIn ? 'shell.openSidebar' : 'shell.openNav')"
             aria-haspopup="dialog"
             :aria-expanded="open"
             :aria-controls="panelId"
@@ -22,7 +22,7 @@
             :id="panelId"
             ref="panel"
             class="mobile-drawer"
-            aria-label="工作台侧边栏"
+            :aria-label="t('shell.sidebar')"
             @cancel.prevent="close(true)"
             @keydown.tab="containFocus"
             @click="backdrop"
@@ -33,7 +33,7 @@
                         v-if="signedIn"
                         class="drawer-account"
                         to="/account"
-                        aria-label="打开账号页面"
+                        :aria-label="t('shell.openAccount')"
                         :aria-current="route.path === '/account' ? 'page' : undefined"
                         @click="select('/account', $event)"
                     >
@@ -43,7 +43,7 @@
                             :version="session.user.value?.avatarVersion"
                         />
                         <span class="drawer-identity">
-                            <strong>我的账号</strong>
+                            <strong>{{ t('shell.myAccount') }}</strong>
                             <span class="account-email">{{ session.user.value?.email }}</span>
                         </span>
                         <app-icon name="chevron" />
@@ -51,14 +51,14 @@
                     <button
                         type="button"
                         class="close-trigger"
-                        aria-label="关闭侧边栏"
+                        :aria-label="t('shell.closeSidebar')"
                         autofocus
                         @click="close(true)"
                     >
                         <app-icon name="close" />
                     </button>
                 </div>
-                <nav class="menu-panel" aria-label="工作台菜单">
+                <nav class="menu-panel" :aria-label="t('shell.menu')">
                     <router-link
                         v-for="item in items"
                         :key="item.path"
@@ -75,13 +75,13 @@
                         v-if="session.user.value && session.phase.value === 'ready'"
                         :busy="session.logoutPending.value"
                         @click="session.logout"
-                        ><app-icon name="logout" />退出登录</action-button
+                        ><app-icon name="logout" />{{ t('shell.logout') }}</action-button
                     >
                     <navigation-button
                         v-else-if="session.phase.value === 'ready'"
                         to="/login"
                         icon="account"
-                        >登录</navigation-button
+                        >{{ t('pages.login') }}</navigation-button
                     >
                     <p v-if="session.logoutError.value" class="logout-error">
                         {{ session.logoutError.value }}
@@ -93,14 +93,15 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
 import { computed, nextTick, onMounted, onUnmounted, ref, useId, watch } from 'vue';
 import { RouterLink, useRoute } from 'vue-router';
-import ActionButton from '@/components/common/ActionButton.vue';
-import AppIcon from '@/components/common/AppIcon.vue';
-import NavigationButton from '@/components/common/NavigationButton.vue';
-import type { IconName } from '@/components/common/icons';
-import { useSession } from '@/composables/useSession';
-import AccountAvatar from '@/components/account/AccountAvatar.vue';
+import ActionButton from '@/component/common/ActionButton.vue';
+import AppIcon from '@/component/common/AppIcon.vue';
+import NavigationButton from '@/component/common/NavigationButton.vue';
+import type { IconName } from '@/utils/icons';
+import { useSession } from '@/composable/useSession';
+import AccountAvatar from '@/component/account/AccountAvatar.vue';
 
 defineProps<{ items: { path: string; label: string; icon: IconName }[] }>();
 const route = useRoute();
@@ -177,6 +178,7 @@ onUnmounted(() => {
     close();
     media?.removeEventListener('change', resize);
 });
+const { t } = useI18n({ useScope: 'global' });
 </script>
 
 <style scoped>

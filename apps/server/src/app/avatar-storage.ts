@@ -1,4 +1,4 @@
-import { createImageStorageView, type ImageStorage } from '@scova/image-storage';
+import { createImageStorageView, type ImageStorage } from '@scova/object-storage/image';
 import { createBucketStorage } from '@/app/object-storage';
 
 /** Standalone compatibility factory. ApiServices owns the shared bucket instead. */

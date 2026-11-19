@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test';
 import { BRAVE_SEARCH_PRESET } from '@scova/models';
-import { parseSearchTemplate, searchTemplateDraft } from '@/models/search-template';
+import { parseSearchTemplate, searchTemplateDraft } from '@/utils/account/search-template';
 
 describe('custom search editor draft', () => {
     it('round trips the shared Brave preset including provider-specific Chinese language mapping', () => {

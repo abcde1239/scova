@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 import { effectScope, nextTick, ref } from 'vue';
 import type { Run, SessionResponse } from '@scova/models';
 import { createSessionLifecycle } from '@/api/session';
-import { useRunActions } from '@/composables/useRunActions';
+import { useRunActions } from '@/composable/useRunActions';
 import type { RunActionTarget } from '@/api/runs';
 
 const taskId = '00000000-0000-4000-8000-000000000001';

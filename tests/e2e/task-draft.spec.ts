@@ -5,7 +5,7 @@ import type {
     TaskDraftInput,
     TaskDraftScope,
 } from '../../packages/models/src/task/drafts.ts';
-import type { taskInput } from '../../apps/web/src/composables/useCreateTask.ts';
+import type { taskInput } from '../../apps/web/src/composable/useCreateTask.ts';
 
 test.use({ timezoneId: 'Asia/Tokyo' });
 type CreateInput = ReturnType<typeof taskInput> & { inputText?: string };
@@ -792,7 +792,9 @@ test('字符边界与非法时区前端拦截保留原文，2000中文字符合�
     await original(page).fill(boundary);
     await timezone(page).click();
     await page.getByRole('combobox', { name: '搜索需求时区' }).fill('Mars/Olympus');
-    await expect(page.getByRole('option')).toHaveCount(0);
+    const options = page.getByRole('listbox', { name: '需求时区', exact: true });
+    await expect(options).toBeVisible();
+    await expect(options.getByRole('option')).toHaveCount(0);
     await page.keyboard.press('Escape');
     expect(draftPosts(calls)).toHaveLength(0);
     await generateDraft(page);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vite-plus/test';
-import { useCommand } from '@/composables/useCommand';
+import { useCommand } from '@/composable/useCommand';
 
 describe('command concurrency boundary', () => {
     it('locks synchronously, ignores overlapping calls and allows the next user action', async () => {

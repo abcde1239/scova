@@ -11,5 +11,6 @@ if (process.env.MODEL_API_KEY || process.env.TAVILY_API_KEY)
     throw new Error('Browser supplier must not use remote provider credentials');
 
 startServer('bun', {
+    runControl: true,
     services: createDefaultServices({ reportQuestionModel: () => acceptanceQuestionModel }),
 });

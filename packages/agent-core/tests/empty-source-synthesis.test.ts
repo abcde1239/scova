@@ -347,7 +347,7 @@ describe('empty source synthesis boundaries', () => {
                 ).toBe(true);
             }
             expect(model.mock.calls.map(([key]) => key)).toEqual(
-                failure === 'date_unconfirmed' ? ['plan-0', 'search-rewrite-1'] : ['plan-0'],
+                failure === 'date_unconfirmed' ? ['plan-0', 'search-rewrite-1-0'] : ['plan-0'],
             );
             expect(deps.tools.read).toHaveBeenCalledTimes(1);
             expect(vi.mocked(deps.tools.search).mock.calls.length).toBeLessThanOrEqual(2);

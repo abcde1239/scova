@@ -1,6 +1,6 @@
 import { chooseOption, chooseTimezone } from './support/select.ts';
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
-import type { taskInput } from '../../apps/web/src/composables/useCreateTask.ts';
+import type { taskInput } from '../../apps/web/src/composable/useCreateTask.ts';
 
 test.use({ timezoneId: 'Asia/Tokyo' });
 type TaskConfig = ReturnType<typeof taskInput>['config'];
@@ -349,7 +349,9 @@ test('非法IANA、空当地时间与未选星期定位错误，完整配置不�
     await page.evaluate(() => (document.documentElement.style.fontSize = '200%'));
     await timezone(page).click();
     await page.getByRole('combobox', { name: '搜索任务时区' }).fill('Mars/Olympus');
-    await expect(page.getByRole('option')).toHaveCount(0);
+    const options = page.getByRole('listbox', { name: '任务时区', exact: true });
+    await expect(options).toBeVisible();
+    await expect(options.getByRole('option')).toHaveCount(0);
     await page.keyboard.press('Escape');
     await expect(timezone(page)).toContainText('America/New_York');
     await localTime(page).fill('');

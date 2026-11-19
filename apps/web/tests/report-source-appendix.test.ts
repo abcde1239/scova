@@ -13,7 +13,7 @@ import {
     evidencePageUrl,
     groupEvidence,
     groupEvidenceVersions,
-} from '@/utils/evidence-groups';
+} from '@/utils/report/sources';
 
 const evidence = (number: number, overrides: Partial<Evidence> = {}): Evidence => ({
     id: `evidence-${number}`,
@@ -87,11 +87,11 @@ describe('actual report source appendix', () => {
             server: { middlewareMode: true, watch: null, hmr: false },
             appType: 'custom',
         });
-        sources = (await server.ssrLoadModule('/src/components/reports/ReportSources.vue')).default;
-        claim = (await server.ssrLoadModule('/src/components/reports/ReportClaim.vue')).default;
-        field = (await server.ssrLoadModule('/src/components/reports/ReportStructuredValue.vue'))
+        sources = (await server.ssrLoadModule('/src/component/reports/ReportSources.vue')).default;
+        claim = (await server.ssrLoadModule('/src/component/reports/ReportClaim.vue')).default;
+        field = (await server.ssrLoadModule('/src/component/reports/ReportStructuredValue.vue'))
             .default;
-        panel = (await server.ssrLoadModule('/src/components/reports/ReportArtifactPanel.vue'))
+        panel = (await server.ssrLoadModule('/src/component/reports/ReportArtifactPanel.vue'))
             .default;
     });
     afterAll(async () => server?.close());
@@ -204,7 +204,8 @@ describe('actual report source appendix', () => {
 
     it('suppresses only conditions and gaps already in visible field text, retaining unknown-field conditions', async () => {
         const report = {
-            claims: [{ id: 'a', kind: 'fact' }],
+            claims: [{ id: 'a', kind: 'fact', evidenceIds: [] }],
+            evidence: [],
             coverage: {
                 reportValue: {
                     selections: [
@@ -269,7 +270,7 @@ describe('actual report source appendix', () => {
         expect(document.querySelector('.citation-history')).toBeNull();
     });
 
-    it('keeps main claim anchors and conditions while removing body and table source controls', async () => {
+    it('keeps claim anchors and conditions with compact source entries in prose and fields', async () => {
         const report = {
             claims: [
                 {
@@ -313,8 +314,11 @@ describe('actual report source appendix', () => {
         const document = new DOMParser().parseFromString(output, 'text/html');
         expect(document.getElementById('claim-a')).not.toBeNull();
         expect(document.body.textContent).toContain('工作日适用');
+        expect(document.querySelectorAll('.source-chip')).toHaveLength(2);
+        for (const chip of document.querySelectorAll('a.source-chip'))
+            expect(chip.getAttribute('href')).toBe('#evidence-evidence-1');
         expect(
-            document.querySelector('a, .citations, .structured-links, .confidence-details'),
+            document.querySelector('.citations, .structured-links, .confidence-details'),
         ).toBeNull();
     });
 });

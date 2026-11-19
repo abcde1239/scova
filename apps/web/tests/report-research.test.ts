@@ -6,8 +6,8 @@ import { createSSRApp, h, type Component } from 'vue';
 import { renderToString } from 'vue/server-renderer';
 import { createPinia } from 'pinia';
 import { ReportSchema, parseContract, type Report } from '@scova/models';
-import { claimEvidence, reportIntegrity, reportSections } from '@/composables/useReport';
-import { changeSummary, mapReportChanges } from '@/utils/report-changes';
+import { claimEvidence, reportIntegrity, reportSections } from '@/utils/report/summary';
+import { changeSummary, mapReportChanges } from '@/utils/report/changes';
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 function fixture(changes: Report['changes'] = []): Report {
@@ -187,9 +187,9 @@ describe('ResearchReport empty changes outcome rendering', () => {
             server: { middlewareMode: true, watch: null, hmr: false },
             appType: 'custom',
         });
-        research = (await server.ssrLoadModule('/src/components/reports/ResearchReport.vue'))
+        research = (await server.ssrLoadModule('/src/component/reports/ResearchReport.vue'))
             .default as Component;
-        brief = (await server.ssrLoadModule('/src/components/reports/ReportBrief.vue'))
+        brief = (await server.ssrLoadModule('/src/component/reports/ReportBrief.vue'))
             .default as Component;
     });
     afterAll(async () => server?.close());

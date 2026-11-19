@@ -1,17 +1,13 @@
+import { prepareTestCheckpointSchema } from './checkpoint-schema.ts';
 import { ConnectorError } from '@scova/connectors';
 import { createDatabaseClient, connectDatabase, closeDatabase } from '@scova/db';
 
-import { Redis } from 'ioredis';
 import { createWorkerApp } from '../../src/app/index.ts';
 import { readWorkerConfig } from '../../src/app/config.ts';
 import { createRunRepository } from '../../src/repo/runs.ts';
-import { createOutboxRepository } from '../../src/repo/outbox.ts';
 import { createRunHandler } from '../../src/handler/runs.ts';
-import { createOutboxHandler } from '../../src/handler/outbox.ts';
-import { createRunConsumer } from '../../src/queue/runs.ts';
-import { createOutboxQueue } from '../../src/queue/outbox.ts';
+import { createRunConsumer } from '../../src/app/queue/runs.ts';
 import { RunService } from '../../src/service/runs.ts';
-import { OutboxService } from '../../src/service/outbox.ts';
 import { createAgentRuntime } from '../../src/service/agent.ts';
 import {
     scenarioConnectors,
@@ -30,18 +26,11 @@ if (!scenarioNames.includes(scenario) || !['A', 'B', 'C'].includes(phase))
     throw new Error('Invalid acceptance scenario or phase');
 
 const database = createDatabaseClient({ connectionString: config.databaseUrl });
-const redis = new Redis(config.redisUrl, {
-    lazyConnect: true,
-    enableOfflineQueue: false,
-    maxRetriesPerRequest: 1,
-});
-redis.on('error', () => undefined);
 const fixtureBundle = scenarioConnectors(scenario, phase);
 const agent = createAgentRuntime({
     database,
     databaseUrl: config.databaseUrl,
     checkpointSchema: process.env.AGENT_CHECKPOINT_SCHEMA,
-    env: { ...process.env, AGENT_CHECKPOINT_MIGRATION: 'startup' },
     bundle: {
         ...fixtureBundle,
         reader: {
@@ -60,20 +49,15 @@ const agent = createAgentRuntime({
     },
     enableDelivery: true,
 });
-let publisher: ReturnType<typeof createOutboxQueue> | undefined;
-let dispatch: ReturnType<typeof createOutboxHandler> | undefined;
 let consumer: ReturnType<typeof createRunConsumer> | undefined;
 const app = createWorkerApp({
     config,
     resources: {
         async connect() {
             await connectDatabase(database);
-            await redis.connect();
-            publisher = createOutboxQueue(redis, config.queueName);
-            await publisher.queue.waitUntilReady();
-            dispatch = createOutboxHandler(
-                new OutboxService({ repository: createOutboxRepository(database), publisher }),
-                config.batchSize,
+            await prepareTestCheckpointSchema(
+                config.databaseUrl,
+                process.env.AGENT_CHECKPOINT_SCHEMA,
             );
             await agent.connect();
             consumer = createRunConsumer(
@@ -91,10 +75,7 @@ const app = createWorkerApp({
             );
             await consumer.start();
         },
-        dispatch(signal) {
-            if (!dispatch) throw new Error('Acceptance worker is not connected');
-            return dispatch(signal);
-        },
+        isReady: () => consumer?.isReady() ?? false,
         stop: () => consumer?.stop() ?? Promise.resolve(),
         finished: () => consumer?.finished() ?? Promise.resolve(),
         async close() {
@@ -102,14 +83,9 @@ const app = createWorkerApp({
                 await consumer?.stop();
             } finally {
                 try {
-                    await publisher?.close();
+                    await agent.close();
                 } finally {
-                    redis.disconnect();
-                    try {
-                        await agent.close();
-                    } finally {
-                        await closeDatabase(database);
-                    }
+                    await closeDatabase(database);
                 }
             }
         },

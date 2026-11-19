@@ -10,7 +10,7 @@ import {
     taskDraftFromConfig,
     taskInput,
     taskField,
-} from '@/composables/useCreateTask';
+} from '@/composable/useCreateTask';
 import {
     dstExamples,
     formatScheduleInstant,

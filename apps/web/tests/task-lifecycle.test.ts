@@ -4,8 +4,8 @@ import type { SessionResponse, TaskDetailResponse } from '@scova/models';
 import type { ApiResponse } from '@/api/client';
 import { createSessionLifecycle } from '@/api/session';
 import { taskLifecycleOptions, validateLifecycleSnapshot } from '@/api/task-lifecycle';
-import { useTaskLifecycle } from '@/composables/useTaskLifecycle';
-import { initialTaskDraft, taskInput } from '@/composables/useCreateTask';
+import { useTaskLifecycle } from '@/composable/useTaskLifecycle';
+import { initialTaskDraft, taskInput } from '@/composable/useCreateTask';
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const instant = '2026-10-31T00:00:00Z';

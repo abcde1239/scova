@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 import { createPinia, disposePinia, setActivePinia } from 'pinia';
 import { APPEARANCE_STORAGE_KEY, useAppearanceStore } from '@/store/appearance';
-import { accentOptions, themeOverrides, themeTokens, themeVariables } from '@/theme/tokens';
+import { accentOptions, themeOverrides, themeTokens, themeVariables } from '@/utils/theme/tokens';
 
 const pins: ReturnType<typeof createPinia>[] = [];
 

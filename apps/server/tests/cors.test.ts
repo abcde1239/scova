@@ -4,7 +4,7 @@ import { node } from '@elysiajs/node';
 import { createApiApp } from '../src/app/index';
 import { createDefaultServices } from '../src/app/services';
 import { createApiErrorPlugin } from '../src/app/errors';
-import { createCorsPlugin } from '../src/http/cors';
+import { createCorsPlugin } from '../src/handler/http/cors';
 
 const origin = 'http://localhost:5173';
 const request = (path = '/health', init?: RequestInit) =>

@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 import { effectScope } from 'vue';
 import type { RunEvent } from '@scova/models';
-import { useSearchApiSuggestion, SLOW_SEARCH_MS } from '@/composables/useSearchApiSuggestion';
+import { useSearchApiSuggestion, SLOW_SEARCH_MS } from '@/composable/useSearchApiSuggestion';
 
 const notification = vi.hoisted(() => ({ info: vi.fn() }));
 vi.mock('naive-ui', () => ({ useNotification: () => notification }));
-vi.mock('@/components/common/AppIcon.vue', () => ({ default: {} }));
+vi.mock('@/component/common/AppIcon.vue', () => ({ default: {} }));
 const scopes: ReturnType<typeof effectScope>[] = [];
 const common = { schemaVersion: 1 as const, eventId: 'event', runId: 'run', seq: 1 };
 const start = (provider?: 'searxng' | 'api', age = 0): RunEvent => ({

@@ -5,7 +5,7 @@ import { subscribeRunEvents } from '@/api/run-events';
 import { runQueryOptions } from '@/api/runs';
 import { createApp, effectScope, nextTick, ref } from 'vue';
 import { sessionLifecycleKey } from '@/api/session';
-import { useRunEvents } from '@/composables/useRunEvents';
+import { useRunEvents } from '@/composable/useRunEvents';
 
 const runId = '00000000-0000-4000-8000-000000000001';
 const otherId = '00000000-0000-4000-8000-000000000009';

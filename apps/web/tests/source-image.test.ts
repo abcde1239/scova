@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vite-plus/test';
-import { displayImage } from '@/models/source-image';
+import { displayImage } from '@/utils/source/image';
 
 const image = { src: '/assets/map.svg', alt: '流域概念图', attribution: '自制', concept: true };
 

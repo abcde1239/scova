@@ -200,6 +200,7 @@ export function chooseGap(
     memory: GapLoop,
     candidate: AgentCandidate,
     errors: string[],
+    canChangeDirection: (target: GapTarget) => boolean = () => false,
 ) {
     const questions = candidate.coverage.reportValue?.questions ?? [];
     const order = questions.map((q) => q.id);
@@ -208,7 +209,8 @@ export function chooseGap(
         .map((action) => ({ action, fingerprint: gapFingerprint(action, candidate, errors) }))
         .filter(
             ({ action, fingerprint }) =>
-                !memory.history.some((h) => h.fingerprint === fingerprint) &&
+                (canChangeDirection(action) ||
+                    !memory.history.some((h) => h.fingerprint === fingerprint)) &&
                 memory.history.filter(
                     (h) => h.requirementId === action.requirementId && h.gain === false,
                 ).length < 2,

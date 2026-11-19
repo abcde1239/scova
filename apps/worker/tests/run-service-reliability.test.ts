@@ -35,7 +35,6 @@ function fixture(duration = 10_000) {
         finish: vi.fn(async () => true),
         emit: vi.fn(async () => {}),
         assertActive: vi.fn(async () => {}),
-        listRecoverable: vi.fn(async () => []),
     } satisfies RunRepository;
     return { repository, claimed };
 }

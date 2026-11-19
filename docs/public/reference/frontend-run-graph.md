@@ -18,6 +18,6 @@ Worker 在节点开始时保存尝试，节点检查点合法提升之后才记�
 
 图形节点使用原生按钮，文字说明状态，支持键盘选择；窄区域的图板独立横向滚动，节点详情在图下方阅读。字号和图板尺寸使用 rem，页面放大后不裁切节点文字。
 
-源码入口为 `apps/web/src/components/run/ExecutionGraph.vue`、`apps/web/src/composables/useRunGraph.ts`、`packages/models/src/research/graph.ts`；服务端状态投影在 `packages/db/src/run-graph.ts`。
+源码入口为 `apps/web/src/component/run/ExecutionGraph.vue`、`apps/web/src/composable/useRunGraph.ts`、`packages/models/src/research/graph.ts`；服务端状态投影在 `packages/db/src/run-graph.ts`。
 
 验证使用 `vp test` 的运行图单元测试、真实 PostgreSQL 的 SSE/运行图集成测试，以及 `vp run test:e2e tests/e2e/search-graph.spec.ts` 的受控浏览器场景。浏览器固定响应不代表真实研究或线上 SSE 业务验收。

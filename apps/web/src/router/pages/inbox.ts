@@ -4,7 +4,7 @@ export default [
     {
         path: '/inbox',
         name: 'inbox',
-        component: () => import('@/views/InboxView.vue'),
-        meta: { title: '收件箱', section: 'inbox', navigation: 'primary' },
+        component: () => import('@/view/InboxView.vue'),
+        meta: { titleKey: 'inbox', section: 'inbox', navigation: 'primary' },
     },
 ] satisfies RouteRecordRaw[];

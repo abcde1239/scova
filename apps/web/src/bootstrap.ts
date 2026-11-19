@@ -4,12 +4,13 @@ import '@/main.css';
 import 'virtual:uno.css';
 import App from '@/App.vue';
 import { createSessionLifecycle, sessionLifecycleKey } from '@/api/session';
+import { createInterfaceI18n } from '@/utils/i18n';
 import { createWorkbenchRouter } from '@/router';
 import {
     createSessionController,
     installSessionRouting,
     sessionControllerKey,
-} from '@/composables/useSession';
+} from '@/composable/useSession';
 
 export async function mountApplication() {
     const router = createWorkbenchRouter();
@@ -18,6 +19,7 @@ export async function mountApplication() {
     const disposeRouting = installSessionRouting(router, session);
     const app = createApp(App)
         .use(lifecycle.pinia)
+        .use(createInterfaceI18n())
         .use(VueQueryPlugin, { queryClient: lifecycle.queryClient })
         .provide(sessionLifecycleKey, lifecycle)
         .provide(sessionControllerKey, session)

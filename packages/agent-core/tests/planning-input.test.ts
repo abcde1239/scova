@@ -28,6 +28,16 @@ describe('planning input preflight', () => {
         expect(prepared.schema).toBe(input.schema);
         expect(prepared.prompt).toContain(JSON.stringify(frozen));
     });
+    it('keeps geographic-neutral instructions when fitting v2, without upgrading older inputs', () => {
+        const scoped = { ...frozen, topic: 'Compare consumer protection in Japan and France' };
+        expect(fitPlanningInput(input, scoped, ['brief'], 1).prompt).not.toContain(
+            'Geographic scope:',
+        );
+        const { prompt } = fitPlanningInput(input, scoped, ['brief'], 2);
+        expect(prompt).toContain('Do not infer the user’s location');
+        expect(prompt).toContain('Preserve any geographic scope explicitly requested');
+        expect(prompt).toContain(JSON.stringify(scoped));
+    });
     it('returns already bounded input unchanged', () => {
         const compact = { ...input, prompt: 'Use frozen requirements.' };
         expect(fitPlanningInput(compact, frozen, ['brief'])).toBe(compact);

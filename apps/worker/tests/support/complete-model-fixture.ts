@@ -19,7 +19,11 @@ export function completeModelFixture() {
                     verification: 'stable',
                 })),
             );
-            return { ...data, requirements, knowledgePlan: [] };
+            const queries =
+                properties.queries.items.properties.language && Array.isArray(data.queries)
+                    ? data.queries.map((query) => ({ ...query, language: query.language ?? null }))
+                    : data.queries;
+            return { ...data, queries, requirements, knowledgePlan: [] };
         }
         if (properties.answers)
             return {

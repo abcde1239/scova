@@ -366,6 +366,10 @@ describe('Drizzle SQL 迁移与旧库无损接管', () => {
                     data: { count: 0, hash: createHash('md5').update('[]').digest('hex') },
                 },
                 {
+                    table: 'report_exports',
+                    data: { count: 0, hash: createHash('md5').update('[]').digest('hex') },
+                },
+                {
                     table: 'run_graph_snapshots',
                     data: { count: 0, hash: createHash('md5').update('[]').digest('hex') },
                 },

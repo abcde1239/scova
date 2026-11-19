@@ -8,6 +8,7 @@ import {
     ReportListQuerySchema,
     ReportListResponseSchema,
     ReportSchema,
+    ReportExportSchema,
 } from '@scova/models';
 import type { ApiServices } from '@/app/services';
 import { createReportHandlers } from '@/handler/reports.ts';
@@ -69,6 +70,16 @@ export function createReportPlugin(services: ApiServices) {
                 summary: '读取报告与原文证据',
                 description:
                     '校验当前账号、执行归属及来源快照后返回结构化结论与引用；正文过期仍保留证据片段，不暴露完整正文或内部执行状态。',
+            },
+        })
+        .post('/reports/:reportId/exports/markdown', handlers.exportMarkdown, {
+            response: { 200: ReportExportSchema, ...errors },
+            detail: {
+                operationId: 'exportReportMarkdown',
+                tags: ['报告'],
+                summary: '导出报告摘要、结论与引用为 Markdown',
+                description:
+                    '需要会话与 CSRF，只能导出本人已交付报告。同一报告内容在有效期内复用，不触发研究或外部存储。',
             },
         })
         .get('/inbox', handlers.inbox, {

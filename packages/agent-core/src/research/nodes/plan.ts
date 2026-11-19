@@ -3,7 +3,7 @@ import { searchLanguageSchema } from '../../search/direction.ts';
 import { isSearchLanguage } from '@scova/connectors';
 import { ConnectorError } from '@scova/connectors';
 import { repairableModelOutput, modelRepairHint } from '../../model/errors.ts';
-import { researchPrompt } from '../../model/prompts.ts';
+import { geographicScopeInstructions, researchPrompt } from '../../model/prompts.ts';
 import { initialSearchLimit as gapInitialSearchLimit } from '../gap-loop.ts';
 import { fitPlanningInput } from '../../model/planning-input.ts';
 import { plannedRequirements, requirementPlanSchema } from '../../report/artifacts/index.ts';
@@ -90,13 +90,15 @@ export function planNode(rt: AgentRuntime) {
                 },
                 ...(context.conversation ? { conversation: context.conversation } : {}),
             };
+            const scope = geographicScopeInstructions(state.searchDirectionPolicy);
             const input: AgentModelInput = fitPlanningInput(
                 modelInput(
-                    `${researchPrompt('planning', planningData)}${state.evidencePolicy ? `\n${knowledgePlanInstructions}` : ''}${state.researchLoopPolicy ? `\n${verificationInstructions}` : ''}`,
+                    `${scope}${researchPrompt('planning', planningData)}${state.evidencePolicy ? `\n${knowledgePlanInstructions}` : ''}${state.researchLoopPolicy ? `\n${verificationInstructions}` : ''}`,
                     planningSchema,
                 ),
                 planningData,
                 formats,
+                state.searchDirectionPolicy,
             );
             if (
                 state.pagePolicy ||
@@ -116,7 +118,9 @@ export function planNode(rt: AgentRuntime) {
                     ...(state.gapKindPolicy ? { gapKindPolicy: 1 } : {}),
                     ...(state.knowledgeFirstPolicy ? { knowledgeFirstPolicy: 1 } : {}),
                     ...(state.gapLoopPolicy ? { gapLoopPolicy: 1 } : {}),
-                    ...(state.searchDirectionPolicy ? { searchDirectionPolicy: 1 } : {}),
+                    ...(state.searchDirectionPolicy
+                        ? { searchDirectionPolicy: state.searchDirectionPolicy }
+                        : {}),
                 };
             let response;
             try {
@@ -135,6 +139,7 @@ export function planNode(rt: AgentRuntime) {
                         },
                         planningData,
                         formats,
+                        state.searchDirectionPolicy,
                     ),
                 );
             }
@@ -160,6 +165,7 @@ export function planNode(rt: AgentRuntime) {
                             },
                             planningData,
                             formats,
+                            state.searchDirectionPolicy,
                         ),
                     );
                     await guard();

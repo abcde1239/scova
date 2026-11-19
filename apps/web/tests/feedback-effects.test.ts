@@ -6,8 +6,8 @@ import {
     type FeedbackEffect,
     type Report,
 } from '@scova/models';
-import { reportFeedbackEffects } from '@/utils/feedback-effects';
-import { sourceLink } from '@/composables/useReport';
+import { reportFeedbackEffects } from '@/utils/report/feedback';
+import { sourceLink } from '@/utils/source/link';
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 function effect(overrides: Partial<FeedbackEffect> = {}): FeedbackEffect {

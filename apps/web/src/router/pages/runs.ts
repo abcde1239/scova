@@ -4,7 +4,7 @@ export default [
     {
         path: '/runs/:runId',
         name: 'run-detail',
-        component: () => import('@/views/RunDetailView.vue'),
-        meta: { title: '执行详情', section: 'tasks' },
+        component: () => import('@/view/RunDetailView.vue'),
+        meta: { titleKey: 'run', section: 'tasks' },
     },
 ] satisfies RouteRecordRaw[];

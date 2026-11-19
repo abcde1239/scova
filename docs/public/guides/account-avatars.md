@@ -6,7 +6,7 @@
 
 ## Cloudflare R2 配置
 
-头像通过 [`@scova/image-storage`](../../../packages/image-storage/README.md) 保存。部署默认关闭上传，未配置时页面明确提示且不影响其他账号功能。在根 `.env.local`（本地开发）或 Compose 使用的 `.env` 中配置：
+头像通过 [`@scova/object-storage/image`](../../../packages/object-storage/README.md#图片适配) 保存。部署默认关闭上传，未配置时页面明确提示且不影响其他账号功能。在根 `.env.local`（本地开发）或 Compose 使用的 `.env` 中配置：
 
 ```dotenv
 STORAGE_PROVIDER=r2

@@ -56,7 +56,7 @@ export function verifyIdentity(state: ResearchState, context: AgentContext): voi
         throw new AgentError('INVALID_STATE', '检查点策略与规划回执不一致');
     if (
         (state.searchDirectionPolicy !== undefined &&
-            (state.searchDirectionPolicy !== 1 || !state.gapLoopPolicy)) ||
+            (![1, 2, 3].includes(state.searchDirectionPolicy) || !state.gapLoopPolicy)) ||
         (state.loopQualityPolicy !== undefined &&
             (state.loopQualityPolicy !== 1 || !state.gapLoopPolicy)) ||
         (state.verificationStopReason !== undefined &&

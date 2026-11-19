@@ -1,3 +1,4 @@
+import { deferred } from './support/deferred';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 import { effectScope, nextTick, ref } from 'vue';
 import {
@@ -14,7 +15,7 @@ import {
     reportQuestionEndpoint,
     reportConversationEndpoint,
 } from '@/api/report-questions';
-import { useReportQuestions } from '@/composables/useReportQuestions';
+import { useReportQuestions } from '@/composable/useReportQuestions';
 import {
     questionAttempt,
     questionReasons,
@@ -23,7 +24,7 @@ import {
     questionSelection,
     questionTextError,
     validateQuestion,
-} from '@/utils/report-questions';
+} from '@/utils/report/questions';
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const rawQuestion = '  保存的原文\n有什么？  ';
@@ -152,13 +153,6 @@ function failure(status: number, code = 'TEST_FAILURE', retryAfter?: string) {
         { code, message: 'sample', requestId: 'sample' },
         { status, headers: retryAfter ? { 'retry-after': retryAfter } : {} },
     );
-}
-function deferred<T>() {
-    let resolve!: (value: T) => void;
-    const promise = new Promise<T>((done) => {
-        resolve = done;
-    });
-    return { promise, resolve };
 }
 afterEach(() => {
     for (const dispose of disposals.splice(0).reverse()) dispose();

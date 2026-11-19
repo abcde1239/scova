@@ -8,17 +8,16 @@
 
 Vite+ / TypeScript monorepo，Vue 3 前端，Bun + Elysia 后端（兼容 Node.js），PostgreSQL + Drizzle，Redis + BullMQ。
 
-| 目录                                                           | 用途                                      |
-| -------------------------------------------------------------- | ----------------------------------------- |
-| `apps/web`                                                     | 前端工作台                                |
-| `apps/server`                                                  | 后端接口与中文 Swagger                    |
-| `apps/worker`                                                  | 后台执行与队列                            |
-| `packages/models`                                              | 共享接口与事件定义                        |
-| `packages/db`                                                  | 服务端业务数据模型与迁移                  |
-| `packages/agent-core`                                          | Agent 状态与执行逻辑                      |
-| `packages/connectors`                                          | 搜索及来源适配                            |
-| [`packages/object-storage`](packages/object-storage/README.md) | Cloudflare R2 / S3 通用文件存储与用途目录 |
-| [`packages/image-storage`](packages/image-storage/README.md)   | 图片校验与通用存储适配                    |
+| 目录                                                           | 用途                                                |
+| -------------------------------------------------------------- | --------------------------------------------------- |
+| `apps/web`                                                     | 前端工作台                                          |
+| `apps/server`                                                  | 后端接口与中文 Swagger                              |
+| `apps/worker`                                                  | 后台执行与队列                                      |
+| `packages/models`                                              | 共享接口与事件定义                                  |
+| `packages/db`                                                  | 服务端业务数据模型与迁移                            |
+| `packages/agent-core`                                          | Agent 状态与执行逻辑                                |
+| `packages/connectors`                                          | 搜索及来源适配                                      |
+| [`packages/object-storage`](packages/object-storage/README.md) | Cloudflare R2 / S3 通用文件存储、用途目录与图片校验 |
 
 ## 本地开发
 
@@ -28,7 +27,7 @@ Vite+ / TypeScript monorepo，Vue 3 前端，Bun + Elysia 后端（兼容 Node.j
 
 ```sh
 vp install
-vp run local:up           # 同一个 Compose 项目启动 PostgreSQL、Redis、SearXNG
+vp run local:up           # 启动 PostgreSQL、Redis；内置搜索用 local:up --search
 vp run db:migrate         # 初始化或核验业务数据库
 vp run dev                # 本机并行启动前端、Bun Server 和 Worker，监听源码变化
 ```

@@ -75,13 +75,13 @@
 <script setup lang="ts">
 import { computed, ref, watch, onBeforeUnmount } from 'vue';
 import type { Report } from '@scova/models';
-import AppThemeProvider from '@/theme/AppThemeProvider.vue';
-import ReportBrief from '@/components/reports/ReportBrief.vue';
-import TopicListReport from '@/components/reports/TopicListReport.vue';
-import ComparisonReport from '@/components/reports/ComparisonReport.vue';
-import ResearchReport from '@/components/reports/ResearchReport.vue';
+import AppThemeProvider from '@/component/theme/AppThemeProvider.vue';
+import ReportBrief from '@/component/reports/ReportBrief.vue';
+import TopicListReport from '@/component/reports/TopicListReport.vue';
+import ComparisonReport from '@/component/reports/ComparisonReport.vue';
+import ResearchReport from '@/component/reports/ResearchReport.vue';
 import { useAppearanceStore } from '@/store/appearance';
-import { artifactReport } from '@/utils/report-artifacts';
+import { artifactReport } from '@/utils/report/artifacts';
 import { reportFormatSample, reportLongFormatSample } from './report-format-sample';
 const appearance = useAppearanceStore();
 const format = ref<Report['format']>('brief');

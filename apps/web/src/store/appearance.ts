@@ -1,6 +1,6 @@
 import { computed, onScopeDispose, ref, watch } from 'vue';
 import { defineStore } from 'pinia';
-import { accentOptions, modeOptions, type Accent, type AppearanceMode } from '@/theme/tokens';
+import { accentOptions, modeOptions, type Accent, type AppearanceMode } from '@/utils/theme/tokens';
 
 export const APPEARANCE_STORAGE_KEY = 'scova.appearance.v1';
 

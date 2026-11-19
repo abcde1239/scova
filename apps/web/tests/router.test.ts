@@ -27,6 +27,11 @@ describe('工作台路由契约', () => {
         expect(pageTitle(route)).toBe('页面未找到 · 知巡 Scova');
     });
 
+    it('test 模式加载示例路由，而不是落入未找到页', () => {
+        const route = createWorkbenchRouter(createMemoryHistory()).resolve('/__examples/states');
+        expect(route.name).toBe('states-example');
+    });
+
     it('首页默认进入任务', () => {
         const route = createWorkbenchRouter(createMemoryHistory()).resolve('/');
         expect(route.matched[0]?.redirect).toBe('/tasks');

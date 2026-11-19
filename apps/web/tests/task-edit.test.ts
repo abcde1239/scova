@@ -1,3 +1,4 @@
+import { deferred } from './support/deferred';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 import { effectScope } from 'vue';
 import type { SessionResponse, TaskDetailResponse, TaskConfig } from '@scova/models';
@@ -11,7 +12,7 @@ import {
     taskEditOptions,
     taskInput,
     validateTaskEditResponse,
-} from '@/composables/useCreateTask';
+} from '@/composable/useCreateTask';
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const account: SessionResponse = {
@@ -107,13 +108,6 @@ function setup(fetcher: typeof fetch = async () => http(detail(2)), initial = ap
         lifecycle.dispose();
     });
     return { lifecycle, controller };
-}
-function deferred<T>() {
-    let resolve!: (value: T) => void;
-    const promise = new Promise<T>((complete) => {
-        resolve = complete;
-    });
-    return { resolve, promise };
 }
 
 describe('完整任务编辑与草稿保护', () => {

@@ -1,3 +1,4 @@
+import { deferred } from './support/deferred';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 import { effectScope, nextTick, ref } from 'vue';
 import type { SessionResponse } from '@scova/models';
@@ -10,7 +11,7 @@ import {
     inboxReturn,
     useInbox,
     type InboxFilter,
-} from '@/composables/useInbox';
+} from '@/composable/useInbox';
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 function requestUrl(value: Parameters<typeof fetch>[0] | undefined) {
@@ -69,13 +70,6 @@ function setup(fetcher: typeof fetch, selected: InboxFilter = 'all') {
 }
 function failure(status: number, code = 'TEST_FAILURE') {
     return Response.json({ code, message: 'sample', requestId: 'sample' }, { status });
-}
-function deferred<T>() {
-    let resolve!: (value: T) => void;
-    const promise = new Promise<T>((done) => {
-        resolve = done;
-    });
-    return { resolve, promise };
 }
 afterEach(() => cleanups.splice(0).forEach((cleanup) => cleanup()));
 

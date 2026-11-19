@@ -3,9 +3,9 @@ import { outbox as dbOutbox, eq } from '@scova/db';
 import { randomUUID } from 'node:crypto';
 import { Redis } from 'ioredis';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vite-plus/test';
-import { createOutboxRepository } from '../src/repo/outbox.ts';
-import { createOutboxQueue } from '../src/queue/outbox.ts';
-import { OutboxService } from '../src/service/outbox.ts';
+import { createOutboxRepository } from '../../server/src/repo/outbox.ts';
+import { createOutboxQueue } from '../../server/src/repo/queue/outbox.ts';
+import { OutboxService } from '../../server/src/service/outbox.ts';
 import { outboxDatabase } from './support/outbox-database.ts';
 
 const fixture = outboxDatabase();

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 import { effectScope, nextTick, ref, type VNode } from 'vue';
-import { useActionNotification } from '@/composables/useActionNotification';
+import { useActionNotification } from '@/composable/useActionNotification';
 
 const notification = vi.hoisted(() => ({
     success: vi.fn(),

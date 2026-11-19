@@ -1,7 +1,7 @@
 import { swagger } from '@elysiajs/swagger';
 import { node } from '@elysiajs/node';
 import { Elysia } from 'elysia';
-import { contractModels, HealthResponseSchema } from '@/app/contracts.ts';
+import { contractModels, HealthResponseSchema } from '@/model/contracts.ts';
 import { createApiErrorPlugin } from '@/app/errors.ts';
 import { createDefaultServices, type ApiServices } from '@/app/services';
 import { createAuthPlugin } from '@/router/auth.ts';
@@ -14,12 +14,12 @@ import { createReportPlugin } from '@/router/reports.ts';
 import { createNotificationPlugin } from '@/router/notifications.ts';
 import { createSystemPlugin } from '@/router/system.ts';
 import { createFeedbackPlugin } from '@/router/feedback.ts';
-import { createCorsPlugin } from '@/http/cors';
+import { createCorsPlugin } from '@/handler/http/cors';
 import { createAgentProviderPlugin } from '@/router/agent-providers';
 import { createSearchConfigurationPlugin } from '@/router/search-configuration';
 import { createAvatarPlugin } from '@/router/avatar';
 
-export { contractModels, HealthResponseSchema } from '@/app/contracts.ts';
+export { contractModels, HealthResponseSchema } from '@/model/contracts.ts';
 
 export const createApiApp = (
     _runtime: 'bun' | 'node' = 'bun',

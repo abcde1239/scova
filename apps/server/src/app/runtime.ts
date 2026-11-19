@@ -1,10 +1,18 @@
 import { createApiApp } from '@/app/index.ts';
 import { createDefaultServices, type ApiServices } from '@/app/services';
 import { serve } from 'srvx/node';
+import { createRunControl } from '@/app/run-control.ts';
 
 /** 此处使用node:http，使 Bun/Node运行时均通过 write/drain 传播 socket 背压。后续应该会改 */
 
-export function startServer(runtime: 'bun' | 'node', options: { services?: ApiServices } = {}) {
+export function startServer(
+    runtime: 'bun' | 'node',
+    options: { services?: ApiServices; runControl?: boolean } = {},
+) {
+    const controlEnabled =
+        options.runControl ??
+        (!options.services && Boolean(process.env.DATABASE_URL && process.env.REDIS_URL));
+    const runControl = controlEnabled ? createRunControl() : undefined;
     const services = options.services ?? createDefaultServices();
     const app = createApiApp(runtime, services).compile();
     const port = Number(process.env.PORT ?? 3000);
@@ -32,13 +40,18 @@ export function startServer(runtime: 'bun' | 'node', options: { services?: ApiSe
             return app.fetch(request);
         },
     });
+    runControl?.start();
     console.log(`Scova API listening on http://localhost:${port}`);
     let stopping: Promise<void> | undefined;
     const stop = () =>
         (stopping ??= (async () => {
             try {
-                await services.streams.stop();
-                await server.close();
+                const results = await Promise.allSettled([
+                    runControl?.stop(),
+                    services.streams.stop().then(() => server.close()),
+                ]);
+                const failure = results.find((result) => result.status === 'rejected');
+                if (failure?.status === 'rejected') throw failure.reason;
             } finally {
                 try {
                     await services.close();

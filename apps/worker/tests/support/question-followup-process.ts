@@ -1,3 +1,4 @@
+import { prepareTestCheckpointSchema } from './checkpoint-schema.ts';
 import { requiredDatabaseValue } from '@/utils/database.ts';
 import { selectedOutputFormats } from '@scova/models';
 import {
@@ -162,6 +163,7 @@ const runtime = createAgentRuntime({
 });
 try {
     await connectDatabase(db);
+    await prepareTestCheckpointSchema(databaseUrl, schema);
     await runtime.connect();
     const repository = createRunRepository(db);
     const service = new RunService({

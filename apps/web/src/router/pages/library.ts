@@ -3,19 +3,19 @@ export default [
     {
         path: '/library/search',
         name: 'library-search',
-        component: () => import('@/views/LibrarySearchView.vue'),
-        meta: { title: '搜索已存资料', section: 'library' },
+        component: () => import('@/view/LibrarySearchView.vue'),
+        meta: { titleKey: 'librarySearch', section: 'library' },
     },
     {
         path: '/library/sources/:sourceId/snapshots/:snapshotId?',
         name: 'source-history',
-        component: () => import('@/views/SourceHistoryView.vue'),
-        meta: { title: '来源历史', section: 'library' },
+        component: () => import('@/view/SourceHistoryView.vue'),
+        meta: { titleKey: 'sourceHistory', section: 'library' },
     },
     {
         path: '/library',
         name: 'library',
-        component: () => import('@/views/LibraryView.vue'),
-        meta: { title: '资料库', section: 'library', navigation: 'primary' },
+        component: () => import('@/view/LibraryView.vue'),
+        meta: { titleKey: 'library', section: 'library', navigation: 'primary' },
     },
 ] satisfies RouteRecordRaw[];

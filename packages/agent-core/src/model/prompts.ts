@@ -13,5 +13,12 @@ export function researchPrompt(stage: 'planning' | 'synthesis', input: unknown) 
     if (json === undefined) throw new Error('Research prompt requires serializable input');
     return assets[stage].replace('{{input}}', () => json);
 }
+/** Guidance for search/planning/synthesis, not a user locale or provider region setting. */
+export function geographicScopeInstructions(searchDirectionPolicy?: number) {
+    return searchDirectionPolicy === 2 || searchDirectionPolicy === 3
+        ? '\nGeographic scope: Do not infer the user’s location, nationality, market or jurisdiction from prompt language, report language, search language or time zone. Preserve any geographic scope explicitly requested for the subject. Otherwise do not default to a country; when an answer depends on region, distinguish supported regions and state what is unspecified.\n'
+        : '';
+}
+
 export const assessmentPrompt = assets.assessment;
 export const gapKindPrompt = assets.gapKind;
