@@ -23,7 +23,7 @@ export function assertApiPath(path: string) {
 
 /** 领域模块在模块作用域定义端点；缓存统一交由 Vue Query。 */
 export function defineApiEndpoint<S extends EndpointSpec>(
-    options: Omit<EndpointOptions<S>, 'cache' | 'codec' | 'responseType'> & {
+    options: Omit<EndpointOptions<S>, 'cache' | 'codec'> & {
         validator: Validator<EndpointData<S>>;
     },
 ) {
@@ -32,7 +32,7 @@ export function defineApiEndpoint<S extends EndpointSpec>(
         ...options,
         cache: false,
         codec: identityCodec,
-        responseType: 'json',
+        responseType: options.responseType ?? 'json',
     });
 }
 

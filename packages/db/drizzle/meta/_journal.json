@@ -85,6 +85,20 @@
             "when": 1795101655136,
             "tag": "0011_report_export_formats",
             "breakpoints": true
+        },
+        {
+            "idx": 12,
+            "version": "7",
+            "when": 1795142511043,
+            "tag": "0012_project_membership",
+            "breakpoints": true
+        },
+        {
+            "idx": 13,
+            "version": "7",
+            "when": 1795144829590,
+            "tag": "0013_workflows_report_resources",
+            "breakpoints": true
         }
     ]
 }

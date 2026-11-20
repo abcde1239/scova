@@ -444,24 +444,23 @@ describe('Drizzle SQL 迁移与旧库无损接管', () => {
             // Original column values remain identical; new optional fields start at NULL.
             expect(
                 after.filter((row) => !before.some((previous) => previous.table === row.table)),
-            ).toEqual([
-                {
-                    table: 'agent_providers',
+            ).toEqual(
+                [
+                    'agent_providers',
+                    'project_tasks',
+                    'projects',
+                    'report_exports',
+                    'report_resources',
+                    'run_graph_snapshots',
+                    'search_configurations',
+                    'workflow_runs',
+                    'workflow_versions',
+                    'workflows',
+                ].map((table) => ({
+                    table,
                     data: { count: 0, hash: createHash('md5').update('[]').digest('hex') },
-                },
-                {
-                    table: 'report_exports',
-                    data: { count: 0, hash: createHash('md5').update('[]').digest('hex') },
-                },
-                {
-                    table: 'run_graph_snapshots',
-                    data: { count: 0, hash: createHash('md5').update('[]').digest('hex') },
-                },
-                {
-                    table: 'search_configurations',
-                    data: { count: 0, hash: createHash('md5').update('[]').digest('hex') },
-                },
-            ]);
+                })),
+            );
             expect(
                 (
                     await client.query(

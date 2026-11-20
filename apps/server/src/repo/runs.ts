@@ -19,7 +19,7 @@ import { createTaskStore } from '@/repo/tasks.ts';
 import { firstRow, requireRow } from '@/utils/database.ts';
 
 /** Run、事件、幂等记录与 Outbox 共用同一个事务连接。 */
-function createRunStore(database: DatabaseExecutor) {
+export function createRunStore(database: DatabaseExecutor) {
     const tasks = createTaskStore(database);
     return {
         reportQuestions: createReportQuestionStore(database),

@@ -43,3 +43,9 @@ vp run api:openapi:check
 后端完整门禁、固定供应商场景与并发基准见[后端验证](../guides/backend-verification.md)；容器运行、迁移及恢复见[部署维护](../guides/deployment.md)。
 
 反馈接口：`POST /api/v1/feedback` 为指定任务的来源或结论设置 `irrelevant`、`known`、`deeper`；`DELETE /api/v1/feedback/:feedbackId` 撤销，`GET /api/v1/tasks/:taskId/feedback` 读取当前生效项。目标必须属于当前账号和任务，写请求需 CSRF。新执行在 Task 锁内冻结反馈快照；恢复沿用快照，重试及明确确认的后续研究作为新执行捕获当时反馈。反馈不改写历史报告、版本或普通比较范围，`Report.feedbackEffects` 解释实际生效情况；已了解不会遮蔽新值和重要变化。
+
+## 项目、工作流和私有报告资源
+
+- `/api/v1/projects` 分页读取及创建项目。项目详情包含关联任务分页和最近执行、报告。使用 `PUT` 或 `DELETE /api/v1/projects/:projectId/tasks/:taskId` 关联、移动或解除关联。删除项目时保留任务、计划和历史成果。
+- `/api/v1/workflows` 管理工作流草稿，保存和发布使用 `If-Match`，启动使用 `Idempotency-Key`。发布版本冻结可执行图与研究任务版本，`/workflows/:workflowId/versions` 列出所有已发布版本。`/workflow-runs/:runId` 返回持久化节点快照和研究子执行标识，客户端据此恢复展示；子执行继续提供原有 SSE。
+- 报告的 `charts/source-hosts` 生成可读的来源分组数据和私有 SVG 下载，下载有效期 24 小时。`attachments` 接收 UTF-8 CSV 原始字节，单件上限 256 KiB，支持按逻辑记录区间返回原文件行号。解析失败仍保留原件。所有资源按报告和账号授权，随报告删除回收。

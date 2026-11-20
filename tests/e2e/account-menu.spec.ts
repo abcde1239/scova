@@ -44,6 +44,8 @@ for (const { width, scale } of [
             await expect(drawer).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 0)');
             await expect(drawer.getByRole('navigation').getByRole('link')).toHaveText([
                 '任务',
+                '项目',
+                '工作流',
                 '收件箱',
                 '资料库',
                 '通知',

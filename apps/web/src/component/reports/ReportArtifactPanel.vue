@@ -88,13 +88,41 @@
                 @retry="emit('retry')"
             />
             <report-sources v-if="appendixReport" :report="appendixReport" />
+            <details
+                v-if="report"
+                :key="`chart-${report.id}`"
+                class="border-theme rounded-2 scova-interface"
+                @toggle="chartOpen = ($event.currentTarget as HTMLDetailsElement).open || chartOpen"
+            >
+                <summary class="source-disclosure-control min-h-11 py-2 px-4 font-semibold">
+                    引用来源图表
+                </summary>
+                <report-source-chart
+                    v-if="chartOpen"
+                    :report="report"
+                    :visible-evidence-ids="appendixReport?.evidence.map((entry) => entry.id) ?? []"
+                />
+            </details>
+            <details
+                v-if="report"
+                :key="`attachments-${report.id}`"
+                class="border-theme rounded-2 scova-interface"
+                @toggle="attachmentsOpen = ($event.currentTarget as HTMLDetailsElement).open"
+            >
+                <summary class="source-disclosure-control min-h-11 py-2 px-4 font-semibold">
+                    私有参考附件
+                </summary>
+                <report-attachments v-if="attachmentsOpen" :report-id="report.id" />
+            </details>
         </div>
     </section>
 </template>
 
 <script setup lang="ts">
 const readButtonAccessibility = { 'aria-expanded': 'false' };
-import { computed, ref } from 'vue';
+const chartOpen = ref(false);
+const attachmentsOpen = ref(false);
+import { computed, ref, watch } from 'vue';
 import { NButton } from 'naive-ui';
 import type { Report } from '@scova/models';
 import AppIcon from '@/component/common/AppIcon.vue';
@@ -106,6 +134,8 @@ import ComparisonReport from '@/component/reports/ComparisonReport.vue';
 import ResearchReport from '@/component/reports/ResearchReport.vue';
 import ReportChanges from '@/component/reports/ReportChanges.vue';
 import ReportSources from '@/component/reports/ReportSources.vue';
+import ReportSourceChart from '@/component/reports/ReportSourceChart.vue';
+import ReportAttachments from '@/component/reports/ReportAttachments.vue';
 import { artifactReport, savedArtifactFormats } from '@/utils/report/artifacts';
 
 const props = defineProps<{
@@ -136,6 +166,13 @@ const renderers = {
     research_report: ResearchReport,
 };
 const formats = computed(() => (props.report ? savedArtifactFormats(props.report) : []));
+watch(
+    () => props.report?.id,
+    () => {
+        chartOpen.value = false;
+        attachmentsOpen.value = false;
+    },
+);
 const activeFormat = computed(() =>
     format.value && formats.value.includes(format.value)
         ? format.value

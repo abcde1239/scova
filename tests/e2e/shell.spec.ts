@@ -47,6 +47,8 @@ test('有效路径与未知路径均可刷新直达，标题、导航和焦点�
     const errors = recordErrors(page);
     for (const [url, title, selected] of [
         ['/tasks', '任务', '任务'],
+        ['/projects', '项目', '项目'],
+        ['/workflows', '工作流', '工作流'],
         ['/inbox', '收件箱', '收件箱'],
         ['/library', '资料库', '资料库'],
         ['/notifications', '通知', '通知'],

@@ -54,6 +54,8 @@ export {
 export { baselines, type Baseline, runs, type Run } from './schema/runs.ts';
 export { runGraphSnapshots } from './schema/run-graph.ts';
 export { reportExports } from './schema/report-exports.ts';
+export { reportResources } from './schema/report-resources.ts';
+export * from './schema/workflows.ts';
 export {
     toolCalls,
     type ToolCall,
@@ -138,3 +140,4 @@ export {
     reportQuestionsRelations,
     questionEvidenceRelations,
 } from './schema/relations/questions.ts';
+export { projects, projectTasks } from './schema/projects.ts';

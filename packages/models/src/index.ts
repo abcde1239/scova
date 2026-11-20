@@ -32,3 +32,7 @@ export * from './report/artifacts.ts';
 export * from './report/summary.ts';
 export * from './report/artifact-validation.ts';
 export * from './research/diagnostics/model.ts';
+export * from './projects.ts';
+export * from './workflow/schema.ts';
+export * from './report/resources.ts';
+export * from './report/attachments.ts';
