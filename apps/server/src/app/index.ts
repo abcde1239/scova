@@ -6,6 +6,10 @@ import { createApiErrorPlugin } from '@/app/errors.ts';
 import { createDefaultServices, type ApiServices } from '@/app/services';
 import { createAuthPlugin } from '@/router/auth.ts';
 import { createTaskPlugin } from '@/router/tasks.ts';
+import { createProjectPlugin } from '@/router/projects';
+import { createWorkflowPlugin } from '@/router/workflows';
+import { createReportChartPlugin } from '@/router/report-charts';
+import { createReportAttachmentPlugin } from '@/router/report-attachments';
 import { createTaskDraftPlugin } from '@/router/task-drafts.ts';
 import { createLibraryPlugin } from '@/router/library.ts';
 import { createRunPlugin } from '@/router/runs.ts';
@@ -56,10 +60,14 @@ export const createApiApp = (
         .use(createAgentProviderPlugin(services))
         .use(createSearchConfigurationPlugin(services))
         .use(createTaskPlugin(services))
+        .use(createProjectPlugin(services))
+        .use(createWorkflowPlugin(services))
         .use(createTaskDraftPlugin(services))
         .use(createFeedbackPlugin(services))
         .use(createRunPlugin(services))
         .use(createReportPlugin(services))
+        .use(createReportChartPlugin(services))
+        .use(createReportAttachmentPlugin(services))
         .use(createLibraryPlugin(services))
         .use(createNotificationPlugin(services))
         .use(createReportQuestionPlugin(services))

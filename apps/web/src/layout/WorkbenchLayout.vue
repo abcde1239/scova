@@ -145,6 +145,8 @@ const isSelected = (item: RouteRecordNormalized) => route.meta.section === item.
 function navigationIcon(section: unknown): IconName {
     if (
         section === 'tasks' ||
+        section === 'projects' ||
+        section === 'workflows' ||
         section === 'inbox' ||
         section === 'library' ||
         section === 'notifications'
@@ -152,7 +154,7 @@ function navigationIcon(section: unknown): IconName {
         return section;
     return 'account';
 }
-const mobileOrder = ['tasks', 'inbox', 'library', 'notifications'];
+const mobileOrder = ['tasks', 'projects', 'workflows', 'inbox', 'library', 'notifications'];
 const mobileItems = computed(() => [
     ...[...primary.value, ...tools.value]
         .sort(

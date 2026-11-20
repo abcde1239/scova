@@ -237,6 +237,160 @@ async function fixture(
 }
 
 describe('报告证据与收件箱 API', () => {
+    it('生成并引用账号私有图表，并发复用、保留过期资源、续期和级联删除', async () => {
+        const owner = await register();
+        const other = await register();
+        const saved = await fixture(owner);
+        const root = `/reports/${saved.report.id}/charts`;
+        const generate = (auth?: Auth, csrf = auth?.csrf ?? '') =>
+            request(`${root}/source-hosts`, {
+                method: 'POST',
+                headers: { ...headers(auth), 'x-csrf-token': csrf },
+            });
+        expect((await generate()).status).toBe(401);
+        expect((await generate(owner, '')).status).toBe(403);
+        expect((await generate(other)).status).toBe(404);
+        const generated = await Promise.all([generate(owner), generate(owner)]);
+        expect(generated.map((response) => response.status)).toEqual([200, 200]);
+        const [first, second] = await Promise.all(generated.map(json));
+        expect(first).toEqual(second);
+        expect(first).toMatchObject({
+            reportId: saved.report.id,
+            reportVersion: saved.report.publishedAt.toISOString(),
+            rendererVersion: 1,
+            rows: [
+                {
+                    hostname: 'example.com',
+                    count: 1,
+                    sources: [{ sourceId: saved.source.id, evidenceIds: [saved.evidence.id] }],
+                },
+            ],
+        });
+        const download = first!.downloadUrl.replace(/^\/api\/v1/, '');
+        const stable = `${root}/${first!.id}`;
+        const read = (path: string, auth?: Auth) => request(path, { headers: headers(auth) });
+        expect((await read(stable, other)).status).toBe(404);
+        expect((await read(download, other)).status).toBe(404);
+        expect((await read(download)).status).toBe(401);
+        const chart = await read(download, owner);
+        expect(chart.status).toBe(200);
+        expect(chart.headers.get('content-type')).toBe('image/svg+xml');
+        expect(chart.headers.get('content-disposition')).toContain('.svg');
+        expect(await chart.text()).toContain('<desc id="description">example.com：1</desc>');
+        await db
+            .update(tables.reportResources)
+            .set({
+                createdAt: new Date(now.getTime() - 86_400_000),
+                expiresAt: now,
+            })
+            .where(eq(tables.reportResources.id, first!.id));
+        expect((await read(download, owner)).status).toBe(410);
+        expect((await json(await read(stable, owner))).id).toBe(first!.id);
+        expect((await json(await generate(owner))).id).toBe(first!.id);
+        expect((await read(download, owner)).status).toBe(200);
+        await db
+            .delete(tables.claimEvidence)
+            .where(eq(tables.claimEvidence.claimId, saved.claim.id));
+        await db
+            .update(tables.claims)
+            .set({ kind: 'model_answer' })
+            .where(eq(tables.claims.id, saved.claim.id));
+        const empty = await json(await generate(owner));
+        expect(empty.id).not.toBe(first!.id);
+        expect(empty.rows).toEqual([]);
+        expect((await json(await read(stable, owner))).rows).toEqual(first!.rows);
+        await db.delete(tables.claims).where(eq(tables.claims.id, saved.claim.id));
+        await db.delete(tables.inboxItems).where(eq(tables.inboxItems.id, saved.inbox.id));
+        await db.delete(tables.reports).where(eq(tables.reports.id, saved.report.id));
+        expect((await read(stable, owner)).status).toBe(404);
+        expect(
+            await db
+                .select()
+                .from(tables.reportResources)
+                .where(eq(tables.reportResources.id, first!.id)),
+        ).toEqual([]);
+    });
+
+    it('上传私有 CSV，按行定位，保留解析失败原件并拒绝越权、超限和非法类型', async () => {
+        const owner = await register();
+        const other = await register();
+        const saved = await fixture(owner);
+        const root = `/reports/${saved.report.id}/attachments`;
+        const upload = (auth: Auth, body: string, type = 'text/csv', csrf = auth.csrf) =>
+            request(`${root}?filename=${encodeURIComponent('参考资料.csv')}`, {
+                method: 'POST',
+                body,
+                headers: { ...headers(auth), 'content-type': type, 'x-csrf-token': csrf },
+            });
+        const csv = '\ufefftitle,value\r\na,"first\r\nsecond"\r\n';
+        expect((await upload(other, csv)).status).toBe(404);
+        expect((await upload(owner, csv, 'text/csv', '')).status).toBe(403);
+        expect((await upload(owner, csv, 'text/plain')).status).toBe(415);
+        expect((await upload(owner, 'x'.repeat(256 * 1024 + 1))).status).toBe(413);
+        const response = await upload(owner, csv);
+        expect(response.status).toBe(200);
+        const item = await json(response);
+        expect(item).toMatchObject({
+            reportId: saved.report.id,
+            filename: '参考资料.csv',
+            byteLength: Buffer.byteLength(csv),
+            status: 'ready',
+            rowCount: 2,
+            failureCode: null,
+        });
+        expect((await json(await upload(owner, csv))).id).toBe(item.id);
+        const rows = `${root}/${item.id}/rows?start=2&end=10`;
+        expect((await request(rows, { headers: headers(other) })).status).toBe(404);
+        const body = await json(await request(rows, { headers: headers(owner) }));
+        expect(body).toEqual({
+            attachmentId: item.id,
+            rowCount: 2,
+            rows: [{ rowNumber: 2, startLine: 2, endLine: 3, cells: ['a', 'first\r\nsecond'] }],
+        });
+        expect(
+            (await request(`${root}/${item.id}/rows?start=2.2&end=3`, { headers: headers(owner) }))
+                .status,
+        ).toBe(422);
+        const download = item.downloadUrl.replace(/^\/api\/v1/, '');
+        expect((await request(download, { headers: headers(other) })).status).toBe(404);
+        const original = await request(download, { headers: headers(owner) });
+        expect(original.status).toBe(200);
+        expect(Buffer.from(await original.arrayBuffer())).toEqual(Buffer.from(csv));
+        const failed = await json(await upload(owner, 'title,value\n"unfinished'));
+        expect(failed).toMatchObject({
+            status: 'failed',
+            failureCode: 'INVALID_CSV',
+            rowCount: null,
+        });
+        expect(
+            (await request(`${root}/${failed.id}/rows?start=1&end=1`, { headers: headers(owner) }))
+                .status,
+        ).toBe(409);
+        expect(
+            (
+                await request(failed.downloadUrl.replace(/^\/api\/v1/, ''), {
+                    headers: headers(owner),
+                })
+            ).status,
+        ).toBe(200);
+        expect((await request(root, { headers: headers(other) })).status).toBe(404);
+        expect((await json(await request(root, { headers: headers(owner) }))).items).toHaveLength(
+            2,
+        );
+        expect(
+            (await request(`${root}/${item.id}`, { method: 'DELETE', headers: headers(other) }))
+                .status,
+        ).toBe(404);
+        expect(
+            (await request(`${root}/${item.id}`, { method: 'DELETE', headers: headers(owner) }))
+                .status,
+        ).toBe(200);
+        expect((await request(download, { headers: headers(owner) })).status).toBe(404);
+        expect((await json(await request(root, { headers: headers(owner) }))).items).toEqual([
+            failed,
+        ]);
+    });
+
     it('导出原始报告：会话、CSRF、Owner、并发复用及过期回收', async () => {
         const owner = await register();
         const other = await register();

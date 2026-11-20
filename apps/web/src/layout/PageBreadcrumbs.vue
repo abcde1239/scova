@@ -39,6 +39,8 @@ const { t } = useI18n({ useScope: 'global' });
 const context = inject(breadcrumbContext, undefined);
 const sections: Record<string, { key: string; to: string }> = {
     tasks: { key: 'pages.tasks', to: '/tasks' },
+    projects: { key: 'pages.projects', to: '/projects' },
+    workflows: { key: 'pages.workflows', to: '/workflows' },
     inbox: { key: 'pages.inbox', to: '/inbox' },
     library: { key: 'pages.library', to: '/library' },
     account: { key: 'pages.account', to: '/account' },

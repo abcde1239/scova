@@ -1766,3 +1766,122 @@ for (const width of [320, 360, 390, 768, 1024, 1440]) {
         expect(state.unexpected).toEqual([]);
     });
 }
+
+test('报告图表显示来源数据并下载 SVG，私有 CSV 可上传、定位和删除', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await samples(page);
+    const reportId = id(1);
+    const chartId = id(90);
+    const attachmentId = id(91);
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg"><title>来源图表</title></svg>';
+    const chartUrl = `/api/v1/reports/${reportId}/charts/${chartId}/download`;
+    const attachmentUrl = `/api/v1/reports/${reportId}/attachments/${attachmentId}/download`;
+    const csv = '名称,值\r\n"跨行\n样例",9\r\n';
+    const filename = '参考.csv';
+    const attachment = {
+        id: attachmentId,
+        reportId,
+        filename,
+        byteLength: Buffer.byteLength(csv),
+        createdAt: report().publishedAt,
+        downloadUrl: attachmentUrl,
+        status: 'ready',
+        rowCount: 2,
+        failureCode: null,
+    };
+    let saved = false;
+    let chartRequests = 0;
+    await page.route(`**/api/v1/reports/${reportId}/charts/source-hosts`, async (route) => {
+        chartRequests++;
+        expect(route.request().headers()['x-csrf-token']).toBe('report-test-only');
+        await route.fulfill({
+            json: {
+                id: chartId,
+                reportId,
+                reportVersion: new Date(report().publishedAt).toISOString(),
+                rendererVersion: 1,
+                expiresAt: new Date(Date.now() + 60_000).toISOString(),
+                downloadUrl: chartUrl,
+                rows: [
+                    {
+                        hostname: 'example.test',
+                        count: 1,
+                        sources: [{ sourceId: id(21), evidenceIds: [id(20)] }],
+                    },
+                ],
+            },
+        });
+    });
+    await page.route(`**${chartUrl}`, (route) =>
+        route.fulfill({
+            body: svg,
+            headers: {
+                'content-type': 'image/svg+xml',
+                'content-disposition': 'attachment; filename="sources.svg"',
+            },
+        }),
+    );
+    await page.route(`**/api/v1/reports/${reportId}/attachments**`, async (route) => {
+        const request = route.request();
+        const url = new URL(request.url());
+        if (request.method() === 'POST') {
+            expect(request.headers()['x-csrf-token']).toBe('report-test-only');
+            expect(request.headers()['content-type']).toBe('text/csv');
+            expect(url.searchParams.get('filename')).toBe(filename);
+            expect(request.postDataBuffer()?.toString('utf8')).toBe(csv);
+            saved = true;
+            await route.fulfill({ json: attachment });
+        } else if (request.method() === 'DELETE') {
+            expect(request.headers()['x-csrf-token']).toBe('report-test-only');
+            saved = false;
+            await route.fulfill({ json: { id: attachmentId } });
+        } else if (url.pathname.endsWith('/rows')) {
+            expect(url.searchParams.get('start')).toBe('1');
+            expect(url.searchParams.get('end')).toBe('2');
+            await route.fulfill({
+                json: {
+                    attachmentId,
+                    rowCount: 2,
+                    rows: [
+                        { rowNumber: 1, startLine: 1, endLine: 1, cells: ['名称', '值'] },
+                        { rowNumber: 2, startLine: 2, endLine: 3, cells: ['跨行\n样例', '9'] },
+                    ],
+                },
+            });
+        } else {
+            await route.fulfill({ json: { items: saved ? [attachment] : [] } });
+        }
+    });
+    await page.goto(reportPath);
+    await page.getByText('引用来源图表', { exact: true }).click();
+    const generate = page.getByRole('button', { name: '生成来源图表', exact: true });
+    await generate.focus();
+    await generate.press('Enter');
+    await page.getByText('查看图表数据及引用').click();
+    const table = page.getByRole('table', { name: '各主机名的去重引用来源数' });
+    await expect(table.getByRole('rowheader', { name: 'example.test' })).toBeVisible();
+    await expect(table.getByRole('link', { name: '研究资料说明' })).toHaveAttribute(
+        'href',
+        `#evidence-${id(20)}`,
+    );
+    const [download] = await Promise.all([
+        page.waitForEvent('download'),
+        page.getByRole('button', { name: '下载 SVG 图表' }).click(),
+    ]);
+    expect(download.suggestedFilename()).toBe(`scova-source-hosts-${reportId}.svg`);
+    expect(await readFile((await download.path())!, 'utf8')).toBe(svg);
+    expect(chartRequests).toBe(1);
+
+    await page.getByText('私有参考附件', { exact: true }).click();
+    await expect(page.getByText('暂无参考附件')).toBeVisible();
+    await page
+        .getByLabel('选择 CSV 文件')
+        .setInputFiles({ name: filename, mimeType: 'text/csv', buffer: Buffer.from(csv) });
+    await page.getByRole('button', { name: '上传附件', exact: true }).click();
+    await expect(page.getByText(filename, { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: '查看内容', exact: true }).click();
+    await expect(page.getByText('记录 2 · 原文件第 2–3 行')).toBeVisible();
+    await page.getByRole('button', { name: '删除附件', exact: true }).click();
+    await page.getByRole('button', { name: '确认删除', exact: true }).click();
+    await expect(page.getByText('暂无参考附件')).toBeVisible();
+});

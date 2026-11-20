@@ -10,6 +10,7 @@ import { createRedisConnection } from '../repo/redis.ts';
 import { createSchedulerRepository } from '../repo/scheduler.ts';
 import { OutboxService } from '../service/outbox.ts';
 import { SchedulerService } from '../service/scheduler.ts';
+import { createWorkflowBatch } from '../service/workflow-batch.ts';
 import { readRunControlConfig, type RunControlConfig } from './run-control-config.ts';
 
 /** Server 的后台控制面：定时落库、Outbox 发布、恢复回补；不执行 Agent。 */
@@ -21,6 +22,7 @@ export function createRunControl(config: RunControlConfig = readRunControlConfig
     let publisher: ReturnType<typeof createOutboxQueue> | undefined;
     let outbox: ReturnType<typeof createOutboxHandler> | undefined;
     let scheduler: ReturnType<typeof createSchedulerHandler> | undefined;
+    let workflows: ReturnType<typeof createWorkflowBatch> | undefined;
     let loops: Promise<void>[] | undefined;
     let closing: Promise<void> | undefined;
     const db = () =>
@@ -67,6 +69,14 @@ export function createRunControl(config: RunControlConfig = readRunControlConfig
         await scheduler(signal);
     }
 
+    async function workflowBatch() {
+        workflows ??= createWorkflowBatch(db(), {
+            batchSize: config.batchSize,
+            intervalMs: config.pollIntervalMs,
+        });
+        await workflows(signal);
+    }
+
     async function poll(
         batch: () => Promise<void>,
         interval: number,
@@ -90,6 +100,7 @@ export function createRunControl(config: RunControlConfig = readRunControlConfig
         start() {
             if (signal.aborted) throw new Error('Server Run 控制面已停止');
             loops ??= [
+                poll(workflowBatch, config.pollIntervalMs, config.failureDelayMs, '工作流推进批次'),
                 poll(
                     dispatchBatch,
                     config.pollIntervalMs,

@@ -50,6 +50,8 @@ export const verificationTasks = {
             'vp run test:questions',
             'vp test --config tests/runs.vite.config.ts',
             'vp run test:reports',
+            'vp test --config tests/projects.vite.config.ts',
+            'vp test --config tests/workflows.vite.config.ts',
             'vp run test:library',
             'vp run test:notifications',
             'vp run test:sse',

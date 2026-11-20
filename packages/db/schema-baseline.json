@@ -48,6 +48,14 @@
         {
             "name": "0011_report_export_formats",
             "hash": "654faab91290c4844a43feaf3a4ae1617557af732054dd6d21827355ac97ea47"
+        },
+        {
+            "name": "0012_project_membership",
+            "hash": "51f1cfc461e28d6b603e28d58bea1a25ec9fbbfe8f2a4fd9cf44adf0bceb6dff"
+        },
+        {
+            "name": "0013_workflows_report_resources",
+            "hash": "7c75c8a476e9607e366496c1fbd1428f78a58a8e17858eea5144ae29a9a759e1"
         }
     ],
     "signature": {
@@ -151,6 +159,20 @@
                 "force_row_security": false
             },
             {
+                "name": "project_tasks",
+                "kind": "r",
+                "persistence": "p",
+                "row_security": false,
+                "force_row_security": false
+            },
+            {
+                "name": "projects",
+                "kind": "r",
+                "persistence": "p",
+                "row_security": false,
+                "force_row_security": false
+            },
+            {
                 "name": "question_evidence",
                 "kind": "r",
                 "persistence": "p",
@@ -166,6 +188,13 @@
             },
             {
                 "name": "report_questions",
+                "kind": "r",
+                "persistence": "p",
+                "row_security": false,
+                "force_row_security": false
+            },
+            {
+                "name": "report_resources",
                 "kind": "r",
                 "persistence": "p",
                 "row_security": false,
@@ -264,6 +293,27 @@
             },
             {
                 "name": "users",
+                "kind": "r",
+                "persistence": "p",
+                "row_security": false,
+                "force_row_security": false
+            },
+            {
+                "name": "workflow_runs",
+                "kind": "r",
+                "persistence": "p",
+                "row_security": false,
+                "force_row_security": false
+            },
+            {
+                "name": "workflow_versions",
+                "kind": "r",
+                "persistence": "p",
+                "row_security": false,
+                "force_row_security": false
+            },
+            {
+                "name": "workflows",
                 "kind": "r",
                 "persistence": "p",
                 "row_security": false,
@@ -1471,6 +1521,83 @@
                 "collation": null
             },
             {
+                "table_name": "project_tasks",
+                "name": "user_id",
+                "position": 1,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_tasks",
+                "name": "task_id",
+                "position": 2,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_tasks",
+                "name": "project_id",
+                "position": 3,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "projects",
+                "name": "id",
+                "position": 1,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "projects",
+                "name": "user_id",
+                "position": 2,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "projects",
+                "name": "name",
+                "position": 3,
+                "type": "text",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "projects",
+                "name": "created_at",
+                "position": 4,
+                "type": "timestamp(6) with time zone",
+                "not_null": true,
+                "default_value": "now()",
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
                 "table_name": "question_evidence",
                 "name": "id",
                 "position": 1,
@@ -1717,6 +1844,127 @@
                 "name": "context_json",
                 "position": 9,
                 "type": "jsonb",
+                "not_null": false,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "report_resources",
+                "name": "id",
+                "position": 1,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "report_resources",
+                "name": "user_id",
+                "position": 2,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "report_resources",
+                "name": "report_id",
+                "position": 3,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "report_resources",
+                "name": "report_version",
+                "position": 4,
+                "type": "timestamp with time zone",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "report_resources",
+                "name": "purpose",
+                "position": 5,
+                "type": "text",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "report_resources",
+                "name": "version",
+                "position": 6,
+                "type": "integer",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "report_resources",
+                "name": "content_key",
+                "position": 7,
+                "type": "text",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "report_resources",
+                "name": "content",
+                "position": 8,
+                "type": "bytea",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "report_resources",
+                "name": "metadata",
+                "position": 9,
+                "type": "jsonb",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "report_resources",
+                "name": "created_at",
+                "position": 10,
+                "type": "timestamp with time zone",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "report_resources",
+                "name": "expires_at",
+                "position": 11,
+                "type": "timestamp with time zone",
                 "not_null": false,
                 "default_value": null,
                 "identity": "",
@@ -3372,6 +3620,325 @@
                 "identity": "",
                 "generated": "",
                 "collation": null
+            },
+            {
+                "table_name": "workflow_runs",
+                "name": "id",
+                "position": 1,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_runs",
+                "name": "user_id",
+                "position": 2,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_runs",
+                "name": "workflow_id",
+                "position": 3,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_runs",
+                "name": "version_id",
+                "position": 4,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_runs",
+                "name": "mode",
+                "position": 5,
+                "type": "\"ServiceMode\"",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_runs",
+                "name": "status",
+                "position": 6,
+                "type": "text",
+                "not_null": true,
+                "default_value": "'queued'::text",
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "workflow_runs",
+                "name": "nodes_json",
+                "position": 7,
+                "type": "jsonb",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_runs",
+                "name": "start_key_hash",
+                "position": 8,
+                "type": "text",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "workflow_runs",
+                "name": "created_at",
+                "position": 9,
+                "type": "timestamp(6) with time zone",
+                "not_null": true,
+                "default_value": "now()",
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_runs",
+                "name": "started_at",
+                "position": 10,
+                "type": "timestamp(6) with time zone",
+                "not_null": false,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_runs",
+                "name": "finished_at",
+                "position": 11,
+                "type": "timestamp(6) with time zone",
+                "not_null": false,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_runs",
+                "name": "next_check_at",
+                "position": 12,
+                "type": "timestamp(6) with time zone",
+                "not_null": true,
+                "default_value": "now()",
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_runs",
+                "name": "failure_code",
+                "position": 13,
+                "type": "text",
+                "not_null": false,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "workflow_versions",
+                "name": "id",
+                "position": 1,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_versions",
+                "name": "user_id",
+                "position": 2,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_versions",
+                "name": "workflow_id",
+                "position": 3,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_versions",
+                "name": "version",
+                "position": 4,
+                "type": "integer",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_versions",
+                "name": "draft_revision",
+                "position": 5,
+                "type": "integer",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_versions",
+                "name": "title",
+                "position": 6,
+                "type": "text",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "workflow_versions",
+                "name": "graph_json",
+                "position": 7,
+                "type": "jsonb",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_versions",
+                "name": "bindings_json",
+                "position": 8,
+                "type": "jsonb",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_versions",
+                "name": "published_at",
+                "position": 9,
+                "type": "timestamp(6) with time zone",
+                "not_null": true,
+                "default_value": "now()",
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflows",
+                "name": "id",
+                "position": 1,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflows",
+                "name": "user_id",
+                "position": 2,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflows",
+                "name": "title",
+                "position": 3,
+                "type": "text",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "workflows",
+                "name": "draft_json",
+                "position": 4,
+                "type": "jsonb",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflows",
+                "name": "revision",
+                "position": 5,
+                "type": "integer",
+                "not_null": true,
+                "default_value": "1",
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflows",
+                "name": "created_at",
+                "position": 6,
+                "type": "timestamp(6) with time zone",
+                "not_null": true,
+                "default_value": "now()",
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflows",
+                "name": "updated_at",
+                "position": 7,
+                "type": "timestamp(6) with time zone",
+                "not_null": true,
+                "default_value": "now()",
+                "identity": "",
+                "generated": "",
+                "collation": null
             }
         ],
         "enums": [
@@ -4127,6 +4694,48 @@
                 "validated": true
             },
             {
+                "table_name": "project_tasks",
+                "name": "project_tasks_pkey",
+                "type": "p",
+                "definition": "PRIMARY KEY (user_id, task_id)",
+                "validated": true
+            },
+            {
+                "table_name": "project_tasks",
+                "name": "project_tasks_project_fkey",
+                "type": "f",
+                "definition": "FOREIGN KEY (user_id, project_id) REFERENCES projects(user_id, id) ON DELETE CASCADE",
+                "validated": true
+            },
+            {
+                "table_name": "project_tasks",
+                "name": "project_tasks_task_fkey",
+                "type": "f",
+                "definition": "FOREIGN KEY (user_id, task_id) REFERENCES tasks(user_id, id) ON DELETE CASCADE",
+                "validated": true
+            },
+            {
+                "table_name": "projects",
+                "name": "projects_name_nonempty",
+                "type": "c",
+                "definition": "CHECK (length(btrim(name)) > 0)",
+                "validated": true
+            },
+            {
+                "table_name": "projects",
+                "name": "projects_pkey",
+                "type": "p",
+                "definition": "PRIMARY KEY (id)",
+                "validated": true
+            },
+            {
+                "table_name": "projects",
+                "name": "projects_user_id_fkey",
+                "type": "f",
+                "definition": "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE",
+                "validated": true
+            },
+            {
                 "table_name": "question_evidence",
                 "name": "question_evidence_pkey",
                 "type": "p",
@@ -4222,6 +4831,41 @@
                 "name": "report_questions_user_id_revision_run_id_fkey",
                 "type": "f",
                 "definition": "FOREIGN KEY (user_id, revision_run_id) REFERENCES runs(user_id, id)",
+                "validated": true
+            },
+            {
+                "table_name": "report_resources",
+                "name": "report_resources_expiry_valid",
+                "type": "c",
+                "definition": "CHECK (purpose = 'source-host-chart'::text AND expires_at IS NOT NULL AND expires_at > created_at OR purpose = 'reference-csv'::text AND expires_at IS NULL)",
+                "validated": true
+            },
+            {
+                "table_name": "report_resources",
+                "name": "report_resources_owner_report_fkey",
+                "type": "f",
+                "definition": "FOREIGN KEY (user_id, report_id) REFERENCES reports(user_id, id) ON DELETE CASCADE",
+                "validated": true
+            },
+            {
+                "table_name": "report_resources",
+                "name": "report_resources_payload_valid",
+                "type": "c",
+                "definition": "CHECK (octet_length(content) >= 1 AND octet_length(content) <=\nCASE\n    WHEN purpose = 'source-host-chart'::text THEN 262144\n    ELSE 262144\nEND AND content_key ~ '^[a-f0-9]{64}$'::text AND version > 0)",
+                "validated": true
+            },
+            {
+                "table_name": "report_resources",
+                "name": "report_resources_pkey",
+                "type": "p",
+                "definition": "PRIMARY KEY (id)",
+                "validated": true
+            },
+            {
+                "table_name": "report_resources",
+                "name": "report_resources_purpose_valid",
+                "type": "c",
+                "definition": "CHECK (purpose = ANY (ARRAY['source-host-chart'::text, 'reference-csv'::text]))",
                 "validated": true
             },
             {
@@ -4685,6 +5329,69 @@
                 "type": "p",
                 "definition": "PRIMARY KEY (id)",
                 "validated": true
+            },
+            {
+                "table_name": "workflow_runs",
+                "name": "workflow_runs_checkpoint_valid",
+                "type": "c",
+                "definition": "CHECK (jsonb_typeof(nodes_json) = 'array'::text AND (status = ANY (ARRAY['queued'::text, 'running'::text, 'cancel_requested'::text, 'succeeded'::text, 'canceled'::text, 'failed'::text])) AND (finished_at IS NULL) = (status = ANY (ARRAY['queued'::text, 'running'::text, 'cancel_requested'::text])))",
+                "validated": true
+            },
+            {
+                "table_name": "workflow_runs",
+                "name": "workflow_runs_pkey",
+                "type": "p",
+                "definition": "PRIMARY KEY (id)",
+                "validated": true
+            },
+            {
+                "table_name": "workflow_runs",
+                "name": "workflow_runs_version_fkey",
+                "type": "f",
+                "definition": "FOREIGN KEY (user_id, workflow_id, version_id) REFERENCES workflow_versions(user_id, workflow_id, id) ON DELETE CASCADE",
+                "validated": true
+            },
+            {
+                "table_name": "workflow_versions",
+                "name": "workflow_versions_pkey",
+                "type": "p",
+                "definition": "PRIMARY KEY (id)",
+                "validated": true
+            },
+            {
+                "table_name": "workflow_versions",
+                "name": "workflow_versions_valid",
+                "type": "c",
+                "definition": "CHECK (version >= 1 AND draft_revision >= 1)",
+                "validated": true
+            },
+            {
+                "table_name": "workflow_versions",
+                "name": "workflow_versions_workflow_fkey",
+                "type": "f",
+                "definition": "FOREIGN KEY (user_id, workflow_id) REFERENCES workflows(user_id, id) ON DELETE CASCADE",
+                "validated": true
+            },
+            {
+                "table_name": "workflows",
+                "name": "workflows_pkey",
+                "type": "p",
+                "definition": "PRIMARY KEY (id)",
+                "validated": true
+            },
+            {
+                "table_name": "workflows",
+                "name": "workflows_revision_valid",
+                "type": "c",
+                "definition": "CHECK (revision >= 1)",
+                "validated": true
+            },
+            {
+                "table_name": "workflows",
+                "name": "workflows_user_id_users_id_fk",
+                "type": "f",
+                "definition": "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE",
+                "validated": true
             }
         ],
         "indexes": [
@@ -5032,6 +5739,41 @@
                 "ready": true
             },
             {
+                "table_name": "project_tasks",
+                "name": "project_tasks_pkey",
+                "definition": "CREATE UNIQUE INDEX project_tasks_pkey ON project_tasks USING btree (user_id, task_id)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "project_tasks",
+                "name": "project_tasks_project_idx",
+                "definition": "CREATE INDEX project_tasks_project_idx ON project_tasks USING btree (user_id, project_id, task_id)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "projects",
+                "name": "projects_owner_page_idx",
+                "definition": "CREATE INDEX projects_owner_page_idx ON projects USING btree (user_id, created_at DESC NULLS LAST, id DESC NULLS LAST)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "projects",
+                "name": "projects_pkey",
+                "definition": "CREATE UNIQUE INDEX projects_pkey ON projects USING btree (id)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "projects",
+                "name": "projects_user_id_id_key",
+                "definition": "CREATE UNIQUE INDEX projects_user_id_id_key ON projects USING btree (user_id, id)",
+                "valid": true,
+                "ready": true
+            },
+            {
                 "table_name": "question_evidence",
                 "name": "question_evidence_pkey",
                 "definition": "CREATE UNIQUE INDEX question_evidence_pkey ON question_evidence USING btree (id)",
@@ -5091,6 +5833,20 @@
                 "table_name": "report_questions",
                 "name": "report_questions_user_id_id_key",
                 "definition": "CREATE UNIQUE INDEX report_questions_user_id_id_key ON report_questions USING btree (user_id, id)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "report_resources",
+                "name": "report_resources_content_key",
+                "definition": "CREATE UNIQUE INDEX report_resources_content_key ON report_resources USING btree (user_id, report_id, purpose, report_version, version, content_key)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "report_resources",
+                "name": "report_resources_pkey",
+                "definition": "CREATE UNIQUE INDEX report_resources_pkey ON report_resources USING btree (id)",
                 "valid": true,
                 "ready": true
             },
@@ -5511,6 +6267,83 @@
                 "table_name": "users",
                 "name": "users_pkey",
                 "definition": "CREATE UNIQUE INDEX users_pkey ON users USING btree (id)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "workflow_runs",
+                "name": "workflow_runs_due_idx",
+                "definition": "CREATE INDEX workflow_runs_due_idx ON workflow_runs USING btree (next_check_at, id) WHERE (status = ANY (ARRAY['queued'::text, 'running'::text, 'cancel_requested'::text]))",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "workflow_runs",
+                "name": "workflow_runs_history_idx",
+                "definition": "CREATE INDEX workflow_runs_history_idx ON workflow_runs USING btree (user_id, workflow_id, created_at DESC NULLS LAST, id DESC NULLS LAST)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "workflow_runs",
+                "name": "workflow_runs_pkey",
+                "definition": "CREATE UNIQUE INDEX workflow_runs_pkey ON workflow_runs USING btree (id)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "workflow_runs",
+                "name": "workflow_runs_start_key",
+                "definition": "CREATE UNIQUE INDEX workflow_runs_start_key ON workflow_runs USING btree (user_id, workflow_id, start_key_hash)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "workflow_versions",
+                "name": "workflow_versions_owner_key",
+                "definition": "CREATE UNIQUE INDEX workflow_versions_owner_key ON workflow_versions USING btree (user_id, workflow_id, id)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "workflow_versions",
+                "name": "workflow_versions_pkey",
+                "definition": "CREATE UNIQUE INDEX workflow_versions_pkey ON workflow_versions USING btree (id)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "workflow_versions",
+                "name": "workflow_versions_revision_key",
+                "definition": "CREATE UNIQUE INDEX workflow_versions_revision_key ON workflow_versions USING btree (workflow_id, draft_revision)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "workflow_versions",
+                "name": "workflow_versions_sequence_key",
+                "definition": "CREATE UNIQUE INDEX workflow_versions_sequence_key ON workflow_versions USING btree (workflow_id, version)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "workflows",
+                "name": "workflows_pkey",
+                "definition": "CREATE UNIQUE INDEX workflows_pkey ON workflows USING btree (id)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "workflows",
+                "name": "workflows_user_created_idx",
+                "definition": "CREATE INDEX workflows_user_created_idx ON workflows USING btree (user_id, created_at DESC NULLS LAST, id DESC NULLS LAST)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "workflows",
+                "name": "workflows_user_id_id_key",
+                "definition": "CREATE UNIQUE INDEX workflows_user_id_id_key ON workflows USING btree (user_id, id)",
                 "valid": true,
                 "ready": true
             }
@@ -6022,6 +6855,54 @@
                 "enabled": "O"
             },
             {
+                "table_name": "project_tasks",
+                "constraint_name": "project_tasks_project_fkey",
+                "event": 5,
+                "enabled": "O"
+            },
+            {
+                "table_name": "project_tasks",
+                "constraint_name": "project_tasks_project_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "project_tasks",
+                "constraint_name": "project_tasks_task_fkey",
+                "event": 5,
+                "enabled": "O"
+            },
+            {
+                "table_name": "project_tasks",
+                "constraint_name": "project_tasks_task_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "projects",
+                "constraint_name": "project_tasks_project_fkey",
+                "event": 9,
+                "enabled": "O"
+            },
+            {
+                "table_name": "projects",
+                "constraint_name": "project_tasks_project_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "projects",
+                "constraint_name": "projects_user_id_fkey",
+                "event": 5,
+                "enabled": "O"
+            },
+            {
+                "table_name": "projects",
+                "constraint_name": "projects_user_id_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
                 "table_name": "question_evidence",
                 "constraint_name": "question_evidence_user_id_evidence_id_fkey",
                 "event": 5,
@@ -6130,6 +7011,18 @@
                 "enabled": "O"
             },
             {
+                "table_name": "report_resources",
+                "constraint_name": "report_resources_owner_report_fkey",
+                "event": 5,
+                "enabled": "O"
+            },
+            {
+                "table_name": "report_resources",
+                "constraint_name": "report_resources_owner_report_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
                 "table_name": "reports",
                 "constraint_name": "change_records_user_id_report_id_fkey",
                 "event": 9,
@@ -6210,6 +7103,18 @@
             {
                 "table_name": "reports",
                 "constraint_name": "report_questions_user_id_report_id_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "reports",
+                "constraint_name": "report_resources_owner_report_fkey",
+                "event": 9,
+                "enabled": "O"
+            },
+            {
+                "table_name": "reports",
+                "constraint_name": "report_resources_owner_report_fkey",
                 "event": 17,
                 "enabled": "O"
             },
@@ -6875,6 +7780,18 @@
             },
             {
                 "table_name": "tasks",
+                "constraint_name": "project_tasks_task_fkey",
+                "event": 9,
+                "enabled": "O"
+            },
+            {
+                "table_name": "tasks",
+                "constraint_name": "project_tasks_task_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "tasks",
                 "constraint_name": "runs_user_id_task_id_fkey",
                 "event": 9,
                 "enabled": "O"
@@ -7127,6 +8044,18 @@
             },
             {
                 "table_name": "users",
+                "constraint_name": "projects_user_id_fkey",
+                "event": 9,
+                "enabled": "O"
+            },
+            {
+                "table_name": "users",
+                "constraint_name": "projects_user_id_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "users",
                 "constraint_name": "question_evidence_user_id_fkey",
                 "event": 9,
                 "enabled": "O"
@@ -7290,6 +8219,78 @@
             {
                 "table_name": "users",
                 "constraint_name": "tool_calls_user_id_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "users",
+                "constraint_name": "workflows_user_id_users_id_fk",
+                "event": 9,
+                "enabled": "O"
+            },
+            {
+                "table_name": "users",
+                "constraint_name": "workflows_user_id_users_id_fk",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "workflow_runs",
+                "constraint_name": "workflow_runs_version_fkey",
+                "event": 5,
+                "enabled": "O"
+            },
+            {
+                "table_name": "workflow_runs",
+                "constraint_name": "workflow_runs_version_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "workflow_versions",
+                "constraint_name": "workflow_runs_version_fkey",
+                "event": 9,
+                "enabled": "O"
+            },
+            {
+                "table_name": "workflow_versions",
+                "constraint_name": "workflow_runs_version_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "workflow_versions",
+                "constraint_name": "workflow_versions_workflow_fkey",
+                "event": 5,
+                "enabled": "O"
+            },
+            {
+                "table_name": "workflow_versions",
+                "constraint_name": "workflow_versions_workflow_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "workflows",
+                "constraint_name": "workflow_versions_workflow_fkey",
+                "event": 9,
+                "enabled": "O"
+            },
+            {
+                "table_name": "workflows",
+                "constraint_name": "workflow_versions_workflow_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "workflows",
+                "constraint_name": "workflows_user_id_users_id_fk",
+                "event": 5,
+                "enabled": "O"
+            },
+            {
+                "table_name": "workflows",
+                "constraint_name": "workflows_user_id_users_id_fk",
                 "event": 17,
                 "enabled": "O"
             }

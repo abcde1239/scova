@@ -12,6 +12,8 @@ import {
     ColorPaletteOutline,
     CreateOutline,
     DocumentTextOutline,
+    FolderOpenOutline,
+    GitNetworkOutline,
     DesktopOutline,
     LibraryOutline,
     ListOutline,
@@ -39,6 +41,8 @@ import {
 export const icons = {
     help: HelpCircleOutline,
     tasks: ListOutline,
+    projects: FolderOpenOutline,
+    workflows: GitNetworkOutline,
     inbox: MailOutline,
     library: LibraryOutline,
     report: DocumentTextOutline,

@@ -5,6 +5,7 @@ import { readRunControlConfig } from '../src/app/run-control-config.ts';
 const mocks = vi.hoisted(() => ({
     publishBatch: vi.fn<() => Promise<number>>(),
     scheduleBatch: vi.fn<() => Promise<number>>(),
+    workflowBatch: vi.fn<() => Promise<number>>(),
     findRecoverable: vi.fn<() => Promise<unknown[]>>(),
     enqueueRecovery: vi.fn<() => Promise<number>>(),
     closeQueue: vi.fn<() => Promise<void>>(),
@@ -31,6 +32,9 @@ vi.mock('../src/repo/recoverable-runs.ts', () => ({ listRecoverableRuns: mocks.f
 vi.mock('../src/repo/queue/recoverable-runs.ts', () => ({
     enqueueRecoverableRuns: mocks.enqueueRecovery,
 }));
+vi.mock('../src/service/workflow-batch.ts', () => ({
+    createWorkflowBatch: () => mocks.workflowBatch,
+}));
 vi.mock('../src/service/outbox.ts', () => ({
     OutboxService: class {
         dispatchOnce = mocks.publishBatch;
@@ -54,6 +58,7 @@ beforeEach(() => {
     vi.resetAllMocks();
     mocks.publishBatch.mockResolvedValue(0);
     mocks.scheduleBatch.mockResolvedValue(0);
+    mocks.workflowBatch.mockResolvedValue(0);
     mocks.findRecoverable.mockResolvedValue([]);
     mocks.enqueueRecovery.mockResolvedValue(0);
 });
@@ -76,6 +81,7 @@ describe('Server Run 控制面', () => {
                 expect(mocks.scheduleBatch.mock.calls.length).toBeGreaterThan(1),
             );
             expect(mocks.publishBatch).toHaveBeenCalledOnce();
+            expect(mocks.workflowBatch).toHaveBeenCalled();
             const stop = control.stop();
             expect(control.stop()).toBe(stop);
             expect(mocks.closeQueue).not.toHaveBeenCalled();

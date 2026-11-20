@@ -116,7 +116,7 @@ export function createApi(options: { fetcher?: Fetcher } = {}) {
                         signal: lifetime.signal,
                         timeout: options.timeout ?? spec.timeout,
                         credentials: apiCredentials,
-                        responseType: 'json',
+                        responseType: spec.responseType ?? 'json',
                         bypassCache: true,
                     });
                     let data: EndpointData<S>;
