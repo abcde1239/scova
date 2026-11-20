@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vite-plus/test';
+import { describe, expect, it, vi } from 'vite-plus/test';
 import { REPORT_ATTACHMENT_MAX_BYTES, type Report } from '@scova/models';
 import { readReportAttachment } from '@/handler/http/report-attachment-body.ts';
 import { parseReportCsv } from '@/service/report-csv.ts';
@@ -118,5 +118,42 @@ describe('报告私有 CSV', () => {
         } as RequestInit & { duplex: 'half' });
         await expect(readReportAttachment(request)).rejects.toMatchObject({ status: 413 });
         expect(canceled).toBe(true);
+    });
+
+    it('上传取消时立即取消正在等待数据的读取并释放锁', async () => {
+        const abort = new AbortController();
+        const waiting = Promise.withResolvers<void>();
+        const cancel = vi.fn();
+        let source!: ReadableStreamDefaultController<Uint8Array>;
+        const body = new ReadableStream<Uint8Array>(
+            {
+                start(controller) {
+                    source = controller;
+                },
+                pull() {
+                    waiting.resolve();
+                },
+                cancel,
+            },
+            { highWaterMark: 0 },
+        );
+        const request = new Request('https://scova.test', {
+            method: 'POST',
+            headers: { 'content-type': 'text/csv' },
+            body,
+            signal: abort.signal,
+            duplex: 'half',
+        } as RequestInit & { duplex: 'half' });
+        const result = readReportAttachment(request).catch((error: unknown) => error);
+        await waiting.promise;
+
+        const reason = new DOMException('上传已取消', 'AbortError');
+        abort.abort(reason);
+        // Close the fixture if the reader ignored abort, so the regression fails by assertion.
+        if (!cancel.mock.calls.length) source.close();
+
+        expect(await result).toBe(reason);
+        expect(cancel).toHaveBeenCalledExactlyOnceWith(reason);
+        expect(body.locked).toBe(false);
     });
 });

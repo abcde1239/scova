@@ -20,10 +20,16 @@ export async function readReportAttachment(request: Request) {
     if (!reader) throw new ApiError(422, 'REPORT_ATTACHMENT_EMPTY', '请选择非空的 CSV 文件');
     const chunks: Uint8Array[] = [];
     let size = 0;
+    const { signal } = request;
+    const cancelOnAbort = () => {
+        void reader.cancel(signal.reason).catch(() => {});
+    };
+    signal.addEventListener('abort', cancelOnAbort, { once: true });
     try {
         while (true) {
-            request.signal.throwIfAborted();
+            signal.throwIfAborted();
             const { value, done } = await reader.read();
+            signal.throwIfAborted();
             if (done) break;
             size += value.byteLength;
             if (size > REPORT_ATTACHMENT_MAX_BYTES) {
@@ -33,6 +39,7 @@ export async function readReportAttachment(request: Request) {
             chunks.push(value);
         }
     } finally {
+        signal.removeEventListener('abort', cancelOnAbort);
         reader.releaseLock();
     }
     if (!size) throw new ApiError(422, 'REPORT_ATTACHMENT_EMPTY', '请选择非空的 CSV 文件');
