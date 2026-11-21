@@ -2,6 +2,9 @@ import { expect, test, type Page } from '@playwright/test';
 import type { Project } from '@scova/models';
 import { mockFixtureSession } from './support/session-sample.ts';
 
+const projectView = (page: Page, name: string) =>
+    page.getByRole('group', { name: '项目视图' }).getByRole('button', { name, exact: true });
+
 const projectId = '00000000-0000-4000-8000-000000000011';
 const taskId = '00000000-0000-4000-8000-000000000012';
 const runId = '00000000-0000-4000-8000-000000000013';
@@ -89,12 +92,15 @@ test('项目用户旅程使用项目契约关联和解除任务，查看近期�
     await page.getByLabel('新项目名称').fill(project.name);
     await page.getByRole('button', { name: '创建项目', exact: true }).click();
     await expect(page).toHaveURL(`/projects/${projectId}`);
+    await expect(projectView(page, '对话')).toHaveAttribute('aria-pressed', 'true');
+    await projectView(page, '研究任务').click();
     await expect(page.getByText('暂无关联任务')).toBeVisible();
     await page.getByLabel('选择要关联或移入的任务').selectOption(taskId);
     await page.getByRole('button', { name: '关联任务', exact: true }).click();
     await expect(
         page.getByRole('region', { name: '研究任务' }).getByRole('link', { name: task.title }),
     ).toHaveAttribute('href', `/tasks/${taskId}`);
+    await projectView(page, '概览').click();
     await expect(page.getByRole('region', { name: '最近执行' }).getByRole('link')).toHaveAttribute(
         'href',
         `/runs/${runId}`,
@@ -103,12 +109,16 @@ test('项目用户旅程使用项目契约关联和解除任务，查看近期�
         'href',
         `/reports/${reportId}`,
     );
+    await projectView(page, '对话').click();
+    await expect(page.getByRole('complementary', { name: '项目概览' })).toBeVisible();
     await page.screenshot({
         path: testInfo.outputPath('project-workspace-1440.png'),
         fullPage: true,
     });
+    await projectView(page, '研究任务').click();
     await page.getByRole('button', { name: `解除关联 ${task.title}` }).click();
     await expect(page.getByText('暂无关联任务')).toBeVisible();
+    await projectView(page, '概览').click();
     await expect(page.getByText('暂无执行记录')).toBeVisible();
     await page.getByRole('button', { name: '删除项目', exact: true }).click();
     await page.getByRole('button', { name: '确认删除项目' }).click();
@@ -190,7 +200,7 @@ test('项目手动表单在响应丢失后只重试原提交并打开执行详�
         'href',
         `/tasks/${taskId}`,
     );
-    await page.getByRole('link', { name: '新建任务' }).click();
+    await page.getByRole('main').getByRole('link', { name: '新建任务' }).click();
     await expect(page).toHaveURL(`${projectPath}/tasks/new`);
     await page.getByLabel('任务标题', { exact: true }).fill('项目研究');
     await page.getByLabel('查阅主题', { exact: true }).fill('开源发布');
@@ -257,7 +267,15 @@ test('项目对话草案刷新后进入共享表单，保存修订后确认运�
         return route.fulfill({ json: submission(draft.config, true) });
     });
     await page.goto(projectPath);
-    await page.getByLabel('消息', { exact: true }).fill(config.goal);
+    const composer = page.getByLabel('消息', { exact: true });
+    const overview = page.getByRole('complementary', { name: '项目概览' });
+    await expect(overview).toBeHidden();
+    await composer.fill(config.goal);
+    await projectView(page, '概览').click();
+    await expect(overview).toBeVisible();
+    await expect(composer).toBeHidden();
+    await projectView(page, '对话').click();
+    await expect(composer).toHaveValue(config.goal);
     await page.getByRole('button', { name: '发送', exact: true }).click();
     await expect(page.getByRole('heading', { name: config.title })).toBeVisible();
     await page.reload();
@@ -265,7 +283,15 @@ test('项目对话草案刷新后进入共享表单，保存修订后确认运�
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
         390,
     );
+    const history = page.getByRole('region', { name: '对话记录' });
+    const editDraft = history.getByRole('link', { name: '在表单中编辑' });
+    await history.evaluate((element) => (element.scrollTop = element.scrollHeight));
+    const historyBounds = (await history.boundingBox())!;
+    expect((await composer.boundingBox())!.y).toBeGreaterThan(
+        historyBounds.y + historyBounds.height,
+    );
     await page.screenshot({ path: testInfo.outputPath('draft-recovery-390.png'), fullPage: true });
+    await expect(editDraft).toBeInViewport();
     await page.getByRole('link', { name: '在表单中编辑' }).click();
     await expect(page).toHaveURL(`${projectPath}/drafts/${draftId}/edit`);
     await expect(page.getByLabel('任务标题', { exact: true })).toHaveValue(config.title);
@@ -445,6 +471,7 @@ for (const createProject of [false, true]) {
                 conversation.getByRole('heading', { name: '项目对话', exact: true }),
             ).toBeFocused();
             await expect(conversation.getByLabel('消息', { exact: true })).toBeVisible();
+            await projectView(page, '研究任务').click();
             await expect(
                 page
                     .getByRole('region', { name: '研究任务' })
@@ -476,6 +503,7 @@ test('任务摘要移动并取消项目归类，任务配置与任务本身保�
     await region.getByRole('button', { name: '继续对话研究', exact: true }).click();
     await expect(page).toHaveURL(`/projects/${otherProject.id}#project-conversation-heading`);
     await expect(page.getByRole('heading', { name: '项目对话', exact: true })).toBeFocused();
+    await projectView(page, '研究任务').click();
     await page.getByRole('link', { name: task.title, exact: true }).click();
     await expect(page).toHaveURL(taskPath);
     await change.click();

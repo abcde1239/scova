@@ -1,95 +1,79 @@
 <template>
-    <section class="layout-grid gap-3" aria-labelledby="project-conversation-heading">
+    <section class="project-conversation" aria-labelledby="project-conversation-heading">
         <h3 id="project-conversation-heading" ref="heading" tabindex="-1" class="m-0">项目对话</h3>
-        <p v-if="query.isError.value" role="alert" class="m-0">
-            无法读取项目对话。 <action-button @click="query.refetch()">重新读取</action-button>
-        </p>
-        <p v-else-if="query.isPending.value" role="status" class="m-0">正在读取对话</p>
-        <ol v-if="view?.turns.length" class="layout-grid gap-3 m-0 p-0 list-none">
-            <li
-                v-for="turn in view.turns"
-                :key="turn.id"
-                class="layout-grid gap-2 border-theme rounded-2 p-3 bg-surface break-anywhere"
-            >
-                <p class="m-0 whitespace-pre-wrap font-semibold">{{ turn.message }}</p>
-                <p v-if="turn.status === 'running'" role="status" class="m-0 text-muted">
-                    正在处理本轮
-                </p>
-                <p v-else-if="turn.answer" class="m-0 whitespace-pre-wrap">{{ turn.answer }}</p>
-                <router-link
-                    v-if="turn.reportId"
-                    class="internal-link"
-                    :to="{ name: 'report-detail', params: { reportId: turn.reportId } }"
-                    >打开引用报告</router-link
-                >
-                <action-button
-                    v-if="turn.status === 'failed' || turn.status === 'canceled'"
-                    :disabled="Boolean(running) || pending"
-                    @click="retry(turn)"
-                    >继续编辑这条请求</action-button
-                >
-            </li>
-        </ol>
-        <section
-            v-if="view?.drafts.length"
-            class="layout-grid gap-2"
-            aria-labelledby="project-drafts-heading"
+        <div
+            class="project-history layout-grid gap-4 min-w-0"
+            :tabindex="turns.length ? 0 : undefined"
+            role="region"
+            aria-label="对话记录"
         >
-            <h4 id="project-drafts-heading" class="m-0">研究草案</h4>
-            <article
-                v-for="draft in view.drafts"
-                :key="draft.id"
-                class="layout-grid gap-2 p-3 rounded-2 border-theme bg-surface break-anywhere"
+            <p v-if="query.isError.value" role="alert" class="m-0">
+                无法读取项目对话。 <action-button @click="query.refetch()">重新读取</action-button>
+            </p>
+            <p v-else-if="query.isPending.value" role="status" class="m-0">正在读取对话</p>
+            <p v-else-if="!turns.length && !unplacedDrafts.length" class="project-empty">
+                描述你想研究的主题，或选择一份报告提问。
+            </p>
+            <ol v-if="turns.length" class="layout-grid gap-6 m-0 p-0 list-none">
+                <li
+                    v-for="{ turn, draft } in turns"
+                    :key="turn.id"
+                    class="layout-grid gap-3 min-w-0 break-anywhere"
+                >
+                    <p class="project-message m-0 whitespace-pre-wrap">{{ turn.message }}</p>
+                    <div class="layout-grid gap-2 justify-items-start min-w-0">
+                        <router-link
+                            v-if="turn.reportId"
+                            class="project-report-reference internal-link"
+                            :to="{ name: 'report-detail', params: { reportId: turn.reportId } }"
+                            >{{
+                                reports.find((report) => report.id === turn.reportId)?.title ??
+                                '打开引用报告'
+                            }}</router-link
+                        >
+                        <p v-if="turn.status === 'running'" role="status" class="m-0 text-muted">
+                            正在处理本轮
+                        </p>
+                        <p v-else-if="turn.answer" class="m-0 whitespace-pre-wrap leading-relaxed">
+                            {{ turn.answer }}
+                        </p>
+                        <action-button
+                            v-if="turn.status === 'failed' || turn.status === 'canceled'"
+                            :disabled="Boolean(running) || pending"
+                            @click="retry(turn)"
+                            >继续编辑这条请求</action-button
+                        >
+                    </div>
+                    <project-draft-card
+                        v-if="draft"
+                        :draft="draft"
+                        :project-id="projectId"
+                        :busy="pending || Boolean(running)"
+                        @adjust="targetDraft(draft)"
+                        @confirm="confirm(draft, $event)"
+                    />
+                </li>
+            </ol>
+            <section
+                v-if="unplacedDrafts.length"
+                class="layout-grid gap-2"
+                aria-labelledby="project-drafts-heading"
             >
-                <h5 class="m-0 text-base">{{ draft.config.title }}</h5>
-                <p class="m-0 text-sm text-muted">
-                    第 {{ draft.revision }} 版 · {{ draft.taskId ? '已提交' : '待确认' }}
-                </p>
-                <p class="m-0">{{ draft.config.goal }}</p>
-                <template v-if="draft.taskId">
-                    <router-link
-                        class="internal-link"
-                        :to="{ name: 'task-summary', params: { taskId: draft.taskId } }"
-                        >查看任务</router-link
-                    >
-                    <router-link
-                        v-if="draft.runId"
-                        class="internal-link"
-                        :to="{ name: 'run-detail', params: { runId: draft.runId } }"
-                        >查看执行</router-link
-                    >
-                </template>
-                <div v-else class="flex flex-wrap items-center gap-2">
-                    <router-link
-                        class="internal-link keyboard-focus"
-                        :to="{
-                            name: 'project-draft-edit',
-                            params: { projectId, draftId: draft.id },
-                        }"
-                        >在表单中编辑</router-link
-                    >
-                    <action-button
-                        :disabled="pending || Boolean(running)"
-                        @click="targetDraft(draft)"
-                        >继续调整</action-button
-                    >
-                    <action-button
-                        :disabled="pending || Boolean(running)"
-                        @click="confirm(draft, false)"
-                        >保存任务</action-button
-                    >
-                    <action-button
-                        type="primary"
-                        :disabled="pending || Boolean(running)"
-                        @click="confirm(draft, true)"
-                        >保存并立即运行</action-button
-                    >
-                </div>
-            </article>
-        </section>
+                <h4 id="project-drafts-heading" class="m-0">研究草案</h4>
+                <project-draft-card
+                    v-for="draft in unplacedDrafts"
+                    :key="draft.id"
+                    :draft="draft"
+                    :project-id="projectId"
+                    :busy="pending || Boolean(running)"
+                    @adjust="targetDraft(draft)"
+                    @confirm="confirm(draft, $event)"
+                />
+            </section>
+        </div>
         <form
             v-if="view"
-            class="layout-grid gap-2"
+            class="project-composer layout-grid gap-2"
             method="post"
             aria-labelledby="project-conversation-heading"
             @submit.prevent="send"
@@ -99,10 +83,10 @@
                 <action-button @click="draftTarget = undefined">清除草案选择</action-button>
             </div>
             <fieldset
-                class="layout-grid gap-2 m-0 p-0 border-0"
+                class="layout-grid gap-2 m-0 p-0 border-0 min-w-0"
                 :disabled="pending || Boolean(running)"
             >
-                <legend class="p-0 mb-1 font-semibold">下一轮</legend>
+                <legend class="sr-only">下一轮</legend>
                 <div v-if="target" class="flex flex-wrap items-center gap-2">
                     <span
                         >正在调整「{{ target.config.title }}」第
@@ -132,7 +116,8 @@
                         ref="composer"
                         v-model="message"
                         class="report-select w-full"
-                        rows="3"
+                        rows="2"
+                        placeholder="描述研究目标，或补充下一步"
                         name="message"
                         maxlength="2000"
                         required
@@ -177,6 +162,7 @@ import { toApiError } from '@/api/errors';
 import type { ApiResponse } from '@/api/client';
 import { useSessionLifecycle } from '@/composable/useSessionQuery';
 import ActionButton from '@/component/common/ActionButton.vue';
+import ProjectDraftCard from '@/component/projects/ProjectDraftCard.vue';
 
 const props = defineProps<{ projectId: string; reports: ProjectDetailResponse['recentReports'] }>();
 const lifecycle = useSessionLifecycle();
@@ -201,6 +187,26 @@ const query = useQuery(
     lifecycle.queryClient,
 );
 const view = computed(() => query.data.value?.data);
+const draftLocations = computed(() => {
+    const locations = new Map<string, string>();
+    for (const turn of view.value?.turns ?? []) {
+        if (turn.draftId && turn.status === 'completed') locations.set(turn.draftId, turn.id);
+    }
+    return locations;
+});
+const turns = computed(() => {
+    const drafts = new Map(view.value?.drafts.map((draft) => [draft.id, draft]));
+    return (view.value?.turns ?? []).map((turn) => ({
+        turn,
+        draft:
+            turn.draftId && draftLocations.value.get(turn.draftId) === turn.id
+                ? drafts.get(turn.draftId)
+                : undefined,
+    }));
+});
+const unplacedDrafts = computed(() =>
+    (view.value?.drafts ?? []).filter((draft) => !draftLocations.value.has(draft.id)),
+);
 const running = computed(() => view.value?.turns.find((turn) => turn.status === 'running'));
 const route = useRoute();
 const heading = ref<HTMLElement>();
@@ -329,3 +335,29 @@ function retry(turn: ProjectConversation['turns'][number]) {
     void nextTick(() => composer.value?.focus());
 }
 </script>
+
+<style scoped>
+.project-conversation {
+    @apply layout-grid gap-4 min-w-0 border-theme rounded-3 p-4 bg-surface;
+}
+.project-message {
+    @apply justify-self-end max-w-[92%] rounded-3 py-2 px-3 [background:var(--scova-selected)];
+}
+.project-report-reference {
+    @apply inline-flex items-center rounded-2 min-h-11 px-3 max-w-full [background:var(--scova-selected)];
+}
+.project-empty {
+    @apply m-0 px-1 py-7 text-muted;
+}
+.project-composer {
+    @apply border-theme rounded-3 p-3 bg-surface min-w-0;
+}
+.project-history:focus-visible {
+    @apply [outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.125rem] rounded-2;
+}
+@media (max-width: 53.999rem) {
+    .project-history {
+        @apply max-h-[min(33dvh,_20rem)] [overflow-y:auto] [padding:0.125rem];
+    }
+}
+</style>

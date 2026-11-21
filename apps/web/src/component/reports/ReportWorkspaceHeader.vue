@@ -80,7 +80,7 @@ a {
 a:focus-visible {
     @apply [outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.25rem];
 }
-@media (max-width: 63.999rem) {
+@media (width < 72rem) {
     .report-tools :deep(.navigation-button) {
         @apply hidden;
     }

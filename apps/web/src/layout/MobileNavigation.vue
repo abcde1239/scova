@@ -63,6 +63,7 @@
                         v-for="item in items"
                         :key="item.path"
                         :to="item.path"
+                        :class="{ 'drawer-create-task': item.prominent }"
                         :aria-current="route.path === item.path ? 'page' : undefined"
                         @click="select(item.path, $event)"
                     >
@@ -103,7 +104,7 @@ import type { IconName } from '@/utils/icons';
 import { useSession } from '@/composable/useSession';
 import AccountAvatar from '@/component/account/AccountAvatar.vue';
 
-defineProps<{ items: { path: string; label: string; icon: IconName }[] }>();
+defineProps<{ items: { path: string; label: string; icon: IconName; prominent?: boolean }[] }>();
 const route = useRoute();
 const session = useSession();
 const trigger = ref<HTMLButtonElement>();
@@ -253,6 +254,9 @@ const { t } = useI18n({ useScope: 'global' });
 }
 .menu-panel {
     @apply grid gap-1;
+}
+.menu-panel .drawer-create-task {
+    @apply mb-2 border-theme bg-surface font-medium;
 }
 .drawer-footer {
     @apply grid gap-2 pt-2

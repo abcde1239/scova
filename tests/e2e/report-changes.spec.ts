@@ -155,7 +155,7 @@ async function samples(context: BrowserContext) {
 const panel = (page: Page) => page.locator('.report-changes');
 async function openReport(page: Page) {
     await page.goto(path);
-    if ((page.viewportSize()?.width ?? 1440) < 1024)
+    if ((page.viewportSize()?.width ?? 1440) < 1152)
         await page.getByRole('button', { name: '成果', exact: true }).click();
     await expect(page.locator('.artifact-document')).toBeVisible();
 }

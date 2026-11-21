@@ -226,7 +226,10 @@ test('键盘注册、登录、创建、执行、报告引用及菜单返回；�
         }
         await expect(page).toHaveURL(/\/tasks$/);
         await page.unroute('**/api/v1/auth/login');
-        await tabTo(page, page.getByRole('link', { name: '新建任务', exact: true }));
+        await tabTo(
+            page,
+            page.getByRole('main').getByRole('link', { name: '新建任务', exact: true }),
+        );
         await page.keyboard.press('Enter');
         for (const [label, value] of [
             ['任务标题', '键盘完成的演示任务'],

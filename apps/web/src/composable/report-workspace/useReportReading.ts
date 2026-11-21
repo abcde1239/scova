@@ -45,7 +45,7 @@ export function useReportReading(
     async function openArtifact() {
         const identity = routeIdentity.value;
         artifactOpen.value = true;
-        readingOnly.value = window.matchMedia('(max-width: 63.999rem)').matches;
+        readingOnly.value = window.matchMedia('(width < 72rem)').matches;
         await nextTick();
         if (identity !== routeIdentity.value || !report.value) return;
         if (readingOnly.value)

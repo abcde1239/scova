@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 
 async function openPrimaryNavigation(page: Page) {
+    await expect(page.getByRole('main')).toBeVisible();
     let navigation = page.getByRole('navigation', { name: '主导航', exact: true });
     if (!(await navigation.isVisible())) {
         await page.getByRole('button', { name: /^打开(个人侧栏|导航菜单)$/ }).click();
@@ -45,8 +46,10 @@ test('Scova 品牌与面包屑保留真实层级，快捷入口可键盘导航',
 
 test('有效路径与未知路径均可刷新直达，标题、导航和焦点正确', async ({ page }, testInfo) => {
     const errors = recordErrors(page);
+    await page.setViewportSize({ width: 1440, height: 900 });
     for (const [url, title, selected] of [
         ['/tasks', '任务', '任务'],
+        ['/tasks/new', '新建任务', '新建任务'],
         ['/projects', '项目', '项目'],
         ['/workflows', '工作流', '工作流'],
         ['/inbox', '收件箱', '收件箱'],
@@ -94,11 +97,62 @@ test('有效路径与未知路径均可刷新直达，标题、导航和焦点�
     expect(errors).toEqual([]);
 });
 
+test('桌面侧栏的任务和新建任务独立可达，底部弹层留在视口内', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/inbox');
+    const banner = page.getByRole('banner');
+    const main = page.getByRole('main');
+    const navigation = banner.getByRole('navigation', { name: '主导航', exact: true });
+    await expect(navigation).toBeVisible();
+    const tasks = navigation.getByRole('link', { name: '任务', exact: true });
+    const create = navigation.getByRole('link', { name: '新建任务', exact: true });
+    const brand = banner.getByRole('link', { name: 'Scova，任务首页' });
+    expect((await banner.boundingBox())!.width).toBeLessThanOrEqual((await main.boundingBox())!.x);
+    await brand.focus();
+    await page.keyboard.press('Tab');
+    await expect(create).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(/\/tasks\/new$/);
+    await expect(main).toBeFocused();
+    await expect(create).toHaveAttribute('aria-current', 'page');
+    await expect(tasks).not.toHaveAttribute('aria-current');
+    await tasks.click();
+    await expect(page).toHaveURL(/\/tasks$/);
+
+    const notification = banner.getByRole('button', { name: '通知', exact: true });
+    await notification.focus();
+    const preview = page.getByRole('dialog', { name: '通知预览', exact: true });
+    await expect(preview).toBeInViewport({ ratio: 1 });
+    expect((await preview.boundingBox())!.x).toBeGreaterThan((await notification.boundingBox())!.x);
+    await page.keyboard.press('Escape');
+    await expect(notification).toBeFocused();
+
+    const account = banner.getByRole('button', { name: '账号菜单', exact: true });
+    await account.focus();
+    await page.keyboard.press('Enter');
+    const accountPanel = banner.getByRole('navigation', { name: '账号操作', exact: true });
+    await expect(accountPanel).toBeInViewport({ ratio: 1 });
+    expect((await accountPanel.boundingBox())!.y).toBeLessThan((await account.boundingBox())!.y);
+    await page.keyboard.press('Escape');
+    await expect(account).toBeFocused();
+});
+
 test('导航可用且 390 视口没有整页横溢出，跳到主内容可键盘操作', async ({ page }, testInfo) => {
     const errors = recordErrors(page);
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/tasks');
     const navigation = await openPrimaryNavigation(page);
+    const tasks = navigation.getByRole('link', { name: '任务', exact: true });
+    await expect(tasks).toBeVisible();
+    await expect(tasks).toHaveAttribute('aria-current', 'page');
+    const create = navigation.getByRole('link', { name: '新建任务', exact: true });
+    await create.focus();
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(/\/tasks\/new$/);
+    await expect(page.getByRole('main')).toBeFocused();
+    await expect(
+        (await openPrimaryNavigation(page)).getByRole('link', { name: '新建任务', exact: true }),
+    ).toHaveAttribute('aria-current', 'page');
     const inbox = navigation.getByRole('link', { name: '收件箱', exact: true });
     await inbox.focus();
     await page.keyboard.press('Enter');

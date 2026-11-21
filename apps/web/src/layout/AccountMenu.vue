@@ -2,29 +2,25 @@
     <div
         v-if="session.user.value && session.phase.value === 'ready'"
         ref="root"
-        class="account-menu relative shrink-0 [@media(max-width:_53.999rem)]:hidden"
+        class="account-menu relative min-w-0 [@media(max-width:_53.999rem)]:hidden"
         @pointerenter="enter"
         @pointerleave="leave"
         @focusout="blur"
         @keydown.esc.stop.prevent="close(true)"
         @keydown="keydown"
     >
-        <n-button
-            quaternary
-            circle
-            class="account-trigger [&&]:(min-w-11 min-h-11 h-auto) focus-visible:([outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.125rem])"
-            v-bind="triggerAccessibility"
-            @click="toggle"
-        >
+        <n-button quaternary class="account-trigger" v-bind="triggerAccessibility" @click="toggle">
             <account-avatar
                 :email="session.user.value.email"
                 :version="session.user.value.avatarVersion"
             />
+            <span class="account-email truncate">{{ session.user.value.email }}</span>
+            <app-icon class="account-chevron" name="expand" />
         </n-button>
         <nav
             v-if="open"
             :id="panelId"
-            class="account-panel absolute [top:100%] [right:0] z-[20] grid gap-1 w-[min(19rem,_calc(100vw_-_2rem))] border-theme rounded-3 bg-surface break-anywhere p-3 [&.account-panel_.n-button]:(justify-start w-full min-h-11 h-auto whitespace-normal)"
+            class="account-panel"
             :aria-label="t('shell.accountActions')"
             @click="navigateInside"
         >
@@ -164,3 +160,25 @@ onUnmounted(() => {
     media?.removeEventListener('change', closeForResize);
 });
 </script>
+
+<style scoped>
+.account-menu .account-trigger {
+    @apply w-full min-w-0 min-h-11 h-auto justify-start py-1.5 px-2 rounded-2 text-[0.875rem]
+        keyboard-focus-inset;
+}
+.account-trigger :deep(.n-button__content) {
+    @apply grid grid-cols-[auto_minmax(0,_1fr)_auto] items-center gap-2 w-full min-w-0 text-start;
+}
+.account-chevron {
+    @apply rotate-180 text-muted;
+}
+.account-panel {
+    @apply absolute bottom-full [inset-inline-start:0] z-[20] grid grid-cols-[minmax(0,_1fr)] gap-1
+        w-[min(19rem,_calc(100vw_-_2rem))] max-h-[calc(100dvh_-_5rem)] [overflow-y:auto]
+        [overscroll-behavior:contain] border-theme rounded-3 bg-surface break-anywhere p-3
+        [box-shadow:0_0.5rem_1.5rem_color-mix(in_srgb,_var(--scova-text)_12%,_transparent)];
+}
+.account-panel :deep(.n-button) {
+    @apply justify-start w-full min-h-11 h-auto whitespace-normal;
+}
+</style>

@@ -2,7 +2,7 @@
     <n-popover
         v-model:show="show"
         trigger="hover"
-        placement="bottom-end"
+        :placement="placement"
         :delay="120"
         :duration="180"
         :show-arrow="false"
@@ -41,10 +41,12 @@
 import { useI18n } from 'vue-i18n';
 import { ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { NPopover } from 'naive-ui';
+import { NPopover, type PopoverProps } from 'naive-ui';
 import AppIcon from '@/component/common/AppIcon.vue';
 import NotificationPreview from '@/component/notifications/NotificationPreview.vue';
-defineProps<{ selected: boolean }>();
+withDefaults(defineProps<{ selected: boolean; placement?: PopoverProps['placement'] }>(), {
+    placement: 'bottom-end',
+});
 const route = useRoute();
 const show = ref(false);
 const trigger = ref<HTMLButtonElement>();

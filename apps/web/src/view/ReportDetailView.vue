@@ -234,7 +234,7 @@ const {
 .report-companion :deep(.tool-section h2 .n-icon) {
     @apply hidden;
 }
-@media (max-width: 63.999rem) {
+@media (width < 72rem) {
     .report-workspace :deep(.report-artifact-panel:not(.report-artifact-panel--reading)) {
         @apply hidden;
     }
@@ -242,7 +242,7 @@ const {
         @apply fixed inset-0 z-[20] max-h-none h-[100dvh] rounded-none;
     }
 }
-@media (min-width: 64rem) {
+@media (width >= 72rem) {
     .report-workspace {
         @apply grid-cols-[minmax(0,_0.9fr)_minmax(0,_1.1fr)] gap-6;
     }
@@ -283,7 +283,7 @@ const {
 .artifact-pane-leave-active {
     @apply [transition:opacity_220ms_ease,_transform_220ms_cubic-bezier(0.2,_0.7,_0.2,_1)];
 }
-@media (min-width: 64rem) {
+@media (width >= 72rem) {
     .artifact-pane-leave-active {
         @apply absolute [top:0] [right:0] w-[calc(55%_-_0.75rem)] [pointer-events:none];
     }

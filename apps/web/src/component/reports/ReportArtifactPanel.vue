@@ -394,7 +394,7 @@ function onKeydown(event: KeyboardEvent) {
         @apply pl-2.5 pr-2.5;
     }
 }
-@media (min-width: 64rem) {
+@media (width >= 72rem) {
     .report-artifact-panel:not(.report-artifact-panel--reading) {
         @apply sticky [top:1rem] max-h-[calc(100dvh_-_6rem)];
     }

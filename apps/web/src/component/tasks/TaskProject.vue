@@ -1,5 +1,8 @@
 <template>
-    <section class="layout-grid gap-3" aria-labelledby="task-project-heading">
+    <section
+        class="task-project layout-grid gap-3 min-w-0 rounded-3 border-theme p-4 bg-surface"
+        aria-labelledby="task-project-heading"
+    >
         <h2 id="task-project-heading" class="m-0">项目归类</h2>
         <p v-if="membership.isPending.value" role="status" class="m-0">正在读取项目归类</p>
         <div v-else-if="membership.isError.value" class="flex flex-wrap gap-2 items-center">
@@ -16,10 +19,17 @@
                     :to="{ name: 'project-detail', params: { projectId: project.id } }"
                     >{{ project.name }}</router-link
                 >
-                <span v-else>未归类</span>
+                <span
+                    v-else
+                    class="inline-flex px-2 py-0.5 rounded-2 text-sm [background:var(--scova-selected)]"
+                    >未归类</span
+                >
             </p>
             <div class="flex flex-wrap gap-2">
-                <action-button :busy="command.pending.value" @click="continueResearch"
+                <action-button
+                    type="primary"
+                    :busy="command.pending.value"
+                    @click="continueResearch"
                     >继续对话研究</action-button
                 >
                 <action-button :disabled="command.pending.value" @click="showPicker">
@@ -28,7 +38,7 @@
             </div>
             <div
                 v-if="picker"
-                class="layout-grid gap-3 p-3 border-theme rounded-2 bg-surface max-w-[40rem]"
+                class="layout-grid gap-3 p-3 border-theme rounded-3 bg-surface max-w-[40rem] min-w-0"
             >
                 <h3 ref="pickerHeading" tabindex="-1" class="m-0">
                     {{ forConversation ? '选择对话所属的项目' : '选择项目' }}

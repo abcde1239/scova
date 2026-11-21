@@ -262,7 +262,7 @@ test('报告 Markdown 导出失败可感知，可再次提交', async ({ page })
 });
 
 async function readOnMobile(page: Page) {
-    if ((page.viewportSize()?.width ?? 1440) < 1024)
+    if ((page.viewportSize()?.width ?? 1440) < 1152)
         await page.getByRole('button', { name: '成果', exact: true }).click();
 }
 const article = (page: Page) =>
@@ -367,7 +367,9 @@ test('宽屏左侧对话右侧成果、窄屏对话在前，基线在成果内�
     await readOnMobile(page);
     await expect(article(page)).toBeVisible();
     const main = await page.getByRole('main').boundingBox();
-    expect(main!.width).toBeGreaterThan(1300);
+    const sidebar = await page.getByRole('banner').boundingBox();
+    expect(main!.x).toBeGreaterThanOrEqual(sidebar!.x + sidebar!.width);
+    expect(main!.width).toBeCloseTo(1440 - sidebar!.width, 0);
     const content = await page.locator('.report-content').boundingBox();
     const companion = await page.locator('.report-companion').boundingBox();
     expect(content!.x).toBeGreaterThanOrEqual(companion!.x + companion!.width);

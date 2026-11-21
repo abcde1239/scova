@@ -1,75 +1,63 @@
 <template>
     <div class="workbench min-h-[100dvh]">
         <a
-            class="skip-link inline-flex items-center gap-[0.5em] min-h-11 text-default no-underline cursor-pointer fixed [top:0.5rem] [left:0.5rem] z-[10] bg-surface [transform:translateY(-200%)] py-2 px-4 keyboard-focus-wide [nav_&:is(a)]:(rounded-2 py-2 px-3.5) [nav_&:is(a):hover]:([background:var(--scova-selected)] text-primary) focus:[transform:translateY(0)]"
+            class="skip-link fixed top-2 left-2 z-10 inline-flex items-center min-h-11 text-default no-underline bg-surface -translate-y-[200%] py-2 px-4 keyboard-focus-wide focus:translate-y-0"
             href="#main-content"
             >{{ t('shell.skip') }}</a
         >
-        <div
-            class="workbench-header-bar [border-bottom:0.0625rem_solid_color-mix(in_srgb,_var(--scova-border)_30%,_transparent)]"
-        >
-            <header
-                class="workbench-header w-[min(100%,_88rem)] ml-auto mr-auto min-w-0 flex flex-wrap items-center gap-[0.5rem_1.5rem] min-h-[4.5rem] py-2 px-[clamp(1rem,_2.5vw,_2rem)] [@media(max-width:_53.999rem)]:(gap-[0.5rem_1rem] min-h-[3.75rem] pt-1.5 pb-1.5)"
-            >
-                <mobile-navigation :items="mobileItems" />
+        <header class="workbench-header">
+            <mobile-navigation :items="mobileItems" />
+            <router-link class="brand" to="/tasks" :aria-label="t('shell.taskHome')">
+                <img src="/favicon.ico?v=ebde566c" alt="" class="w-6 h-6 object-contain" />
+                <span lang="en">Scova</span>
+            </router-link>
+            <nav class="primary-navigation" :aria-label="t('shell.primaryNav')">
                 <router-link
-                    class="brand inline-flex items-center gap-[0.5em] min-h-11 text-inherit no-underline cursor-pointer keyboard-focus-wide [&&]:(text-[1.25rem] [font-weight:650] whitespace-nowrap) [nav_&:is(a)]:(rounded-2 py-2 px-3.5) [nav_&:is(a):hover]:([background:var(--scova-selected)] text-primary)"
-                    to="/tasks"
-                    :aria-label="t('shell.taskHome')"
+                    class="sidebar-link create-task"
+                    :to="newTask.path"
+                    :aria-current="route.path === newTask.path ? 'page' : undefined"
                 >
-                    <img src="/favicon.ico?v=ebde566c" alt="" class="w-6 h-6 object-contain" />
-                    <span lang="en">Scova</span>
+                    <app-icon :name="newTask.icon" />{{ newTask.label }}
                 </router-link>
-                <nav
-                    class="primary-navigation flex flex-wrap gap-2 [@media(max-width:_53.999rem)]:hidden"
-                    :aria-label="t('shell.primaryNav')"
+                <router-link
+                    v-for="item in primary"
+                    :key="String(item.name)"
+                    class="sidebar-link"
+                    :to="item.path"
+                    :class="{ selected: isSelected(item) }"
+                    :aria-current="route.path === item.path ? 'page' : undefined"
                 >
-                    <router-link
-                        class="inline-flex items-center gap-[0.5em] min-h-11 text-inherit no-underline cursor-pointer keyboard-focus-wide [nav_&:is(a)]:(rounded-2 py-2 px-3.5) [nav_&:is(a):hover]:([background:var(--scova-selected)] text-primary) [&.selected]:([background:var(--scova-selected)] text-primary font-semibold)"
-                        v-for="item in primary"
-                        :key="String(item.name)"
-                        :to="item.path"
-                        :class="{ selected: isSelected(item) }"
-                        :aria-current="route.path === item.path ? 'page' : undefined"
-                    >
-                        <app-icon
-                            class="[.page-heading_>_&]:(min-w-0 max-w-full break-anywhere)"
-                            :name="navigationIcon(item.meta.section)"
-                        />
-                        {{ routeTitle(item, t) }}
-                    </router-link>
-                </nav>
-                <nav
-                    class="tool-navigation flex flex-wrap gap-2 ml-auto [@media(max-width:_53.999rem)]:hidden"
-                    :aria-label="t('shell.toolsNav')"
-                >
+                    <app-icon :name="navigationIcon(item.meta.section)" />{{ routeTitle(item, t) }}
+                </router-link>
+            </nav>
+            <div class="sidebar-footer">
+                <nav class="tool-navigation" :aria-label="t('shell.toolsNav')">
                     <template v-for="item in tools" :key="String(item.name)">
                         <notification-menu
                             v-if="item.meta.section === 'notifications'"
                             :selected="isSelected(item)"
+                            placement="right-end"
                         />
                         <router-link
-                            class="inline-flex items-center gap-[0.5em] min-h-11 text-inherit no-underline cursor-pointer keyboard-focus-wide [nav_&:is(a)]:(rounded-2 py-2 px-3.5) [nav_&:is(a):hover]:([background:var(--scova-selected)] text-primary) [&.selected]:([background:var(--scova-selected)] text-primary font-semibold)"
                             v-else
+                            class="sidebar-link"
                             :to="item.path"
                             :class="{ selected: isSelected(item) }"
                             :aria-current="route.path === item.path ? 'page' : undefined"
                         >
-                            <app-icon
-                                class="[.page-heading_>_&]:(min-w-0 max-w-full break-anywhere)"
-                                :name="navigationIcon(item.meta.section)"
-                            />
-                            {{ routeTitle(item, t) }}
+                            <app-icon :name="navigationIcon(item.meta.section)" />{{
+                                routeTitle(item, t)
+                            }}
                         </router-link>
                     </template>
                 </nav>
-                <interface-language-select class="[@media(max-width:_53.999rem)]:ml-auto" />
+                <interface-language-select class="interface-language" />
                 <account-menu />
-            </header>
-        </div>
+            </div>
+        </header>
         <main
             id="main-content"
-            class="workbench-main w-[min(100%,_88rem)] ml-auto mr-auto min-w-0 pt-8 [&:has(>_.breadcrumbs)]:pt-3 pb-8 px-[clamp(1rem,_2.5vw,_2rem)] [&.workbench]:min-h-[100dvh] focus:[outline:none] [&.workbench-main--form]:w-[min(100%,_calc(44rem_+_clamp(2rem,_5vw,_4rem)))]"
+            class="workbench-main"
             :class="{ 'workbench-main--form': route.meta.contentWidth === 'form' }"
             tabindex="-1"
             aria-labelledby="page-title"
@@ -133,8 +121,15 @@ const route = useRoute();
 const { t } = useI18n({ useScope: 'global' });
 
 provide(breadcrumbContext, shallowRef<BreadcrumbContext>());
+const sectionOrder = ['tasks', 'projects', 'workflows', 'inbox', 'library'];
 const primary = computed(() =>
-    props.navigation.filter((item) => item.meta.navigation === 'primary'),
+    props.navigation
+        .filter((item) => item.meta.navigation === 'primary')
+        .sort(
+            (left, right) =>
+                sectionOrder.indexOf(String(left.meta.section)) -
+                sectionOrder.indexOf(String(right.meta.section)),
+        ),
 );
 const tools = computed(() =>
     props.navigation.filter(
@@ -154,20 +149,104 @@ function navigationIcon(section: unknown): IconName {
         return section;
     return 'account';
 }
-const mobileOrder = ['tasks', 'projects', 'workflows', 'inbox', 'library', 'notifications'];
+const newTask = computed(() => ({
+    path: '/tasks/new',
+    label: t('pages.createTask'),
+    icon: 'create' as const,
+    prominent: true,
+}));
 const mobileItems = computed(() => [
-    ...[...primary.value, ...tools.value]
-        .sort(
-            (left, right) =>
-                mobileOrder.indexOf(String(left.meta.section)) -
-                mobileOrder.indexOf(String(right.meta.section)),
-        )
-        .map((item) => ({
-            path: item.path,
-            label: routeTitle(item, t),
-            icon: navigationIcon(item.meta.section),
-        })),
+    newTask.value,
+    ...[...primary.value, ...tools.value].map((item) => ({
+        path: item.path,
+        label: routeTitle(item, t),
+        icon: navigationIcon(item.meta.section),
+    })),
     { path: '/account/agent', label: t('pages.agent'), icon: 'settings' as const },
     { path: '/account/appearance', label: t('pages.appearance'), icon: 'appearance' as const },
 ]);
 </script>
+
+<style scoped>
+.workbench-header {
+    @apply flex flex-wrap items-center gap-x-2 min-h-[3.75rem] min-w-0 px-3 py-1.5
+        [border-bottom:1px_solid_color-mix(in_srgb,_var(--scova-border)_30%,_transparent)];
+}
+.brand {
+    @apply inline-flex items-center gap-2 min-h-11 text-[1.125rem] font-semibold text-default
+        no-underline whitespace-nowrap rounded-2 keyboard-focus-wide;
+}
+.primary-navigation,
+.tool-navigation {
+    @apply hidden;
+}
+.sidebar-footer {
+    @apply contents;
+}
+.interface-language {
+    @apply ml-auto min-w-0;
+}
+.workbench-main {
+    --workbench-gutter: clamp(1rem, 2vw, 2rem);
+
+    @apply w-full min-w-0 max-w-[88rem] mx-auto pt-8 pb-8 [padding-inline:var(--workbench-gutter)]
+        focus:[outline:none];
+}
+.workbench-main:has(> .breadcrumbs) {
+    @apply pt-3;
+}
+.workbench-main--form {
+    @apply max-w-[calc(44rem_+_2_*_var(--workbench-gutter))];
+}
+@media (min-width: 54rem) {
+    .workbench {
+        @apply grid grid-cols-[min(15.5rem,_30vw)_minmax(0,_1fr)];
+    }
+    .workbench-header {
+        @apply sticky top-0 z-[5] self-start grid grid-cols-[minmax(0,_1fr)]
+            grid-rows-[auto_minmax(0,_1fr)_auto] items-start gap-3 h-[100dvh] min-h-0
+            px-2.5 py-3 [border-bottom:0]
+            [border-inline-end:1px_solid_color-mix(in_srgb,_var(--scova-border)_28%,_transparent)]
+            [background:color-mix(in_srgb,_var(--scova-canvas)_70%,_var(--scova-selected))];
+    }
+    .brand {
+        @apply px-2;
+    }
+    .primary-navigation {
+        /* Keep the popovers in the footer outside the scrolling region. */
+        @apply self-stretch grid grid-cols-[minmax(0,_1fr)] content-start gap-0.5 min-h-0
+            [overflow-y:auto] [overscroll-behavior:contain];
+    }
+    .sidebar-link {
+        @apply flex items-center gap-2.5 min-h-11 min-w-0 rounded-2 text-[0.875rem] text-default
+            no-underline break-anywhere px-2.5 py-2 keyboard-focus-inset;
+    }
+    .sidebar-link:hover {
+        @apply [background:var(--scova-selected)] text-primary;
+    }
+    .sidebar-link.selected {
+        @apply bg-surface font-semibold
+            [box-shadow:inset_0.125rem_0_var(--scova-primary),inset_0_0_0_1px_color-mix(in_srgb,_var(--scova-border)_22%,_transparent)];
+    }
+    .create-task {
+        @apply mb-2 bg-surface border-theme font-medium
+            [box-shadow:0_1px_2px_color-mix(in_srgb,_var(--scova-text)_8%,_transparent)];
+    }
+    .create-task[aria-current='page'] {
+        @apply [border-color:var(--scova-primary)] text-primary font-semibold;
+    }
+    .sidebar-footer {
+        @apply grid grid-cols-[minmax(0,_1fr)] gap-1 pt-2
+            [border-top:1px_solid_color-mix(in_srgb,_var(--scova-border)_28%,_transparent)];
+    }
+    .tool-navigation {
+        @apply grid grid-cols-[minmax(0,_1fr)] min-w-0;
+    }
+    .tool-navigation :deep(.notification-trigger) {
+        @apply w-full min-w-0 min-h-11 px-2.5 text-[0.875rem] text-start;
+    }
+    .interface-language {
+        @apply w-full ml-0 text-[0.875rem];
+    }
+}
+</style>

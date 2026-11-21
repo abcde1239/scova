@@ -437,7 +437,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         await page.setViewportSize({ width, height: 1000 });
         await page.goto('/tasks');
         await expect(page.getByRole('status')).toContainText('没有匹配的任务');
-        await page.getByRole('link', { name: '新建任务', exact: true }).click();
+        await page.getByRole('main').getByRole('link', { name: '新建任务', exact: true }).click();
         await expect(page).toHaveURL(/\/tasks\/new$/);
         await fillMain(page);
         await page.getByText('关注范围与来源偏好', { exact: true }).click();
@@ -662,7 +662,7 @@ test('未保存离开可取消，确认后放弃；重进不泄露草稿', async
     page.once('dialog', (dialog) => dialog.accept());
     await page.getByRole('link', { name: '返回任务列表', exact: true }).click();
     await expect(page).toHaveURL(/\/tasks$/);
-    await page.getByRole('link', { name: '新建任务', exact: true }).click();
+    await page.getByRole('main').getByRole('link', { name: '新建任务', exact: true }).click();
     await expect(page.getByLabel('任务标题', { exact: true })).toHaveValue('');
 });
 

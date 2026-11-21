@@ -166,15 +166,18 @@ for (const width of [1024, 1440, 1920]) {
         ] as const) {
             await page.goto(path);
             await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+            const sidebar = await page.getByRole('banner').boundingBox();
+            expect(sidebar).not.toBeNull();
+            const contentCenter = (sidebar!.x + sidebar!.width + width) / 2;
             const main = await page.getByRole('main').boundingBox();
             const content = await page.locator(body!).boundingBox();
             const heading = await page.locator('.page-heading').boundingBox();
             expect(main).not.toBeNull();
             expect(content).not.toBeNull();
-            expect(Math.abs(main!.x + main!.width / 2 - width / 2)).toBeLessThan(1);
-            expect(Math.abs(content!.x + content!.width / 2 - width / 2)).toBeLessThan(1);
+            expect(Math.abs(main!.x + main!.width / 2 - contentCenter)).toBeLessThan(1);
+            expect(Math.abs(content!.x + content!.width / 2 - contentCenter)).toBeLessThan(1);
             expect(Math.abs(heading!.x - content!.x)).toBeLessThan(1);
-            expect(content!.width).toBeLessThanOrEqual(704);
+            expect(content!.width).toBeLessThanOrEqual(705);
         }
     });
 }

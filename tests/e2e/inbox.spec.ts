@@ -286,13 +286,13 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         const before = await page.evaluate(() => scrollY);
         await reportLink(page, 6).press('Enter');
         await expect(page).toHaveURL(new RegExp(`/reports/${id(106)}$`));
-        if (width < 1024) await page.getByRole('button', { name: '成果', exact: true }).click();
+        if (width < 1152) await page.getByRole('button', { name: '成果', exact: true }).click();
         await expect(
             page.getByRole('article', { name: item(6).report.title, exact: true }),
         ).toBeVisible();
         expect(patches(calls)).toHaveLength(0);
         if ([390, 1024, 1920].includes(width)) await page.goBack();
-        else if (width < 1024) {
+        else if (width < 1152) {
             await page.getByRole('button', { name: '返回对话', exact: true }).click();
             await expect(page.getByRole('dialog', { name: '报告交付物', exact: true })).toHaveCount(
                 0,

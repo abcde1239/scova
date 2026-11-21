@@ -7,7 +7,7 @@
         :retryable="!hidden"
         @retry="query.refetch()"
     />
-    <div v-else-if="detail" class="layout-grid gap-6">
+    <div v-else-if="detail" class="layout-grid gap-4 project-workbench">
         <div class="flex flex-wrap items-start justify-between gap-4">
             <h2 class="m-0 break-anywhere">{{ detail.project.name }}</h2>
             <action-button v-if="!confirmDelete" @click="confirmDelete = true"
@@ -30,13 +30,43 @@
                 </div>
             </div>
         </div>
-        <div class="grid gap-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
-            <project-conversation
-                :key="`${lifecycle.session.epoch}:${detail.project.id}`"
-                :project-id="detail.project.id"
-                :reports="detail.recentReports"
-            />
-            <aside class="layout-grid content-start gap-4" aria-label="项目概览">
+        <div class="project-toolbar flex flex-wrap items-center justify-between gap-3">
+            <div class="flex flex-wrap gap-1" role="group" aria-label="项目视图">
+                <action-button
+                    v-for="item in views"
+                    :key="item.id"
+                    v-bind="{
+                        'aria-pressed': activeView === item.id,
+                        'aria-controls': item.target,
+                    }"
+                    @click="activeView = item.id"
+                    >{{ item.label }}</action-button
+                >
+            </div>
+            <router-link
+                class="internal-link keyboard-focus inline-flex items-center min-h-11"
+                :to="{ name: 'project-task-create', params: { projectId: detail.project.id } }"
+                >新建任务</router-link
+            >
+        </div>
+        <div
+            v-show="activeView !== 'tasks'"
+            class="project-panes"
+            :class="{ 'project-panes--conversation': activeView === 'conversation' }"
+        >
+            <div v-show="activeView === 'conversation'" id="project-conversation" class="min-w-0">
+                <project-conversation
+                    :key="`${lifecycle.session.epoch}:${detail.project.id}`"
+                    :project-id="detail.project.id"
+                    :reports="detail.recentReports"
+                />
+            </div>
+            <aside
+                id="project-overview"
+                class="project-overview layout-grid content-start gap-4"
+                aria-label="项目概览"
+            >
+                <h3 class="m-0">项目概览</h3>
                 <h3 class="m-0">下次运行</h3>
                 <p v-if="detail.nextRun" class="m-0 break-anywhere">
                     <router-link
@@ -57,15 +87,13 @@
                 />
             </aside>
         </div>
-        <section class="layout-grid gap-3" aria-labelledby="project-tasks">
-            <div class="flex flex-wrap items-center justify-between gap-3">
-                <h3 id="project-tasks" class="m-0">研究任务</h3>
-                <router-link
-                    class="internal-link keyboard-focus"
-                    :to="{ name: 'project-task-create', params: { projectId: detail.project.id } }"
-                    >新建任务</router-link
-                >
-            </div>
+        <section
+            v-show="activeView === 'tasks'"
+            id="project-task-panel"
+            class="project-task-panel layout-grid gap-3"
+            aria-labelledby="project-tasks"
+        >
+            <h3 id="project-tasks" class="m-0">研究任务</h3>
             <form class="layout-grid gap-2 max-w-[36rem]" method="post" @submit.prevent="assign">
                 <label for="project-task-select">选择要关联或移入的任务</label>
                 <div class="flex flex-wrap items-start gap-2">
@@ -179,8 +207,18 @@ const projectId = computed(() =>
     typeof route.params.projectId === 'string' ? route.params.projectId : '',
 );
 const { query, detail, tasks } = useProject(projectId, lifecycle);
+const views = [
+    { id: 'conversation', label: '对话', target: 'project-conversation' },
+    { id: 'overview', label: '概览', target: 'project-overview' },
+    { id: 'tasks', label: '研究任务', target: 'project-task-panel' },
+] as const;
+const activeView = ref<(typeof views)[number]['id']>('conversation');
 const hidden = computed(() => [401, 403, 404].includes(toApiError(query.error.value).status ?? 0));
-const options = useTasks('all', lifecycle, () => !!detail.value && !hidden.value);
+const options = useTasks(
+    'all',
+    lifecycle,
+    () => activeView.value === 'tasks' && !!detail.value && !hidden.value,
+);
 const taskOptions = computed(() => {
     const linked = new Set(tasks.value.map((task) => task.id));
     return options.items.value.filter((task) => !linked.has(task.id));
@@ -195,7 +233,14 @@ const deleteProject = useSessionMutation(deleteProjectEndpoint, lifecycle);
 watch([projectId, () => lifecycle.session.epoch], () => {
     selected.value = '';
     confirmDelete.value = false;
+    activeView.value = 'conversation';
 });
+watch(
+    () => route.hash,
+    (hash) => {
+        if (hash === '#project-conversation-heading') activeView.value = 'conversation';
+    },
+);
 
 async function assign() {
     const taskId = selected.value;
@@ -244,3 +289,31 @@ async function remove() {
     }
 }
 </script>
+
+<style scoped>
+.project-toolbar {
+    @apply pb-3 [border-bottom:1px_solid_var(--scova-border)];
+}
+.project-toolbar :deep([aria-pressed='true']) {
+    @apply [background:var(--scova-selected)] [color:var(--scova-primary)] font-semibold;
+}
+.project-panes {
+    @apply grid gap-4 items-start;
+    grid-template-columns: minmax(0, 1fr);
+}
+.project-overview,
+.project-task-panel {
+    @apply min-w-0 border-theme rounded-3 p-4 bg-surface;
+}
+.project-panes--conversation .project-overview {
+    display: none;
+}
+@media (min-width: 72rem) {
+    .project-panes--conversation {
+        grid-template-columns: minmax(0, 1fr) minmax(15rem, 19rem);
+    }
+    .project-panes--conversation .project-overview {
+        display: grid;
+    }
+}
+</style>

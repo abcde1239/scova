@@ -164,9 +164,8 @@ async function samples(context: BrowserContext) {
         if (path.startsWith('/api/v1/runs/')) {
             if (path.endsWith('/events'))
                 return route.fulfill({ contentType: 'text/event-stream', body: '' });
-            return route.fulfill({
-                json: run(state.items.find((value) => value.runId === path.split('/').at(-1))!),
-            });
+            const entry = state.items.find((value) => path === `/api/v1/runs/${value.runId}`);
+            return entry ? route.fulfill({ json: run(entry) }) : failure(404);
         }
         const visible = state.items.filter((value) => !taskId || value.taskId === taskId);
         const pageItems = structuredClone(pageCursor ? visible.slice(3) : visible.slice(0, 3));
@@ -267,7 +266,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         }));
         await link(page, 6).press('Enter');
         await expect(page).toHaveURL(new RegExp(`/reports/${id(6)}$`));
-        if (width < 1024) await page.getByRole('button', { name: '成果', exact: true }).click();
+        if (width < 1152) await page.getByRole('button', { name: '成果', exact: true }).click();
         await expect(page.getByRole('article', { name: item(6).title, exact: true })).toBeVisible();
         await page.goBack();
         await expect(entries(page)).toHaveCount(width === 390 ? 6 : 12);
@@ -304,7 +303,7 @@ test('短标题报告也具有足够点击高度，窄屏与桌面均可键盘�
         await link(page, 1).focus();
         await link(page, 1).press('Enter');
         await expect(page).toHaveURL(new RegExp(`/reports/${id(1)}$`));
-        if (width < 1024) await page.getByRole('button', { name: '成果', exact: true }).click();
+        if (width < 1152) await page.getByRole('button', { name: '成果', exact: true }).click();
         await expect(page.getByRole('article', { name: '政策报告', exact: true })).toBeVisible();
     }
 });

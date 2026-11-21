@@ -178,7 +178,7 @@ async function fixtures(page: Page) {
 
 test('serial editor saves order and runs a frozen version with idempotent retries', async ({
     page,
-}) => {
+}, testInfo) => {
     await page.setViewportSize({ width: 1280, height: 900 });
     const state = await fixtures(page);
     await page.goto('/workflows');
@@ -206,7 +206,13 @@ test('serial editor saves order and runs a frozen version with idempotent retrie
     const handle = page.locator('[draggable="true"]').nth(1);
     const firstStudy = page.locator('[data-node-id]').first();
     await handle.dragTo(firstStudy);
+    const firstNode = page.getByRole('button', { name: /研究 1\s*调研任务 1/ });
+    await firstNode.click();
+    await expect(firstNode).toHaveAttribute('aria-pressed', 'true');
     await expect(first).toHaveValue(tasks[0]!);
+    await page
+        .locator('.workflow-board')
+        .screenshot({ path: testInfo.outputPath('workflow-editor-1280.png') });
     await page.getByRole('button', { name: '保存草稿' }).click();
     await expect(page.getByText('已保存草稿', { exact: true })).toBeVisible();
     const save = state.saveCalls[0]!;

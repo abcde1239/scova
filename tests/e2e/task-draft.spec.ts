@@ -866,7 +866,7 @@ test('离开解析页后迟到结果不会应用到新页面', async ({ page }) 
     await expect(page).toHaveURL(/\/tasks$/);
     release();
     await expect(panel(page)).toHaveCount(0);
-    await page.getByRole('link', { name: '新建任务', exact: true }).click();
+    await page.getByRole('main').getByRole('link', { name: '新建任务', exact: true }).click();
     await expect(original(page)).toHaveValue('');
     await expect(title(page)).toHaveValue('');
     await expect(apply(page)).toHaveCount(0);
