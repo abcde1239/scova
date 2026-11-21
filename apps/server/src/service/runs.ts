@@ -1,8 +1,4 @@
-import {
-    reportSearchConfigurationHash,
-    type Run as StoredRun,
-    type RunEvent as StoredRunEvent,
-} from '@scova/db';
+import { reportSearchConfigurationHash, type Run as StoredRun } from '@scova/db';
 import { openCredential } from '@scova/shared/credentials';
 import { createHash } from 'node:crypto';
 import { effectiveRunScopeHash } from '@scova/shared';
@@ -10,7 +6,6 @@ import {
     PageQuerySchema,
     RunListResponseSchema,
     RunCommandInputSchema,
-    RunEventSchema,
     RunSchema,
     TaskConfigSchema,
     parseContract,
@@ -56,18 +51,6 @@ export function toRun(run: StoredRun) {
         startedAt: run.startedAt?.toISOString() ?? null,
         finishedAt: run.finishedAt?.toISOString() ?? null,
         failureCode: run.failureCode,
-    });
-}
-
-function eventDto(event: StoredRunEvent) {
-    return parseContract(RunEventSchema, {
-        schemaVersion: event.schemaVersion,
-        eventId: event.id,
-        runId: event.runId,
-        seq: event.seq,
-        occurredAt: event.occurredAt.toISOString(),
-        type: event.type,
-        payload: event.payload,
     });
 }
 
@@ -405,27 +388,7 @@ export function createRunService(services: ApiServices) {
                     searchConfigurationHash: searchHash,
                     usageJson: usage,
                 });
-                const queued = eventDto(
-                    await store.createEvent({
-                        userId,
-                        runId: run.id,
-                        seq: 1,
-                        type: 'run.queued',
-                        payload: { status: 'queued', taskVersionId: version.id },
-                    }),
-                );
-                await store.createOutbox({
-                    userId,
-                    aggregateId: run.id,
-                    eventType: 'run.enqueue',
-                    dedupeKey: `run-${run.id}-enqueue`,
-                    payload: {
-                        runId: run.id,
-                        taskId: task.id,
-                        taskVersionId: version.id,
-                        mode: command.mode,
-                    },
-                });
+                await store.enqueue(run);
                 if (question && !draft) {
                     const linked = await store.linkQuestion(
                         question.id,
@@ -445,7 +408,7 @@ export function createRunService(services: ApiServices) {
                               draftContext,
                           )
                         : undefined;
-                return { run, reused: false, queued, question: linkedQuestion };
+                return { run, reused: false, question: linkedQuestion };
             });
         } catch (error) {
             if (!repo.isUniqueConflict(error)) throw error;

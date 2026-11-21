@@ -101,7 +101,7 @@ for (const [path, title] of [
     ['/register', '注册'],
 ] as const) {
     for (const width of [1024, 1440]) {
-        test(`${title}：${width}桌面独立布局及居中`, async ({ page }) => {
+        test(`${title}：${width}桌面分栏，表单在右栏居中`, async ({ page }) => {
             await page.setViewportSize({ width, height: 1000 });
             await page.goto(path);
             await expect(page.getByLabel('邮箱', { exact: true })).toBeVisible();
@@ -110,13 +110,22 @@ for (const [path, title] of [
             await expect(page.getByRole('navigation')).toHaveCount(0);
             await expect(page.getByRole('button', { name: '账号菜单' })).toHaveCount(0);
             await expect(page.locator('#main-content')).toBeFocused();
+            const showcase = page.locator('.auth-showcase');
+            await expect(showcase).toBeVisible();
+            await expect(showcase.locator('.auth-preview')).toHaveAttribute('aria-hidden', 'true');
+            await expect(page.locator('.auth-brand')).toBeHidden();
+            const column = await page.locator('.auth-form-column').boundingBox();
             const panel = await page.locator('.auth-panel').boundingBox();
             const form = await page.locator('form').boundingBox();
+            expect(column).not.toBeNull();
             expect(panel).not.toBeNull();
             expect(form).not.toBeNull();
-            expect(Math.abs(panel!.x + panel!.width / 2 - width / 2)).toBeLessThan(2);
-            expect(Math.abs(panel!.y + panel!.height / 2 - 500)).toBeLessThan(2);
-            expect(Math.abs(form!.x + form!.width / 2 - width / 2)).toBeLessThan(2);
+            const center = column!.x + column!.width / 2;
+            expect(column!.x).toBeGreaterThan(width * 0.4);
+            expect(Math.abs(panel!.x + panel!.width / 2 - center)).toBeLessThan(2);
+            expect(Math.abs(form!.x + form!.width / 2 - center)).toBeLessThan(2);
+            expect(panel!.y).toBeGreaterThanOrEqual(0);
+            expect(panel!.y + panel!.height).toBeLessThanOrEqual(1000);
             expect(form!.width).toBeLessThanOrEqual(448);
             expect(form!.width).toBeGreaterThan(300);
         });
@@ -134,12 +143,7 @@ for (const [path, title] of [
                 await page.evaluate(() => {
                     document.documentElement.style.fontSize = '200%';
                 });
-            if (scale === 2) {
-                const pause = page.getByRole('button', { name: '暂停背景动画' });
-                await expect(pause).toBeInViewport();
-                await pause.click();
-                await expect(page.getByRole('button', { name: '播放背景动画' })).toBeVisible();
-            }
+            await expect(page.locator('.auth-showcase')).toBeHidden();
             const brand = await page.locator('.auth-brand').boundingBox();
             expect(brand!.y).toBeGreaterThanOrEqual(0);
             const appearance = await page.getByLabel('外观', { exact: true }).boundingBox();
@@ -180,110 +184,49 @@ test('登录与注册共享外观选择，重新加载保留主题并响应系�
     await expect(page.locator('.scova-theme')).toHaveClass(/scova-theme--dark/);
 });
 
-test('背景动画可用键盘暂停和恢复，减少动态效果时保持静止', async ({ page }) => {
+test('登录页保持静态：没有背景动画和暂停按钮，减少动态效果下外观一致', async ({ page }) => {
+    const infinite = () =>
+        page.evaluate(
+            () =>
+                document
+                    .getAnimations()
+                    .filter(
+                        (animation) =>
+                            animation.effect?.getComputedTiming().iterations === Infinity,
+                    ).length,
+        );
     await page.emulateMedia({ reducedMotion: 'no-preference' });
     await page.goto('/login');
-    const backdrop = page.locator('.auth-backdrop');
-    const times = () =>
-        backdrop.evaluate((el) =>
-            el.getAnimations({ subtree: true }).map((animation) => Number(animation.currentTime)),
-        );
-    const initial = await times();
-    expect(initial).toHaveLength(2);
-    await expect.poll(times).not.toEqual(initial);
-    const pause = page.getByRole('button', { name: '暂停背景动画' });
-    await pause.focus();
-    await page.keyboard.press('Enter');
-    const resume = page.getByRole('button', { name: '播放背景动画' });
-    await expect(resume).toHaveAttribute('aria-pressed', 'true');
-    await expect
-        .poll(() =>
-            backdrop.evaluate(
-                (el) =>
-                    el.getAnimations({ subtree: true }).length === 2 &&
-                    el
-                        .getAnimations({ subtree: true })
-                        .every((animation) => animation.playState === 'paused'),
-            ),
-        )
-        .toBe(true);
-    const paused = await times();
-    await page.waitForTimeout(150);
-    expect(await times()).toEqual(paused);
-    await page.keyboard.press('Space');
-    await expect(page.getByRole('button', { name: '暂停背景动画' })).toBeFocused();
-    await expect.poll(times).not.toEqual(paused);
-    await page.emulateMedia({ reducedMotion: 'reduce' });
-    await expect(page.getByRole('button', { name: '暂停背景动画' })).toBeHidden();
-    expect(await times()).toEqual([]);
     await expect(page.getByLabel('邮箱', { exact: true })).toBeVisible();
+    await expect(page.locator('.auth-backdrop')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /背景动画/ })).toHaveCount(0);
+    expect(await infinite()).toBe(0);
+    const panel = await page.locator('.auth-panel').boundingBox();
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    expect(await infinite()).toBe(0);
+    expect(await page.locator('.auth-panel').boundingBox()).toEqual(panel);
 });
 
-test('主题切换改变抽象形状，保留表单、暂停状态和跨页偏好', async ({ page }) => {
+test('主题切换只改变强调色，保留表单、布局和跨页偏好', async ({ page }) => {
     await page.goto('/login');
     const email = page.getByLabel('邮箱', { exact: true });
     await email.fill('theme-preview@example.test');
-    await page.getByRole('button', { name: '暂停背景动画' }).click();
     await page.evaluate(() => document.fonts.ready);
     const panelBefore = await page.locator('.auth-panel').boundingBox();
-    const shapes = new Set<string>();
-    const motionNames = new Set<string>();
+    const accents = new Set<string>();
     for (const accent of ['blue', 'pine', 'iris', 'amber']) {
         await chooseOption(page, '主题', themeLabels[accent]!);
         await expect(email).toHaveValue('theme-preview@example.test');
-        await expect(page.getByRole('button', { name: '播放背景动画' })).toHaveAttribute(
-            'aria-pressed',
-            'true',
+        accents.add(
+            await page.locator('.auth-headline em').evaluate((el) => getComputedStyle(el).color),
         );
-        const shape = await page.locator('.ribbon-front path').first().getAttribute('d');
-        expect(shape).toBeTruthy();
-        shapes.add(shape!);
-        const animations = () =>
-            page.locator('.auth-backdrop').evaluate((el) =>
-                el.getAnimations({ subtree: true }).map((animation) => ({
-                    name: (animation as CSSAnimation).animationName,
-                    time: Number(animation.currentTime),
-                    state: animation.playState,
-                })),
-            );
-        await expect.poll(async () => (await animations()).length).toBe(2);
-        const pausedAnimations = await animations();
-        motionNames.add(pausedAnimations[0]!.name);
-        expect(pausedAnimations.every((animation) => animation.state === 'paused')).toBe(true);
-        await page.getByRole('button', { name: '播放背景动画' }).click();
-        await expect
-            .poll(async () => (await animations()).map((animation) => animation.time))
-            .not.toEqual(pausedAnimations.map((animation) => animation.time));
-        await page.getByRole('button', { name: '暂停背景动画' }).click();
-        await expect
-            .poll(() =>
-                page
-                    .locator('.auth-backdrop')
-                    .evaluate((el) =>
-                        el
-                            .getAnimations({ subtree: true })
-                            .every((animation) => animation.playState === 'paused'),
-                    ),
-            )
-            .toBe(true);
         expect(await page.locator('.auth-panel').boundingBox()).toEqual(panelBefore);
     }
-    expect(shapes.size).toBe(4);
-    expect(motionNames.size).toBe(4);
+    expect(accents.size).toBe(4);
     await chooseOption(page, '外观', '深色');
     await page.getByRole('link', { name: '注册账号' }).click();
     await expect(page.getByLabel('主题', { exact: true })).toHaveText('琥珀');
     await page.reload();
     await expect(page.getByLabel('主题', { exact: true })).toHaveText('琥珀');
     await expect(page.getByLabel('外观', { exact: true })).toHaveText('深色');
-    await page.emulateMedia({ reducedMotion: 'reduce' });
-    for (const accent of ['blue', 'pine', 'iris', 'amber']) {
-        await chooseOption(page, '主题', themeLabels[accent]!);
-        await expect(page.locator('.auth-motion')).toBeHidden();
-        expect(
-            await page
-                .locator('.auth-backdrop')
-                .evaluate((el) => el.getAnimations({ subtree: true }).length),
-        ).toBe(0);
-    }
 });

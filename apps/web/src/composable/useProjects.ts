@@ -11,13 +11,16 @@ type PageRequest = { signal: AbortSignal; pageParam: string | undefined };
 const nextPage = (next: string | null, preceding: (string | null)[]) =>
     next && !preceding.includes(next) ? next : undefined;
 
-export function useProjects(lifecycle = useSessionLifecycle()) {
+export function useProjects(
+    lifecycle = useSessionLifecycle(),
+    enabled: MaybeRefOrGetter<boolean> = true,
+) {
     const query = useInfiniteQuery(
         computed(() => {
             const scope = lifecycle.capture();
             return {
                 queryKey: scope.queryKey(['projects', 'list']),
-                enabled: scope.accountId !== null,
+                enabled: scope.accountId !== null && toValue(enabled),
                 initialPageParam: undefined as string | undefined,
                 queryFn: ({ signal, pageParam }: PageRequest) =>
                     scope.request(
@@ -48,6 +51,18 @@ export function useProject(projectId: MaybeRefOrGetter<string>, lifecycle = useS
             const id = toValue(projectId);
             return {
                 queryKey: scope.queryKey(['projects', id]),
+                refetchInterval: (query: {
+                    state: { data?: { pages: ApiResponse<ProjectDetailResponse>[] } };
+                }) =>
+                    query.state.data?.pages[0]?.data.recentRuns.some(
+                        ({ status }) =>
+                            status === 'queued' ||
+                            status === 'running' ||
+                            status === 'recovering' ||
+                            status === 'cancel_requested',
+                    )
+                        ? 3000
+                        : false,
                 enabled: scope.accountId !== null && id !== '',
                 initialPageParam: undefined as string | undefined,
                 queryFn: ({ signal, pageParam }: PageRequest) =>

@@ -1,5 +1,10 @@
-import { type Task as StoredTask, type TaskVersion as StoredTaskVersion } from '@scova/db';
-import { nextScheduledAt, researchComparisonScopeHash } from '@scova/shared';
+import { createHash } from 'node:crypto';
+import {
+    type Task as StoredTask,
+    type TaskVersion as StoredTaskVersion,
+    type DatabaseTransaction,
+} from '@scova/db';
+import { effectiveRunScopeHash, nextScheduledAt, researchComparisonScopeHash } from '@scova/shared';
 import {
     CreateTaskInputSchema,
     PageQuerySchema,
@@ -14,7 +19,9 @@ import {
 import type { ApiServices } from '@/app/services';
 import { ApiError } from '@/utils/errors.ts';
 import { TASK_BUDGET_LIMITS } from '@/app/task-policy.ts';
-import { createTaskRepo, type TaskStore } from '@/repo/tasks.ts';
+import { createTaskRepo, createTaskStore, type TaskStore } from '@/repo/tasks.ts';
+import { createProjectStore } from '@/repo/projects.ts';
+import { createRunStore } from '@/repo/runs.ts';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -129,7 +136,164 @@ function decodeCursor(value: string | undefined): { updatedAt: string; id: strin
 /** 任务业务规则与事务编排；持久化只通过 repo 的领域操作完成。 */
 export function createTaskService(services: ApiServices) {
     const repo = createTaskRepo(services);
+    async function replayTaskSubmission(
+        userId: string,
+        receipt: { taskId?: string; runId: string | null },
+        tx: DatabaseTransaction,
+        projectId?: string,
+    ) {
+        const store = createTaskStore(tx);
+        const run = receipt.runId ? await createRunStore(tx).findRun(receipt.runId, userId) : null;
+        const taskId = receipt.taskId ?? run?.taskId;
+        if (!taskId) throw new ApiError(404, 'NOT_FOUND', '原执行已不可用');
+        const task = await ownedTask(taskId, userId, store);
+        if (projectId && !(await createProjectStore(tx).hasTask(userId, projectId, task.id)))
+            throw new ApiError(409, 'PROJECT_TASK_MOVED', '原任务已移出该项目');
+        if (receipt.runId && run?.taskId !== task.id)
+            throw new ApiError(404, 'NOT_FOUND', '原执行已不可用');
+        const version = run
+            ? await store.findVersion(run.taskVersionId, userId, task.id)
+            : await store.findInitialVersion(userId, task.id);
+        if (!version) throw new ApiError(404, 'NOT_FOUND', '原任务版本已不可用');
+        // 保留提交时的配置与修订，防止用旧配置和最新修订覆盖之后的编辑。
+        const submittedTask =
+            task.currentVersionId === version.id
+                ? task
+                : {
+                      ...task,
+                      currentVersionId: version.id,
+                      revision: 1,
+                      title: parseContract(TaskConfigSchema, version.configJson).title,
+                  };
+        return { detail: taskResponse(submittedTask, version, false), runId: run?.id ?? null };
+    }
+
+    async function createConfiguredTask(
+        userId: string,
+        body: unknown,
+        key?: string,
+        target?: { id?: string; start: boolean },
+        transaction?: DatabaseTransaction,
+    ) {
+        const input = parseContract(CreateTaskInputSchema, body);
+        const scope = 'task:create';
+        const hash = (value: string) => createHash('sha256').update(value).digest('hex');
+        const now = services.clock();
+        const create = async (tx: DatabaseTransaction) => {
+            const store = createTaskStore(tx);
+            const runs = createRunStore(tx);
+            const projects = createProjectStore(tx);
+            const projectId = target?.id;
+            if (projectId && !(await projects.lockProject(userId, projectId)))
+                throw new ApiError(404, 'NOT_FOUND', '资源不存在');
+            let reservation;
+            if (key) {
+                const keyHash = hash(key);
+                // 保持已有任务创建与项目创建请求的幂等摘要兼容。
+                const payloadHash = hash(JSON.stringify(stable({ input, project: target })));
+                reservation = await runs.reserveIdempotency({
+                    userId,
+                    scope,
+                    keyHash,
+                    payloadHash,
+                    expiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000),
+                });
+                if (!reservation) {
+                    const receipt = await runs.findIdempotency(userId, scope, keyHash);
+                    if (receipt && receipt.payloadHash !== payloadHash)
+                        throw new ApiError(
+                            409,
+                            'IDEMPOTENCY_PAYLOAD_MISMATCH',
+                            '同一幂等键不能提交不同任务参数',
+                        );
+                    if (!receipt?.resourceId || receipt.status !== 'completed')
+                        throw new ApiError(
+                            409,
+                            'IDEMPOTENCY_PENDING',
+                            '相同任务命令仍在处理中，请稍后重试',
+                        );
+                    if (target)
+                        return replayTaskSubmission(
+                            userId,
+                            target.start
+                                ? { runId: receipt.resourceId }
+                                : { taskId: receipt.resourceId, runId: null },
+                            tx,
+                            projectId,
+                        );
+                    const task = await ownedTask(receipt.resourceId, userId, store);
+                    const version = await store.findVersion(
+                        task.currentVersionId!,
+                        userId,
+                        task.id,
+                    );
+                    if (!version) throw new ApiError(404, 'NOT_FOUND', '原任务版本已不可用');
+                    return { detail: taskResponse(task, version, false), runId: null };
+                }
+            }
+            assertBudget(input.config);
+            if (
+                input.config.agentProviderId &&
+                !(await store.findAgentProvider(userId, input.config.agentProviderId))
+            )
+                throw new ApiError(
+                    422,
+                    'AGENT_PROVIDER_UNAVAILABLE',
+                    '所选执行Agent配置不可用，请重新选择',
+                );
+            const task = await store.createTask({
+                userId,
+                title: input.config.title,
+                nextRunAt: nextRunAt(input.config, now),
+            });
+            const scopeHash = comparisonScopeHash(input.config);
+            const version = await store.createVersion({
+                userId,
+                taskId: task.id,
+                version: 1,
+                inputText: input.inputText,
+                configSchemaVersion: 1,
+                configJson: input.config,
+                comparisonScopeHash: scopeHash,
+            });
+            const saved = await store.setCurrentVersion(task.id, version.id);
+            if (projectId) await projects.associate(userId, projectId, task.id);
+            let runId: string | null = null;
+            if (target?.start) {
+                const run = await runs.createRun({
+                    userId,
+                    taskId: task.id,
+                    taskVersionId: version.id,
+                    comparisonScopeHash: effectiveRunScopeHash(scopeHash, 'live'),
+                    mode: 'live',
+                    trigger: 'manual',
+                    budgetJson: input.config.budget,
+                    feedbackSnapshotJson: await runs.feedbackSnapshot(userId, task.id),
+                    usageJson: {
+                        searches: 0,
+                        pages: 0,
+                        inputTokens: 0,
+                        outputTokens: 0,
+                        estimated: true,
+                    },
+                });
+                await runs.enqueue(run);
+                runId = run.id;
+            }
+            if (reservation) await runs.completeIdempotency(reservation.id, runId ?? task.id, 201);
+            return { detail: taskResponse(saved, version, false), runId };
+        };
+        return transaction ? create(transaction) : services.db().transaction(create);
+    }
     return {
+        replayProjectTask(
+            userId: string,
+            projectId: string,
+            receipt: { taskId?: string; runId: string | null },
+            tx: DatabaseTransaction,
+        ) {
+            return replayTaskSubmission(userId, receipt, tx, projectId);
+        },
         async remove(userId: string, taskId: string, expectedRevision: number) {
             await repo.transaction(async (store) => {
                 if (!UUID.test(taskId) || !(await store.lockTask(taskId, userId)).length)
@@ -171,39 +335,25 @@ export function createTaskService(services: ApiServices) {
                 });
             });
         },
-        async create(userId: string, body: unknown) {
-            const input = parseContract(CreateTaskInputSchema, body);
-            assertBudget(input.config);
-            const scopeHash = comparisonScopeHash(input.config);
-            const next = nextRunAt(input.config, services.clock());
-            const result = await repo.transaction(async (store) => {
-                if (
-                    input.config.agentProviderId &&
-                    !(await store.findAgentProvider(userId, input.config.agentProviderId))
-                )
-                    throw new ApiError(
-                        422,
-                        'AGENT_PROVIDER_UNAVAILABLE',
-                        '所选执行Agent配置不可用，请重新选择',
-                    );
-                const task = await store.createTask({
-                    userId,
-                    title: input.config.title,
-                    nextRunAt: next,
-                });
-                const version = await store.createVersion({
-                    userId,
-                    taskId: task.id,
-                    version: 1,
-                    inputText: input.inputText,
-                    configSchemaVersion: 1,
-                    configJson: input.config,
-                    comparisonScopeHash: scopeHash,
-                });
-                const updated = await store.setCurrentVersion(task.id, version.id);
-                return { task: updated, version };
+        async create(userId: string, body: unknown, key?: string) {
+            return (await createConfiguredTask(userId, body, key)).detail;
+        },
+        async start(userId: string, body: unknown, key: string) {
+            const { detail, runId } = await createConfiguredTask(userId, body, key, {
+                start: true,
             });
-            return taskResponse(result.task, result.version, false);
+            if (!runId) throw new ApiError(500, 'TASK_START_RUN_MISSING', '任务执行信息不可用');
+            return { detail, runId };
+        },
+        createInProject(
+            userId: string,
+            projectId: string,
+            body: unknown,
+            key: string,
+            start: boolean,
+            transaction?: DatabaseTransaction,
+        ) {
+            return createConfiguredTask(userId, body, key, { id: projectId, start }, transaction);
         },
         async get(userId: string, taskId: string) {
             const task = await ownedTask(taskId, userId, repo);

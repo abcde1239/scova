@@ -30,8 +30,42 @@
                 </div>
             </div>
         </div>
+        <div class="grid gap-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
+            <project-conversation
+                :key="`${lifecycle.session.epoch}:${detail.project.id}`"
+                :project-id="detail.project.id"
+                :reports="detail.recentReports"
+            />
+            <aside class="layout-grid content-start gap-4" aria-label="项目概览">
+                <h3 class="m-0">下次运行</h3>
+                <p v-if="detail.nextRun" class="m-0 break-anywhere">
+                    <router-link
+                        class="internal-link"
+                        :to="{ name: 'task-summary', params: { taskId: detail.nextRun.taskId } }"
+                        >{{ detail.nextRun.title }}</router-link
+                    >
+                    ·
+                    <time :datetime="detail.nextRun.at">{{
+                        localTaskTime(detail.nextRun.at)
+                    }}</time>
+                </p>
+                <p v-else class="m-0 text-muted">暂无启用的周期计划</p>
+                <project-recent-results
+                    :runs="detail.recentRuns"
+                    :reports="detail.recentReports"
+                    stacked
+                />
+            </aside>
+        </div>
         <section class="layout-grid gap-3" aria-labelledby="project-tasks">
-            <h3 id="project-tasks" class="m-0">关联任务</h3>
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <h3 id="project-tasks" class="m-0">研究任务</h3>
+                <router-link
+                    class="internal-link keyboard-focus"
+                    :to="{ name: 'project-task-create', params: { projectId: detail.project.id } }"
+                    >新建任务</router-link
+                >
+            </div>
             <form class="layout-grid gap-2 max-w-[36rem]" method="post" @submit.prevent="assign">
                 <label for="project-task-select">选择要关联或移入的任务</label>
                 <div class="flex flex-wrap items-start gap-2">
@@ -115,7 +149,6 @@
                 @retry="query.refetch()"
             />
         </section>
-        <project-recent-results :runs="detail.recentRuns" :reports="detail.recentReports" />
     </div>
 </template>
 
@@ -125,6 +158,8 @@ import { RouterLink, useRoute, useRouter } from 'vue-router';
 import ActionButton from '@/component/common/ActionButton.vue';
 import StatePanel from '@/component/common/StatePanel.vue';
 import ProjectRecentResults from '@/component/projects/ProjectRecentResults.vue';
+import ProjectConversation from '@/component/projects/ProjectConversation.vue';
+import { localTaskTime } from '@/composable/useTasks';
 import { toApiError } from '@/api/errors';
 import {
     assignProjectTaskEndpoint,

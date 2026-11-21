@@ -1,10 +1,17 @@
+import type { CallContext, ModelProvider, StructuredInput } from '@scova/connectors';
 import { randomBytes, randomUUID } from 'node:crypto';
 import pg from 'pg';
+import Redis from 'ioredis';
 import {
+    agentProviders,
     closeDatabase,
     createDatabaseClient,
     eq,
+    idempotencyRecords,
     projectTasks,
+    projectConversationTurns,
+    outbox,
+    runEvents,
     projects,
     reports,
     runs,
@@ -30,7 +37,21 @@ const scopedUrl = new URL(baseUrl);
 scopedUrl.searchParams.set('schema', schema);
 const db = createDatabaseClient({ connectionString: scopedUrl.toString() });
 const admin = new pg.Client({ connectionString: baseUrl });
-const app = createApiApp('node', createDefaultServices({ db: () => db, clock: () => now, origin }));
+const redis = new Redis(process.env.SCOVA_TEST_REDIS_URL ?? 'redis://127.0.0.1:56379', {
+    lazyConnect: true,
+});
+const draftLookups = new Map<string, () => ModelProvider | null | Promise<ModelProvider | null>>();
+const app = createApiApp(
+    'node',
+    createDefaultServices({
+        db: () => db,
+        redis: () => redis,
+        clock: () => now,
+        origin,
+        taskDraftModel: (userId) => (userId ? draftLookups.get(userId)?.() : undefined) ?? null,
+        reportQuestionModel: () => null,
+    }),
+);
 let schemaCreated = false;
 
 type Account = Awaited<ReturnType<typeof seedAccount>>;
@@ -110,11 +131,15 @@ function request(
         method = 'GET',
         body,
         csrf = true,
+        key,
+        revision,
     }: {
         account?: Account;
         method?: string;
         body?: unknown;
         csrf?: boolean;
+        key?: string;
+        revision?: number;
     } = {},
 ) {
     const headers = new Headers({ origin });
@@ -122,6 +147,8 @@ function request(
         headers.set('cookie', account.cookie);
         if (csrf) headers.set('x-csrf-token', account.csrfToken);
     }
+    if (key) headers.set('idempotency-key', key);
+    if (revision !== undefined) headers.set('if-match', `"${revision}"`);
     if (body !== undefined) headers.set('content-type', 'application/json');
     return app.handle(
         new Request(`${origin}${url}`, {
@@ -157,10 +184,12 @@ beforeAll(async () => {
         await admin.query(scopeMigrationSql(migration.sql, schema));
     existingAccount = await seedAccount();
     existingTask = await seedTask(existingAccount.id, '迁移前任务');
-    await admin.query(scopeMigrationSql(migrations[projectMigration]!.sql, schema));
+    for (const migration of migrations.slice(projectMigration))
+        await admin.query(scopeMigrationSql(migration.sql, schema));
 }, 120_000);
 
 afterAll(async () => {
+    redis.disconnect();
     await closeDatabase(db);
     if (schemaCreated) await admin.query(`DROP SCHEMA "${schema}" CASCADE`);
     await admin.end();
@@ -224,10 +253,11 @@ describe('Project owner-scoped API', () => {
         expect(await empty.json()).toEqual({
             project: first,
             tasks: { items: [], nextCursor: null },
+            nextRun: null,
             recentRuns: [],
             recentReports: [],
         });
-        const older = await seedTask(owner.id, '较早任务');
+        const older = await seedTask(owner.id, '较早任务', new Date(now.getTime() - 60_000));
         const newer = await seedTask(owner.id, '较新任务');
         for (const task of [older, newer]) {
             expect(
@@ -245,6 +275,11 @@ describe('Project owner-scoped API', () => {
         expect(detail.tasks.items).toEqual([
             { id: newer.id, title: newer.title, status: 'active', nextRunAt: now.toISOString() },
         ]);
+        expect(detail.nextRun).toEqual({
+            taskId: older.id,
+            title: older.title,
+            at: older.nextRunAt!.toISOString(),
+        });
         const next = await (
             await request(`${path}/${first.id}?cursor=${detail.tasks.nextCursor}`, {
                 account: owner,
@@ -376,5 +411,637 @@ describe('Project owner-scoped API', () => {
             await db.select().from(projectTasks).where(eq(projectTasks.taskId, task.id)),
         ).toEqual([]);
         expect(await db.select().from(projects).where(eq(projects.id, nextId))).toEqual([]);
+    });
+});
+
+const taskConfig = {
+    title: '开源动态',
+    topic: '开源发布',
+    goal: '查阅许可证变更',
+    focusPoints: [],
+    exclusions: [],
+    sourcePreferences: { preferredUrls: [], excludedUrls: [], officialOnly: false },
+    timeRange: { kind: 'rolling', days: 7 },
+    timezone: 'Asia/Tokyo',
+    schedule: { frequency: 'manual' },
+    outputFormat: 'brief',
+    budget: {
+        maxSearches: 10,
+        maxPages: 20,
+        maxDurationSeconds: 300,
+        maxInputTokens: 40_000,
+        maxOutputTokens: 8_000,
+    },
+    notificationPreference: { mode: 'summary', runIssues: true },
+};
+
+describe('task-first entry', () => {
+    it('starts an unassigned task atomically and replays the original run even after later assignment', async () => {
+        const owner = await seedAccount();
+        const other = await seedAccount();
+        const url = '/api/v1/tasks/start';
+        const body = { config: taskConfig };
+        const options = { account: owner, method: 'POST', body, key: randomUUID() };
+        expect((await request(url, { ...options, account: undefined })).status).toBe(401);
+        expect((await request(url, { ...options, csrf: false })).status).toBe(403);
+        expect((await request(url, { ...options, key: undefined })).status).toBe(422);
+        expect((await request(url, { ...options, key: 'x' })).status).toBe(422);
+
+        const submitted = await Promise.all(Array.from({ length: 4 }, () => request(url, options)));
+        expect(submitted.map(({ status }) => status)).toEqual([201, 201, 201, 201]);
+        const replies = await Promise.all(submitted.map((response) => response.json()));
+        const result = replies[0];
+        expect(replies).toEqual(Array(4).fill(result));
+        expect(result.runId).toEqual(expect.any(String));
+        const taskId = result.detail.task.id;
+        expect(await db.select().from(tasks).where(eq(tasks.userId, owner.id))).toHaveLength(1);
+        expect(
+            await db.select().from(taskVersions).where(eq(taskVersions.taskId, taskId)),
+        ).toHaveLength(1);
+        expect(await db.select().from(projectTasks).where(eq(projectTasks.taskId, taskId))).toEqual(
+            [],
+        );
+        expect(await db.select().from(runs).where(eq(runs.taskId, taskId))).toMatchObject([
+            {
+                id: result.runId,
+                taskVersionId: result.detail.version.id,
+                mode: 'live',
+                status: 'queued',
+            },
+        ]);
+        expect(
+            await db.select().from(runEvents).where(eq(runEvents.runId, result.runId)),
+        ).toMatchObject([{ type: 'run.queued' }]);
+        expect(
+            await db.select().from(outbox).where(eq(outbox.aggregateId, result.runId)),
+        ).toHaveLength(1);
+        const changed = await request(url, {
+            ...options,
+            body: { config: { ...taskConfig, title: '更改标题' } },
+        });
+        expect(changed.status).toBe(409);
+        expect(await changed.json()).toMatchObject({ code: 'IDEMPOTENCY_PAYLOAD_MISMATCH' });
+        expect((await request('/api/v1/tasks', options)).status).toBe(409);
+        const otherResponse = await request(url, { ...options, account: other });
+        expect(otherResponse.status).toBe(201);
+        expect((await otherResponse.json()).runId).not.toBe(result.runId);
+
+        const project = await createProject(owner, '后续归类');
+        expect(
+            (await request(membershipPath(project.id, taskId), { account: owner, method: 'PUT' }))
+                .status,
+        ).toBe(204);
+        const edited = await request('/api/v1/tasks/' + taskId, {
+            account: owner,
+            method: 'PATCH',
+            body: { config: { ...taskConfig, title: '归类后编辑' } },
+            revision: result.detail.task.revision,
+        });
+        expect(edited.status).toBe(200);
+        const editedTask = await edited.json();
+        expect(editedTask.task.revision).toBe(2);
+        const replayed = await request(url, options);
+        expect(replayed.status).toBe(201);
+        const replayedResult = await replayed.json();
+        expect(replayedResult.runId).toBe(result.runId);
+        expect(replayedResult.detail.version).toEqual(result.detail.version);
+        expect(replayedResult.detail.task).toMatchObject({
+            id: taskId,
+            title: result.detail.task.title,
+            revision: result.detail.task.revision,
+            currentVersionId: result.detail.version.id,
+        });
+        expect(await db.select().from(tasks).where(eq(tasks.userId, owner.id))).toHaveLength(1);
+    });
+
+    it('restricts task project lookup and creates exactly one project when concurrent requests try to categorize a task', async () => {
+        const owner = await seedAccount();
+        const other = await seedAccount();
+        const task = await seedTask(owner.id, '待归类任务');
+        const url = '/api/v1/tasks/' + task.id + '/project';
+        const create = { account: owner, method: 'POST', body: { name: '  归类项目  ' } };
+        expect((await request(url)).status).toBe(401);
+        expect((await request(url, { account: other })).status).toBe(404);
+        expect((await request(url, { ...create, account: other })).status).toBe(404);
+        expect((await request(url, { ...create, csrf: false })).status).toBe(403);
+        expect((await request(url, { ...create, body: { name: '   ' } })).status).toBe(422);
+        const unassigned = await request(url, { account: owner });
+        expect(unassigned.status).toBe(200);
+        expect(await unassigned.json()).toEqual({ project: null });
+
+        const responses = await Promise.all([request(url, create), request(url, create)]);
+        expect(
+            responses.map(({ status }) => status).sort((first, second) => first - second),
+        ).toEqual([201, 409]);
+        const project = await responses.find(({ status }) => status === 201)!.json();
+        expect(project).toMatchObject({ name: '归类项目', id: expect.any(String) });
+        expect(await responses.find(({ status }) => status === 409)!.json()).toMatchObject({
+            code: 'TASK_ALREADY_ASSIGNED',
+        });
+        expect(await db.select().from(projects).where(eq(projects.userId, owner.id))).toHaveLength(
+            1,
+        );
+        expect(await db.select().from(projects).where(eq(projects.userId, other.id))).toEqual([]);
+        expect(await (await request(url, { account: owner })).json()).toEqual({ project });
+        expect((await request(url, create)).status).toBe(409);
+        expect(
+            (
+                await request(membershipPath(project.id, task.id), {
+                    account: owner,
+                    method: 'DELETE',
+                })
+            ).status,
+        ).toBe(204);
+        expect(await (await request(url, { account: owner })).json()).toEqual({ project: null });
+    });
+});
+
+describe('project task submissions', () => {
+    it('creates and queues once across concurrent HTTP submissions, and rejects key reuse with a different action', async () => {
+        const owner = await seedAccount();
+        const other = await seedAccount();
+        const project = await createProject(owner, '项目执行');
+        const url = `${path}/${project.id}/tasks`;
+        const body = { config: taskConfig, start: true };
+        const options = { account: owner, method: 'POST', body, key: randomUUID() };
+        expect((await request(url, { ...options, key: undefined })).status).toBe(428);
+        expect((await request(url, { ...options, account: other })).status).toBe(404);
+        expect((await request(url, { ...options, csrf: false })).status).toBe(403);
+        const attempts = await Promise.all([request(url, options), request(url, options)]);
+        expect(attempts.map((response) => response.status)).toEqual([201, 201]);
+        const [first, second] = await Promise.all(attempts.map((response) => response.json()));
+        expect(first).toEqual(second);
+        expect(first.runId).toEqual(expect.any(String));
+        expect(await db.select().from(tasks).where(eq(tasks.userId, owner.id))).toHaveLength(1);
+        const [run] = await db.select().from(runs).where(eq(runs.id, first.runId));
+        expect(run).toMatchObject({
+            taskId: first.detail.task.id,
+            taskVersionId: first.detail.version.id,
+            status: 'queued',
+            mode: 'live',
+        });
+        const [membership] = await db
+            .select()
+            .from(projectTasks)
+            .where(eq(projectTasks.taskId, run!.taskId));
+        expect(membership).toMatchObject({ projectId: project.id });
+        expect(
+            await db.select().from(outbox).where(eq(outbox.aggregateId, first.runId)),
+        ).toHaveLength(1);
+        expect(
+            await db.select().from(runEvents).where(eq(runEvents.runId, first.runId)),
+        ).toMatchObject([{ type: 'run.queued', seq: 1 }]);
+        expect((await request(url, { ...options, body: { ...body, start: false } })).status).toBe(
+            409,
+        );
+        const saved = await request(url, {
+            ...options,
+            key: randomUUID(),
+            body: { ...body, start: false },
+        });
+        expect(await saved.json()).toMatchObject({ runId: null });
+        expect(await db.select().from(runs).where(eq(runs.userId, owner.id))).toHaveLength(1);
+    });
+
+    it('applies server idempotency to five unassigned task submissions', async () => {
+        const owner = await seedAccount();
+        const options = {
+            account: owner,
+            method: 'POST',
+            body: { config: taskConfig },
+            key: randomUUID(),
+        };
+        const url = '/api/v1/tasks';
+        const responses = await Promise.all(Array.from({ length: 5 }, () => request(url, options)));
+        expect(responses.map((response) => response.status)).toEqual([201, 201, 201, 201, 201]);
+        const results = await Promise.all(responses.map((response) => response.json()));
+        expect(results).toEqual(Array(5).fill(results[0]));
+        const changed = { config: { ...taskConfig, title: '不同内容' } };
+        expect((await request(url, { ...options, body: changed })).status).toBe(409);
+        expect(await db.select().from(tasks).where(eq(tasks.userId, owner.id))).toHaveLength(1);
+        expect(
+            await db.select().from(taskVersions).where(eq(taskVersions.userId, owner.id)),
+        ).toHaveLength(1);
+        expect(
+            await db.select().from(projectTasks).where(eq(projectTasks.userId, owner.id)),
+        ).toHaveLength(0);
+    });
+
+    it('releases a task idempotency reservation on rollback so the same submission can succeed', async () => {
+        const owner = await seedAccount();
+        const agentProviderId = randomUUID();
+        const options = {
+            account: owner,
+            method: 'POST',
+            body: { config: { ...taskConfig, agentProviderId } },
+            key: randomUUID(),
+        };
+        const url = '/api/v1/tasks';
+        const unavailable = await request(url, options);
+        expect(unavailable.status).toBe(422);
+        expect(await db.select().from(tasks).where(eq(tasks.userId, owner.id))).toHaveLength(0);
+        expect(
+            await db
+                .select()
+                .from(idempotencyRecords)
+                .where(eq(idempotencyRecords.userId, owner.id)),
+        ).toHaveLength(0);
+
+        await db.insert(agentProviders).values({
+            id: agentProviderId,
+            userId: owner.id,
+            name: '项目测试配置',
+            protocol: 'openai_json',
+            baseUrl: 'https://example.test/v1',
+            model: 'fixture',
+            encryptedApiKey: 'fixture-encrypted',
+        });
+        const retried = await request(url, options);
+        expect(retried.status).toBe(201);
+        const result = await retried.json();
+        expect(result.version.config.agentProviderId).toBe(agentProviderId);
+        expect(await (await request(url, options)).json()).toEqual(result);
+        expect(await db.select().from(tasks).where(eq(tasks.userId, owner.id))).toHaveLength(1);
+        expect(
+            await db
+                .select()
+                .from(idempotencyRecords)
+                .where(eq(idempotencyRecords.userId, owner.id)),
+        ).toMatchObject([
+            { scope: 'task:create', status: 'completed', resourceId: result.task.id },
+        ]);
+    });
+});
+
+describe('project conversation', () => {
+    it('reopens read-only answers and persists one draft shared by editor and confirmation', async () => {
+        const owner = await seedAccount();
+        const other = await seedAccount();
+        const project = await createProject(owner, '会话项目');
+        const base = `${path}/${project.id}`;
+        const conversation = `${base}/conversation`;
+        const post = (kind: string, message: string) => ({
+            account: owner,
+            method: 'POST',
+            body: { turnId: randomUUID(), kind, message },
+        });
+        expect((await request(conversation, { account: other })).status).toBe(404);
+        const asking = post('ask', '有哪些成果？');
+        const asked = await request(`${conversation}/turns`, asking);
+        expect(await asked.json()).toMatchObject({
+            turns: [{ id: asking.body.turnId, status: 'completed' }],
+            drafts: [],
+        });
+        expect(await db.select().from(tasks).where(eq(tasks.userId, owner.id))).toHaveLength(0);
+        const drafting = post('draft', '查找开源许可证变化');
+        const created = await request(`${conversation}/turns`, drafting);
+        expect(created.status).toBe(200);
+        const result = await created.json();
+        expect(result.turns).toHaveLength(2);
+        expect(result.drafts).toHaveLength(1);
+        expect(await (await request(`${conversation}/turns`, drafting)).json()).toEqual(result);
+        expect(await (await request(conversation, { account: owner })).json()).toEqual(result);
+        const draft = result.drafts[0];
+        const draftUrl = `${base}/drafts/${draft.id}`;
+        const edit = { method: 'PATCH', account: owner, body: { config: taskConfig, revision: 1 } };
+        expect((await request(draftUrl, { ...edit, account: other })).status).toBe(404);
+        expect(await (await request(draftUrl, edit)).json()).toMatchObject({
+            revision: 2,
+            config: taskConfig,
+        });
+        expect((await request(draftUrl, edit)).status).toBe(409);
+        const confirmUrl = `${draftUrl}/confirm`;
+        const confirm = { method: 'POST', account: owner, body: { revision: 2, start: true } };
+        expect(
+            (await request(confirmUrl, { ...confirm, body: { ...confirm.body, revision: 1 } }))
+                .status,
+        ).toBe(409);
+        const responses = await Promise.all([
+            request(confirmUrl, confirm),
+            request(confirmUrl, confirm),
+        ]);
+        expect(responses.map(({ status }) => status)).toEqual([200, 200]);
+        const [first, second] = await Promise.all(responses.map((response) => response.json()));
+        expect(first).toEqual(second);
+        expect(first.detail.version.config).toEqual(taskConfig);
+        expect(await (await request(conversation, { account: owner })).json()).toMatchObject({
+            drafts: [{ id: draft.id, taskId: first.detail.task.id, runId: first.runId }],
+        });
+        expect(
+            await db.select().from(outbox).where(eq(outbox.aggregateId, first.runId)),
+        ).toHaveLength(1);
+        expect(await db.select().from(tasks).where(eq(tasks.userId, owner.id))).toHaveLength(1);
+        expect(await db.select().from(runs).where(eq(runs.userId, owner.id))).toHaveLength(1);
+    });
+
+    it.each([false, true])(
+        'replays confirmed drafts after receipt deletion (start=%s)',
+        async (start) => {
+            const owner = await seedAccount();
+            const other = await seedAccount();
+            const project = await createProject(owner, '持久确认');
+            const base = `${path}/${project.id}`;
+            const drafted = await request(`${base}/conversation/turns`, {
+                method: 'POST',
+                account: owner,
+                body: { turnId: randomUUID(), kind: 'draft', message: '跟踪开源许可证变化' },
+            });
+            expect(drafted.status).toBe(200);
+            const {
+                drafts: [draft],
+            } = await drafted.json();
+            const url = `${base}/drafts/${draft.id}/confirm`;
+            const options = {
+                account: owner,
+                method: 'POST',
+                body: { revision: draft.revision, start },
+            };
+            const submitted = await request(url, options);
+            expect(submitted.status).toBe(200);
+            const first = await submitted.json();
+            const taskId = first.detail.task.id;
+            expect(first.runId).toEqual(start ? expect.any(String) : null);
+            const removed = await db
+                .delete(idempotencyRecords)
+                .where(eq(idempotencyRecords.userId, owner.id))
+                .returning();
+            expect(removed).toMatchObject([
+                { scope: 'task:create', resourceId: first.runId ?? taskId },
+            ]);
+
+            const replay = await request(url, options);
+            expect(replay.status).toBe(200);
+            expect(await replay.json()).toEqual(first);
+            expect((await request(url, { ...options, account: other })).status).toBe(404);
+            expect(
+                (await request(url, { ...options, body: { ...options.body, start: !start } }))
+                    .status,
+            ).toBe(409);
+
+            const nextConfig = { ...first.detail.version.config, title: '任务后来编辑' };
+            const taskUrl = `/api/v1/tasks/${taskId}`;
+            const changed = await request(taskUrl, {
+                method: 'PATCH',
+                account: owner,
+                revision: first.detail.task.revision,
+                body: { config: nextConfig },
+            });
+            expect(changed.status).toBe(200);
+            const current = await changed.json();
+            expect(current.version.id).not.toBe(first.detail.version.id);
+            const afterEdit = await request(url, options);
+            expect(afterEdit.status).toBe(200);
+            expect(await afterEdit.json()).toMatchObject({
+                runId: first.runId,
+                detail: {
+                    task: {
+                        id: taskId,
+                        currentVersionId: first.detail.version.id,
+                        revision: first.detail.task.revision,
+                        title: first.detail.task.title,
+                    },
+                    version: first.detail.version,
+                },
+            });
+            expect(await db.select().from(tasks).where(eq(tasks.userId, owner.id))).toHaveLength(1);
+            expect(await db.select().from(runs).where(eq(runs.userId, owner.id))).toHaveLength(
+                Number(start),
+            );
+            expect(await db.select().from(outbox).where(eq(outbox.userId, owner.id))).toHaveLength(
+                Number(start),
+            );
+
+            const membership = membershipPath(project.id, taskId);
+            expect((await request(membership, { method: 'DELETE', account: owner })).status).toBe(
+                204,
+            );
+            expect((await request(url, options)).status).toBe(409);
+            expect((await request(membership, { method: 'PUT', account: owner })).status).toBe(204);
+            if (start) {
+                await db.transaction(async (tx) => {
+                    await tx.delete(outbox).where(eq(outbox.aggregateId, first.runId));
+                    await tx.delete(runEvents).where(eq(runEvents.runId, first.runId));
+                    await tx.delete(runs).where(eq(runs.id, first.runId));
+                });
+                expect((await request(url, options)).status).toBe(404);
+            }
+            const removedTask = await request(taskUrl, {
+                method: 'DELETE',
+                account: owner,
+                revision: current.task.revision,
+            });
+            expect(removedTask.status).toBe(204);
+            expect((await request(url, options)).status).toBe(404);
+            expect(await db.select().from(tasks).where(eq(tasks.userId, owner.id))).toHaveLength(0);
+            expect(await db.select().from(runs).where(eq(runs.userId, owner.id))).toHaveLength(0);
+            expect(
+                await db
+                    .select()
+                    .from(idempotencyRecords)
+                    .where(eq(idempotencyRecords.userId, owner.id)),
+            ).toHaveLength(0);
+        },
+    );
+
+    it('keeps a pending draft accessible beyond turn history and retains its revision on failed changes', async () => {
+        const owner = await seedAccount();
+        const project = await createProject(owner, '草案恢复');
+        const url = `${path}/${project.id}/conversation`;
+        const post = (message: string, target?: { id: string; revision: number }) =>
+            request(`${url}/turns`, {
+                method: 'POST',
+                account: owner,
+                body: { turnId: randomUUID(), kind: 'draft', message, target },
+            });
+        const first = await (await post('建立可编辑的初始草案')).json();
+        const [draft] = first.drafts;
+        await db.insert(projectConversationTurns).values(
+            Array.from({ length: 40 }, (_, index) => ({
+                id: randomUUID(),
+                userId: owner.id,
+                projectId: project.id,
+                input: { kind: 'ask' as const, message: '后续问题' },
+                status: 'completed' as const,
+                createdAt: new Date(now.getTime() + index + 1),
+                expiresAt: now,
+            })),
+        );
+        const reopened = await (await request(url, { account: owner })).json();
+        expect(reopened.turns).toHaveLength(40);
+        expect(reopened.turns.every((turn: { draftId: string | null }) => !turn.draftId)).toBe(
+            true,
+        );
+        expect(reopened.drafts).toEqual([draft]);
+        // Clear the newer fixture turns so the subsequent request stays visible under the fixed test clock.
+        await db
+            .delete(projectConversationTurns)
+            .where(eq(projectConversationTurns.projectId, project.id));
+        const target = { id: draft.id, revision: draft.revision };
+        const revised = await (await post('扩大研究范围', target)).json();
+        expect(revised.turns).toMatchObject([{ status: 'failed', target }]);
+        expect(revised.drafts).toEqual([draft]);
+    });
+
+    it('allows one active turn, cancels without publishing a draft, and expires abandoned turns', async () => {
+        const owner = await seedAccount();
+        const project = await createProject(owner, '轮次控制');
+        const url = `${path}/${project.id}/conversation`;
+        const entered = Promise.withResolvers<void>();
+        const release = Promise.withResolvers<null>();
+        draftLookups.set(owner.id, () => {
+            entered.resolve();
+            return release.promise;
+        });
+        const turnId = randomUUID();
+        const first = {
+            method: 'POST',
+            account: owner,
+            body: { turnId, kind: 'draft', message: '暂时阻塞的模型请求' },
+        };
+        const pending = request(`${url}/turns`, first);
+        try {
+            await Promise.race([
+                entered.promise,
+                pending.then(() => {
+                    throw new Error('轮次未进入模型选择');
+                }),
+            ]);
+            expect(await (await request(url, { account: owner })).json()).toMatchObject({
+                turns: [{ id: turnId, status: 'running' }],
+                drafts: [],
+            });
+            expect(
+                (
+                    await request(`${url}/turns`, {
+                        ...first,
+                        body: { ...first.body, turnId: randomUUID() },
+                    })
+                ).status,
+            ).toBe(409);
+            expect(
+                await (
+                    await request(`${url}/turns/${turnId}/cancel`, {
+                        method: 'POST',
+                        account: owner,
+                    })
+                ).json(),
+            ).toMatchObject({
+                turns: [{ id: turnId, status: 'canceled' }],
+                drafts: [],
+            });
+        } finally {
+            draftLookups.delete(owner.id);
+            release.resolve(null);
+        }
+        expect(await (await pending).json()).toMatchObject({
+            turns: [{ id: turnId, status: 'canceled' }],
+            drafts: [],
+        });
+        const abandoned = randomUUID();
+        await db.insert(projectConversationTurns).values({
+            id: abandoned,
+            userId: owner.id,
+            projectId: project.id,
+            input: { kind: 'ask', message: '进程退出前的轮次' },
+            status: 'running',
+            createdAt: new Date(now.getTime() - 2000),
+            expiresAt: new Date(now.getTime() - 1000),
+        });
+        const next = randomUUID();
+        expect(
+            await (
+                await request(`${url}/turns`, {
+                    ...first,
+                    body: { turnId: next, kind: 'ask', message: '重新打开并提问' },
+                })
+            ).json(),
+        ).toMatchObject({
+            turns: expect.arrayContaining([
+                expect.objectContaining({ id: abandoned, status: 'failed' }),
+                expect.objectContaining({ id: next, status: 'completed' }),
+            ]),
+        });
+    });
+
+    it('applies a targeted model revision to the same draft while retaining its manually configured fields', async () => {
+        const owner = await seedAccount();
+        const project = await createProject(owner, '定向草案调整');
+        const base = `${path}/${project.id}`;
+        const turn = (message: string, target?: { id: string; revision: number }) =>
+            request(`${base}/conversation/turns`, {
+                method: 'POST',
+                account: owner,
+                body: { turnId: randomUUID(), kind: 'draft', message, target },
+            });
+        const first = await (await turn('草拟许可证研究')).json();
+        const [draft] = first.drafts;
+        const manual = {
+            ...taskConfig,
+            searchMode: 'searxng',
+            sourcePreferences: {
+                ...taskConfig.sourcePreferences,
+                preferredUrls: ['https://example.org/releases'],
+            },
+            schedule: { frequency: 'weekly', localTime: '09:00', weekday: 1 },
+        };
+        const saved = await request(`${base}/drafts/${draft.id}`, {
+            method: 'PATCH',
+            account: owner,
+            body: { revision: 1, config: manual },
+        });
+        expect(saved.status).toBe(200);
+        const goal = '只追踪许可证义务变化';
+        let input: StructuredInput | undefined;
+        draftLookups.set(owner.id, () => ({
+            async generateStructured<T>(request: StructuredInput, context: CallContext = {}) {
+                input = request;
+                await context.beforeAttempt?.('model');
+                return {
+                    data: { goal } as T,
+                    mode: 'live',
+                    usage: { inputTokens: 100, outputTokens: 100, estimated: false },
+                };
+            },
+        }));
+        try {
+            const target = { id: draft.id, revision: 2 };
+            const result = await (await turn(goal, target)).json();
+            expect(input?.untrustedSources?.[0]).toMatchObject({ defaults: manual });
+            expect(result.turns).toContainEqual(
+                expect.objectContaining({ status: 'completed', draftId: draft.id, target }),
+            );
+            expect(result.drafts).toMatchObject([
+                { id: draft.id, revision: 3, config: { ...manual, goal } },
+            ]);
+            expect(await db.select().from(tasks).where(eq(tasks.userId, owner.id))).toHaveLength(0);
+        } finally {
+            draftLookups.delete(owner.id);
+        }
+    });
+
+    it('rejects report references after the task is moved out of the project', async () => {
+        const owner = await seedAccount();
+        const first = await createProject(owner, '报告原项目');
+        const second = await createProject(owner, '报告新项目');
+        const task = await seedTask(owner.id, '报告任务');
+        const { reportId } = await seedHistory(task);
+        await request(membershipPath(first.id, task.id), { account: owner, method: 'PUT' });
+        const url = `${path}/${first.id}/conversation`;
+        const ask = {
+            account: owner,
+            method: 'POST',
+            body: { turnId: randomUUID(), kind: 'ask', message: '报告的结论？', reportId },
+        };
+        expect(await (await request(`${url}/turns`, ask)).json()).toMatchObject({
+            turns: [{ answer: '摘要', reportId }],
+        });
+        await request(membershipPath(second.id, task.id), { account: owner, method: 'PUT' });
+        expect(await (await request(url, { account: owner })).json()).toMatchObject({
+            turns: [{ answer: '原引用报告已移出项目。', reportId: null }],
+        });
+        expect(
+            (await request(`${url}/turns`, { ...ask, body: { ...ask.body, turnId: randomUUID() } }))
+                .status,
+        ).toBe(404);
     });
 });

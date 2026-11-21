@@ -141,3 +141,4 @@ export {
     questionEvidenceRelations,
 } from './schema/relations/questions.ts';
 export { projects, projectTasks } from './schema/projects.ts';
+export { projectConversationTurns, projectResearchDrafts } from './schema/project-conversations.ts';

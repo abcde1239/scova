@@ -2,6 +2,14 @@ import { Elysia, t } from 'elysia';
 import {
     ApiErrorSchema,
     CreateProjectInputSchema,
+    CreateProjectTaskInputSchema,
+    CreateProjectTaskResponseSchema,
+    ProjectConversationInputSchema,
+    ProjectConversationSchema,
+    ProjectDraftEditSchema,
+    ProjectDraftConfirmSchema,
+    ProjectResearchDraftSchema,
+    IdempotencyHeadersSchema,
     PageQuerySchema,
     ProjectDetailResponseSchema,
     ProjectListResponseSchema,
@@ -19,6 +27,8 @@ const PageQuery = t.Object(
     { additionalProperties: false, description: PageQuerySchema.description },
 );
 const ProjectParams = t.Object({ projectId: UuidSchema });
+const TurnParams = t.Object({ projectId: UuidSchema, turnId: UuidSchema });
+const DraftParams = t.Object({ projectId: UuidSchema, draftId: UuidSchema });
 const MembershipParams = t.Object({ projectId: UuidSchema, taskId: UuidSchema });
 const errors = {
     400: ApiErrorSchema,
@@ -71,6 +81,79 @@ export function createProjectPlugin(services: ApiServices) {
                 operationId: 'deleteProject',
                 summary: '删除项目并解除任务关联',
                 description: '需要会话与 CSRF 校验。关联任务、执行、报告和任务周期配置均保留。',
+            },
+        })
+        .post('/:projectId/tasks', handlers.createTask, {
+            params: ProjectParams,
+            headers: t.Partial(IdempotencyHeadersSchema),
+            body: CreateProjectTaskInputSchema,
+            response: {
+                201: CreateProjectTaskResponseSchema,
+                409: ApiErrorSchema,
+                428: ApiErrorSchema,
+                ...errors,
+            },
+            detail: {
+                tags: ['项目'],
+                operationId: 'createProjectTask',
+                summary: '创建项目任务并按需立即执行',
+                description:
+                    '需要会话、CSRF 与幂等键。保存任务、项目关联和可选执行在同一事务中提交。',
+            },
+        })
+        .get('/:projectId/conversation', handlers.conversation, {
+            params: ProjectParams,
+            response: { 200: ProjectConversationSchema, ...errors },
+            detail: {
+                tags: ['项目'],
+                operationId: 'getProjectConversation',
+                summary: '读取项目会话快照',
+                description:
+                    '返回当前账号项目的近期轮次与关联草案，按任务的当前项目归属校验报告引用。',
+            },
+        })
+        .post('/:projectId/conversation/turns', handlers.sendTurn, {
+            params: ProjectParams,
+            body: ProjectConversationInputSchema,
+            response: { 200: ProjectConversationSchema, 409: ApiErrorSchema, ...errors },
+            detail: {
+                tags: ['项目'],
+                operationId: 'sendProjectTurn',
+                summary: '发送项目问答或起草轮次',
+                description:
+                    '每个项目同一时刻接受一个活动轮次。客户端提供稳定的轮次标识，重试可回读原轮次。',
+            },
+        })
+        .post('/:projectId/conversation/turns/:turnId/cancel', handlers.cancelTurn, {
+            params: TurnParams,
+            response: { 200: ProjectConversationSchema, ...errors },
+            detail: {
+                tags: ['项目'],
+                operationId: 'cancelProjectTurn',
+                summary: '取消指定项目会话轮次',
+                description: '取消尚未完成的指定轮次，已提交的研究执行不受影响。',
+            },
+        })
+        .patch('/:projectId/drafts/:draftId', handlers.editDraft, {
+            params: DraftParams,
+            body: ProjectDraftEditSchema,
+            response: { 200: ProjectResearchDraftSchema, 409: ApiErrorSchema, ...errors },
+            detail: {
+                tags: ['项目'],
+                operationId: 'editProjectDraft',
+                summary: '修改项目研究草案',
+                description: '按草案修订提交完整配置，已确认或已更新的草案拒绝旧写入。',
+            },
+        })
+        .post('/:projectId/drafts/:draftId/confirm', handlers.confirmDraft, {
+            params: DraftParams,
+            body: ProjectDraftConfirmSchema,
+            response: { 200: CreateProjectTaskResponseSchema, 409: ApiErrorSchema, ...errors },
+            detail: {
+                tags: ['项目'],
+                operationId: 'confirmProjectDraft',
+                summary: '确认项目草案并按需立即执行',
+                description: '按草案版本一次确认任务与可选执行。重复确认返回该版本的提交结果。',
             },
         })
         .put('/:projectId/tasks/:taskId', handlers.associate, {

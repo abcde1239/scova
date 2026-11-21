@@ -5,6 +5,7 @@ import {
     PageQuerySchema,
     ProjectDetailResponseSchema,
     ProjectListResponseSchema,
+    TaskProjectResponseSchema,
     UuidSchema,
     parseContract,
 } from '@scova/models';
@@ -64,6 +65,29 @@ export function createProjectService({ db }: Pick<ApiServices, 'db'>) {
             const { name } = parseContract(CreateProjectInputSchema, input);
             return projectItem(await store().create(userId, name.trim()));
         },
+        async getForTask(userId: string, taskId: string) {
+            const row = await store().findTaskProject(userId, taskId);
+            if (!row) throw notFound();
+            return parseContract(TaskProjectResponseSchema, {
+                project: row.project ? projectItem(row.project) : null,
+            });
+        },
+        async createForTask(userId: string, taskId: string, input: unknown) {
+            const { name } = parseContract(CreateProjectInputSchema, input);
+            return db().transaction(async (tx) => {
+                const projectStore = createProjectStore(tx);
+                if (!(await projectStore.lockTask(userId, taskId))) throw notFound();
+                const project = await projectStore.create(userId, name.trim());
+                // 唯一归属约束决定并发归类的胜者，冲突回滚新项目。
+                if (!(await projectStore.associateUnassigned(userId, project.id, taskId)))
+                    throw new ApiError(
+                        409,
+                        'TASK_ALREADY_ASSIGNED',
+                        '任务已归入项目，请刷新后重试',
+                    );
+                return projectItem(project);
+            });
+        },
         async list(userId: string, query: unknown) {
             const page = pageOptions(userId, null, query);
             const rows = await store().list(userId, page.take + 1, page.cursor);
@@ -108,6 +132,7 @@ export function createProjectService({ db }: Pick<ApiServices, 'db'>) {
                                 })),
                             nextCursor: page.nextCursor(rows),
                         },
+                        nextRun: await projectStore.nextRun(userId, project.id),
                         recentRuns: recentRuns.map((run) => ({
                             ...run,
                             queuedAt: run.queuedAt.toISOString(),

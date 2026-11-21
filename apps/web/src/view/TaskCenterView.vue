@@ -121,6 +121,7 @@
                     :task-id="detail.data.value.data.task.id"
                     :task-status="detail.data.value.data.task.status"
                 />
+                <task-project :key="`${lifecycle.session.epoch}:${taskId}`" :task-id="taskId" />
                 <task-lifecycle-actions :task-id="detail.data.value.data.task.id" />
             </template>
         </template>
@@ -137,6 +138,7 @@ import { taskEndpoint, taskKeys } from '@/api/tasks';
 import { toApiError } from '@/api/errors';
 import { useSessionLifecycle } from '@/composable/useSessionQuery';
 import { useTasks, readTaskFilter, type TaskFilter } from '@/composable/useTasks';
+import TaskProject from '@/component/tasks/TaskProject.vue';
 import TaskCard from '@/component/tasks/TaskCard.vue';
 import TaskBulkList from '@/component/tasks/TaskBulkList.vue';
 import TaskFilters from '@/component/tasks/TaskFilters.vue';

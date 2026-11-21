@@ -2,12 +2,13 @@
     <form
         ref="form"
         class="task-config-form w-[min(100%,_44rem)] layout-grid gap-10 cursor-default"
+        method="post"
         novalidate
         :aria-busy="task.pending.value"
         @submit.prevent="save"
     >
         <natural-language-draft
-            v-if="creator"
+            v-if="creator && !seedDraft"
             :task="creator"
             @applied="focusConfiguration"
             @manual="enterManualConfiguration"
@@ -259,8 +260,35 @@
                             editor.reloadRequested.value))
                 "
                 >{{
-                    task.pending.value ? '正在保存' : editor ? '确认保存修改' : '确认保存任务'
+                    task.pending.value
+                        ? '正在保存'
+                        : seedDraft
+                          ? '保存草案'
+                          : editor
+                            ? '确认保存修改'
+                            : '确认保存任务'
                 }}</action-button
+            >
+            <action-button
+                v-if="!seedDraft && !editor && !task.uncertain.value"
+                attr-type="submit"
+                v-bind="{ 'data-intent': 'start' }"
+                :disabled="locked"
+                >保存并立即运行</action-button
+            >
+            <action-button
+                v-if="!editor && task.uncertain.value"
+                attr-type="submit"
+                v-bind="{ 'data-intent': 'retry' }"
+                :busy="task.pending.value"
+                :disabled="task.expired.value"
+                >重试同一次提交</action-button
+            >
+            <router-link
+                v-if="projectId"
+                class="min-h-11 inline-flex items-center internal-link keyboard-focus"
+                :to="{ name: 'project-detail', params: { projectId } }"
+                >返回项目</router-link
             >
             <router-link
                 class="min-h-11 inline-flex items-center internal-link cursor-pointer keyboard-focus"
@@ -274,8 +302,11 @@
                 >返回任务列表</router-link
             >
         </div>
-        <p class="text-muted break-anywhere m-0 [details_>_&:is(p)]:mt-4" v-if="!editor">
-            保存仅创建任务，不会开始执行。
+        <p
+            class="text-muted break-anywhere m-0 [details_>_&:is(p)]:mt-4"
+            v-if="!editor && !seedDraft"
+        >
+            「确认保存任务」仅保存配置。「保存并立即运行」还会排队一次执行。
         </p>
     </form>
 </template>
@@ -306,15 +337,21 @@ import OutputExamples from '@/component/tasks/OutputExamples.vue';
 import { useActionNotification } from '@/composable/useActionNotification';
 const notice = useActionNotification();
 import type { ApiResponse } from '@/api/client';
-const props = defineProps<{ initialResponse?: ApiResponse<TaskDetailResponse> }>();
+const props = defineProps<{
+    initialResponse?: ApiResponse<TaskDetailResponse>;
+    projectId?: string;
+    seedDraft?: import('@scova/models').ProjectResearchDraft;
+}>();
 import NaturalLanguageDraft from '@/component/tasks/NaturalLanguageDraft.vue';
 import TaskExecutionSettings from '@/component/tasks/TaskExecutionSettings.vue';
-const emit = defineEmits<{ saved: [result: TaskDetailResponse] }>();
+const emit = defineEmits<{ saved: [result: TaskDetailResponse, runId?: string]; draftSaved: [] }>();
 const lifecycle = useSessionLifecycle();
 const editor = props.initialResponse
     ? editTaskController(lifecycle, props.initialResponse)
     : undefined;
-const creator = editor ? undefined : createTaskController(lifecycle);
+const creator = editor
+    ? undefined
+    : createTaskController(lifecycle, props.projectId, props.seedDraft);
 const task = editor ?? creator!;
 notice.watch(
     () => (Object.keys(task.fields.value).length ? '' : task.message.value),
@@ -450,18 +487,34 @@ async function focusConfiguration() {
     input?.focus();
     input?.scrollIntoView({ block: 'center' });
 }
-async function save() {
-    const result = await task.submit();
+async function save(event: SubmitEvent) {
+    if (props.seedDraft) {
+        await creator!.updateDraft();
+        if (creator!.updatedDraft.value) {
+            notice.success('草案已保存');
+            emit('draftSaved');
+        }
+        return;
+    }
+    const intent = event.submitter?.getAttribute('data-intent');
+    if (task.uncertain.value && intent !== 'retry') return;
+    const result = editor
+        ? await editor.submit()
+        : await creator!.submit(intent === 'start', intent === 'retry');
     if (result) {
         notice.success(
-            editor ? '任务修改已保存' : '任务已创建',
+            editor
+                ? '任务修改已保存'
+                : creator?.runId.value
+                  ? '任务已创建，研究已排队'
+                  : '任务已创建',
             editor?.result.value?.baselineResetRequired
                 ? '修改了查阅范围，下次执行会重新设定比较起点；历史报告不变'
-                : editor
-                  ? '保存不会开始执行研究。'
+                : creator?.runId.value
+                  ? undefined
                   : '保存不会开始执行研究。',
         );
-        emit('saved', result);
+        emit('saved', result, creator?.runId.value);
     } else if (task.message.value) {
         const invalid = Object.keys(task.fields.value) as TaskDraftField[];
         if (invalid.some((key) => sourceFields.some((field) => field.key === key)) && sources.value)

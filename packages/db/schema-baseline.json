@@ -56,6 +56,10 @@
         {
             "name": "0013_workflows_report_resources",
             "hash": "7c75c8a476e9607e366496c1fbd1428f78a58a8e17858eea5144ae29a9a759e1"
+        },
+        {
+            "name": "0014_project_conversations",
+            "hash": "bbbd599c35fc4a46a74d0eecab024e9b5e42534b828ddb11a593cb5dc67f2203"
         }
     ],
     "signature": {
@@ -153,6 +157,20 @@
             },
             {
                 "name": "outbox",
+                "kind": "r",
+                "persistence": "p",
+                "row_security": false,
+                "force_row_security": false
+            },
+            {
+                "name": "project_conversation_turns",
+                "kind": "r",
+                "persistence": "p",
+                "row_security": false,
+                "force_row_security": false
+            },
+            {
+                "name": "project_research_drafts",
                 "kind": "r",
                 "persistence": "p",
                 "row_security": false,
@@ -1514,6 +1532,193 @@
                 "name": "sent_at",
                 "position": 11,
                 "type": "timestamp(6) with time zone",
+                "not_null": false,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_conversation_turns",
+                "name": "id",
+                "position": 1,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_conversation_turns",
+                "name": "user_id",
+                "position": 2,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_conversation_turns",
+                "name": "project_id",
+                "position": 3,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_conversation_turns",
+                "name": "input",
+                "position": 4,
+                "type": "jsonb",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_conversation_turns",
+                "name": "status",
+                "position": 5,
+                "type": "text",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "project_conversation_turns",
+                "name": "answer",
+                "position": 6,
+                "type": "text",
+                "not_null": false,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "project_conversation_turns",
+                "name": "draft_id",
+                "position": 7,
+                "type": "uuid",
+                "not_null": false,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_conversation_turns",
+                "name": "created_at",
+                "position": 8,
+                "type": "timestamp with time zone",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_conversation_turns",
+                "name": "expires_at",
+                "position": 9,
+                "type": "timestamp with time zone",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_research_drafts",
+                "name": "id",
+                "position": 1,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_research_drafts",
+                "name": "user_id",
+                "position": 2,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_research_drafts",
+                "name": "project_id",
+                "position": 3,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_research_drafts",
+                "name": "revision",
+                "position": 4,
+                "type": "integer",
+                "not_null": true,
+                "default_value": "1",
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_research_drafts",
+                "name": "config",
+                "position": 5,
+                "type": "jsonb",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_research_drafts",
+                "name": "confirmed_task_id",
+                "position": 6,
+                "type": "uuid",
+                "not_null": false,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_research_drafts",
+                "name": "confirmed_run_id",
+                "position": 7,
+                "type": "uuid",
+                "not_null": false,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_research_drafts",
+                "name": "confirmed_start",
+                "position": 8,
+                "type": "integer",
                 "not_null": false,
                 "default_value": null,
                 "identity": "",
@@ -4694,6 +4899,34 @@
                 "validated": true
             },
             {
+                "table_name": "project_conversation_turns",
+                "name": "project_conversation_turns_pkey",
+                "type": "p",
+                "definition": "PRIMARY KEY (id)",
+                "validated": true
+            },
+            {
+                "table_name": "project_conversation_turns",
+                "name": "project_conversation_turns_project_fkey",
+                "type": "f",
+                "definition": "FOREIGN KEY (user_id, project_id) REFERENCES projects(user_id, id) ON DELETE CASCADE",
+                "validated": true
+            },
+            {
+                "table_name": "project_research_drafts",
+                "name": "project_research_drafts_pkey",
+                "type": "p",
+                "definition": "PRIMARY KEY (id)",
+                "validated": true
+            },
+            {
+                "table_name": "project_research_drafts",
+                "name": "project_research_drafts_project_fkey",
+                "type": "f",
+                "definition": "FOREIGN KEY (user_id, project_id) REFERENCES projects(user_id, id) ON DELETE CASCADE",
+                "validated": true
+            },
+            {
                 "table_name": "project_tasks",
                 "name": "project_tasks_pkey",
                 "type": "p",
@@ -5735,6 +5968,41 @@
                 "table_name": "outbox",
                 "name": "outbox_user_id_id_key",
                 "definition": "CREATE UNIQUE INDEX outbox_user_id_id_key ON outbox USING btree (user_id, id)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "project_conversation_turns",
+                "name": "project_conversation_turns_pkey",
+                "definition": "CREATE UNIQUE INDEX project_conversation_turns_pkey ON project_conversation_turns USING btree (id)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "project_conversation_turns",
+                "name": "project_conversation_turns_project_idx",
+                "definition": "CREATE INDEX project_conversation_turns_project_idx ON project_conversation_turns USING btree (user_id, project_id, created_at DESC NULLS LAST, id DESC NULLS LAST)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "project_conversation_turns",
+                "name": "project_conversation_turns_running_key",
+                "definition": "CREATE UNIQUE INDEX project_conversation_turns_running_key ON project_conversation_turns USING btree (user_id, project_id) WHERE (status = 'running'::text)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "project_research_drafts",
+                "name": "project_research_drafts_pkey",
+                "definition": "CREATE UNIQUE INDEX project_research_drafts_pkey ON project_research_drafts USING btree (id)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "project_research_drafts",
+                "name": "project_research_drafts_project_idx",
+                "definition": "CREATE INDEX project_research_drafts_project_idx ON project_research_drafts USING btree (user_id, project_id)",
                 "valid": true,
                 "ready": true
             },
@@ -6855,6 +7123,30 @@
                 "enabled": "O"
             },
             {
+                "table_name": "project_conversation_turns",
+                "constraint_name": "project_conversation_turns_project_fkey",
+                "event": 5,
+                "enabled": "O"
+            },
+            {
+                "table_name": "project_conversation_turns",
+                "constraint_name": "project_conversation_turns_project_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "project_research_drafts",
+                "constraint_name": "project_research_drafts_project_fkey",
+                "event": 5,
+                "enabled": "O"
+            },
+            {
+                "table_name": "project_research_drafts",
+                "constraint_name": "project_research_drafts_project_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
                 "table_name": "project_tasks",
                 "constraint_name": "project_tasks_project_fkey",
                 "event": 5,
@@ -6875,6 +7167,30 @@
             {
                 "table_name": "project_tasks",
                 "constraint_name": "project_tasks_task_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "projects",
+                "constraint_name": "project_conversation_turns_project_fkey",
+                "event": 9,
+                "enabled": "O"
+            },
+            {
+                "table_name": "projects",
+                "constraint_name": "project_conversation_turns_project_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "projects",
+                "constraint_name": "project_research_drafts_project_fkey",
+                "event": 9,
+                "enabled": "O"
+            },
+            {
+                "table_name": "projects",
+                "constraint_name": "project_research_drafts_project_fkey",
                 "event": 17,
                 "enabled": "O"
             },

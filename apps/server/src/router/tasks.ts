@@ -1,14 +1,20 @@
 import { Elysia, t } from 'elysia';
 import {
     CreateTaskInputSchema,
+    CreateProjectInputSchema,
+    CreateAndStartTaskResponseSchema,
+    IdempotencyHeadersSchema,
     ApiErrorSchema,
     PageQuerySchema,
+    ProjectSchema,
     RevisionHeadersSchema,
     TaskDetailResponseSchema,
     TaskListResponseSchema,
+    TaskProjectResponseSchema,
     TaskSchema,
     TaskVersionSchema,
     UpdateTaskInputSchema,
+    UuidSchema,
 } from '@scova/models';
 import type { ApiServices } from '@/app/services';
 import { createTaskHandlers } from '@/handler/tasks.ts';
@@ -27,6 +33,8 @@ const HttpPageQuerySchema = t.Object(
     },
     { additionalProperties: false, description: PageQuerySchema.description },
 );
+
+const TaskProjectParams = t.Object({ taskId: UuidSchema });
 
 const OptionalRevisionHeadersSchema = t.Object(
     {
@@ -73,6 +81,7 @@ export function createTaskPlugin(services: ApiServices) {
             },
         })
         .post('/tasks', handlers.create, {
+            headers: t.Partial(IdempotencyHeadersSchema),
             body: 'CreateTaskInput',
             response: { 201: TaskDetailResponseSchema, ...errors },
             detail: {
@@ -80,7 +89,42 @@ export function createTaskPlugin(services: ApiServices) {
                 tags: ['任务'],
                 summary: '创建查阅任务',
                 description:
-                    '保存用户确认的配置并创建不可变版本；自然语言解析失败时由调用方提交手工配置。',
+                    '保存用户确认的配置并创建不可变版本。可提供幂等键重放原创建，重复使用该键提交不同参数时返回冲突。',
+            },
+        })
+        .post('/tasks/start', handlers.start, {
+            headers: IdempotencyHeadersSchema,
+            body: 'CreateTaskInput',
+            response: { 201: CreateAndStartTaskResponseSchema, ...errors },
+            detail: {
+                operationId: 'startTask',
+                tags: ['任务'],
+                summary: '创建查阅任务并立即运行',
+                description:
+                    '原子保存未归类任务与配置版本，创建并入队执行。需要会话、CSRF 和 Idempotency-Key。同键同参数重放原结果，同键不同参数返回409。',
+            },
+        })
+        .get('/tasks/:taskId/project', handlers.getProject, {
+            params: TaskProjectParams,
+            response: { 200: TaskProjectResponseSchema, ...errors },
+            detail: {
+                operationId: 'getTaskProject',
+                tags: ['任务'],
+                summary: '查看任务所属项目',
+                description:
+                    '仅当前账号拥有的任务可查询。未归类时项目为空，跨账号或不存在时返回404。',
+            },
+        })
+        .post('/tasks/:taskId/project', handlers.createProject, {
+            params: TaskProjectParams,
+            body: CreateProjectInputSchema,
+            response: { 201: ProjectSchema, ...errors },
+            detail: {
+                operationId: 'createProjectForTask',
+                tags: ['任务'],
+                summary: '为未归类任务新建项目',
+                description:
+                    '原子创建项目并归入当前账号的任务。需要会话和 CSRF。任务已归类时返回409，跨账号或不存在时返回404。',
             },
         })
         .get('/tasks/:taskId', handlers.get, {

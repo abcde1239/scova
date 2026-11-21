@@ -10,6 +10,8 @@ import {
     TaskDraftResponseSchema,
     parseContract,
     type TaskDraftResponse,
+    type TaskConfig,
+    TaskConfigSchema,
 } from '@scova/models';
 import {
     ConnectorError,
@@ -56,11 +58,13 @@ function failureReason(error: unknown): Reason {
 export function createTaskDraftService(services: ApiServices) {
     const repository = createTaskDraftRepo(services);
     type Session = Pick<AuthenticatedSession, 'userId' | 'user'>;
+    type Context = { previous?: TaskConfig; project?: string };
     function generate(
         session: Session,
         body: unknown,
         requestSignal: AbortSignal | undefined,
         kind: 'draft',
+        context?: Context,
     ): Promise<TaskDraftResponse>;
     function generate(
         session: Session,
@@ -73,6 +77,7 @@ export function createTaskDraftService(services: ApiServices) {
         body: unknown,
         requestSignal: AbortSignal | undefined,
         kind: 'draft' | 'questions',
+        context?: Context,
     ) {
         const questionInput =
             kind === 'questions' ? parseContract(TaskDraftQuestionsInputSchema, body) : undefined;
@@ -94,7 +99,7 @@ export function createTaskDraftService(services: ApiServices) {
                 session.user.notificationPreference,
             ),
         };
-        const fallback = manualDraft(input, defaults);
+        const fallback = context?.previous ?? manualDraft(input, defaults);
         const resolvedTimezone = resolveDraftTimezone(input, defaults.timezone);
         const policy = services.taskDraftPolicy;
         const ledger: { inputTokens: number; outputTokens: number; estimated: boolean }[] = [];
@@ -182,6 +187,9 @@ export function createTaskDraftService(services: ApiServices) {
                     const modelInput: StructuredInput = {
                         prompt:
                             (kind === 'questions' ? draftQuestionPrompt : draftPrompt) +
+                            (context?.previous
+                                ? '\nThe defaults are the current user-edited draft. Apply only the requested changes and preserve every unrelated field.'
+                                : '') +
                             (call
                                 ? '\nRegenerate once, correcting invalid fields: ' +
                                   repairPaths.join(', ')
@@ -191,6 +199,7 @@ export function createTaskDraftService(services: ApiServices) {
                             {
                                 inputText: input.inputText,
                                 defaults: fallback,
+                                ...(context?.project ? { projectName: context.project } : {}),
                                 clarifications: input.clarifications ?? [],
                                 ...(questionInput
                                     ? {
@@ -306,7 +315,42 @@ export function createTaskDraftService(services: ApiServices) {
                                 parsingUsage: usage(),
                             });
                         }
-                        const normalized = normalizeDraft(result.data, input, fallback);
+                        const previous = context?.previous;
+                        const revisionInput = previous
+                            ? {
+                                  ...input,
+                                  inputText: [
+                                      input.inputText,
+                                      ...previous.sourcePreferences.preferredUrls,
+                                      ...previous.sourcePreferences.excludedUrls,
+                                  ].join('\n'),
+                              }
+                            : input;
+                        const normalized = normalizeDraft(
+                            previous &&
+                                result.data &&
+                                typeof result.data === 'object' &&
+                                !Array.isArray(result.data)
+                                ? { ...previous, ...result.data }
+                                : result.data,
+                            revisionInput,
+                            fallback,
+                            !!previous,
+                        );
+                        if (previous) {
+                            normalized.config = parseContract(TaskConfigSchema, {
+                                ...normalized.config,
+                                ...(!/每天|每日|每周|周期|计划|schedule|daily|weekly|frequency/i.test(
+                                    input.inputText,
+                                )
+                                    ? { schedule: previous.schedule }
+                                    : {}),
+                                ...(previous.agentProviderId
+                                    ? { agentProviderId: previous.agentProviderId }
+                                    : {}),
+                                ...(previous.searchMode ? { searchMode: previous.searchMode } : {}),
+                            });
+                        }
                         return parseContract(TaskDraftResponseSchema, {
                             inputText: input.inputText,
                             ...normalized,
@@ -357,8 +401,8 @@ export function createTaskDraftService(services: ApiServices) {
         }
     }
     return {
-        create: (session: Session, body: unknown, signal?: AbortSignal) =>
-            generate(session, body, signal, 'draft'),
+        create: (session: Session, body: unknown, signal?: AbortSignal, context?: Context) =>
+            generate(session, body, signal, 'draft', context),
         questions: (session: Session, body: unknown, signal?: AbortSignal) =>
             generate(session, body, signal, 'questions'),
     };

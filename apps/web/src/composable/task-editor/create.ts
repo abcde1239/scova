@@ -4,9 +4,11 @@ import {
     TaskConfigSchema,
     parseContract,
     type TaskConfig,
+    type ProjectResearchDraft,
     type TaskDetailResponse,
 } from '@scova/models';
-import { createTaskEndpoint, taskKeys } from '@/api/tasks';
+import { createAndStartTaskEndpoint, createTaskEndpoint, taskKeys } from '@/api/tasks';
+import { createProjectTaskEndpoint, editProjectDraftEndpoint } from '@/api/projects';
 import type { SessionLifecycle } from '@/api/session';
 import { toApiError } from '@/api/errors';
 import { useCommand } from '@/composable/useCommand';
@@ -14,12 +16,20 @@ import { useSessionMutation } from '@/composable/useSessionQuery';
 import { initialTaskDraft, type TaskDraftField, taskInput, taskDraftFromConfig } from './draft.ts';
 import { taskValidationFields, saveNotConfirmed } from './fields.ts';
 
-export function createTaskController(lifecycle: SessionLifecycle) {
+export function createTaskController(
+    lifecycle: SessionLifecycle,
+    projectId?: string,
+    seed?: ProjectResearchDraft,
+) {
     const owner = lifecycle.capture();
-    const draft = reactive(initialTaskDraft(lifecycle.session.user?.preferences));
+    const draft = reactive(
+        seed
+            ? taskDraftFromConfig(seed.config)
+            : initialTaskDraft(lifecycle.session.user?.preferences),
+    );
     const inputText = ref('');
     const keepSuggestedSchedule = ref(true);
-    const parsedConfig = ref<TaskConfig>();
+    const parsedConfig = ref<TaskConfig | undefined>(seed?.config);
     const editRevision = ref(0);
     const stopEdits = watch(
         [() => JSON.stringify(draft), inputText, keepSuggestedSchedule],
@@ -31,6 +41,7 @@ export function createTaskController(lifecycle: SessionLifecycle) {
     const initial = JSON.stringify(draft);
     const command = useCommand();
     const mutation = useSessionMutation(createTaskEndpoint, lifecycle);
+    const runId = ref<string>();
     const fields = ref<Partial<Record<TaskDraftField, string>>>({});
     const message = ref('');
     const saved = ref(false);
@@ -38,7 +49,7 @@ export function createTaskController(lifecycle: SessionLifecycle) {
     const expired = ref(false);
     const controller = new AbortController();
     let disposed = false;
-    let attempt: { body: string; key: string } | undefined;
+    let attempt: { body: string; key: string; start: boolean } | undefined;
     const dirty = computed(
         () => !saved.value && (JSON.stringify(draft) !== initial || inputText.value.length > 0),
     );
@@ -52,8 +63,53 @@ export function createTaskController(lifecycle: SessionLifecycle) {
         message.value = '';
     });
 
-    async function submit(): Promise<TaskDetailResponse | undefined> {
-        if (disposed || saved.value || expired.value || !owner.isCurrent() || uncertain.value)
+    const updatedDraft = ref<ProjectResearchDraft>();
+    async function updateDraft() {
+        if (!seed || !projectId || disposed || expired.value || !owner.isCurrent()) return;
+        await command.run(async () => {
+            fields.value = {};
+            message.value = '';
+            try {
+                const { config } = taskInput(
+                    draft,
+                    parsedConfig.value,
+                    keepSuggestedSchedule.value,
+                );
+                const result = await owner.request(
+                    editProjectDraftEndpoint,
+                    {
+                        params: { projectId, draftId: seed.id },
+                        body: { revision: seed.revision, config },
+                    },
+                    { signal: controller.signal },
+                );
+                if (disposed || !owner.isCurrent()) return;
+                updatedDraft.value = result.data;
+                saved.value = true;
+            } catch (cause) {
+                if (disposed || !owner.isCurrent()) return;
+                const error = toApiError(cause);
+                if (error.kind === 'cancelled') return;
+                fields.value = taskValidationFields(
+                    draft.rangeKind,
+                    cause instanceof ContractValidationError
+                        ? cause.fieldErrors
+                        : error.fieldErrors,
+                );
+                if (!Object.keys(fields.value).length)
+                    message.value =
+                        error.status === 409 ? '草案已更新，请返回项目重新打开。' : error.message;
+            }
+        });
+    }
+    async function submit(start = false, retry = false): Promise<TaskDetailResponse | undefined> {
+        if (
+            disposed ||
+            saved.value ||
+            expired.value ||
+            !owner.isCurrent() ||
+            (uncertain.value && !retry)
+        )
             return;
         return command.run(async () => {
             fields.value = {};
@@ -65,25 +121,54 @@ export function createTaskController(lifecycle: SessionLifecycle) {
                     ...(inputText.value.trim() ? { inputText: inputText.value } : {}),
                 };
                 config = input.config;
-                const body = JSON.stringify(input);
-                if (!attempt || attempt.body !== body) attempt = { body, key: crypto.randomUUID() };
-                const result = await mutation.mutateAsync({
-                    input: { body: input },
-                    options: { idempotencyKey: attempt.key, signal: controller.signal },
-                });
+                if (uncertain.value && attempt) start = attempt.start;
+                const body = JSON.stringify({ input, start });
+                if (uncertain.value && attempt?.body !== body) return;
+                if (!attempt || attempt.body !== body)
+                    attempt = { body, key: crypto.randomUUID(), start };
+                const options = { idempotencyKey: attempt.key, signal: controller.signal };
+                const submitted = projectId
+                    ? (
+                          await owner.request(
+                              createProjectTaskEndpoint,
+                              {
+                                  params: { projectId },
+                                  body: { ...input, start },
+                              },
+                              options,
+                          )
+                      ).data
+                    : start
+                      ? (await owner.request(createAndStartTaskEndpoint, { body: input }, options))
+                            .data
+                      : undefined;
+                const result =
+                    submitted?.detail ??
+                    (await mutation.mutateAsync({ input: { body: input }, options })).data;
                 if (disposed || !owner.isCurrent()) return;
                 saved.value = true;
-                await lifecycle.queryClient.invalidateQueries({
-                    queryKey: owner.queryKey(taskKeys.all),
-                });
-                return owner.isCurrent() && !disposed ? result.data : undefined;
+                uncertain.value = false;
+                runId.value = submitted?.runId ?? undefined;
+                await Promise.all([
+                    lifecycle.queryClient.invalidateQueries({
+                        queryKey: owner.queryKey(taskKeys.all),
+                    }),
+                    ...(projectId
+                        ? [
+                              lifecycle.queryClient.invalidateQueries({
+                                  queryKey: owner.queryKey(['projects', projectId]),
+                              }),
+                          ]
+                        : []),
+                ]);
+                return owner.isCurrent() && !disposed ? result : undefined;
             } catch (cause) {
                 if (disposed || !owner.isCurrent()) return;
                 const error = toApiError(cause);
                 if (error.kind === 'cancelled') return;
                 uncertain.value = !!config && saveNotConfirmed(error.status);
                 if (uncertain.value) {
-                    message.value = '保存结果未确认，请先返回任务列表核对，避免重复创建。';
+                    message.value = '提交结果未确认，可以重试同一次提交，或返回列表核对。';
                     return;
                 }
                 const details =
@@ -152,6 +237,9 @@ export function createTaskController(lifecycle: SessionLifecycle) {
         uncertain,
         expired,
         submit,
+        runId,
+        updateDraft,
+        updatedDraft,
         canLeave,
         dispose,
     };

@@ -19,9 +19,40 @@ const account = {
     csrfToken: 'sample-csrf',
 };
 const title = '持续跟踪跨地区招生政策与学术研究观点的变化，并保留可核验来源证据';
-async function samples(page: Page) {
-    const calls: { path: string; method: string; body?: CreateTaskInput; key?: string }[] = [];
+const startedRunId = id(13);
+const taskApiPath = `/api/v1/tasks/${id(11)}`;
+async function samples(page: Page, loseStartResponse = false) {
+    const calls: {
+        path: string;
+        method: string;
+        body?: CreateTaskInput;
+        rawBody?: string;
+        key?: string;
+    }[] = [];
     let saved: CreateTaskInput | undefined;
+    let queued = false;
+    let startReceipt: { key?: string; rawBody?: string } | undefined;
+    function queuedRun() {
+        const { task, version } = detail();
+        return {
+            id: startedRunId,
+            taskId: task.id,
+            taskVersionId: version.id,
+            parentRunId: null,
+            baselineRunId: null,
+            mode: 'live',
+            status: 'queued',
+            outcome: null,
+            trigger: 'manual',
+            budget: version.config.budget,
+            usage: { searches: 0, pages: 0, inputTokens: 0, outputTokens: 0, estimated: true },
+            coverage: null,
+            queuedAt: version.createdAt,
+            startedAt: null,
+            finishedAt: null,
+            failureCode: null,
+        };
+    }
     function detail() {
         const config = saved!.config;
         return {
@@ -70,29 +101,62 @@ async function samples(page: Page) {
             },
         }),
     );
-    await page.route('**/api/v1/tasks**', async (route) => {
-        const request = route.request(),
-            url = new URL(request.url());
-        const body =
-            request.method() === 'POST' ? (request.postDataJSON() as CreateTaskInput) : undefined;
-        calls.push({
-            path: url.pathname,
-            method: request.method(),
-            body,
-            key: request.headers()['idempotency-key'],
-        });
-        if (request.method() === 'POST') {
+    await page.route(/\/api\/v1\/(?:tasks|projects)(?:[/?]|$)/, async (route) => {
+        const request = route.request();
+        const { pathname } = new URL(request.url());
+        const method = request.method();
+        const rawBody = request.postData() ?? undefined;
+        const body = rawBody ? (request.postDataJSON() as CreateTaskInput) : undefined;
+        const key = request.headers()['idempotency-key'];
+        calls.push({ path: pathname, method, body, rawBody, key });
+
+        if (method === 'POST' && pathname === '/api/v1/tasks/start') {
+            if (!startReceipt) {
+                saved = body;
+                queued = true;
+                startReceipt = { key, rawBody };
+                // The fixture saves the task and queues the run before it loses the first reply.
+                if (loseStartResponse) return route.abort('connectionreset');
+            } else if (key !== startReceipt.key || rawBody !== startReceipt.rawBody) {
+                return route.fulfill({
+                    status: 409,
+                    json: {
+                        code: 'REPLAY_MISMATCH',
+                        message: '请求与首次提交不一致',
+                        requestId: 'sample',
+                    },
+                });
+            }
+            return route.fulfill({ status: 201, json: { detail: detail(), runId: startedRunId } });
+        }
+        if (method === 'POST' && pathname === '/api/v1/tasks') {
             saved = body;
             return route.fulfill({ status: 201, json: detail() });
         }
-        if (url.pathname.endsWith('/runs'))
-            return route.fulfill({ json: { items: [], nextCursor: null } });
-        if (url.pathname === '/api/v1/tasks')
+        if (pathname === taskApiPath + '/runs' && method === 'POST' && saved) {
+            queued = true;
+            return route.fulfill({ status: 202, json: { run: queuedRun(), reused: false } });
+        }
+        if (method !== 'GET') return route.fallback();
+        if (pathname === taskApiPath + '/runs')
+            return route.fulfill({
+                json: { items: queued ? [queuedRun()] : [], nextCursor: null },
+            });
+        if (pathname === taskApiPath + '/project')
+            return route.fulfill({ json: { project: null } });
+        if (pathname === '/api/v1/tasks')
             return route.fulfill({
                 json: { items: saved ? [detail().task] : [], nextCursor: null },
             });
-        return route.fulfill({ json: detail() });
+        if (pathname === taskApiPath && saved) return route.fulfill({ json: detail() });
+        return route.fallback();
     });
+    await page.route('**/api/v1/runs/' + startedRunId, (route) =>
+        queued ? route.fulfill({ json: queuedRun() }) : route.fallback(),
+    );
+    await page.route('**/api/v1/runs/' + startedRunId + '/events**', (route) =>
+        route.fulfill({ contentType: 'text/event-stream', body: ': local sample\n\n' }),
+    );
     return calls;
 }
 async function fillMain(page: Page) {
@@ -635,4 +699,79 @@ test('在途双击只一次，不确定结果不能直接重发', async ({ page 
     await noOverflow(page);
     await page.screenshot({ path: testInfo.outputPath('uncertain-320.png'), fullPage: true });
     expect(count).toBe(1);
+});
+
+for (const loseStartResponse of [false, true]) {
+    test(
+        loseStartResponse
+            ? '独立任务开跑响应丢失后，以相同幂等键和请求体重放'
+            : '独立任务保存并立即运行，直接打开排队中的执行',
+        async ({ page }) => {
+            const calls = await samples(page, loseStartResponse);
+            const writes = () => calls.filter(({ method }) => method !== 'GET');
+            await page.goto('/tasks/new');
+            await fillMain(page);
+            const start = page.getByRole('button', { name: '保存并立即运行', exact: true });
+            await start.click();
+
+            if (loseStartResponse) {
+                const retry = page.getByRole('button', { name: '重试同一次提交', exact: true });
+                await expect(retry).toBeVisible();
+                await expect(page).toHaveURL('/tasks/new');
+                const titleInput = page.getByLabel('任务标题', { exact: true });
+                await expect(titleInput).toHaveValue(title);
+                await expect(titleInput).toBeDisabled();
+                await expect(start).toHaveCount(0);
+                await expect(
+                    page.getByRole('button', { name: '确认保存任务', exact: true }),
+                ).toBeDisabled();
+                expect(writes()).toHaveLength(1);
+                await retry.click();
+            }
+
+            await expect(page).toHaveURL('/runs/' + startedRunId);
+            await expect(
+                page.getByRole('heading', { name: '等待执行', exact: true }),
+            ).toBeVisible();
+            const attempts = writes();
+            expect(attempts).toHaveLength(loseStartResponse ? 2 : 1);
+            expect(attempts[0]).toMatchObject({
+                path: '/api/v1/tasks/start',
+                method: 'POST',
+                key: expect.stringMatching(/\S/),
+                body: {
+                    config: { title, topic: '各地高校招生政策', goal: '比较变化并保留官方证据' },
+                },
+            });
+            if (loseStartResponse) expect(attempts[1]).toEqual(attempts[0]);
+        },
+    );
+}
+
+test('独立任务只保存时保持未归类，任务摘要仍可手动运行', async ({ page }) => {
+    const calls = await samples(page);
+    const writes = () => calls.filter(({ method }) => method !== 'GET');
+    await page.goto('/tasks/new');
+    await fillMain(page);
+    await page.getByRole('button', { name: '确认保存任务', exact: true }).click();
+    await expect(page).toHaveURL('/tasks/' + id(11));
+    const classification = page.getByRole('region', { name: '项目归类' });
+    await expect(classification.getByText('未归类', { exact: true })).toBeVisible();
+    expect(writes().map(({ method, path }) => ({ method, path }))).toEqual([
+        { method: 'POST', path: '/api/v1/tasks' },
+    ]);
+
+    const controls = page.getByRole('region', { name: '立即执行' });
+    await controls.getByRole('button', { name: '立即执行', exact: true }).click();
+    await expect(controls.getByRole('link', { name: '查看执行', exact: true })).toHaveAttribute(
+        'href',
+        '/runs/' + startedRunId,
+    );
+    await expect(classification.getByText('未归类', { exact: true })).toBeVisible();
+    const requests = writes();
+    expect(requests.map(({ method, path }) => ({ method, path }))).toEqual([
+        { method: 'POST', path: '/api/v1/tasks' },
+        { method: 'POST', path: '/api/v1/tasks/' + id(11) + '/runs' },
+    ]);
+    expect(requests[1]?.body).toEqual({ mode: 'live' });
 });

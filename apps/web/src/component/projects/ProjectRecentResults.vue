@@ -1,5 +1,5 @@
 <template>
-    <div class="layout-grid gap-6 md:grid-cols-2">
+    <div class="layout-grid gap-6" :class="{ 'md:grid-cols-2': !stacked }">
         <section class="layout-grid content-start gap-3" aria-labelledby="project-runs">
             <h3 id="project-runs" class="m-0">最近执行</h3>
             <p v-if="!runs.length" class="m-0 text-muted">暂无执行记录</p>
@@ -55,5 +55,6 @@ import { localTaskTime } from '@/composable/useTasks';
 defineProps<{
     runs: ProjectDetailResponse['recentRuns'];
     reports: ProjectDetailResponse['recentReports'];
+    stacked?: boolean;
 }>();
 </script>

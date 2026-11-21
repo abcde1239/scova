@@ -220,7 +220,12 @@ function hasExplicitWeekday(text: string, weekday: unknown): boolean {
 }
 
 /** 缺少可选语义字段时透明填入安全默认；坏核心字段必须修复或回退。 */
-export function normalizeDraft(data: unknown, input: TaskDraftInput, fallback: TaskConfig) {
+export function normalizeDraft(
+    data: unknown,
+    input: TaskDraftInput,
+    fallback: TaskConfig,
+    retainSchedule = false,
+) {
     const text = evidenceText(input);
     if (!object(data))
         throw new ContractValidationError([{ path: '/', message: '模型配置必须为对象' }]);
@@ -286,7 +291,7 @@ export function normalizeDraft(data: unknown, input: TaskDraftInput, fallback: T
     }
     const schedule = config.schedule;
     const frequency = object(schedule) ? schedule.frequency : undefined;
-    if (frequency !== 'manual') {
+    if (frequency !== 'manual' && !(retainSchedule && same(schedule, fallback.schedule))) {
         const daily = /每天|每日|\bdaily\b/i.test(text);
         const weekly = /每周|\bweekly\b/i.test(text);
         const explicit = frequency === 'daily' ? daily : frequency === 'weekly' ? weekly : false;

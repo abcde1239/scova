@@ -1,6 +1,8 @@
 import {
     and,
     desc,
+    asc,
+    isNotNull,
     eq,
     projectTasks,
     projects,
@@ -52,6 +54,24 @@ export function createProjectStore(db: DatabaseExecutor) {
                 .where(and(eq(projects.userId, userId), eq(projects.id, projectId)));
             return row;
         },
+        async findTaskProject(userId: string, taskId: string) {
+            const [row] = await db
+                .select({ project: projectFields })
+                .from(tasks)
+                .leftJoin(
+                    projectTasks,
+                    and(eq(projectTasks.userId, tasks.userId), eq(projectTasks.taskId, tasks.id)),
+                )
+                .leftJoin(
+                    projects,
+                    and(
+                        eq(projects.userId, projectTasks.userId),
+                        eq(projects.id, projectTasks.projectId),
+                    ),
+                )
+                .where(and(eq(tasks.userId, userId), eq(tasks.id, taskId)));
+            return row;
+        },
         async remove(userId: string, projectId: string) {
             const [row] = await db
                 .delete(projects)
@@ -75,6 +95,19 @@ export function createProjectStore(db: DatabaseExecutor) {
                 .for('key share');
             return row;
         },
+        async hasTask(userId: string, projectId: string, taskId: string) {
+            const [row] = await db
+                .select({ taskId: projectTasks.taskId })
+                .from(projectTasks)
+                .where(
+                    and(
+                        eq(projectTasks.userId, userId),
+                        eq(projectTasks.projectId, projectId),
+                        eq(projectTasks.taskId, taskId),
+                    ),
+                );
+            return Boolean(row);
+        },
         associate(userId: string, projectId: string, taskId: string) {
             return db
                 .insert(projectTasks)
@@ -84,6 +117,14 @@ export function createProjectStore(db: DatabaseExecutor) {
                     set: { projectId },
                     setWhere: sql`${projectTasks.projectId} <> ${projectId}`,
                 });
+        },
+        async associateUnassigned(userId: string, projectId: string, taskId: string) {
+            const [row] = await db
+                .insert(projectTasks)
+                .values({ userId, projectId, taskId })
+                .onConflictDoNothing({ target: [projectTasks.userId, projectTasks.taskId] })
+                .returning({ taskId: projectTasks.taskId });
+            return Boolean(row);
         },
         unlink(userId: string, projectId: string, taskId: string) {
             // PostgreSQL rechecks this predicate after waiting for a concurrent move.
@@ -96,6 +137,28 @@ export function createProjectStore(db: DatabaseExecutor) {
                         eq(projectTasks.taskId, taskId),
                     ),
                 );
+        },
+        async nextRun(userId: string, projectId: string) {
+            const [task] = await db
+                .select({ id: tasks.id, title: tasks.title, at: tasks.nextRunAt })
+                .from(projectTasks)
+                .innerJoin(
+                    tasks,
+                    and(eq(tasks.userId, projectTasks.userId), eq(tasks.id, projectTasks.taskId)),
+                )
+                .where(
+                    and(
+                        eq(projectTasks.userId, userId),
+                        eq(projectTasks.projectId, projectId),
+                        eq(tasks.status, 'active'),
+                        isNotNull(tasks.nextRunAt),
+                    ),
+                )
+                .orderBy(asc(tasks.nextRunAt), asc(tasks.id))
+                .limit(1);
+            return task?.at
+                ? { taskId: task.id, title: task.title, at: task.at.toISOString() }
+                : null;
         },
         listTasks(
             userId: string,

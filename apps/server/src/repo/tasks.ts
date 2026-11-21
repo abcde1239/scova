@@ -237,6 +237,17 @@ export function createTaskStore(database: DatabaseExecutor) {
             );
             return anchor;
         },
+        findInitialVersion(userId: string, taskId: string) {
+            return database.query.taskVersions
+                .findFirst({
+                    where: and(
+                        eq(tables.taskVersions.userId, userId),
+                        eq(tables.taskVersions.taskId, taskId),
+                        eq(tables.taskVersions.version, 1),
+                    ),
+                })
+                .then((row) => row ?? null);
+        },
         findVersion(versionId: string, userId: string, taskId: string) {
             return database.query.taskVersions
                 .findFirst({

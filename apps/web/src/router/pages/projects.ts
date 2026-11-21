@@ -13,4 +13,16 @@ export default [
         component: () => import('@/view/ProjectDetailView.vue'),
         meta: { titleKey: 'project', section: 'projects' },
     },
+    {
+        name: 'project-task-create',
+        path: '/projects/:projectId/tasks/new',
+        component: () => import('@/view/CreateTaskView.vue'),
+        meta: { titleKey: 'createTask', section: 'projects', contentWidth: 'form' },
+    },
+    {
+        name: 'project-draft-edit',
+        path: '/projects/:projectId/drafts/:draftId/edit',
+        component: () => import('@/view/CreateTaskView.vue'),
+        meta: { titleKey: 'createTask', section: 'projects', contentWidth: 'form' },
+    },
 ] satisfies RouteRecordRaw[];

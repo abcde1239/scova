@@ -1,8 +1,14 @@
 import type { Context } from 'elysia';
-import { parseRevisionEtag, revisionEtag } from '@scova/models';
+import {
+    IdempotencyHeadersSchema,
+    parseContract,
+    parseRevisionEtag,
+    revisionEtag,
+} from '@scova/models';
 import type { ApiServices } from '@/app/services';
 import { requireCsrf, requireSession } from '@/handler/http/session.ts';
 import { createTaskService } from '@/service/tasks.ts';
+import { createProjectService } from '@/service/projects.ts';
 import { ApiError } from '@/utils/errors.ts';
 
 type HttpContext = Pick<Context, 'request' | 'set'>;
@@ -11,6 +17,7 @@ type TaskParams = { taskId: string };
 /** HTTP 认证、头字段与状态适配；业务事务由 service 负责。 */
 export function createTaskHandlers(services: ApiServices) {
     const tasks = createTaskService(services);
+    const projects = createProjectService(services);
     const control = (action: 'pause' | 'resume' | 'archive') =>
         async function (
             this: void,
@@ -50,10 +57,37 @@ export function createTaskHandlers(services: ApiServices) {
         async create(this: void, { request, set, body }: HttpContext & { body: unknown }) {
             const session = await requireSession(request, services);
             requireCsrf(request, session, services);
-            const result = await tasks.create(session.userId, body);
+            const key = request.headers.get('idempotency-key');
+            if (key !== null) parseContract(IdempotencyHeadersSchema, { 'idempotency-key': key });
+            const result = await tasks.create(session.userId, body, key ?? undefined);
             set.status = 201;
             set.headers.etag = revisionEtag(result.task.revision);
             return result;
+        },
+        async start(this: void, { request, set, body }: HttpContext & { body: unknown }) {
+            const session = await requireSession(request, services);
+            requireCsrf(request, session, services);
+            const { 'idempotency-key': key } = parseContract(IdempotencyHeadersSchema, {
+                'idempotency-key': request.headers.get('idempotency-key'),
+            });
+            const result = await tasks.start(session.userId, body, key);
+            set.status = 201;
+            set.headers.etag = revisionEtag(result.detail.task.revision);
+            return result;
+        },
+        async getProject(this: void, { request, params }: HttpContext & { params: TaskParams }) {
+            const session = await requireSession(request, services);
+            return projects.getForTask(session.userId, params.taskId);
+        },
+        async createProject(
+            this: void,
+            { request, set, params, body }: HttpContext & { params: TaskParams; body: unknown },
+        ) {
+            const session = await requireSession(request, services);
+            requireCsrf(request, session, services);
+            const project = await projects.createForTask(session.userId, params.taskId, body);
+            set.status = 201;
+            return project;
         },
         async get(this: void, { request, set, params }: HttpContext & { params: TaskParams }) {
             const session = await requireSession(request, services);

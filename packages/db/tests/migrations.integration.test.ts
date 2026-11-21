@@ -447,6 +447,8 @@ describe('Drizzle SQL 迁移与旧库无损接管', () => {
             ).toEqual(
                 [
                     'agent_providers',
+                    'project_conversation_turns',
+                    'project_research_drafts',
                     'project_tasks',
                     'projects',
                     'report_exports',

@@ -5,6 +5,8 @@ import {
     RunListResponseSchema,
     UuidSchema,
     CreateTaskInputSchema,
+    CreateAndStartTaskResponseSchema,
+    type CreateAndStartTaskResponse,
     UpdateTaskInputSchema,
     type CreateTaskInput,
     type UpdateTaskInput,
@@ -40,6 +42,16 @@ export const createTaskEndpoint = defineApiEndpoint<{
     path: '/tasks',
     inputValidators: { body: modelValidator(CreateTaskInputSchema) },
     validator: modelValidator(TaskDetailResponseSchema),
+});
+
+export const createAndStartTaskEndpoint = defineApiEndpoint<{
+    body: CreateTaskInput;
+    data: CreateAndStartTaskResponse;
+}>({
+    method: 'POST',
+    path: '/tasks/start',
+    inputValidators: { body: modelValidator(CreateTaskInputSchema) },
+    validator: modelValidator(CreateAndStartTaskResponseSchema),
 });
 
 export const taskEndpoint = defineApiEndpoint<{

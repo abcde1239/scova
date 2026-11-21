@@ -258,6 +258,13 @@ export const TaskDetailResponseSchema = Type.Object(
     },
     { additionalProperties: false, description: '任务摘要与当前不可变配置版本' },
 );
+export const CreateAndStartTaskResponseSchema = Type.Object(
+    {
+        detail: TaskDetailResponseSchema,
+        runId: Type.String({ ...UuidSchema, description: '已入队的执行标识' }),
+    },
+    { additionalProperties: false, description: '已创建的任务及其首次入队执行' },
+);
 export const TaskListResponseSchema = Type.Object(
     {
         items: Type.Array(TaskSchema, { description: '当前账号可见的任务摘要' }),
@@ -290,3 +297,4 @@ export type Task = Static<typeof TaskSchema>;
 export type TaskVersion = Static<typeof TaskVersionSchema>;
 export type TaskDetailResponse = Static<typeof TaskDetailResponseSchema>;
 export type TaskListResponse = Static<typeof TaskListResponseSchema>;
+export type CreateAndStartTaskResponse = Static<typeof CreateAndStartTaskResponseSchema>;

@@ -21,7 +21,7 @@ import { firstRow, requireRow } from '@/utils/database.ts';
 /** Run、事件、幂等记录与 Outbox 共用同一个事务连接。 */
 export function createRunStore(database: DatabaseExecutor) {
     const tasks = createTaskStore(database);
-    return {
+    const store = {
         reportQuestions: createReportQuestionStore(database),
         findSearchConfiguration(userId: string) {
             return database.query.searchConfigurations.findFirst({
@@ -167,10 +167,24 @@ export function createRunStore(database: DatabaseExecutor) {
                 .returning()
                 .then(firstRow);
         },
-        completeIdempotency(id: string, resourceId: string) {
+        reserveIdempotency(data: typeof tables.idempotencyRecords.$inferInsert) {
+            return database
+                .insert(tables.idempotencyRecords)
+                .values(data)
+                .onConflictDoNothing({
+                    target: [
+                        tables.idempotencyRecords.userId,
+                        tables.idempotencyRecords.scope,
+                        tables.idempotencyRecords.keyHash,
+                    ],
+                })
+                .returning()
+                .then(([row]) => row);
+        },
+        completeIdempotency(id: string, resourceId: string, responseCode = 202) {
             return database
                 .update(tables.idempotencyRecords)
-                .set({ status: 'completed', responseCode: 202, resourceId: resourceId })
+                .set({ status: 'completed', responseCode, resourceId })
                 .where(and(eq(tables.idempotencyRecords.id, id)))
                 .returning()
                 .then(firstRow);
@@ -209,6 +223,26 @@ export function createRunStore(database: DatabaseExecutor) {
                 .where(and(eq(tables.runs.id, runId)))
                 .returning()
                 .then(firstRow);
+        },
+    };
+    return {
+        ...store,
+        async enqueue(run: typeof tables.runs.$inferSelect) {
+            const { id: runId, userId, taskId, taskVersionId, mode } = run;
+            await store.createEvent({
+                userId,
+                runId,
+                seq: 1,
+                type: 'run.queued',
+                payload: { status: 'queued', taskVersionId },
+            });
+            await store.createOutbox({
+                userId,
+                aggregateId: runId,
+                eventType: 'run.enqueue',
+                dedupeKey: `run-${runId}-enqueue`,
+                payload: { runId, taskId, taskVersionId, mode },
+            });
         },
     };
 }
