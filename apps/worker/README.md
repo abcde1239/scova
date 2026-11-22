@@ -1,44 +1,46 @@
 # Scova Worker
 
-后台研究执行进程：消费 BullMQ Run 作业，管理租约、预算账本和 LangGraph 检查点，将研究候选及其原文引用原子交付为报告和收件箱记录。
+后台研究执行进程。Worker 消费 Run 作业、运行 Agent，再把研究候选交给 Server 核验和交付。
 
-运行前先执行 Server 的 `vp run db:migrate`。Worker 只核验 checkpoint 版本，不建表，也不提供备份、恢复等离线维护命令。运行态仍须连接 PostgreSQL 和 Redis，以维护本次执行的租约、checkpoint、工具账本和交付。调度、Outbox 投递及恢复回补由 Server 后台负责，单独启动 Worker 不会产生队列作业。
+先执行 Server 的 `vp run db:migrate`，启动同版本 Server。Worker 通过内部执行接口申请租约、保存工具账本与 LangGraph 检查点、提交交付。Server 独立负责调度、Outbox 投递、恢复回补和持久化。
 
 ## 启动
 
-在仓库根目录配置 `DATABASE_URL`、`REDIS_URL`，安装依赖并完成数据库迁移后运行：
+配置与 Server 一致的 `WORKER_EXECUTION_TOKEN`。BullMQ 模式另需 `REDIS_URL`，SQLite 模式通过执行接口消费作业。安装依赖并启动 Server 后运行：
 
 ```sh
-vp run worker#start       # Bun
-vp run worker#start:node  # Node.js
+vp run worker#start       # Bun 主运行时（默认）
+vp run worker#start:node  # Node.js 兼容运行时（显式选择）
 ```
 
 停止时阻止新领取、中断在途执行并等待写入收敛，再关闭消费者与执行连接。取消、租约到期和进程停机分别处理，后者保留可恢复状态。
 
 ## 配置
 
-默认通过 SearxNG 搜索；可显式配置 Tavily、DeepSeek/Perplexity 独立搜索 API，或在账号供应商配置中授权 OpenAI/Anthropic 内置搜索。内置搜索同时计入搜索与 Token 预算，详见[搜索配置](../../docs/public/guides/search.md)。
+默认通过 SearXNG 搜索。账号可配置独立 Search API，任务或单次执行可覆盖搜索方式，详见[搜索配置](../../docs/public/guides/search.md)。
 
-| 环境变量                             | 默认值        | 用途                                                                        |
-| ------------------------------------ | ------------- | --------------------------------------------------------------------------- |
-| `WORKER_QUEUE_NAME`                  | `scova-runs`  | BullMQ 队列名                                                               |
-| `WORKER_RUN_LEASE_SECONDS`           | `30`          | Run 租约；续期间隔为其三分之一，最多 10 秒                                  |
-| `WORKER_RUN_CONCURRENCY`             | `2`           | Run 消费并发数，最大 32                                                     |
-| `SEARCH_ENGINE_INTERVAL_MS`          | `10000`       | 每引擎共享启动间隔（毫秒）                                                  |
-| `SEARCH_CONFIG_VERSION`              | `1`           | 搜索实例出口、地区或 CX 配置指纹版本                                        |
-| `SEARCH_CACHE_ENABLED`               | `true`        | 同账号候选缓存与在途复用                                                    |
-| `SEARCH_ADAPTIVE_ENABLED`            | `true`        | Agent 最多两次预算内补搜                                                    |
-| `RESEARCH_ANSWER_SUPPLEMENT_ENABLED` | `false`       | 旧策略的可选补证；新执行按覆盖缺口自动补证，仍受SEARCH_ADAPTIVE_ENABLED约束 |
-| `READER_RENDER_WAIT_MS`              | `1000`        | 浏览器 DOM 渲染等待，范围 1–5000 毫秒                                       |
-| `READER_CHROMIUM_SANDBOX`            | `false`(容器) | Chromium sandbox；宿主机可设为 `true`                                       |
+| 环境变量                             | 默认值                  | 用途                                                                        |
+| ------------------------------------ | ----------------------- | --------------------------------------------------------------------------- |
+| `WORKER_EXECUTION_URL`               | `http://127.0.0.1:3001` | Server 内部执行服务地址                                                     |
+| `WORKER_EXECUTION_TOKEN`             | 必填                    | 与 Server 相同的内部服务令牌                                                |
+| `WORKER_QUEUE_NAME`                  | `scova-runs`            | 与 Server 一致的 Run 队列名                                                 |
+| `WORKER_RUN_LEASE_SECONDS`           | `30`                    | Run 租约；续期间隔为其三分之一，最多 10 秒                                  |
+| `WORKER_RUN_CONCURRENCY`             | `2`                     | Run 消费并发数，最大 32                                                     |
+| `SEARCH_ENGINE_INTERVAL_MS`          | `10000`                 | 每引擎共享启动间隔（毫秒）                                                  |
+| `SEARCH_CONFIG_VERSION`              | `1`                     | 搜索实例出口、地区或 CX 配置指纹版本                                        |
+| `SEARCH_CACHE_ENABLED`               | `true`                  | 同账号候选缓存与在途复用                                                    |
+| `SEARCH_ADAPTIVE_ENABLED`            | `true`                  | Agent 最多两次预算内补搜                                                    |
+| `RESEARCH_ANSWER_SUPPLEMENT_ENABLED` | `false`                 | 旧策略的可选补证；新执行按覆盖缺口自动补证，仍受SEARCH_ADAPTIVE_ENABLED约束 |
+| `READER_RENDER_WAIT_MS`              | `1000`                  | 浏览器 DOM 渲染等待，范围 1–5000 毫秒                                       |
+| `READER_CHROMIUM_SANDBOX`            | `false`(容器)           | Chromium sandbox；宿主机可设为 `true`                                       |
 
-Run 从数据库固定 owner、版本、模式和预算，队列只能选择 runId。同一 Run 只有一个有效租约，接管递增 epoch，最多恢复三次；恢复保留首次开始时间和 deadline。Server 的恢复扫描独立于原始 job，能处理消息丢失和保留的 completed/failed job。
+队列只携带 runId。Server 读取冻结的账号、版本和预算，签发有期限的 Run 租约。同一 Run 只有一个有效租约，接管递增 epoch，最多恢复三次；恢复保留首次开始时间和 deadline。Server 的恢复扫描独立于原始 job，能处理消息丢失和保留的 completed/failed job。
 
-网页阅读默认使用 Crawlee + Playwright。Reader 先用受限 HTTP 客户端安全跟随重定向，再在一次性 Chromium 上下文中执行 JavaScript；页面只能发起经过同一安全客户端的公网 GET，禁止写请求、凭据转发、下载、WebSocket、service worker 和二次导航。单次读取最多 15 秒、主文档/单资源 2 MiB、总资源 8 MiB、32 个资源请求。Worker 镜像已安装匹配 Chromium；Bun 在 Windows 上通过 Node/vpx 子进程承载 Reader，取消和关闭会等待浏览器清理。该能力面向非交互公网页面，登录墙、挑战页和 PDF 不保证得到正文。
+网页阅读默认使用 Crawlee + Playwright。Reader 先用受限 HTTP 客户端安全跟随重定向，再在一次性 Chromium 上下文中执行 JavaScript；页面只能发起经过同一安全客户端的公网 GET，禁止写请求、凭据转发、下载、WebSocket、service worker 和二次导航。单次读取最多 15 秒、主文档/单资源 2 MiB、总资源 8 MiB、32 个资源请求。Worker 镜像已安装匹配 Chromium；Bun 通过 Node/vpx 子进程承载 Reader（包括 Windows 和容器），Worker 主进程仍运行于 Bun，取消和关闭会等待浏览器清理。该能力面向非交互公网页面，登录墙、挑战页和 PDF 不保证得到正文。
 
 Bun 入口通过 `scripts/run-bun.mjs` 将当前 Node 路径传给 Reader；直接运行 Bun 时可用 `READER_NODE_EXECUTABLE` 指定 Node 可执行文件，默认查找 `node`。Node 通过仓库内 Vite+ loader 加载 Reader TypeScript，不需要额外安装脚本运行器。
 
-`AGENT_CHECKPOINT_SCHEMA` 默认为 `scova_agent`，由 Server 迁移创建并登记版本，Worker 启动时只核验该版本。模型优先使用账号配置，可用 `MODEL_API_KEY`、`MODEL_NAME` 和可选 `MODEL_BASE_URL` 设置部署默认模型。搜索与正文提取默认使用内置 SearXNG，账号可配置独立 Search API，任务或单次执行可覆盖；不读取服务器搜索 API 默认或模型内嵌搜索。`SEARXNG_BASE_URL`（默认 `http://127.0.0.1:8080`）仅指定内置工具地址，不选择搜索方式；搜索密钥单独加密保存，不写入任务或事件。升级须先执行数据库迁移，旧搜索 API 可在账号页显式迁入，见[搜索配置](../../docs/public/guides/search.md)。任务模型配置不可用时以 `AGENT_CONFIGURATION_INVALID` 失败，显式 API 缺配置或密钥无法读取分别使用 `SEARCH_API_NOT_CONFIGURED`、`SEARCH_CREDENTIAL_INVALID`，生产 Worker 不接受 demo 队列；历史演示报告仍可读取，测试可显式注入固定供应商。
+Worker 启动时先经内部接口检查 Server 的检查点版本和队列配置。`AGENT_CHECKPOINT_SCHEMA` 由 Server 配置与迁移。模型优先使用账号配置，可在 Server 配置 `MODEL_API_KEY`、`MODEL_NAME` 和可选 `MODEL_BASE_URL` 设置部署默认模型。搜索与正文提取默认使用内置 SearXNG，账号可配置独立 Search API，任务或单次执行可覆盖；不读取服务器搜索 API 默认或模型内嵌搜索。Server 的 `SEARXNG_BASE_URL`（默认 `http://127.0.0.1:8080`）仅指定内置工具地址，不选择搜索方式；搜索密钥单独加密保存，不写入任务或事件。升级须先执行数据库迁移，旧搜索 API 可在账号页显式迁入，见[搜索配置](../../docs/public/guides/search.md)。任务模型配置不可用时以 `AGENT_CONFIGURATION_INVALID` 失败，显式 API 缺配置或密钥无法读取分别使用 `SEARCH_API_NOT_CONFIGURED`、`SEARCH_CREDENTIAL_INVALID`，生产 Worker 不接受 demo 队列；历史演示报告仍可读取，测试可显式注入固定供应商。
 
 执行层通过受限上下文发出进度事件并检查执行权限；受信领域 repository 必须通过 `withRunFence` 在同一 Run 行锁事务内写入。普通写入拒绝取消、超期或失效租约；失败/取消终结有单独入口。执行器返回本身不代表已交付成果。
 

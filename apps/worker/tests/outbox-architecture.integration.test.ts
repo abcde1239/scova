@@ -1,4 +1,4 @@
-import { requiredDatabaseValue } from '@/utils/database.ts';
+import { requiredDatabaseValue } from '../../server/src/utils/execution/database.ts';
 import { outbox as dbOutbox, eq } from '@scova/db';
 import { randomUUID } from 'node:crypto';
 import { Redis } from 'ioredis';

@@ -8,7 +8,7 @@ import { createApiApp } from '../src/app/index.ts';
 import { createDefaultServices } from '../src/app/services.ts';
 import { outboxDatabase } from '../../worker/tests/support/outbox-database.ts';
 import { runConfig } from '../../worker/tests/support/run-database.ts';
-import { createRunRepository } from '../../worker/src/repo/runs.ts';
+import { createRunRepository } from '../src/repo/execution/runs.ts';
 import { firstRow, requireRow } from '../src/utils/database.ts';
 
 const fixture = outboxDatabase();

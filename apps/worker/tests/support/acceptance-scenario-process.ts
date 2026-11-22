@@ -3,11 +3,11 @@ import { createDatabaseClient, connectDatabase, closeDatabase } from '@scova/db'
 
 import { createWorkerApp } from '../../src/app/index.ts';
 import { readWorkerConfig } from '../../src/app/config.ts';
-import { createRunRepository } from '../../src/repo/runs.ts';
+import { createRunRepository } from '../../../server/src/repo/execution/runs.ts';
 import { createRunHandler } from '../../src/handler/runs.ts';
 import { createRunConsumer } from '../../src/app/queue/runs.ts';
 import { RunService } from '../../src/service/runs.ts';
-import { createAgentRuntime } from '../../src/service/agent.ts';
+import { createLocalAgentRuntime as createAgentRuntime } from './local-agent-runtime.ts';
 import {
     scenarioConnectors,
     scenarioNames,
@@ -15,8 +15,9 @@ import {
     type ScenarioPhase,
 } from './acceptance-scenario-fixtures.ts';
 
-const config = readWorkerConfig();
-const schema = new URL(config.databaseUrl).searchParams.get('schema');
+const config = readWorkerConfig({ ...process.env, WORKER_EXECUTION_TOKEN: 'fixture'.repeat(5) });
+const databaseUrl = process.env.DATABASE_URL!;
+const schema = new URL(databaseUrl).searchParams.get('schema');
 const scenario = process.env.SCOVA_ACCEPTANCE_SCENARIO as ScenarioName;
 const phase = process.env.SCOVA_ACCEPTANCE_PHASE as ScenarioPhase;
 if (!schema || !/^scova_acceptance_[a-f0-9]{32}$/.test(schema))
@@ -24,10 +25,10 @@ if (!schema || !/^scova_acceptance_[a-f0-9]{32}$/.test(schema))
 if (!scenarioNames.includes(scenario) || !['A', 'B', 'C'].includes(phase))
     throw new Error('Invalid acceptance scenario or phase');
 
-const database = createDatabaseClient({ connectionString: config.databaseUrl });
+const database = createDatabaseClient({ connectionString: databaseUrl });
 const agent = createAgentRuntime({
     database,
-    databaseUrl: config.databaseUrl,
+    databaseUrl,
     checkpointSchema: schema,
     bundle: scenarioConnectors(scenario, phase, {
         queryForGoal: process.env.SCOVA_ACCEPTANCE_QUERY_FOR_GOAL === '1',
@@ -40,7 +41,7 @@ const app = createWorkerApp({
     resources: {
         async connect() {
             await connectDatabase(database);
-            await prepareTestCheckpointSchema(config.databaseUrl, schema);
+            await prepareTestCheckpointSchema(databaseUrl, schema);
             await agent.connect();
             consumer = createRunConsumer(
                 config.redisUrl,

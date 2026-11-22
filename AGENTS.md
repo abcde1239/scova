@@ -46,6 +46,8 @@ release. Add a tool name to select part of the graph. For example, run
 
 ## 目录与后端分层
 
+后端以 Bun 为主运行时，Node.js 为显式兼容运行时。Server/Worker 的默认 `dev`、`start`、数据库迁移及容器入口使用 Bun；Node.js 通过 `:node` 命令选择，不自动降级。Vite+ 工具链与 Reader 的 Node 子进程独立于后端主进程；使用 `node:*` API 或 Node HTTP 适配器不改变主运行时定位。运行时变更须验证 Bun 主入口及 Node 兼容入口。
+
 每个 `apps/*`、`packages/*` 工作区均以 `src` 保存源码，配置本工作区的 `@/* → ./src/*` 别名。应用内部使用 `@/`，跨包通过包名和 exports 引用；直接导出源码的共享包内部保留相对引用，避免消费方 TypeScript 将 `@/` 解析到错误工作区。Vite/Vitest 开启按导入文件解析 tsconfig paths；Node.js 入口通过 `vpx` 执行。
 
 Web 的 `src/` 顶层目录仅用 `component`（仅 `.vue`：复用 UI、应用级 UI provider）、`layout`（应用页面外壳及其专用导航、菜单和面包屑）、`composable`（复用交互和响应式流程）、`utils`（通用辅助，以及按领域分组的纯函数、展示类型和静态配置）、`store`（Pinia 客户端状态）、`api`（requestlane、SSE 与接口契约适配）、`view`（页面）、`router`（Vue Router 装配、路由登记和元数据）。使用这些单数目录名；报告等专用辅助模块放在 `utils` 的对应领域子目录，不在 `component` 存放独立 `.ts` 文件，也不另设顶层目录。
@@ -54,6 +56,25 @@ Server 的 `src/` 顶层目录仅用 `repo`、`handler`、`service`、`model`、
 
 Server 的 `handler/http` 放 Cookie、Origin/CSRF、会话桥接、请求体限制与 SSE 背压/心跳/连接清理，`repo` 包含 Redis 客户端适配及数据访问，`repo/queue` 放 BullMQ 发布、回补和维护操作；长期连接由 `app` 装配并关闭。Server 后台控制由 `app` 装配独立批次和资源，负责调度、Outbox 投递及可恢复 Run 回补，不暴露 HTTP 路由；停止先阻止新批次并等待在途工作，再关闭资源。
 
-Worker 复用后端分层的实际子集，不建空 `router` 或 `model`：只消费 BullMQ 作业、管理执行并运行 agent-core，禁止周期调度、发布 Run 或扫描回补。`app/queue` 承载运行时消费适配，`handler` 接收作业，`service` 编排，`repo` 目前仍负责执行绑定的租约、工具账本、checkpoint 和交付。停止先中断并等待在途执行收敛，再释放消费者及执行依赖；导入模块不连接外部服务。队列确认不能视为 Agent 已完成执行。
+Worker 复用后端分层的实际子集，不建空 `router` 或 `model`：只消费 Run 作业、管理执行并运行 agent-core，禁止周期调度、发布 Run 或扫描回补。`app/queue` 承载运行时消费适配，`handler` 接收作业，`service` 编排，`repo` 通过 Server 的内部执行接口申请租约、持久化工具账本和 checkpoint、提交候选成果。Server 校验账号、租约和 epoch，执行交付事务。SQLite 队列经同一接口消费；Worker 生产代码不访问 PostgreSQL 或 SQLite 文件。停止先中断并等待在途执行收敛，再释放消费者及执行依赖；导入模块不连接外部服务。队列确认不能视为 Agent 已完成执行。
 
 以上限制只针对应用 `src/` 的一级目录，不限制层内按职责分组、工作区根级的测试/静态资源/工具配置，或 `src/` 顶层真实入口文件（如 Web 的 `main.ts`、`App.vue`、`main.css`、`env.d.ts`，后端的 `main.ts`、`node.ts` 及部署实际调用的健康检查/维护 CLI）。不给入口增加纯转发文件或空目录；如确需额外一级目录，在变更说明中写明现有层为何不适合、边界和使用方，并同步公开架构文档。
+
+<!-- prettier-ignore-start -->
+
+<!-- harness-kit:begin -->
+## Project development and verification
+
+- Read applicable project instructions first. If docs/agent_guide.md or MEMORY.md exists locally, read only relevant conventions and lessons. Continue from public files when private material is absent; do not require downloading it.
+- If docs/decision/coding-style/RULES.md exists, apply adopted rules within this task's scope; candidate rules are references only. Personal preferences do not override current user requirements, applicable instructions or existing tool configuration. Explain material conflicts.
+- Use applicable installed Skills. Load Harness Kit through the actual host mechanism or CLI for onboarding, development, repair, review or recovery. Implement small changes directly; clarify scope and acceptance for complex work. Preserve frameworks and user edits.
+- Use harness doctor for diagnosis, harness check for conventions and harness run for configured verification. If unavailable, verify the installation and selected Node.js/Bun runtime. Never report unrun, unconfigured, timed-out or skipped work as passed.
+- Put generated logs, reports, and screenshots in one directory allocated by harness artifacts create for the work. Reuse it across agents, finish it after writers stop, and keep it before linking durable evidence. Preview cleanup; apply it only when requested. Keep .harness for CLI state and managed Hook files. Put tests, fixtures, and snapshots in the framework test directories; keep test output in the framework output directory or a managed artifact run. Never add experimental Hook executables to .harness/hooks.
+- For complex or cross-session work, use harness task start/resume/status to preserve goals, harness run --work ID to associate verification, harness task accept for checked criteria, and harness task finish only after completion gates hold.
+- Delegate independent work only when authorized and real host tools are available. Provide goals, writable files, interface dependencies, applicable rules and verification commands. Assign one writer per shared file and independently check changes and evidence.
+- Reproduce failures and distinguish implementation, configuration and environment causes before retrying. Report changes, actual outcomes and remaining blockers; refresh relevant evidence after project inputs change.
+- Write maintained agent prompts and instructions in English; use the user's requested language for responses. Preserve original user-owned text, code and quotations. For observed agent behavior problems, assess context, tools, workflow, prompts and validation before adding a scoped rule.
+- After coding or system design, consolidate reusable project memory and applicability. Keep development lessons, decisions and verification records internal. Check actual artifacts and provenance separately before publication.
+<!-- harness-kit:end -->
+
+<!-- prettier-ignore-end -->

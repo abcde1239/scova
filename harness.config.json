@@ -111,6 +111,7 @@
             "compose.yaml",
             "compose.search.yaml",
             "compose.local.yaml",
+            "compose.sqlite.yaml",
             "ops/searxng/**",
             "Dockerfile",
             ".dockerignore",

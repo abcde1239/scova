@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vite-plus/test';
 import type { AgentCandidate, AgentContext } from '@scova/agent-core';
 import type { Run, ToolCall } from '@scova/db';
 
-import { finalizeCoverage, type DeliveryProof } from '@/service/delivery-proof.ts';
+import {
+    finalizeCoverage,
+    type DeliveryProof,
+} from '../../server/src/service/execution/delivery-proof.ts';
 
 const url = 'https://example.com/a';
 

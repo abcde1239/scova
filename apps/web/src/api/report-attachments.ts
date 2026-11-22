@@ -1,5 +1,6 @@
 import {
     REPORT_ATTACHMENT_MAX_BYTES,
+    REPORT_ATTACHMENT_MEDIA_TYPES,
     ReportAttachmentDeletedSchema,
     ReportAttachmentFilenameSchema,
     ReportAttachmentListSchema,
@@ -56,9 +57,9 @@ export const uploadReportAttachmentEndpoint = defineApiEndpoint<{
                     !(value instanceof Blob) ||
                     !value.size ||
                     value.size > REPORT_ATTACHMENT_MAX_BYTES ||
-                    value.type !== 'text/csv'
+                    !Object.values<string>(REPORT_ATTACHMENT_MEDIA_TYPES).includes(value.type)
                 )
-                    throw new TypeError('请选择不超过 256 KiB 的 CSV 文件');
+                    throw new TypeError('请选择不超过 256 KiB 的 CSV、TXT 或 PDF 文件');
                 return value;
             },
         },

@@ -1065,7 +1065,7 @@ describe('长期任务、不可变版本与并发编辑', () => {
                 where: eq(tables.taskVersions.id, created.version.id),
             }))!.configJson,
         ).toMatchObject({ agentProviderId: b.id });
-        const { activeAgentProvider } = await import('../../worker/src/repo/agent-providers');
+        const { activeAgentProvider } = await import('../src/repo/execution/agent-providers.ts');
         expect((await activeAgentProvider(db, userId, b.id))?.id).toBe(b.id);
         expect(await activeAgentProvider(db, userId, foreign.id)).toBeNull();
     });

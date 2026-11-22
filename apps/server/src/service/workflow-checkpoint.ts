@@ -76,53 +76,61 @@ export async function advanceWorkflow(
         }
     }
 
+    async function refreshChildren(stage: WorkflowRunNode[], cancel = false) {
+        for (const node of stage) {
+            if (node.status !== 'running') continue;
+            if (!node.childRunId) throw new Error('运行中的研究节点缺少子执行');
+            const child = { ...configured(node), childRunId: node.childRunId };
+            recordChild(node, await (cancel ? research.cancel(child) : research.read(child)));
+        }
+        return stage.some((node) => node.status === 'running');
+    }
+
     if (run.status === 'cancel_requested') {
         checkpoint.startedAt = run.startedAt;
         checkpoint.status = 'cancel_requested';
-        const active = nodes.find((node) => node.status === 'running');
-        if (active) {
-            if (!active.childRunId) throw new Error('运行中的研究节点缺少子执行');
-            const child = await research.cancel({
-                ...configured(active),
-                childRunId: active.childRunId,
-            });
-            recordChild(active, child);
-            if (active.status === 'running') return checkpoint;
-        }
-        return finish('canceled');
+        return (await refreshChildren(nodes, true)) ? checkpoint : finish('canceled');
     }
 
+    const stages = new Map<string, WorkflowRunNode[]>();
     for (const node of nodes) {
-        if (node.status === 'succeeded') continue;
-        if (node.status === 'running') {
-            if (!node.childRunId) throw new Error('运行中的研究节点缺少子执行');
-            const child = await research.read({ ...configured(node), childRunId: node.childRunId });
-            recordChild(node, child);
-            // The call can change the state. Child status distinguishes waiting and terminal phases.
-            if (child && childRunActive(child.status)) return checkpoint;
-            if (child?.status !== 'succeeded')
-                return finish('failed', node.failureCode ?? 'CHILD_RUN_CANCELED');
-            continue;
+        const key = node.parallelGroup ?? node.id;
+        const stage = stages.get(key);
+        if (stage) stage.push(node);
+        else stages.set(key, [node]);
+    }
+    for (const stage of stages.values()) {
+        if (stage.every((node) => node.status === 'succeeded')) continue;
+        if (await refreshChildren(stage)) return checkpoint;
+        const failed = stage.find((node) => node.status === 'failed' || node.status === 'canceled');
+        if (failed) return finish('failed', failed.failureCode ?? 'CHILD_RUN_CANCELED');
+
+        // Launch takes a Task row lock. Every group uses the same lock ordering as publish.
+        const pending = stage
+            .filter((node) => node.status === 'pending')
+            .sort((a, b) => (a.taskId ?? '').localeCompare(b.taskId ?? ''));
+        for (const node of pending) {
+            node.attempt = 1;
+            node.startedAt = at;
+            if (node.type !== 'study') {
+                node.status = 'succeeded';
+                node.finishedAt = at;
+                continue;
+            }
+            const result = await research.launch(configured(node));
+            if ('failureCode' in result) {
+                node.status = 'failed';
+                node.finishedAt = at;
+                node.failureCode = result.failureCode;
+                // Already started siblings retain their child Runs until those Runs settle.
+                if (stage.some((sibling) => sibling.status === 'running')) return checkpoint;
+                return finish('failed', result.failureCode);
+            }
+            node.status = 'running';
+            node.childRunId = result.run.id;
+            node.childStatus = result.run.status;
         }
-        if (node.status !== 'pending') throw new Error('工作流检查点与运行状态不一致');
-        node.attempt = 1;
-        node.startedAt = at;
-        if (node.type !== 'study') {
-            node.status = 'succeeded';
-            node.finishedAt = at;
-            continue;
-        }
-        const result = await research.launch(configured(node));
-        if ('failureCode' in result) {
-            node.status = 'failed';
-            node.finishedAt = at;
-            node.failureCode = result.failureCode;
-            return finish('failed', result.failureCode);
-        }
-        node.status = 'running';
-        node.childRunId = result.run.id;
-        node.childStatus = result.run.status;
-        return checkpoint;
+        if (stage.some((node) => node.status === 'running')) return checkpoint;
     }
     return finish('succeeded');
 }

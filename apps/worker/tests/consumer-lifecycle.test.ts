@@ -118,7 +118,7 @@ describe('Run consumer意外退出与停止的故障传播', () => {
         };
         const app = createWorkerApp({
             config: readWorkerConfig({
-                DATABASE_URL: 'postgresql://localhost/scova',
+                WORKER_EXECUTION_TOKEN: 'test'.repeat(8),
                 REDIS_URL: 'redis://localhost',
             }),
             resources,

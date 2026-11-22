@@ -4,7 +4,7 @@ import {
     classifyToolFailure,
     toolFailures,
     modelFailureDiagnostic,
-} from '../src/utils/tool-failure.ts';
+} from '@scova/shared/execution/tool-failure';
 
 describe('公开工具错误分类', () => {
     it.each([

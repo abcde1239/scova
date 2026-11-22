@@ -79,6 +79,7 @@ export class ComposeEnvironment {
         this.env = {
             ...process.env,
             POSTGRES_PASSWORD: randomBytes(24).toString('hex'),
+            WORKER_EXECUTION_TOKEN: randomBytes(32).toString('hex'),
             APP_ORIGIN: this.origin,
             SCOVA_BIND: '127.0.0.1',
             SCOVA_PORT: String(address.port),
@@ -103,12 +104,15 @@ export class ComposeEnvironment {
                         ? {}
                         : {
                               environment: {
-                                  DATABASE_URL:
-                                      url +
-                                      (service === 'api' || service === 'worker'
-                                          ? `&application_name=scova-${service}`
-                                          : ''),
-                                  AGENT_CHECKPOINT_SCHEMA: this.checkpointSchema,
+                                  ...(service === 'worker'
+                                      ? {}
+                                      : {
+                                            DATABASE_URL:
+                                                service === 'api'
+                                                    ? `${url}&application_name=scova-api`
+                                                    : url,
+                                            AGENT_CHECKPOINT_SCHEMA: this.checkpointSchema,
+                                        }),
                                   WORKER_QUEUE_NAME: this.queue,
                                   WORKER_POLL_INTERVAL_MS: '50',
                                   WORKER_FAILURE_DELAY_MS: '50',

@@ -1,5 +1,5 @@
 import { prepareTestCheckpointSchema } from './checkpoint-schema.ts';
-import { requiredDatabaseValue } from '@/utils/database.ts';
+import { requiredDatabaseValue } from '../../../server/src/utils/execution/database.ts';
 import { selectedOutputFormats } from '@scova/models';
 import {
     createDatabaseClient,
@@ -18,8 +18,8 @@ import {
     type StructuredInput,
     type CallContext,
 } from '@scova/connectors';
-import { createRunRepository } from '../../src/repo/runs.ts';
-import { createAgentRuntime } from '../../src/service/agent.ts';
+import { createRunRepository } from '../../../server/src/repo/execution/runs.ts';
+import { createLocalAgentRuntime as createAgentRuntime } from './local-agent-runtime.ts';
 import { RunService, type RunExecutionContext } from '../../src/service/runs.ts';
 
 // Test-only deterministic providers; the production claim, graph, checkpoints and delivery all run.

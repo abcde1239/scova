@@ -1877,7 +1877,7 @@ test('报告图表显示来源数据并下载 SVG，私有 CSV 可上传、定�
     await page.getByText('私有参考附件', { exact: true }).click();
     await expect(page.getByText('暂无参考附件')).toBeVisible();
     await page
-        .getByLabel('选择 CSV 文件')
+        .getByLabel('选择附件')
         .setInputFiles({ name: filename, mimeType: 'text/csv', buffer: Buffer.from(csv) });
     await page.getByRole('button', { name: '上传附件', exact: true }).click();
     await expect(page.getByText(filename, { exact: true })).toBeVisible();
@@ -1886,4 +1886,115 @@ test('报告图表显示来源数据并下载 SVG，私有 CSV 可上传、定�
     await page.getByRole('button', { name: '删除附件', exact: true }).click();
     await page.getByRole('button', { name: '确认删除', exact: true }).click();
     await expect(page.getByText('暂无参考附件')).toBeVisible();
+});
+
+for (const width of [1440, 390]) {
+    test(`报告打印只保留当前成果、变化和来源 / ${width}px`, async ({ page }, info) => {
+        await page.setViewportSize({ width, height: 900 });
+        await samples(page);
+        await page.addInitScript(() => {
+            window.print = () => window.dispatchEvent(new Event('beforeprint'));
+        });
+        await page.goto(reportPath);
+        if (width < 600) await page.getByRole('button', { name: '成果', exact: true }).click();
+        const panel = page.locator('#report-artifact');
+        const source = panel.locator('.evidence-source-group').first();
+        await expect(source).toBeVisible();
+        await expect(source).not.toHaveAttribute('open', '');
+        await panel.getByRole('button', { name: '打印 / 另存为 PDF' }).press('Enter');
+        await expect(source).toHaveAttribute('open', '');
+        await page.emulateMedia({ media: 'print' });
+        await expect(panel.locator('#report-title')).toHaveText(report().title);
+        await expect(panel.locator('.source-quotes').first()).toBeVisible();
+        await expect(page.locator('.workbench-header')).toBeHidden();
+        await expect(page.locator('#report-conversation')).toBeHidden();
+        await expect(panel.getByText('私有参考附件')).toBeHidden();
+        await expect(panel.locator('.artifact-scroll')).toHaveCSS('overflow', 'visible');
+        const pdf = await page.pdf({ path: info.outputPath('report-print.pdf'), format: 'A4' });
+        expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
+        await page.emulateMedia({ media: 'screen' });
+        await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
+        await expect(source).not.toHaveAttribute('open', '');
+        await expect(panel.getByRole('button', { name: '打印 / 另存为 PDF' })).toBeVisible();
+    });
+}
+
+test('报告附件 TXT 显示原文行，PDF 只提供原件下载', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await samples(page);
+    const reportId = id(1);
+    const root = `/api/v1/reports/${reportId}/attachments`;
+    const fixtures = {
+        '资料.txt': { id: id(92), content: '<b>文本原样保留</b>\n', mediaType: 'text/plain' },
+        '资料.pdf': { id: id(93), content: '%PDF-1.7\nfixture', mediaType: 'application/pdf' },
+    };
+    const saved = new Set<keyof typeof fixtures>();
+    const resource = (filename: keyof typeof fixtures) => ({
+        id: fixtures[filename].id,
+        reportId,
+        filename,
+        byteLength: Buffer.byteLength(fixtures[filename].content),
+        createdAt: report().publishedAt,
+        downloadUrl: `${root}/${fixtures[filename].id}/download`,
+        failureCode: null,
+        ...(filename.endsWith('.pdf')
+            ? { format: 'pdf', status: 'download_only', rowCount: null }
+            : { format: 'txt', status: 'ready', rowCount: 1 }),
+    });
+    await page.route(`**${root}**`, async (route) => {
+        const request = route.request();
+        const url = new URL(request.url());
+        if (request.method() === 'POST') {
+            const filename = url.searchParams.get('filename') as keyof typeof fixtures;
+            expect(request.headers()['x-csrf-token']).toBe('report-test-only');
+            expect(request.headers()['content-type']).toBe(fixtures[filename].mediaType);
+            expect(request.postDataBuffer()?.toString()).toBe(fixtures[filename].content);
+            saved.add(filename);
+            return route.fulfill({ json: resource(filename) });
+        }
+        if (url.pathname.endsWith(`/${fixtures['资料.txt'].id}/rows`))
+            return route.fulfill({
+                json: {
+                    attachmentId: fixtures['资料.txt'].id,
+                    rowCount: 1,
+                    rows: [
+                        {
+                            rowNumber: 1,
+                            startLine: 1,
+                            endLine: 1,
+                            cells: [fixtures['资料.txt'].content.trimEnd()],
+                        },
+                    ],
+                },
+            });
+        if (url.pathname.endsWith(`/${fixtures['资料.pdf'].id}/download`))
+            return route.fulfill({
+                contentType: 'application/octet-stream',
+                body: fixtures['资料.pdf'].content,
+            });
+        return route.fulfill({ json: { items: [...saved].map(resource) } });
+    });
+    await page.goto(reportPath);
+    await page.getByText('私有参考附件', { exact: true }).click();
+    for (const [filename, fixture] of Object.entries(fixtures)) {
+        await page.getByLabel('选择附件').setInputFiles({
+            name: filename,
+            mimeType: 'application/octet-stream',
+            buffer: Buffer.from(fixture.content),
+        });
+        await page.getByRole('button', { name: '上传附件', exact: true }).press('Enter');
+        await expect(page.getByText(filename, { exact: true })).toBeVisible();
+    }
+    await page.getByRole('button', { name: '查看内容', exact: true }).click();
+    await expect(page.getByText('<b>文本原样保留</b>', { exact: true })).toBeVisible();
+    const pdf = page.locator('li').filter({
+        has: page.getByText('PDF · 可下载原文件', { exact: true }),
+    });
+    await expect(pdf.getByRole('button', { name: '查看内容', exact: true })).toHaveCount(0);
+    const [download] = await Promise.all([
+        page.waitForEvent('download'),
+        pdf.getByRole('button', { name: '下载原文件' }).click(),
+    ]);
+    expect(download.suggestedFilename()).toBe('资料.pdf');
+    expect(await readFile((await download.path())!, 'utf8')).toBe(fixtures['资料.pdf'].content);
 });

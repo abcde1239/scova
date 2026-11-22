@@ -6,7 +6,8 @@
     "exports": {
         ".": "./src/index.ts",
         "./feedback": "./src/feedback.ts",
-        "./migrate": "./src/migrate.ts"
+        "./migrate": "./src/migrate.ts",
+        "./sqlite-state": "./src/sqlite-state.ts"
     },
     "scripts": {
         "build": "tsc --noEmit",

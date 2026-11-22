@@ -1,13 +1,17 @@
 import { and, eq, isNull, users } from '@scova/db';
 import type { ApiServices } from '@/app/services';
+import { countLocalAttempts } from '@/repo/sqlite-coordination';
 
 export function createAvatarRepository(services: ApiServices) {
     return {
         async takeWriteSlot(userId: string) {
-            const redis = services.redis();
-            if (redis.status === 'wait') await redis.connect();
             const window = Math.floor(services.clock().getTime() / 60_000);
             const prefix = `${services.rateLimit.keyPrefix}avatar:${window}:`;
+            const local = services.sqliteState?.();
+            if (local)
+                return countLocalAttempts(local, [`${prefix}${userId}`, `${prefix}global`], 60);
+            const redis = services.redis();
+            if (redis.status === 'wait') await redis.connect();
             return redis.eval(
                 "local a=redis.call('INCR',KEYS[1]); if a==1 then redis.call('EXPIRE',KEYS[1],60) end; local b=redis.call('INCR',KEYS[2]); if b==1 then redis.call('EXPIRE',KEYS[2],60) end; return {a,b}",
                 2,

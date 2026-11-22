@@ -2,11 +2,11 @@
 
 任务驱动的 AI 信息查阅与研究工作台。围绕主题搜索、阅读和查证资料，生成带引用的报告，并持续追踪新增与变化。
 
-项目开发中：Vue 工作台提供账号、任务与计划、执行进度与控制、四种报告形式、引用、收件箱/通知、反馈、资料库和证据问答。后端提供有预算的持久化 Agent、搜索/模型/安全阅读、证据交付和连续运行比较，同源 Compose 可部署 Web/API/Worker。浏览器与完整工作台门禁见[工作台说明](docs/public/guides/web-workbench.md)；受控供应商测试和真实远程研究分别验证。
+Vue 工作台支持独立任务和项目内任务、定时执行、串行工作流、执行进度与取消。研究成果提供四种报告形式、来源引用、连续问答、图表下载和私有 CSV 附件。后端 Agent 按预算搜索、阅读并核验证据，通过持久化执行状态支持恢复与跨次比较。项目仍在开发，使用入口见[工作台说明](docs/public/guides/web-workbench.md)。
 
 ## 技术与目录
 
-Vite+ / TypeScript monorepo，Vue 3 前端，Bun + Elysia 后端（兼容 Node.js），PostgreSQL + Drizzle，Redis + BullMQ。
+Vite+ / TypeScript monorepo，Vue 3 前端，Elysia 后端，PostgreSQL + Drizzle，Redis + BullMQ。后端以 **Bun 为主运行时，Node.js 为兼容运行时**；Server、Worker 和数据库迁移默认使用 Bun。
 
 | 目录                                                           | 用途                                                |
 | -------------------------------------------------------------- | --------------------------------------------------- |
@@ -42,7 +42,7 @@ vp run local:status       # 查看三个基础服务的状态
 vp run local:down         # 停止这套基础服务，保留数据卷与 .env.local
 ```
 
-后端提供 `/health`、`/swagger` 和 `/swagger/json`。Worker 可从成功保存的正文交付带引用的报告与收件箱记录；未核验时间范围、来源失败或正文截断会保留为 partial，不冒充完整研究。配置见 [Worker 说明](apps/worker/README.md)。
+后端提供 `/health`、`/swagger` 和 `/swagger/json`。Worker 消费队列并执行 Agent，Server 管理租约、检查点和工具账本，并从已保存的正文交付带引用的报告与收件箱记录；未核验时间范围、来源失败或正文截断会保留为 partial，不冒充完整研究。配置见 [Worker 说明](apps/worker/README.md)。
 
 ## 构建与预览
 

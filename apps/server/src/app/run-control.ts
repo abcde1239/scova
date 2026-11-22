@@ -1,5 +1,7 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { closeDatabase, createDatabaseClient, type DatabaseClient } from '@scova/db';
+import { openSqliteRunQueue } from '@scova/db/sqlite-state';
+import { outboxJobId, type OutboxMessage } from '@scova/shared/outbox-job';
 import { createOutboxHandler } from '../handler/outbox.ts';
 import { createSchedulerHandler } from '../handler/scheduler.ts';
 import { createOutboxQueue } from '../repo/queue/outbox.ts';
@@ -19,6 +21,7 @@ export function createRunControl(config: RunControlConfig = readRunControlConfig
     const { signal } = controller;
     let database: DatabaseClient | undefined;
     let redis: ReturnType<typeof createRedisConnection> | undefined;
+    let localQueue: ReturnType<typeof openSqliteRunQueue> | undefined;
     let publisher: ReturnType<typeof createOutboxQueue> | undefined;
     let outbox: ReturnType<typeof createOutboxHandler> | undefined;
     let scheduler: ReturnType<typeof createSchedulerHandler> | undefined;
@@ -32,6 +35,29 @@ export function createRunControl(config: RunControlConfig = readRunControlConfig
         }));
 
     async function dispatchBatch() {
+        if (config.sqliteStatePath) {
+            const queue = (localQueue ??= openSqliteRunQueue(
+                config.sqliteStatePath,
+                config.queueName,
+            ));
+            outbox ??= outboxHandler({
+                async publish(item) {
+                    queue.publish(outboxJobId(item), item.eventType, item.payload);
+                },
+            });
+            await outbox(signal);
+            if (signal.aborted) return;
+            for (const run of await listRecoverableRuns(db(), config.batchSize)) {
+                if (signal.aborted) break;
+                queue.publish(
+                    `run-recover-${run.id}-${run.leaseEpoch}`,
+                    'run.enqueue',
+                    { runId: run.id },
+                    true,
+                );
+            }
+            return;
+        }
         if (!config.redisUrl) throw new Error('缺少 REDIS_URL');
         if (!redis) {
             redis = createRedisConnection(config.redisUrl, {
@@ -43,19 +69,23 @@ export function createRunControl(config: RunControlConfig = readRunControlConfig
         if (signal.aborted) return;
         if (redis.status !== 'ready') throw new Error('Run 队列未就绪');
         publisher ??= createOutboxQueue(redis, config.queueName);
-        outbox ??= createOutboxHandler(
-            new OutboxService({
-                repository: createOutboxRepository(db()),
-                publisher,
-                leaseSeconds: config.leaseSeconds,
-            }),
-            config.batchSize,
-        );
+        outbox ??= outboxHandler(publisher);
         await outbox(signal);
         if (!signal.aborted) {
             const runs = await listRecoverableRuns(db(), config.batchSize);
             await enqueueRecoverableRuns(publisher.queue, runs, signal);
         }
+    }
+
+    function outboxHandler(target: { publish(item: OutboxMessage): Promise<void> }) {
+        return createOutboxHandler(
+            new OutboxService({
+                repository: createOutboxRepository(db()),
+                publisher: target,
+                leaseSeconds: config.leaseSeconds,
+            }),
+            config.batchSize,
+        );
     }
 
     async function scheduleBatch() {
@@ -120,6 +150,7 @@ export function createRunControl(config: RunControlConfig = readRunControlConfig
             return (closing ??= (async () => {
                 await Promise.all(loops ?? []);
                 try {
+                    localQueue?.close();
                     await publisher?.close();
                 } finally {
                     redis?.disconnect();

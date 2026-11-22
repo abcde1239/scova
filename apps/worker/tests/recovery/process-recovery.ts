@@ -1,9 +1,7 @@
-import { requiredDatabaseValue } from '@/utils/database.ts';
+import { requiredDatabaseValue } from '../../../server/src/utils/execution/database.ts';
 import {
     runs as dbRuns,
     eq,
-    sql,
-    queryRows,
     toolCalls as dbToolCalls,
     reports as dbReports,
     count as dbCount,
@@ -13,7 +11,7 @@ import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import pg from 'pg';
 import { expect, it } from 'vite-plus/test';
 import { seedRun } from '../support/run-database.ts';
-import { fixture } from './fixture.ts';
+import { fixture, executionFixture } from './fixture.ts';
 import { launchAgent, waitAgentMessage, endAgent } from './process-fixture.ts';
 
 export function registerProcessRecovery() {
@@ -39,7 +37,7 @@ export function registerProcessRecovery() {
                 .where(eq(dbRuns.id, seed.run.id))
                 .returning()
                 .then((rows) => requiredDatabaseValue(rows[0]));
-            const first = launchAgent(runtime, 'crash', seed.run.id, boundary);
+            const first = launchAgent(runtime, 'crash', seed.run.id, boundary, executionFixture);
             let second: ReturnType<typeof launchAgent> | undefined;
             try {
                 await waitAgentMessage(first, 'settled-before-checkpoint');
@@ -64,7 +62,7 @@ export function registerProcessRecovery() {
                 const raw = new PostgresSaver(
                     new pg.Pool({ connectionString: fixture.databaseUrl, max: 1 }),
                     undefined,
-                    { schema: new URL(fixture.databaseUrl).searchParams.get('schema')! },
+                    { schema: fixture.checkpointSchema },
                 );
                 try {
                     const ref = initial.checkpointRef as {
@@ -94,7 +92,7 @@ export function registerProcessRecovery() {
                     .where(eq(dbRuns.id, seed.run.id))
                     .returning()
                     .then((rows) => requiredDatabaseValue(rows[0]));
-                second = launchAgent(runtime, 'resume', seed.run.id, boundary);
+                second = launchAgent(runtime, 'resume', seed.run.id, boundary, executionFixture);
                 await waitAgentMessage(second, 'candidate');
                 await endAgent(second);
                 expect(second.exit?.code, second.output).toBe(0);
@@ -111,9 +109,8 @@ export function registerProcessRecovery() {
                     budgetJson: budget,
                     checkpointRef: { leaseEpoch: initial.leaseEpoch + 1 },
                 });
-                const calls = await queryRows<{ kind: string; input: string }>(
-                    fixture.db,
-                    sql`SELECT kind, input FROM recovery_external_calls WHERE run_id = ${seed.run.id}::uuid ORDER BY id`,
+                const calls = [...first.messages, ...second.messages].filter(
+                    (message) => message.type === 'connector',
                 );
                 expect(calls.map((call) => call.kind)).toEqual(['search', 'read']);
                 const ledger = await fixture.db.query.toolCalls.findMany({

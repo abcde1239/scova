@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { withDeadline } from '@scova/connectors';
 import type { ApiServices } from '@/app/services';
 import { ApiError } from '@/utils/errors.ts';
+import { reserveLocalDraft, settleLocalDraft } from '@/repo/sqlite-coordination';
 
 const fields = ['requests', 'attempts', 'inputTokens', 'outputTokens'] as const;
 const reserveScript = [
@@ -28,7 +29,7 @@ export interface DraftReservation {
 
 /** 只保存独立草稿限流和预算预留；不读写任何任务、执行或Outbox。 */
 export function createTaskDraftRepo(
-    services: Pick<ApiServices, 'redis' | 'clock' | 'taskDraftPolicy'>,
+    services: Pick<ApiServices, 'redis' | 'sqliteState' | 'clock' | 'taskDraftPolicy'>,
 ) {
     return {
         async begin(userId: string, signal?: AbortSignal) {
@@ -38,17 +39,28 @@ export function createTaskDraftRepo(
             const prefix = policy.keyPrefix + window + ':';
             const keys = [prefix + 'user:' + userId, prefix + 'global'];
             const remaining = policy.windowSeconds - (seconds % policy.windowSeconds);
-            async function execute(script: string, reservationKey: string, args: number[]) {
+            async function execute(
+                operation: 'reserve' | 'settle',
+                reservationKey: string,
+                args: number[],
+            ) {
                 try {
                     const result = await withDeadline(
                         Math.min(policy.commandTimeoutMs, policy.timeoutMs),
                         signal,
                         async (commandSignal) => {
+                            if (commandSignal.aborted) throw commandSignal.reason;
+                            const local = services.sqliteState?.();
+                            if (local) {
+                                const localOperation =
+                                    operation === 'reserve' ? reserveLocalDraft : settleLocalDraft;
+                                return localOperation(local, keys, reservationKey, args);
+                            }
                             const redis = services.redis();
                             if (redis.status === 'wait') await redis.connect();
                             if (commandSignal.aborted) throw commandSignal.reason;
                             const result = await redis.eval(
-                                script,
+                                operation === 'reserve' ? reserveScript : settleScript,
                                 3,
                                 ...keys,
                                 reservationKey,
@@ -76,7 +88,7 @@ export function createTaskDraftRepo(
             async function reserve(delta: number[]) {
                 if (delta.length !== fields.length) throw new Error('草稿预留字段不完整');
                 const reservationKey = prefix + 'reservation:' + randomUUID();
-                const ok = await execute(reserveScript, reservationKey, [
+                const ok = await execute('reserve', reservationKey, [
                     ...delta,
                     policy.userRequests,
                     policy.userAttempts,
@@ -118,7 +130,7 @@ export function createTaskDraftRepo(
                                 actualOutput > outputTokens
                             )
                                 throw new Error('草稿结算超过预算预留');
-                            if (!(await execute(settleScript, key, [actualInput, actualOutput])))
+                            if (!(await execute('settle', key, [actualInput, actualOutput])))
                                 throw new ApiError(
                                     503,
                                     'DRAFT_SERVICE_UNAVAILABLE',

@@ -1,6 +1,7 @@
 import { and, eq, isNull, isUniqueConflict, type DatabaseExecutor, type User } from '@scova/db';
 import * as tables from '@scova/db';
 import type { ApiServices } from '@/app/services';
+import { countLocalAttempts } from '@/repo/sqlite-coordination';
 import { firstRow } from '@/utils/database.ts';
 
 function sessionStore(database: DatabaseExecutor) {
@@ -20,6 +21,7 @@ function sessionStore(database: DatabaseExecutor) {
 }
 
 export type AuthTransaction = ReturnType<typeof sessionStore>;
+
 const rateScript = `local a=redis.call('INCR',KEYS[1]); if a==1 then redis.call('EXPIRE',KEYS[1],ARGV[1]) end; local b=redis.call('INCR',KEYS[2]); if b==1 then redis.call('EXPIRE',KEYS[2],ARGV[1]) end; return {a,b}`;
 
 /** 认证持久化适配；事务回调中的操作共享同一个数据库连接。 */
@@ -73,6 +75,8 @@ export function createAuthRepository(services: ApiServices) {
                 })
                 .then((row) => row ?? null),
         async countAttempts(globalKey: string, accountKey: string, windowSeconds: number) {
+            const local = services.sqliteState?.();
+            if (local) return countLocalAttempts(local, [globalKey, accountKey], windowSeconds);
             const redis = services.redis();
             if (redis.status === 'wait') await redis.connect();
             return redis.eval(rateScript, 2, globalKey, accountKey, windowSeconds);

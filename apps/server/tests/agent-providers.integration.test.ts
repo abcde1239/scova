@@ -23,7 +23,7 @@ import { createApiErrorPlugin } from '../src/app/errors';
 import { createAgentProviderPlugin } from '../src/router/agent-providers';
 import { createAgentProviderService } from '../src/service/agent-providers';
 import { csrfForSession, tokenHash } from '../src/utils/security';
-import { activeAgentProvider } from '../../worker/src/repo/agent-providers';
+import { activeAgentProvider } from '../src/repo/execution/agent-providers.ts';
 import { ConnectorError } from '@scova/connectors';
 
 const baseUrl =

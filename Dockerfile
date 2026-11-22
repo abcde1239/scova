@@ -31,7 +31,7 @@ FROM oven/bun:1.3.4-debian@sha256:9d9504d425a8b85c5cf162c1c354f9403e15583e0f3e1d
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
 # The pinned Bun Debian image uses Trixie, which ships the required PostgreSQL 17 client.
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates postgresql-client-17 && \
-    rm -rf /var/lib/apt/lists/* && mkdir -p /backups && chown bun:bun /backups
+    rm -rf /var/lib/apt/lists/* && mkdir -p /backups /var/lib/scova && chown bun:bun /backups /var/lib/scova
 ENV NODE_ENV=production
 
 FROM runtime-base AS runtime
@@ -41,7 +41,9 @@ WORKDIR /app/apps/server
 CMD ["bun", "run", "src/main.ts"]
 
 # Only the Worker needs Chromium; keep the API and migration image browser-free.
-FROM runtime-base AS worker-browser
+FROM oven/bun:1.3.4-debian@sha256:9d9504d425a8b85c5cf162c1c354f9403e15583e0f3e1de3750ce3723d3e89ac AS worker-browser
+COPY --from=node /usr/local/bin/node /usr/local/bin/node
+ENV NODE_ENV=production
 # Install browsers from dependency manifests, before copying source, so code-only
 # updates reuse Chromium and its system packages without repeating downloads.
 COPY --from=dependencies --chown=bun:bun /app /app

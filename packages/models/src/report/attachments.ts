@@ -7,15 +7,32 @@ export const REPORT_ATTACHMENT_MAX_COLUMNS = 64;
 export const REPORT_ATTACHMENT_MAX_CELL_CHARS = 4096;
 export const REPORT_ATTACHMENT_MAX_PAGE_ROWS = 100;
 
+export const REPORT_ATTACHMENT_MEDIA_TYPES = {
+    csv: 'text/csv',
+    txt: 'text/plain',
+    pdf: 'application/pdf',
+} as const;
+export type ReportAttachmentFormat = keyof typeof REPORT_ATTACHMENT_MEDIA_TYPES;
+export type ReportAttachmentMediaType =
+    (typeof REPORT_ATTACHMENT_MEDIA_TYPES)[ReportAttachmentFormat];
+
+export function reportAttachmentFormat(filename: string) {
+    return (['csv', 'txt', 'pdf'] as const).find((format) =>
+        filename.toLowerCase().endsWith(`.${format}`),
+    );
+}
+
 export const ReportAttachmentFilenameSchema = Type.String({
     minLength: 5,
     maxLength: 120,
-    description: '原始 CSV 文件名',
+    description: '原始 CSV、TXT 或 PDF 文件名',
 });
 const AttachmentFailureSchema = Type.Union([
     Type.Literal('INVALID_UTF8'),
     Type.Literal('INVALID_CSV'),
     Type.Literal('CSV_LIMIT_EXCEEDED'),
+    Type.Literal('INVALID_TEXT'),
+    Type.Literal('TEXT_LIMIT_EXCEEDED'),
 ]);
 export type ReportAttachmentFailure = Static<typeof AttachmentFailureSchema>;
 
@@ -32,31 +49,49 @@ const fields = {
     downloadUrl: Type.String({ minLength: 1, description: '本人会话可访问的原件下载路径' }),
 };
 
+const textFormat = Type.Optional(
+    Type.Union([Type.Literal('csv'), Type.Literal('txt')], {
+        description: '文本格式，省略表示 CSV',
+    }),
+);
 const ready = {
+    format: textFormat,
     status: Type.Literal('ready', { description: '解析成功' }),
     rowCount: Type.Integer({
         minimum: 1,
         maximum: REPORT_ATTACHMENT_MAX_ROWS,
-        description: 'CSV 逻辑记录的行号或总数',
+        description: 'CSV 逻辑记录或纯文本行的行号或总数',
     }),
     failureCode: Type.Null({ description: '无解析错误' }),
 };
 const failed = {
+    format: textFormat,
     status: Type.Literal('failed', { description: '解析失败，仍保留私有原件' }),
     rowCount: Type.Null({ description: '解析失败时无行数' }),
     failureCode: { ...AttachmentFailureSchema, description: '解析失败原因' },
 };
-const AttachmentParseStateSchema = Type.Union([Type.Object(ready), Type.Object(failed)]);
+const downloadOnly = {
+    format: Type.Literal('pdf', { description: 'PDF 文件' }),
+    status: Type.Literal('download_only', { description: '可下载原件' }),
+    rowCount: Type.Null({ description: '无预览行数' }),
+    failureCode: Type.Null({ description: '无解析错误' }),
+};
+const AttachmentParseStateSchema = Type.Union([
+    Type.Object(ready),
+    Type.Object(failed),
+    Type.Object(downloadOnly),
+]);
 export type ReportAttachmentParseState = Static<typeof AttachmentParseStateSchema>;
 
 export const ReportAttachmentSchema = Type.Union([
     Type.Object({ ...fields, ...ready }, { additionalProperties: false }),
     Type.Object({ ...fields, ...failed }, { additionalProperties: false }),
+    Type.Object({ ...fields, ...downloadOnly }, { additionalProperties: false }),
 ]);
 export type ReportAttachment = Static<typeof ReportAttachmentSchema>;
 
 export const ReportAttachmentListSchema = Type.Object(
-    { items: Type.Array(ReportAttachmentSchema, { description: '报告附带的私有 CSV 文件' }) },
+    { items: Type.Array(ReportAttachmentSchema, { description: '报告附带的私有文件' }) },
     { additionalProperties: false },
 );
 
@@ -65,7 +100,7 @@ const ReportAttachmentRowSchema = Type.Object(
         rowNumber: Type.Integer({
             minimum: 1,
             maximum: REPORT_ATTACHMENT_MAX_ROWS,
-            description: 'CSV 逻辑记录的行号或总数',
+            description: 'CSV 逻辑记录或纯文本行的行号或总数',
         }),
         startLine: Type.Integer({ minimum: 1, description: '原件起始物理行号，从一计数' }),
         endLine: Type.Integer({ minimum: 1, description: '原件结束物理行号，包含结束行' }),
@@ -85,7 +120,7 @@ export const ReportAttachmentRowsSchema = Type.Object(
         rowCount: Type.Integer({
             minimum: 1,
             maximum: REPORT_ATTACHMENT_MAX_ROWS,
-            description: 'CSV 逻辑记录的行号或总数',
+            description: 'CSV 逻辑记录或纯文本行的行号或总数',
         }),
         rows: Type.Array(ReportAttachmentRowSchema, {
             maxItems: REPORT_ATTACHMENT_MAX_PAGE_ROWS,

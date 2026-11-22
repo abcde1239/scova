@@ -2,7 +2,7 @@ import { Redis } from 'ioredis';
 import { createRunControl } from '../../server/src/app/run-control.ts';
 import { readRunControlConfig } from '../../server/src/app/run-control-config.ts';
 import { createOutboxQueue } from '../../server/src/repo/queue/outbox.ts';
-import { requiredDatabaseValue } from '@/utils/database.ts';
+import { requiredDatabaseValue } from '../../server/src/utils/execution/database.ts';
 import {
     createDatabaseClient,
     connectDatabase,

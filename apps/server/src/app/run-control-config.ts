@@ -1,3 +1,4 @@
+import { readSqliteStatePath } from '@scova/db/sqlite-state';
 import { readRunQueueName } from '@scova/shared/outbox-job';
 
 function integerSetting(env: NodeJS.ProcessEnv, name: string, fallback: number, maximum: number) {
@@ -12,6 +13,7 @@ export function readRunControlConfig(env: NodeJS.ProcessEnv = process.env) {
     return {
         databaseUrl: env.DATABASE_URL,
         redisUrl: env.REDIS_URL,
+        sqliteStatePath: readSqliteStatePath(env),
         queueName: readRunQueueName(env),
         pollIntervalMs: integerSetting(env, 'WORKER_POLL_INTERVAL_MS', 1000, 300_000),
         failureDelayMs: integerSetting(env, 'WORKER_FAILURE_DELAY_MS', 5000, 300_000),

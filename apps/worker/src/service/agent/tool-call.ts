@@ -1,4 +1,4 @@
-import { classifyToolFailure, modelFailureDiagnostic } from '@/utils/tool-failure.ts';
+import { classifyToolFailure, modelFailureDiagnostic } from '@scova/shared/execution/tool-failure';
 import {
     ConnectorError,
     isModelPreflightFailure,
@@ -11,7 +11,11 @@ import {
     type SearchResponse,
 } from '@scova/connectors';
 import type { Usage } from '@scova/models';
-import { AgentPersistenceError, type AgentReservation, type AgentTool } from '@/repo/agent.ts';
+import {
+    AgentPersistenceError,
+    type AgentReservation,
+    type AgentTool,
+} from '@scova/shared/execution/agent';
 import { type AgentSessionOptions } from '@/service/agent/session.ts';
 import { digest, emptyUsage } from '@/service/agent/tool-results.ts';
 

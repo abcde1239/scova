@@ -227,13 +227,14 @@ export function createRunStore(database: DatabaseExecutor) {
     };
     return {
         ...store,
-        async enqueue(run: typeof tables.runs.$inferSelect) {
+        async enqueue(run: typeof tables.runs.$inferSelect, now?: Date) {
             const { id: runId, userId, taskId, taskVersionId, mode } = run;
             await store.createEvent({
                 userId,
                 runId,
                 seq: 1,
                 type: 'run.queued',
+                occurredAt: now,
                 payload: { status: 'queued', taskVersionId },
             });
             await store.createOutbox({
@@ -241,6 +242,7 @@ export function createRunStore(database: DatabaseExecutor) {
                 aggregateId: runId,
                 eventType: 'run.enqueue',
                 dedupeKey: `run-${runId}-enqueue`,
+                availableAt: now,
                 payload: { runId, taskId, taskVersionId, mode },
             });
         },

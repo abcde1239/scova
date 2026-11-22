@@ -8,6 +8,8 @@ import {
     describeProperties,
 } from '../common/schema.ts';
 
+export { readWorkflowStages } from './graph.ts';
+
 const strict = { additionalProperties: false };
 const nodeId = Type.String({ pattern: '^[A-Za-z0-9_-]{1,64}$', description: '图内唯一节点标识' });
 const title = Type.String({
@@ -34,9 +36,10 @@ const workflowEdgeSchema = Type.Object(
 export const WorkflowGraphSchema = Type.Object(
     {
         nodes: Type.Array(workflowNodeSchema, { maxItems: workflowNodeLimit }),
-        edges: Type.Array(workflowEdgeSchema, { maxItems: workflowNodeLimit - 1 }),
+        // Adjacent groups of seven studies yield the largest graph at the node limit.
+        edges: Type.Array(workflowEdgeSchema, { maxItems: 63 }),
     },
-    { ...strict, description: '串行工作流画布，发布时验证节点与连线' },
+    { ...strict, description: '工作流画布，发布时验证串行阶段与并行组的连线' },
 );
 export const WorkflowDraftInputSchema = Type.Object({ title, graph: WorkflowGraphSchema }, strict);
 export const WorkflowSchema = Type.Object(
@@ -116,6 +119,7 @@ export const WorkflowRunNodeSchema = Type.Object(
         id: nodeId,
         type: Type.Union([Type.Literal('start'), Type.Literal('study'), Type.Literal('end')]),
         status: workflowNodeStatusSchema,
+        parallelGroup: Type.Optional(nodeId),
         attempt: Type.Integer({ minimum: 0, maximum: 1 }),
         startedAt: nullableInstant,
         finishedAt: nullableInstant,

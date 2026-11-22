@@ -29,24 +29,18 @@ if (!existsSync(envPath)) {
     console.log('Created .env.local with random local credentials.');
 }
 
-// Add new deployment-only encryption material once; never rotate existing user credentials.
-const existingEnv = readFileSync(envPath, 'utf8');
-const credential = [...existingEnv.matchAll(/^AGENT_CREDENTIAL_KEY=([^\r\n]*)\r?$/gm)]
-    .at(-1)?.[1]
-    ?.trim();
-if (
-    (action === 'init' || action === 'up') &&
-    (!credential || credential === '""' || credential === "''")
-) {
-    const withoutBlankKey = existingEnv.replace(/^AGENT_CREDENTIAL_KEY=[^\r\n]*(?:\r?\n|$)/gm, '');
-    writeFileSync(
-        envPath,
-        `${withoutBlankKey.trimEnd()}\nAGENT_CREDENTIAL_KEY=${randomBytes(32).toString('hex')}\n`,
-        { mode: 0o600 },
-    );
-    console.log(
-        'Initialized account model credential encryption. Keep .env.local backed up securely.',
-    );
+// Initialize local service secrets once without rotating existing credentials.
+if (action === 'init' || action === 'up') {
+    const existing = readFileSync(envPath, 'utf8');
+    let updated = existing;
+    for (const name of ['AGENT_CREDENTIAL_KEY', 'WORKER_EXECUTION_TOKEN']) {
+        const setting = new RegExp(`^${name}=([^\r\n]*)\r?$`, 'gm');
+        const value = [...updated.matchAll(setting)].at(-1)?.[1]?.trim();
+        if (!value || value === '""' || value === "''") {
+            updated = `${updated.replace(setting, '').trimEnd()}\n${name}=${randomBytes(32).toString('hex')}\n`;
+        }
+    }
+    if (updated !== existing) writeFileSync(envPath, updated, { mode: 0o600 });
 }
 
 if (action === 'init') {

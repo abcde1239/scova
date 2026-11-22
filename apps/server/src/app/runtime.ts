@@ -2,8 +2,10 @@ import { createApiApp } from '@/app/index.ts';
 import { createDefaultServices, type ApiServices } from '@/app/services';
 import { serve } from 'srvx/node';
 import { createRunControl } from '@/app/run-control.ts';
+import { readSqliteStatePath } from '@scova/db/sqlite-state';
+import { startWorkerExecution } from './worker-execution.ts';
 
-/** 此处使用node:http，使 Bun/Node运行时均通过 write/drain 传播 socket 背压。后续应该会改 */
+// Bun 为主运行时，Node 为兼容运行时；共用 node:http 以保持 SSE 的 write/drain 背压。
 
 export function startServer(
     runtime: 'bun' | 'node',
@@ -11,10 +13,12 @@ export function startServer(
 ) {
     const controlEnabled =
         options.runControl ??
-        (!options.services && Boolean(process.env.DATABASE_URL && process.env.REDIS_URL));
+        (!options.services &&
+            Boolean(process.env.DATABASE_URL && (readSqliteStatePath() || process.env.REDIS_URL)));
     const runControl = controlEnabled ? createRunControl() : undefined;
     const services = options.services ?? createDefaultServices();
     const app = createApiApp(runtime, services).compile();
+    const workerExecution = startWorkerExecution(() => services.db());
     const port = Number(process.env.PORT ?? 3000);
     const server = serve({
         port,
@@ -48,6 +52,7 @@ export function startServer(
             try {
                 const results = await Promise.allSettled([
                     runControl?.stop(),
+                    workerExecution?.stop(),
                     services.streams.stop().then(() => server.close()),
                 ]);
                 const failure = results.find((result) => result.status === 'rejected');

@@ -1,13 +1,4 @@
-import { prepareTestCheckpointSchema } from '../../../apps/worker/tests/support/checkpoint-schema.ts';
-import { createDatabaseClient, connectDatabase, closeDatabase } from '@scova/db';
-
 import { createWorkerApp } from '../../../apps/worker/src/app/index.ts';
-import { readWorkerConfig } from '../../../apps/worker/src/app/config.ts';
-import { createRunRepository } from '../../../apps/worker/src/repo/runs.ts';
-import { createRunHandler } from '../../../apps/worker/src/handler/runs.ts';
-import { createRunConsumer } from '../../../apps/worker/src/app/queue/runs.ts';
-import { RunService } from '../../../apps/worker/src/service/runs.ts';
-import { createAgentRuntime } from '../../../apps/worker/src/service/agent.ts';
 import {
     scenarioConnectors,
     scenarioNames,
@@ -15,28 +6,16 @@ import {
     type ScenarioPhase,
 } from '../../../apps/worker/tests/support/acceptance-scenario-fixtures.ts';
 
-const config = readWorkerConfig();
-const schema = new URL(config.databaseUrl).searchParams.get('schema');
 const scenario = process.env.SCOVA_ACCEPTANCE_SCENARIO as ScenarioName;
 const phase = process.env.SCOVA_ACCEPTANCE_PHASE as ScenarioPhase;
-const checkpointSchema = process.env.AGENT_CHECKPOINT_SCHEMA;
-if (!checkpointSchema || !/^scova_e2e_agent_[a-f0-9]{32}$/.test(checkpointSchema))
-    throw new Error('Browser worker requires its isolated checkpoint schema');
-if (!schema || !/^scova_acceptance_[a-f0-9]{32}$/.test(schema))
-    throw new Error('Acceptance worker requires its isolated test schema');
 if (!scenarioNames.includes(scenario) || !['A', 'B', 'C'].includes(phase))
     throw new Error('Invalid acceptance scenario or phase');
 
-const database = createDatabaseClient({ connectionString: config.databaseUrl });
 const fixtureBundle = scenarioConnectors(scenario, phase, {
     queryForGoal: process.env.SCOVA_ACCEPTANCE_QUERY_FOR_GOAL === '1',
     browserScenarios: true,
 });
-const agent = createAgentRuntime({
-    database,
-    databaseUrl: config.databaseUrl,
-    checkpointSchema,
-    env: process.env,
+const app = createWorkerApp({
     bundle:
         process.env.SCOVA_ACCEPTANCE_TRUNCATED === '1'
             ? {
@@ -49,46 +28,6 @@ const agent = createAgentRuntime({
                   },
               }
             : fixtureBundle,
-    enableDelivery: true,
-});
-let consumer: ReturnType<typeof createRunConsumer> | undefined;
-const app = createWorkerApp({
-    config,
-    resources: {
-        async connect() {
-            await connectDatabase(database);
-            await prepareTestCheckpointSchema(config.databaseUrl, checkpointSchema);
-            await agent.connect();
-            consumer = createRunConsumer(
-                config.redisUrl,
-                config.queueName,
-                createRunHandler(
-                    new RunService({
-                        repository: createRunRepository(database),
-                        executorFactory: (token) => agent.executorFactory(token),
-                        leaseMs: 30_000,
-                        renewIntervalMs: 5_000,
-                    }),
-                ),
-                1,
-            );
-            await consumer.start();
-        },
-        isReady: () => consumer?.isReady() ?? false,
-        stop: () => consumer?.stop() ?? Promise.resolve(),
-        finished: () => consumer?.finished() ?? Promise.resolve(),
-        async close() {
-            try {
-                await consumer?.stop();
-            } finally {
-                try {
-                    await agent.close();
-                } finally {
-                    await closeDatabase(database);
-                }
-            }
-        },
-    },
 });
 let stopping: Promise<void> | undefined;
 const stop = () => (stopping ??= app.stop().then(() => process.disconnect?.()));

@@ -13,7 +13,7 @@ import {
 import { expect, it } from 'vite-plus/test';
 import { candidateFromCheckpoint } from '@scova/agent-core';
 import { type SearchResponse } from '@scova/connectors';
-import { createAgentRepository } from '../../src/repo/agent.ts';
+import { createAgentRepository } from '../../../server/src/repo/execution/agent.ts';
 import { seedRun } from '../support/run-database.ts';
 import { createDefaultServices } from '../../../server/src/app/services.ts';
 import { createReportService } from '../../../server/src/service/reports.ts';

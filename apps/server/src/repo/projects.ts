@@ -81,7 +81,7 @@ export function createProjectStore(db: DatabaseExecutor) {
         },
         async lockProject(userId: string, projectId: string) {
             const [row] = await db
-                .select({ id: projects.id })
+                .select({ id: projects.id, name: projects.name })
                 .from(projects)
                 .where(and(eq(projects.userId, userId), eq(projects.id, projectId)))
                 .for('key share');

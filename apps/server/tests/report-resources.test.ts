@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vite-plus/test';
 import { REPORT_ATTACHMENT_MAX_BYTES, type Report } from '@scova/models';
 import { readReportAttachment } from '@/handler/http/report-attachment-body.ts';
+import { parseReportText, validateReportPdf } from '../src/service/report-attachment-formats.ts';
+import { reportPdfFixture } from './fixtures/report-pdf.ts';
 import { parseReportCsv } from '@/service/report-csv.ts';
 import { renderSourceHostChart, reportSourceHostRows } from '@/service/report-source-host-chart.ts';
 
@@ -116,7 +118,9 @@ describe('报告私有 CSV', () => {
             body,
             duplex: 'half',
         } as RequestInit & { duplex: 'half' });
-        await expect(readReportAttachment(request)).rejects.toMatchObject({ status: 413 });
+        await expect(readReportAttachment(request, 'text/csv')).rejects.toMatchObject({
+            status: 413,
+        });
         expect(canceled).toBe(true);
     });
 
@@ -144,7 +148,7 @@ describe('报告私有 CSV', () => {
             signal: abort.signal,
             duplex: 'half',
         } as RequestInit & { duplex: 'half' });
-        const result = readReportAttachment(request).catch((error: unknown) => error);
+        const result = readReportAttachment(request, 'text/csv').catch((error: unknown) => error);
         await waiting.promise;
 
         const reason = new DOMException('上传已取消', 'AbortError');
@@ -155,5 +159,43 @@ describe('报告私有 CSV', () => {
         expect(await result).toBe(reason);
         expect(cancel).toHaveBeenCalledExactlyOnceWith(reason);
         expect(body.locked).toBe(false);
+    });
+});
+
+describe('报告私有 TXT 和 PDF', () => {
+    it('保留 UTF-8 纯文本中的空行、引号及物理行号', () => {
+        expect(parseReportText(Buffer.from('\ufeff甲,"乙"\r\n\r\n\t丙\r丁\n'))).toEqual({
+            status: 'ready',
+            rows: ['甲,"乙"', '', '\t丙', '丁'].map((line, index) => ({
+                rowNumber: index + 1,
+                startLine: index + 1,
+                endLine: index + 1,
+                cells: [line],
+            })),
+        });
+    });
+
+    it.each([
+        [Buffer.from([0xff]), 'INVALID_UTF8'],
+        [Buffer.from('a\u0000'), 'INVALID_TEXT'],
+        [Buffer.from('\ufeff'), 'INVALID_TEXT'],
+        [Buffer.from('x'.repeat(4097)), 'TEXT_LIMIT_EXCEEDED'],
+        [Buffer.from('a\n'.repeat(2001)), 'TEXT_LIMIT_EXCEEDED'],
+    ])('拒绝预览无效或超限文本 %s', (body, failureCode) => {
+        expect(parseReportText(body)).toEqual({ status: 'failed', failureCode });
+    });
+
+    it('识别 PDF 的交叉引用表并拒绝伪造或截断的文件', () => {
+        const pdf = reportPdfFixture();
+        expect(validateReportPdf(Buffer.from(pdf))).toBe(true);
+        for (const invalid of [
+            '<html>%PDF-1.7</html>',
+            '%PDF-1.7\n%%EOF',
+            pdf.replace('%%EOF', ''),
+            `${pdf}<script>extra content</script>`,
+            pdf.replace(/startxref\n\d+/, 'startxref\n10'),
+        ]) {
+            expect(validateReportPdf(Buffer.from(invalid))).toBe(false);
+        }
     });
 });

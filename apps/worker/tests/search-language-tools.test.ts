@@ -2,7 +2,10 @@ import { expect, it, vi } from 'vite-plus/test';
 import { createAgentTools } from '../src/service/agent/tools.ts';
 import { createToolCaller } from '../src/service/agent/tool-call.ts';
 import { emptyUsage } from '../src/service/agent/tool-results.ts';
-import type { AgentRepository, AgentReservationInput } from '../src/repo/agent.ts';
+import type {
+    AgentRepository,
+    AgentReservationInput,
+} from '../../server/src/repo/execution/agent.ts';
 import type { AgentSessionOptions } from '../src/service/agent/session.ts';
 import type { SearchProvider } from '@scova/connectors';
 

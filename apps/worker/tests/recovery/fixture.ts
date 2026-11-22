@@ -1,13 +1,18 @@
-import { requiredDatabaseValue } from '@/utils/database.ts';
+import { requiredDatabaseValue } from '../../../server/src/utils/execution/database.ts';
 import { runs as dbRuns, eq, sql, queryRows } from '@scova/db';
 import type { Usage } from '@scova/models';
 import { type ConnectorBundle } from '@scova/connectors';
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import pg from 'pg';
 import { afterAll, beforeAll } from 'vite-plus/test';
-import { createAgentRepository, type AgentRepository } from '../../src/repo/agent.ts';
-import { createRunRepository, type ClaimedRun } from '../../src/repo/runs.ts';
+import {
+    createAgentRepository,
+    type AgentRepository,
+} from '../../../server/src/repo/execution/agent.ts';
+import { createRunRepository, type ClaimedRun } from '../../../server/src/repo/execution/runs.ts';
 import { createAgentSession } from '../../src/service/agent.ts';
+import { prepareTestCheckpointSchema } from '../support/checkpoint-schema.ts';
+import { testWorkerExecution } from '../support/worker-execution.ts';
 import { outboxDatabase } from '../support/outbox-database.ts';
 import { emptyUsage, seedRun } from '../support/run-database.ts';
 
@@ -94,11 +99,20 @@ export function sessionFixture(
     return { session, prepare: () => saver.setup(), close: () => saver.end() };
 }
 
+export let executionFixture: Awaited<ReturnType<typeof testWorkerExecution>>;
 beforeAll(async () => {
     await fixture.setup();
-    await fixture.db.execute(
-        sql`CREATE TABLE recovery_external_calls (id bigserial PRIMARY KEY, run_id uuid NOT NULL, kind text NOT NULL, input text NOT NULL)`,
-    );
+    await prepareTestCheckpointSchema(fixture.databaseUrl, fixture.checkpointSchema);
+    executionFixture = await testWorkerExecution(fixture.db, {
+        DATABASE_URL: fixture.databaseUrl,
+        AGENT_CHECKPOINT_SCHEMA: fixture.checkpointSchema,
+    });
 }, 120_000);
 
-afterAll(() => fixture.cleanup());
+afterAll(async () => {
+    try {
+        await executionFixture?.stop();
+    } finally {
+        await fixture.cleanup();
+    }
+});

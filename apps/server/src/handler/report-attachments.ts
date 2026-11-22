@@ -10,8 +10,8 @@ export function createReportAttachmentHandlers(services: ApiServices) {
         async upload(request: Request, reportId: string, filename: string) {
             const session = await requireSession(request, services);
             requireCsrf(request, session, services);
-            return attachments.upload(session.userId, reportId, filename, () =>
-                readReportAttachment(request),
+            return attachments.upload(session.userId, reportId, filename, (mediaType) =>
+                readReportAttachment(request, mediaType),
             );
         },
         async list(request: Request, reportId: string) {

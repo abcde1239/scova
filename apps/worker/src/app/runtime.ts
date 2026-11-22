@@ -33,7 +33,7 @@ export async function startWorker() {
         await app.finished();
         await shutdown();
     } catch {
-        console.error('Worker 启动或运行失败，请检查数据库、Redis 与 Worker 配置');
+        console.error('Worker 启动或运行失败，请检查 Server 执行接口、队列与 Worker 配置');
         process.exitCode = 1;
         await shutdown();
     }

@@ -80,22 +80,7 @@ export function bindWorkflowResearch(
                     estimated: true,
                 },
             });
-            await runs.createEvent({
-                userId,
-                runId: run.id,
-                seq: 1,
-                type: 'run.queued',
-                occurredAt: now,
-                payload: { status: 'queued', taskVersionId: version.id },
-            });
-            await runs.createOutbox({
-                userId,
-                aggregateId: run.id,
-                eventType: 'run.enqueue',
-                dedupeKey: `run-${run.id}-enqueue`,
-                availableAt: now,
-                payload: { runId: run.id, taskId: task.id, taskVersionId: version.id, mode },
-            });
+            await runs.enqueue(run, now);
             return { run };
         },
         async cancel(node) {

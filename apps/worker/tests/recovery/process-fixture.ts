@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { nodeScriptCommand } from '../../../../scripts/process-runtime.mjs';
-import { fixture } from './fixture.ts';
+import type { testWorkerExecution } from '../support/worker-execution.ts';
 
 type Runtime = 'node' | 'bun';
 
@@ -13,6 +13,7 @@ export function launchAgent(
     phase: 'crash' | 'resume',
     runId: string,
     boundary: 'search' | 'read',
+    execution: Awaited<ReturnType<typeof testWorkerExecution>>,
 ) {
     const bun =
         process.env.BUN_BIN ??
@@ -23,16 +24,27 @@ export function launchAgent(
     const args = [phase, runId, boundary];
     const command =
         runtime === 'bun'
-            ? { executable: bun, args: ['run', script, ...args] }
+            ? { executable: bun, args: ['--no-env-file', script, ...args] }
             : nodeScriptCommand(script, args);
+    const env: NodeJS.ProcessEnv = {
+        ...process.env,
+        WORKER_EXECUTION_URL: execution.url,
+        WORKER_EXECUTION_TOKEN: execution.token,
+    };
+    delete env.DATABASE_URL;
+    delete env.SCOVA_TEST_DATABASE_URL;
+    delete env.RUNTIME_DATABASE_URL;
+    delete env.AGENT_CREDENTIAL_KEY;
+    delete env.SCOVA_SQLITE_STATE_PATH;
     const child = spawn(command.executable, command.args, {
         cwd: fileURLToPath(new URL('../../', import.meta.url)),
-        env: { ...process.env, DATABASE_URL: fixture.databaseUrl },
+        env,
         stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
         windowsHide: true,
     });
     const messages: {
         type: string;
+        kind?: string;
         candidate?: { runId: string; pages: unknown[]; mode: string };
     }[] = [];
     let output = '';

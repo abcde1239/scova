@@ -269,3 +269,43 @@ test('draft conflict preserves local input and can reload on a narrow viewport',
     await expect(page.getByLabel('研究 1 的任务')).toBeFocused();
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(360);
 });
+
+test('parallel groups can be created by keyboard, reopened and split into separate stages', async ({
+    page,
+}) => {
+    const state = await fixtures(page);
+    await page.goto(`/workflows/${workflowId}`);
+    const add = page.getByRole('button', { name: '添加研究节点' });
+    await add.click();
+    await page.getByLabel('研究 1 的任务').selectOption(tasks[0]!);
+    await add.click();
+    await page.getByLabel('研究 2 的任务').selectOption(tasks[1]!);
+
+    const merge = page.getByRole('button', { name: '与上一阶段并行' });
+    await merge.focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByText('已合并为包含 2 项研究的并行组')).toBeVisible();
+    await expect(page.getByLabel('研究 2 的任务')).toBeFocused();
+    const groupLabels = page.getByText(/研究 [12] · 阶段 1（并行）/);
+    await expect(groupLabels).toHaveCount(2);
+
+    const save = page.getByRole('button', { name: '保存草稿' });
+    const publish = page.getByRole('button', { name: '发布版本' });
+    await save.click();
+    await expect(publish).toBeEnabled();
+    const fork = state.saveCalls[0]!.body.graph;
+    expect(fork.edges.filter(({ from }) => from.nodeId === 'start')).toHaveLength(2);
+    expect(fork.edges.filter(({ to }) => to.nodeId === 'end')).toHaveLength(2);
+    await publish.click();
+    await expect(publish).toBeDisabled();
+    await expect.poll(() => state.detail.publishedVersion?.graph).toEqual(fork);
+
+    await page.reload();
+    await expect(groupLabels).toHaveCount(2);
+    await page.getByRole('button', { name: '移到下一独立阶段' }).click();
+    await expect(groupLabels).toHaveCount(0);
+    await save.click();
+    await expect(publish).toBeEnabled();
+    expect(state.saveCalls[1]!.body.graph.edges).toHaveLength(3);
+    expect(state.detail.publishedVersion?.graph).toEqual(fork);
+});

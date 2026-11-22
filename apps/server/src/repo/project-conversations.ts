@@ -4,6 +4,7 @@ import {
     eq,
     inArray,
     lt,
+    gte,
     isNull,
     or,
     projectConversationTurns as turns,
@@ -21,7 +22,31 @@ export function createProjectConversationStore(
 ) {
     const ownTurn = and(eq(turns.userId, userId), eq(turns.projectId, projectId));
     const ownDraft = and(eq(drafts.userId, userId), eq(drafts.projectId, projectId));
+    const visibleReport = and(
+        eq(reports.userId, userId),
+        inArray(
+            reports.taskId,
+            db
+                .select({ taskId: projectTasks.taskId })
+                .from(projectTasks)
+                .where(and(eq(projectTasks.userId, userId), eq(projectTasks.projectId, projectId))),
+        ),
+    );
     return {
+        isRunning(id: string, now: Date) {
+            return db
+                .select({ id: turns.id })
+                .from(turns)
+                .where(
+                    and(
+                        ownTurn,
+                        eq(turns.id, id),
+                        eq(turns.status, 'running'),
+                        gte(turns.expiresAt, now),
+                    ),
+                )
+                .then((rows) => rows.length > 0);
+        },
         turn(id: string) {
             return db
                 .select()
@@ -123,21 +148,16 @@ export function createProjectConversationStore(
             const [report] = await db
                 .select({ title: reports.title, summary: reports.summary })
                 .from(reports)
-                .innerJoin(
-                    projectTasks,
-                    and(
-                        eq(projectTasks.userId, reports.userId),
-                        eq(projectTasks.taskId, reports.taskId),
-                    ),
-                )
-                .where(
-                    and(
-                        eq(reports.userId, userId),
-                        eq(projectTasks.projectId, projectId),
-                        eq(reports.id, id),
-                    ),
-                );
+                .where(and(visibleReport, eq(reports.id, id)));
             return report;
+        },
+        async visibleReportIds(ids: string[]) {
+            if (!ids.length) return [];
+            const rows = await db
+                .select({ id: reports.id })
+                .from(reports)
+                .where(and(visibleReport, inArray(reports.id, ids)));
+            return rows.map((row) => row.id);
         },
     };
 }

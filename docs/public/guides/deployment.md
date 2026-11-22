@@ -2,17 +2,27 @@
 
 当前提供 Vue 工作台、API、Worker、同源静态资源/反向代理、PostgreSQL 17 和 Redis 7 的 Docker Compose 部署。登录、任务、执行、简报及资料库等页面已接入，路由可刷新访问；功能与剩余范围见[工作台说明](web-workbench.md)。Web 镜像只包含构建后的静态资源与 Nginx 配置，浏览器不需要 Node/Bun。后端主运行时为 Bun 1.3.4，后端镜像内安装 Node 24.22.1、Vite+ 1.4.0 和 PostgreSQL 17 客户端。这是单机 Web 部署，不是桌面端或本地一体化应用。
 
+单机部署可叠加 `compose.sqlite.yaml`，使用挂载到 Server 的 SQLite 文件处理队列与协调，业务数据库继续使用 PostgreSQL。此配置需要支持 `!override` 的 Docker Compose 2.24.4 或更新版本。可先用独立的 Compose 项目名试运行。切换已有实例前先停 API 和 Worker，并使用相同的 Compose 文件组合执行维护命令。
+
+```sh
+docker compose -f compose.yaml -f compose.sqlite.yaml up -d --build --wait
+```
+
+维护时可通过 `COMPOSE_FILE` 让 `vp run operations` 采用相同组合。在 Bash 中设置 `export COMPOSE_FILE=compose.yaml:compose.sqlite.yaml`，在 PowerShell 中设置 `$env:COMPOSE_FILE='compose.yaml;compose.sqlite.yaml'`。
+
+SQLite 协调状态保存在 `sqlite-state` 卷。业务备份仍通过 PostgreSQL 维护命令完成。如果需要保留协调状态，在 API、Worker 和维护进程停止后对整个 SQLite 卷做一致快照。API 和 Server 维护命令使用同一主机上的可写磁盘。分布式部署沿用默认的 Redis 协调配置。
+
 ## 启动
 
 需要 Docker Engine/Desktop Linux 容器与 Compose v2。为此项目使用独立数据库，不与其他应用共用数据库或 Redis 队列名称。
 
-1. 复制 `.env.example` 为 `.env`，把数据库密码替换为随机值。只有启用内置 SearXNG 时才需要设置随机搜索密钥。数据库密码使用随机十六进制文本，避免连接 URL 的转义歧义；不要提交 `.env`。
+1. 复制 `.env.example` 为 `.env`，把数据库密码替换为随机值，并为 `WORKER_EXECUTION_TOKEN` 设置独立的 32 字节随机令牌（可用 64 位十六进制）。只有启用内置 SearXNG 时才需要设置随机搜索密钥。数据库密码使用随机十六进制文本，避免连接 URL 的转义歧义；不要提交 `.env`。
 2. 执行 `docker compose up --build -d`，再用 `docker compose ps` 查看健康状态。
-3. 默认只绑定 `127.0.0.1:8080`。打开 `http://localhost:8080/tasks` 访问工作台。`GET /health` 是 API 存活检查；API 容器健康检查另外核验 PostgreSQL、Redis、业务迁移和 saver 版本；Worker 容器健康检查读取 Worker 完成启动和后台轮询后更新的心跳；代理健康检查验证 Web 入口可读。
+3. 默认只绑定 `127.0.0.1:8080`。打开 `http://localhost:8080/tasks` 访问工作台。`GET /health` 是 API 存活检查；API 容器健康检查另外核验 PostgreSQL、所选协调存储、业务迁移和 saver 版本；Worker 启动时验证内部执行接口的鉴权、检查点版本及队列名称，容器健康检查读取 Worker 更新的心跳；代理健康检查验证 Web 入口可读。
 
 `Dockerfile` 的 `build` 阶段在 Linux 内安装锁定依赖并运行全部工作区构建；`web` 目标从 `apps/web/dist` 复制静态产物，Compose 的 `proxy` 服务使用该目标，`runtime` 目标保留 API/维护工具，`worker-runtime` 额外安装锁定版本 Chromium 及系统依赖。构建不从宿主机复制 dist 或 node_modules，也不将后端模型凭据作为前端构建参数。更新源码后执行 `docker compose up --build -d` 才会重新构建 Web 资源。
 
-启动先执行一次性 `migrate` 服务。Drizzle 业务迁移和 LangGraph saver 迁移均成功后，API/Worker 才启动。迁移服务再次运行时若核验当前全部版本已齐，仅返回只读的 current 结果；需要 DDL 时仍要求 API/Worker 已停止。迁移和离线维护由 Server 的 CLI 处理；Worker 仅检查已安装的 checkpoint 版本，不会在启动时建表。本地亦须先完成 `vp run db:migrate`。升级前先使用旧版本镜像完成备份并验证恢复；保持应用停止，再构建新镜像、执行迁移并启动：
+启动先执行一次性 `migrate` 服务。Drizzle 业务迁移和 LangGraph saver 迁移均成功后，API/Worker 才启动。迁移服务再次运行时若核验当前全部版本已齐，仅返回只读的 current 结果；需要 DDL 时仍要求 API/Worker 已停止。迁移和离线维护由 Server 的 CLI 处理；Server 的内部执行接口报告已安装的 checkpoint 版本。本地亦须先完成 `vp run db:migrate`。升级前先使用旧版本镜像完成备份并验证恢复；保持应用停止，设置内部令牌，再构建新镜像、执行迁移并启动同版本的 Server 和 Worker。数据库解耦本身沿用已有 schema：
 
 ```sh
 vp run operations backup
@@ -23,7 +33,7 @@ docker compose up -d
 
 从 Prisma 版本首次升级时，新镜像的备份命令要求原生迁移账本已经存在，因此升级前备份须由旧镜像执行。迁移会核验旧账本与完整物理结构后接管，保留业务数据和历史账本。失败时保持应用停止并检查原因。仅在新版本尚未写入且旧版本结构兼容时才考虑回退镜像；恢复备份会丢弃恢复点后的数据，必须先评估并保存新增数据。
 
-API/Worker 与 Web 代理均由非 root 用户运行，只读根文件系统和临时 `/tmp`；PostgreSQL 与 Redis 使用独立持久卷，Redis 开启 AOF/everysec。仅代理发布端口，数据库、队列和搜索均在 Compose 网络内部。正常 `docker compose down` 保留数据；不要使用 `down -v` 作为升级或恢复步骤。
+API/Worker 与 Web 代理均由非 root 用户运行，只读根文件系统和临时 `/tmp`；PostgreSQL 与 Redis 使用独立持久卷，Redis 开启 AOF/everysec。仅代理发布端口。PostgreSQL 位于独立数据库网络。Worker 使用默认网络上的 `http://api:3001` 访问执行接口，SQLite 模式下仅 Server 和维护容器挂载协调卷。跨主机部署时使用受控内网和 HTTPS 承载该接口。正常 `docker compose down` 保留数据；不要使用 `down -v` 作为升级或恢复步骤。
 
 Compose 的 Worker 使用 `worker-runtime` 镜像、256 MiB `/dev/shm` 和 1536 MiB 内存上限；容器默认 `READER_CHROMIUM_SANDBOX=false`，安全边界由非 root、只读根文件系统、cap drop 和 no-new-privileges 提供。Reader 仅处理非交互公网页面，执行 JavaScript 生成 DOM，但阻止写请求、凭据、下载、WebSocket、service worker 和二次导航；单次读取最多 15 秒、总资源 8 MiB。需要额外 Chromium sandbox 时可设置 `READER_CHROMIUM_SANDBOX=true`，并先在目标内核上受控验证。
 
@@ -47,11 +57,11 @@ SearxNG 是固定镜像、非 root 的可选服务。设置随机 `SEARXNG_SECRE
 docker compose --profile live-search up -d
 ```
 
-设置 `MODEL_API_KEY`、`MODEL_NAME` 和必要的 `MODEL_BASE_URL` 作为部署默认模型，或配置 `AGENT_CREDENTIAL_KEY` 后让各账号在界面添加个人供应商，详见[Agent 配置](agent-configuration.md)。加密主密钥在 Server/Worker 中必须一致，并独立备份。搜索服务、搜索密钥与正文策略仅在账号的独立搜索区域配置，服务器没有默认搜索 Agent；旧 SEARCH_PROVIDER、SEARCH_API_*、TAVILY_API_KEY 不再生效。`SEARXNG_BASE_URL` 仅为内置工具基础设施地址，容器使用 `http://searxng:8080`，不使用宿主机的 localhost。见[搜索说明](search.md)。手动、重试和调度统一创建 live 执行，旧 `WORKER_SCHEDULED_RUN_MODE` 已移除，设置该变量不再改变调度行为。缺凭据或调用失败不会从 live 静默切成演示、付费渠道或其他供应商。真实烟测单独 opt-in，未执行时应记录“未执行”，不能用 fixture 通过冒充真实服务成功。
+设置 `MODEL_API_KEY`、`MODEL_NAME` 和必要的 `MODEL_BASE_URL` 作为部署默认模型，或配置 `AGENT_CREDENTIAL_KEY` 后让各账号在界面添加个人供应商，详见[Agent 配置](agent-configuration.md)。模型默认值与加密主密钥由 Server 持有，主密钥需独立备份。搜索服务、搜索密钥与正文策略仅在账号的独立搜索区域配置，服务器没有默认搜索 Agent；旧 SEARCH_PROVIDER、SEARCH_API_*、TAVILY_API_KEY 不再生效。`SEARXNG_BASE_URL` 仅为内置工具基础设施地址，容器使用 `http://searxng:8080`，不使用宿主机的 localhost。见[搜索说明](search.md)。手动、重试和调度统一创建 live 执行，旧 `WORKER_SCHEDULED_RUN_MODE` 已移除，设置该变量不再改变调度行为。缺凭据或调用失败不会从 live 静默切成演示、付费渠道或其他供应商。真实烟测单独 opt-in，未执行时应记录“未执行”，不能用 fixture 通过冒充真实服务成功。
 
 ## Worker 并发
 
-Server 的 `api` 服务同时运行定时调度、Outbox 投递和可恢复 Run 回补；Worker 可横向扩容，只消费和执行，现阶段仍需要 PostgreSQL 处理执行租约、checkpoint、工具账本及交付。`WORKER_QUEUE_NAME` 由双方和维护命令共用。`WORKER_POLL_INTERVAL_MS`、`WORKER_FAILURE_DELAY_MS`、`WORKER_BATCH_SIZE`、`WORKER_LEASE_SECONDS`、`WORKER_SCHEDULER_INTERVAL_MS` 和 `WORKER_SCHEDULER_CONCURRENCY` 保留原变量名，现配置在 `api` 而非 Worker。默认分别为 `1000`、`5000`、`50`、`30`、`30000` 和 `2`（间隔为毫秒，租约为秒）。升级时先停旧 Worker，再以同一版本更新 `api` 和 Worker，避免旧 Worker 与新 Server 同时扫描、投递；迁移期间已保存的 Run/Outbox 不丢失。
+Server 的 `api` 服务同时运行定时调度、Outbox 投递和可恢复 Run 回补；Worker 可横向扩容。Server 执行接口管理租约、checkpoint、工具账本及交付。`WORKER_QUEUE_NAME` 由双方和维护命令共用。`WORKER_POLL_INTERVAL_MS`、`WORKER_FAILURE_DELAY_MS`、`WORKER_BATCH_SIZE`、`WORKER_LEASE_SECONDS`、`WORKER_SCHEDULER_INTERVAL_MS` 和 `WORKER_SCHEDULER_CONCURRENCY` 保留原变量名，现配置在 `api` 而非 Worker。默认分别为 `1000`、`5000`、`50`、`30`、`30000` 和 `2`（间隔为毫秒，租约为秒）。升级时先停旧 Worker，再以同一版本更新 `api` 和 Worker，保持内部执行协议版本一致；迁移期间已保存的 Run/Outbox 不丢失。
 
 `WORKER_RUN_CONCURRENCY` 控制每个 Worker 同时消费的 Run 数，默认 `2`，范围 `1–32`。有排队且资源未饱和时，可先把 `.env` 中的值提高到 `4`，等在途任务结束，再用 `docker compose up -d --no-deps worker` 按新配置重建 Worker。宿主机开发则修改 `.env.local` 并重启 Worker。观察队列等待时间、Run 错误和超时率、数据库连接等待、Worker 内存及供应商 429，再决定是否继续提高。调度扫描并发和 Outbox 批大小不增加执行槽位。
 

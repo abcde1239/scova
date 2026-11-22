@@ -8,6 +8,7 @@ import { Redis as RedisClient } from 'ioredis';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vite-plus/test';
 import { createApiApp } from '../src/app/index.ts';
 import { createDefaultServices } from '../src/app/services.ts';
+import { reportPdfFixture } from './fixtures/report-pdf.ts';
 import { firstRow, requireRow } from '../src/utils/database.ts';
 
 const baseUrl =
@@ -389,6 +390,72 @@ describe('报告证据与收件箱 API', () => {
         expect((await json(await request(root, { headers: headers(owner) }))).items).toEqual([
             failed,
         ]);
+    });
+
+    it('私有 TXT 和 PDF 共用附件鉴权、限额和重试去重', async () => {
+        const owner = await register();
+        const other = await register();
+        const { report } = await fixture(owner);
+        const root = `/reports/${report.id}/attachments`;
+        const upload = (filename: string, type: string, body: string, auth = owner) =>
+            request(`${root}?filename=${encodeURIComponent(filename)}`, {
+                method: 'POST',
+                body,
+                headers: { ...headers(auth), 'content-type': type },
+            });
+        const text = '标题\r\n\r\n第二段\n';
+        const textUploads = await Promise.all([
+            upload('资料.TXT', 'text/plain; charset=utf-8', text),
+            upload('资料.TXT', 'text/plain', text),
+        ]);
+        expect(textUploads.map((response) => response.status)).toEqual([200, 200]);
+        const [txt, retry] = await Promise.all(textUploads.map(json));
+        expect(txt).toEqual(retry);
+        expect(txt).toMatchObject({ format: 'txt', status: 'ready', rowCount: 3 });
+        expect(
+            await json(
+                await request(`${root}/${txt!.id}/rows?start=2&end=3`, {
+                    headers: headers(owner),
+                }),
+            ),
+        ).toEqual({
+            attachmentId: txt!.id,
+            rowCount: 3,
+            rows: [
+                { rowNumber: 2, startLine: 2, endLine: 2, cells: [''] },
+                { rowNumber: 3, startLine: 3, endLine: 3, cells: ['第二段'] },
+            ],
+        });
+
+        const pdf = reportPdfFixture();
+        expect((await upload('资料.pdf', 'text/plain', pdf)).status).toBe(415);
+        expect((await upload('资料.pdf', 'application/pdf', '%PDF-1.7\n%%EOF')).status).toBe(422);
+        expect((await upload('资料.pdf', 'application/pdf', pdf, other)).status).toBe(404);
+        expect(
+            (await upload('资料.pdf', 'application/pdf', pdf.padEnd(256 * 1024 + 1))).status,
+        ).toBe(413);
+        const response = await upload('资料.pdf', 'application/pdf', pdf);
+        expect(response.status).toBe(200);
+        const item = await json(response);
+        expect(item).toMatchObject({ format: 'pdf', status: 'download_only', rowCount: null });
+        const preview = `${root}/${item.id}/rows?start=1&end=1`;
+        expect((await request(preview, { headers: headers(owner) })).status).toBe(409);
+        expect((await request(preview, { headers: headers(other) })).status).toBe(404);
+        const download = `${root}/${item.id}/download`;
+        expect((await request(download, { headers: headers(other) })).status).toBe(404);
+        const original = await request(download, { headers: headers(owner) });
+        expect(original.headers.get('content-type')).toBe('application/octet-stream');
+        expect(original.headers.get('content-disposition')).toMatch(/^attachment;/);
+        expect(original.headers.get('x-content-type-options')).toBe('nosniff');
+        expect(await original.text()).toBe(pdf);
+        expect((await json(await request(root, { headers: headers(owner) }))).items).toHaveLength(
+            2,
+        );
+        expect(
+            (await request(`${root}/${item.id}`, { method: 'DELETE', headers: headers(owner) }))
+                .status,
+        ).toBe(200);
+        expect((await request(download, { headers: headers(owner) })).status).toBe(404);
     });
 
     it('导出原始报告：会话、CSRF、Owner、并发复用及过期回收', async () => {

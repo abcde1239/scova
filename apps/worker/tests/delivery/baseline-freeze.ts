@@ -1,4 +1,4 @@
-import { requiredDatabaseValue } from '@/utils/database.ts';
+import { requiredDatabaseValue } from '../../../server/src/utils/execution/database.ts';
 import {
     reports as dbReports,
     eq,
@@ -10,7 +10,7 @@ import {
     changeRecords as dbChangeRecords,
 } from '@scova/db';
 import { expect, it } from 'vite-plus/test';
-import { createAgentRepository } from '../../src/repo/agent.ts';
+import { createAgentRepository } from '../../../server/src/repo/execution/agent.ts';
 import { liveResearch } from './live-research.ts';
 import { fixture, delivery, assertEmpty, runs } from './fixture.ts';
 

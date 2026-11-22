@@ -1,7 +1,7 @@
 import { eq, runs as dbRuns } from '@scova/db';
 import { expect, it } from 'vite-plus/test';
 import { candidateFromCheckpoint, type ComparisonExtraction } from '@scova/agent-core';
-import { createAgentRepository } from '../../src/repo/agent.ts';
+import { createAgentRepository } from '../../../server/src/repo/execution/agent.ts';
 import { createDefaultServices } from '../../../server/src/app/services.ts';
 import { createReportService } from '../../../server/src/service/reports.ts';
 import { liveResearch } from './live-research.ts';

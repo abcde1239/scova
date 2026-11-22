@@ -61,7 +61,7 @@ Key限额不等于账号余额；同一账号的多个配置可能查询到同�
 
 ## 管理员设置
 
-Server 和 Worker 必须配置相同的 `AGENT_CREDENTIAL_KEY`（64 位十六进制、256 bit 随机密钥），用于加密账号 API Key。本机执行 `vp run local:init` 会为缺失配置初始化一次，并保存在被忽略的根 `.env.local`；部署在 `.env` 配置，Compose 会同时传入两个服务。
+Server 持有 `AGENT_CREDENTIAL_KEY`（64 位十六进制、256 bit 随机密钥），用于加密账号 API Key。Server 在 Worker 持有有效 Run 租约时提供本次执行所需的供应商凭据。本机运行 `vp run local:init` 将缺失的主密钥写入根 `.env.local`，Compose 部署从 `.env` 传给 Server。
 
 升级先备份、停止应用，再执行增量迁移；本机为 `vp run db:migrate`，Compose 见[部署指南](deployment.md)。迁移按版本新增供应商、独立用途及搜索配置表，不重置现有数据。已有模型用途选择保持不变；旧搜索 API 通过页面显式迁入。
 

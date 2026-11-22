@@ -11,6 +11,7 @@ import { createAgentProviderService } from '@/service/agent-providers';
 import { createImageStorageView, type ImageStorageClient } from '@scova/object-storage/image';
 import type { ObjectStorage } from '@scova/object-storage';
 import { createBucketStorage } from '@/app/object-storage';
+import { openSqliteState, readSqliteStatePath, type SqliteState } from '@scova/db/sqlite-state';
 import { createRedisConnection } from '@/repo/redis.ts';
 
 type Redis = ReturnType<typeof createRedisConnection>;
@@ -27,6 +28,7 @@ export interface AuthRateLimitConfig {
 export interface ApiServices {
     db(): DatabaseClient;
     redis(): Redis;
+    sqliteState?(): SqliteState;
     origin: string;
     production: boolean;
     registrationEnabled: boolean;
@@ -64,6 +66,8 @@ function positiveSetting(name: string, fallback: number): number {
 export function createDefaultServices(overrides: ApiServiceOverrides = {}): ApiServices {
     let database: DatabaseClient | undefined;
     let cache: Redis | undefined;
+    let localState: SqliteState | undefined;
+    const sqlitePath = readSqliteStatePath();
     let draftModel: ModelProvider | null | undefined;
     let questionModel: ModelProvider | null | undefined;
     let images: ImageStorageClient | null | undefined;
@@ -148,6 +152,9 @@ export function createDefaultServices(overrides: ApiServiceOverrides = {}): ApiS
                 }
                 return database;
             }),
+        sqliteState:
+            overrides.sqliteState ??
+            (sqlitePath ? () => (localState ??= openSqliteState(sqlitePath)) : undefined),
         redis:
             overrides.redis ??
             (() => {
@@ -161,6 +168,7 @@ export function createDefaultServices(overrides: ApiServiceOverrides = {}): ApiS
             (closing ??= (async () => {
                 await streams.stop();
                 bucket?.destroy();
+                localState?.close();
                 if (overrides.close) {
                     await overrides.close();
                     return;

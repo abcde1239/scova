@@ -16,17 +16,18 @@ flowchart LR
   PG -->|持久化事件回放| API
   API -->|SSE| Web
   API -->|Outbox 发布和恢复回补| Queue[(Redis / BullMQ)]
-  Queue --> Worker[Worker: BullMQ 消费 / Agent 执行]
-  Worker -->|执行态持久化| PG
+  Queue --> Worker[Worker: Run 消费 / Agent 执行]
+  Worker -->|内部 HTTP 执行协议| Exec[Server 内部执行接口]
+  Exec -->|租约、账本、报告| PG
   Worker --> Graph[LangGraph.js Agent]
-  Graph --> CP[(PostgreSQL checkpoints)]
+  Exec --> CP[(PostgreSQL checkpoints)]
   Graph --> Search[SearXNG / 账号独立搜索 API]
   Graph --> Reader[Search API Fetch/Extract 或 SearXNG 本地 Reader]
   Graph --> Model[可配置模型适配器]
   Graph -->|结构化候选成果| Worker
 ```
 
-API 和 Worker 是分别运行的后端进程，PostgreSQL 和 Redis 是唯一首版基础服务。同机 Compose 通过反向代理提供同源网页、`/api` 和 `/api/.../events`；不引入独立调度集群、搜索集群或额外向量数据库。
+API 和 Worker 是分别运行的后端进程，默认基础服务为 PostgreSQL 和 Redis，单机可用 SQLite 文件替换 Redis 协调服务。同机 Compose 通过反向代理提供同源网页、`/api` 和 `/api/.../events`；不引入独立调度集群、搜索集群或额外向量数据库。
 
 ## 2. 工作区与职责
 
@@ -42,7 +43,7 @@ API 和 Worker 是分别运行的后端进程，PostgreSQL 和 Redis 是唯一�
 | packages/connectors     | SearXNG、搜索 API、模型协议、HTTP 抓取与 Readability                                    | 向 agent-core 提供工具接口                               |
 | packages/object-storage | R2 / S3 通用文件、目录作用域、大小与 MIME 策略、签名 URL 和图片签名校验                 | 官方 AWS S3 SDK；不依赖应用                              |
 
-Server 在独立于 HTTP 请求的后台循环运行周期调度、Outbox 投递和可恢复 Run 回补；Worker 不管理任务计划、不发布队列作业，也不提供账号管理入口；Agent 没有通用 SQL、文件系统或任意脚本工具。`packages/db/src/schema.ts` 与 `packages/db/drizzle` 维护业务结构和迁移；Server/Worker 从 `@scova/db` 引用持久化类型，公开接口仍使用 `@scova/models`。迁移、备份、恢复、留存清理和账号数据清理均为 Server 离线 CLI，不挂到公开 HTTP 路由。Worker 运行态仍直接读写 PostgreSQL 的租约、checkpoint、工具账本和交付事务；启动时不执行迁移。
+Server 在独立于 HTTP 请求的后台循环运行周期调度、Outbox 投递和可恢复 Run 回补；Worker 不管理任务计划、不发布队列作业，也不提供账号管理入口；Agent 没有通用 SQL、文件系统或任意脚本工具。`packages/db/src/schema.ts` 与 `packages/db/drizzle` 维护业务结构和迁移；Server 通过 `@scova/db` 持有数据库访问与迁移，公开接口使用 `@scova/models`，内部执行协议与租约类型定义在 `@scova/shared`。迁移、备份、恢复、留存清理和账号数据清理均为 Server 离线 CLI，不挂到公开 HTTP 路由。Worker 通过独立监听的 `POST /internal/worker/v1` 访问 Server 执行接口。Server 验证服务令牌，再按 Run、账号、lease owner 和 epoch 校验操作；检查点写入与租约校验共用事务。该端口不经 Web 代理转发。
 
 报告连续对话以 Report 为锚点，`report_questions` 保存有序轮次和服务端授权构建的上下文。普通问答独立限流、计量并核对引用；生成新版或联网补研需显式确认，Run 冻结报告、讨论、成果形式与预算，重试沿用快照。修订工具只读取保存证据，禁止联网搜索和重新抓取。连接器按各供应商协议保留原生 user/assistant 角色；历史回答只能作讨论，不能成为事实证据。该会话记忆与单次 Run 的 LangGraph checkpoint 恢复分别维护。
 
@@ -50,7 +51,7 @@ Web `src/` 只设 `component`、`layout`、`composable`、`utils`、`store`、`a
 
 Server `src/` 只设 `repo`、`handler`、`service`、`model`、`utils`、`app` 和 `router`。调用链为 `main → app → router → handler → service → repo`；`model` 保存本应用的 schema 与 Elysia 的契约注册，跨端 DTO 仍来自 `@scova/models`。`handler/http` 包含会话、Origin/CSRF、请求体和 SSE 适配；流注册和终止仍由 `app` 管理。Redis 客户端适配和实际访问在 `repo`，BullMQ 的发布、恢复回补和维护操作归 `repo/queue`，长期连接的生命周期由 `app` 管理。Task CAS 与 Run/事件/Outbox 仍同事务提交。
 
-Worker 沿用后端分层的子集：没有 HTTP `router`，也不复制共享 `model`。`app/queue` 的 BullMQ 消费器交给 `handler`，由 `service` 执行 Run、Agent 与交付，`repo` 执行当前 Run 的持久化条件写。交付复核已提升的 checkpoint 和原文后原子提交报告、收件箱和终态。停止先阻止新领取、中断执行并等待在途写入，再关闭消费者与执行连接。
+Worker 沿用后端分层的子集：没有 HTTP `router`，也不复制共享 `model`。`app/queue` 把队列作业交给 `handler`，`service` 运行 Agent，`repo` 调用内部执行接口。Server 交付时复核已提升的 checkpoint 和原文，并原子提交报告、收件箱和终态。停止先阻止新领取、中断执行并等待在途写入，再关闭消费者与执行连接。
 
 顶层入口文件不属于业务分层：Web 保留框架装配和基础样式，后端保留 Bun/Node 入口及部署调用的健康检查和维护 CLI；不增设只转发到现有入口的文件。
 
@@ -60,7 +61,9 @@ Run 另有独立租约与递增 epoch。统一 `withRunFence` 门在 Run 行锁�
 
 所有 app/package 均以 `src` 保存源码，并配置 `@/* → ./src/*`。应用内使用别名，跨包引用包名；直接导出源码的共享包内部保留相对引用，避免消费方 TypeScript/Bun 对同名别名的解析冲突。Vite/Vitest 使用原生 tsconfig paths 解析，Node.js 启动入口由 `vpx` 处理。
 
-M1 已将前端迁至 `apps/web`，建立 API/worker 与三个共享包的最小入口，共享纯调度与执行范围计算由 `packages/shared` 提供。业务模块仍按各自 Issue 实现；新增真实测试时同步 Vitest 与 harness 覆盖声明，不将类型/常量占位验证计为业务覆盖。Bun 为主运行时；Bun/Node.js 的 API 均使用 Elysia 官方 Node Web 适配器与显式 `srvx/node` HTTP 服务，通过 `node:http` 的 write/drain 传播 SSE socket 背压。
+后端以 Bun 为主运行时，Node.js 为兼容运行时。Server/Worker 的默认开发与启动脚本、数据库迁移和容器入口均使用 Bun；Node.js 通过显式 `:node` 命令选择。Bun/Node.js 的 API 共用 Elysia 官方 Node Web 适配器与 `srvx/node` HTTP 服务，通过 `node:http` 的 write/drain 传播 SSE socket 背压。这里的 Node 适配器属于 HTTP 实现，不表示进程运行于 Node.js；当前没有另设 `Bun.serve` 原生 HTTP 路径。
+
+Vite+ 的 Node 工具进程负责依赖、构建和验证。Bun Worker 的网页 Reader 通过私有协议委托 Node/vpx 子进程运行 Crawlee/Playwright，Worker 仍负责执行、预算与可信 HTTP 回调。运行时核查应分别确认主进程、HTTP 适配和 Reader 子进程，不能仅凭 `node:*` 导入判断运行时。
 
 依赖由 Vite+ 1.4.0 支持的 `pnpm-workspace.yaml` 管理；使用 `workspace:*` 声明包关系。`vp run <script>` 执行包脚本，`vp check` / `vp test` 使用内置工具；Bun 运行 API/worker，不能用另一份 Bun lockfile 分裂依赖来源。
 
@@ -92,6 +95,7 @@ sequenceDiagram
   participant D as Server 后台投递
   participant Q as BullMQ
   participant W as Worker
+  participant E as Server 内部执行接口
   UI->>API: 立即执行 / 到期任务
   API->>DB: 事务：锁任务，插入 Run + Outbox
   DB-->>API: runId（已有活动执行则返回该执行）
@@ -100,9 +104,11 @@ sequenceDiagram
   D->>Q: jobId = run-{uuid}
   D->>DB: 标记已投递
   Q->>W: 至少一次投递
-  W->>DB: 条件获取租约 + fencing epoch
+  W->>E: 领取 Run
+  E->>DB: 条件获取租约并签发 epoch
   W->>W: 恢复图 / 执行工具与证据综合
-  W->>DB: 事务：校验租约，报告 + 收件箱 + 事件 + Run 终态
+  W->>E: 提交候选成果
+  E->>DB: 事务：校验租约，报告 + 收件箱 + 事件 + Run 终态
   W->>Q: ACK
 ```
 
@@ -111,6 +117,8 @@ Outbox 防止“数据库已有执行但队列丢失”。发送后宕机可能�
 Server 默认每 30 秒扫描到期任务，以 `FOR NO KEY UPDATE SKIP LOCKED` 领取到期项；更新 `nextRunAt`、创建 Occurrence、执行/跳过记录、首事件和 outbox 在同一事务内完成。Task 非键行锁兼容交付写入 Baseline 时的外键检查，避免归档 Task→Run 与交付 Run→Task 锁环。调度和 Run 消费默认并发各为 2，可分别配置；周期执行固定为真实研究（live），缺少模型或搜索必要配置时明确失败。
 
 频率为手动/每日/每周，持久化当地时间、IANA timezone 和 UTC `nextRunAt`。共享 Temporal 日历计算将不存在的当地时刻顺延到首个有效时刻，重复时刻只选择较早一次；下一次从原始当地时分重建。停机后最多补最近一次时点，更早记录为 `missedCount`；活动执行时记 `skipped_overlap`。修改计划或时区在锁内重算 nextRunAt 并增加 scheduleRevision，普通标题等编辑保留原到期时点。暂停清空下一时点，恢复只安排未来时点，归档请求取消已有活动执行。
+
+单机可选 SQLite WAL 作为队列与协调存储。Outbox 仍由 Server 发布和确认，Worker 通过内部接口领取、续租和确认 SQLite 作业，再向 Server 领取业务 Run 租约。SQLite 文件只由 Server 和 Server 维护命令访问。恢复扫描使用 PostgreSQL 的 Run 状态和租约 epoch，晚到的消费确认受 SQLite 领取令牌保护。业务记录、报告和 Agent 检查点继续使用 PostgreSQL。
 
 ### 交付与后续对比
 
@@ -150,7 +158,7 @@ LangGraph checkpointer 使用 PostgreSQL，每个租约 epoch 使用独立 threa
 
 ## 5. Agent 图、工具与模型
 
-研究图先加载上下文与规划，再按冻结策略执行知识草稿、搜索、选页、读取、校验、综合、补答和比较。新策略优先完成直接答复，再进行历史比较；字段缺口可在原预算内触发重绑、修复、定向读取或补搜。`validate` 与候选投影共用完成计算，图递归上限作为兜底；交付由 Worker 完成，图不自行发送提醒或改写基线。节点与恢复规则见[研究循环](agent-research-loop.md)。
+研究图先加载上下文与规划，再按冻结策略执行知识草稿、搜索、选页、读取、校验、综合、补答和比较。新策略优先完成直接答复，再进行历史比较；字段缺口可在原预算内触发重绑、修复、定向读取或补搜。`validate` 与候选投影共用完成计算，图递归上限作为兜底；交付由 Server 完成，图不自行发送提醒或改写基线。节点与恢复规则见[研究循环](agent-research-loop.md)。
 
 状态保存 run/version、owner 上下文引用、基线、反馈快照、检索计划、证据 ID、调用账本摘要、候选结论、coverage 与错误；不把整个历史网页反复塞入模型上下文。图输入只接受服务器加载的数据，禁止客户端指定 owner、checkpoint namespace 或任意工具参数。
 
@@ -160,7 +168,7 @@ LangGraph checkpointer 使用 PostgreSQL，每个租约 epoch 使用独立 threa
 
 模型结构错误区分非法 JSON、schema 不匹配、响应信封和拒绝。每次 tool.failed 可保存阶段、schema SHA-256 指纹、可信契约路径以及预期枚举、数量限制或必填字段；不保存无效响应原文或字段值。修复提示只引用这些有界诊断。失败调用的已确认 usage 仍结算，即使后续修复成功，原失败诊断也保留。
 
-新执行通过 `evidencePolicy: 1` 区分来源发现与原文支持：规划的 `knowledgePlan` 提供候选答案与核验要点，综合的 `evidenceLinks` 保存页、问题、连续原文及支持理由，不修改原 `page.questionIds`。跨问题引用需被同一成功回执的合法关联片段包含，不能追溯升级旧失败尝试。Worker 认证不可变模型账本，语义支持仍是模型评估。
+新执行通过 `evidencePolicy: 1` 区分来源发现与原文支持：规划的 `knowledgePlan` 提供候选答案与核验要点，综合的 `evidenceLinks` 保存页、问题、连续原文及支持理由，不修改原 `page.questionIds`。跨问题引用需被同一成功回执的合法关联片段包含，不能追溯升级旧失败尝试。Server 认证不可变模型账本，语义支持仍是模型评估。
 
 新执行同时冻结 `researchLoopPolicy: 1`：规划分类稳定知识、实时信息、精确数据和指定出处，综合逐字段输出 `fieldChecks`。有材料但未绑定则重绑、结构或引文错误先修复、确认缺资料才按具体命题补搜、冲突保留双方。稳定知识可通过【模型自回答】补足解释，无外部引用；其他核验类型保留证据要求。`coverage.propositions` 保存命题与字段绑定、适用条件及正文 hash/UTF-16 区间，原文和快照仍由既有证据记录保存；`coverage.metrics` 分别统计回答完成、外部证据支持和未解决问题。前端只为模型知识添加标签，不追加小字说明。复用原图节点和累计预算，旧检查点与既有证据修订保留原策略；独立证据实体库、答案 CAS 和独立写作节点未引入。
 

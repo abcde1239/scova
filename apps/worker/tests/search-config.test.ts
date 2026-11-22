@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vite-plus/test';
 import { createConnectorBundle } from '@scova/connectors';
-import { effectiveSearchConfig, accountSearchConfig } from '../src/app/search-config.ts';
+import {
+    effectiveSearchConfig,
+    accountSearchConfig,
+} from '../../server/src/service/execution/search-config.ts';
 import { sealCredential } from '@scova/shared/credentials';
 
 const api = {

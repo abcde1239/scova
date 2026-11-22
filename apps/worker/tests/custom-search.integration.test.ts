@@ -2,9 +2,9 @@ import { expect, it } from 'vite-plus/test';
 import { randomUUID } from 'node:crypto';
 import { runs as dbRuns, eq, reportSearchConfigurationHash, searchConfigurations } from '@scova/db';
 import { createConnectorBundle } from '@scova/connectors';
-import { createAgentRuntime } from '../src/service/agent.ts';
+import { createLocalAgentRuntime as createAgentRuntime } from './support/local-agent-runtime.ts';
 import { prepareTestCheckpointSchema } from './support/checkpoint-schema.ts';
-import { freezeSearchConfiguration } from '../src/repo/search-configuration-freeze.ts';
+import { freezeSearchConfiguration } from '../../server/src/repo/execution/search-configuration-freeze.ts';
 import { fixture, setup, takeover, usage } from './recovery/fixture.ts';
 
 it('冻结自定义源身份并跨租约恢复，改配置或移除源不会静默改路由', async () => {

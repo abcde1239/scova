@@ -1,3 +1,4 @@
+import { readSqliteStatePath } from '@scova/db/sqlite-state';
 import { readRunQueueName } from '@scova/shared/outbox-job';
 import pg from 'pg';
 import { databaseSettings, schemaName } from '@/utils/operations.ts';
@@ -11,6 +12,7 @@ export function operationConfig(env: NodeJS.ProcessEnv = process.env) {
         backupDirectory: env.SCOVA_BACKUP_DIRECTORY ?? '/backups',
         offline: env.SCOVA_MAINTENANCE === '1',
         redisUrl: env.REDIS_URL,
+        sqliteStatePath: readSqliteStatePath(env),
         queueName: readRunQueueName(env),
     };
 }

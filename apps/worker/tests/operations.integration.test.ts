@@ -1,4 +1,4 @@
-import { requiredDatabaseValue } from '@/utils/database.ts';
+import { requiredDatabaseValue } from '../../server/src/utils/execution/database.ts';
 import {
     type DatabaseClient,
     reports as dbReports,
@@ -46,11 +46,12 @@ import { operationConfig, operationPool } from '../../server/src/app/operations.
 import { createOperationService } from '../../server/src/service/operations.ts';
 import { createOperationRepository } from '../../server/src/repo/operations.ts';
 import { parseOperation } from '../../server/src/utils/operations.ts';
-import { createAgentRepository } from '../src/repo/agent.ts';
-import { createRunRepository } from '../src/repo/runs.ts';
-import { createAgentSession, createAgentRuntime } from '../src/service/agent.ts';
+import { createAgentRepository } from '../../server/src/repo/execution/agent.ts';
+import { createRunRepository } from '../../server/src/repo/execution/runs.ts';
+import { createAgentSession } from '../src/service/agent.ts';
+import { createLocalAgentRuntime as createAgentRuntime } from './support/local-agent-runtime.ts';
 import { RunService } from '../src/service/runs.ts';
-import { createDeliveryService } from '../src/service/delivery.ts';
+import { createDeliveryService } from '../../server/src/service/execution/delivery.ts';
 import { outboxDatabase } from './support/outbox-database.ts';
 import { seedRun } from './support/run-database.ts';
 import { completeModelFixture } from './support/complete-model-fixture.ts';

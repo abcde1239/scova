@@ -27,6 +27,7 @@ const origin = `http://127.0.0.1:${port}`;
 const env = {
     ...process.env,
     POSTGRES_PASSWORD: randomBytes(24).toString('hex'),
+    WORKER_EXECUTION_TOKEN: randomBytes(32).toString('hex'),
     SCOVA_PORT: String(port),
     SCOVA_BIND: '127.0.0.1',
     APP_ORIGIN: origin,

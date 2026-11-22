@@ -1,4 +1,4 @@
-import { requiredDatabaseValue } from '@/utils/database.ts';
+import { requiredDatabaseValue } from '../../../server/src/utils/execution/database.ts';
 import { eq, taskVersions as dbTaskVersions, runs as dbRuns } from '@scova/db';
 import {
     createConnectorBundle,
@@ -6,7 +6,7 @@ import {
     createHttpPageReader as createPageReader,
     type ConnectorBundle,
 } from '@scova/connectors';
-import { createAgentRepository } from '../../src/repo/agent.ts';
+import { createAgentRepository } from '../../../server/src/repo/execution/agent.ts';
 import { createAgentSession } from '../../src/service/agent.ts';
 import { seedRun } from '../support/run-database.ts';
 import { fixture, runs, saver } from './fixture.ts';

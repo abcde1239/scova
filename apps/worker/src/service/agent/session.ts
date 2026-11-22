@@ -1,4 +1,4 @@
-import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
+import type { BaseCheckpointSaver } from '@langchain/langgraph';
 import {
     runResearchAgent,
     deterministicPartial,
@@ -9,9 +9,9 @@ import {
     type AgentContext,
 } from '@scova/agent-core';
 import { ConnectorError, type ConnectorBundle } from '@scova/connectors';
-import { type AgentRepository } from '@/repo/agent.ts';
+import { type AgentRepository } from '@scova/shared/execution/agent';
 import type { RunExecutionContext } from '@/service/runs.ts';
-import { RunExecutionError, type RunLeaseToken } from '@/utils/runs.ts';
+import { RunExecutionError, type RunLeaseToken } from '@scova/shared/execution/runs';
 import { within } from '@/utils/timeout.ts';
 import { digest, readPage } from '@/service/agent/tool-results.ts';
 import { createSessionCheckpoints } from '@/service/agent/checkpoints.ts';
@@ -24,7 +24,8 @@ export interface AgentSessionOptions {
     answerSupplementEnabled?: boolean;
     adaptiveSearchDisabled?: boolean;
     repository: AgentRepository;
-    saver: PostgresSaver;
+    saver: BaseCheckpointSaver;
+    readDeadlineCheckpoint?: BaseCheckpointSaver['getTuple'];
     token: RunLeaseToken;
     context: RunExecutionContext;
     bundle: ConnectorBundle;
@@ -36,6 +37,7 @@ export function createAgentSession({
     adaptiveSearchDisabled: optionsAdaptiveSearchDisabled,
     repository: rawRepository,
     saver: rawSaver,
+    readDeadlineCheckpoint: readDeadlineTuple,
     token,
     context,
     bundle,
@@ -58,7 +60,11 @@ export function createAgentSession({
     const { promote, openCheckpoint, readDeadlineCheckpoint } = createSessionCheckpoints(
         { repository, saver, token },
         guard,
-        (config) => trackDomain(() => rawSaver.getTuple(config), true),
+        (config) =>
+            trackDomain(
+                () => (readDeadlineTuple ? readDeadlineTuple(config) : rawSaver.getTuple(config)),
+                true,
+            ),
     );
     const call = createToolCaller({ repository, context, bundle }, currentUsage, guard, () => {
         tokenBudgetInvalid = true;

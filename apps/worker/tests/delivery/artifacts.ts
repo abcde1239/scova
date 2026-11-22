@@ -1,4 +1,4 @@
-import { requiredDatabaseValue } from '@/utils/database.ts';
+import { requiredDatabaseValue } from '../../../server/src/utils/execution/database.ts';
 import {
     reports as dbReports,
     eq,
@@ -14,7 +14,7 @@ import type { Report } from '@scova/models';
 import { expect, it } from 'vite-plus/test';
 import { candidateFromCheckpoint } from '@scova/agent-core';
 import { checkpointWithBodies } from './checkpoint.ts';
-import { createAgentRepository } from '../../src/repo/agent.ts';
+import { createAgentRepository } from '../../../server/src/repo/execution/agent.ts';
 import { liveResearch } from './live-research.ts';
 import { delivery, fixture, assertEmpty, saver } from './fixture.ts';
 

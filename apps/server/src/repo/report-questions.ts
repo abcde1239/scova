@@ -23,6 +23,7 @@ const hash = (value: string) => createHash('sha256').update(value).digest('hex')
 export function createQuestionBudgetRepo(services: ApiServices) {
     const budget = createTaskDraftRepo({
         redis: () => services.redis(),
+        sqliteState: services.sqliteState ? () => services.sqliteState!() : undefined,
         clock: () => services.clock(),
         taskDraftPolicy: services.reportQuestionPolicy,
     });

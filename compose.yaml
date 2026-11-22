@@ -36,6 +36,7 @@ x-app: &app
         options: { max-size: 5m, max-file: '2' }
 services:
     postgres:
+        networks: [database]
         image: postgres:17-alpine
         restart: unless-stopped
         environment:
@@ -61,6 +62,7 @@ services:
             retries: 20
         logging: *logging
     migrate:
+        networks: [default, database]
         <<: *app
         restart: 'no'
         working_dir: /app/apps/server
@@ -71,10 +73,13 @@ services:
         depends_on:
             postgres: { condition: service_healthy }
     api:
+        networks: [default, database]
         <<: *app
         environment:
             <<: *environment
             DATABASE_URL: postgresql://scova:${POSTGRES_PASSWORD}@postgres:5432/scova?application_name=scova-api
+            WORKER_EXECUTION_HOST: 0.0.0.0
+            WORKER_EXECUTION_TOKEN: ${WORKER_EXECUTION_TOKEN:?Set a random Worker execution token}
             WORKER_POLL_INTERVAL_MS: ${WORKER_POLL_INTERVAL_MS:-1000}
             WORKER_FAILURE_DELAY_MS: ${WORKER_FAILURE_DELAY_MS:-5000}
             WORKER_BATCH_SIZE: ${WORKER_BATCH_SIZE:-50}
@@ -120,8 +125,18 @@ services:
         mem_limit: 1536m
         working_dir: /app/apps/worker
         environment:
-            <<: *environment
-            DATABASE_URL: postgresql://scova:${POSTGRES_PASSWORD}@postgres:5432/scova?application_name=scova-worker
+            WORKER_EXECUTION_URL: http://api:3001
+            WORKER_EXECUTION_TOKEN: ${WORKER_EXECUTION_TOKEN:?Set a random Worker execution token}
+            REDIS_URL: redis://redis:6379
+            WORKER_QUEUE_NAME: ${WORKER_QUEUE_NAME:-scova-runs}
+            SEARCH_DNS_RESOLVER: ${SEARCH_DNS_RESOLVER:-auto}
+            SEARCH_ENGINE_INTERVAL_MS: ${SEARCH_ENGINE_INTERVAL_MS:-10000}
+            SEARCH_CONFIG_VERSION: ${SEARCH_CONFIG_VERSION:-1}
+            SEARCH_CACHE_ENABLED: ${SEARCH_CACHE_ENABLED:-true}
+            SEARCH_ADAPTIVE_ENABLED: ${SEARCH_ADAPTIVE_ENABLED:-true}
+            RESEARCH_ANSWER_SUPPLEMENT_ENABLED: ${RESEARCH_ANSWER_SUPPLEMENT_ENABLED:-false}
+            MODEL_DNS_RESOLVER: ${MODEL_DNS_RESOLVER:-auto}
+            READER_DNS_RESOLVER: ${READER_DNS_RESOLVER:-auto}
             WORKER_HEARTBEAT_PATH: /tmp/scova-worker-ready
             WORKER_RUN_CONCURRENCY: ${WORKER_RUN_CONCURRENCY:-2}
             READER_RENDER_WAIT_MS: ${READER_RENDER_WAIT_MS:-1000}
@@ -129,7 +144,7 @@ services:
             READER_CHROMIUM_SANDBOX: ${READER_CHROMIUM_SANDBOX:-false}
         command: [bun, run, src/main.ts]
         depends_on:
-            migrate: { condition: service_completed_successfully }
+            api: { condition: service_healthy }
             redis: { condition: service_healthy }
         healthcheck:
             test: [CMD, bun, run, src/health.ts]
@@ -189,6 +204,7 @@ services:
             start_period: 20s
         logging: *logging
     operations:
+        networks: [default, database]
         <<: *app
         profiles: [maintenance]
         restart: 'no'
@@ -208,3 +224,7 @@ volumes:
     redis-data:
     searxng-cache:
     backups:
+
+networks:
+    database:
+        internal: true

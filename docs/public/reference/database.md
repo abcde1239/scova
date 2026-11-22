@@ -1,6 +1,6 @@
 # 业务数据库
 
-PostgreSQL 表与关系定义在 `packages/db/src/schema.ts`，Server/Worker 通过 `@scova/db` 使用原生 Drizzle 客户端与推导行类型。公开 DTO、事件和运行时校验独立放在 `@scova/models`。Bun 为主运行时，Node.js 使用相同实现。连接由部署者配置，不提交密码。
+PostgreSQL 表与关系定义在 `packages/db/src/schema.ts`，Server 通过 `@scova/db` 使用原生 Drizzle 客户端与推导行类型。Worker 通过 Server 内部执行接口保存执行状态。公开 DTO、事件和运行时校验独立放在 `@scova/models`。Bun 为主运行时，Node.js 使用相同实现。连接由部署者配置，不提交密码。
 
 ## 初始化与升级
 

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vite-plus/test';
 import type { AgentClaim } from '@scova/agent-core';
-import { primaryArtifactSummary, reportSummary } from '../src/utils/report-summary.ts';
+import {
+    primaryArtifactSummary,
+    reportSummary,
+} from '../../server/src/utils/execution/report-summary.ts';
 import type { Coverage, ReportValue } from '@scova/models';
 const claim = (kind: AgentClaim['kind'], text: string): AgentClaim => ({
     kind,

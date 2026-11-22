@@ -2,9 +2,9 @@ import { describe, expect, it, vi } from 'vite-plus/test';
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import { createConnectorBundle } from '@scova/connectors';
 import { createAgentSession } from '../src/service/agent/session.ts';
-import type { AgentRepository } from '../src/repo/agent.ts';
+import type { AgentRepository } from '../../server/src/repo/execution/agent.ts';
 import type { RunExecutionContext } from '../src/service/runs.ts';
-import { RunFenceError } from '../src/utils/runs.ts';
+import { RunFenceError } from '@scova/shared/execution/runs';
 const projection = vi.hoisted(() => vi.fn((_context, state) => ({ claims: state.claims })));
 vi.mock('@scova/agent-core', async (original) => ({
     ...(await original<typeof import('@scova/agent-core')>()),

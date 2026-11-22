@@ -16,7 +16,7 @@ function deferred() {
 }
 
 const config = readWorkerConfig({
-    DATABASE_URL: 'postgresql://worker:secret@localhost/scova',
+    WORKER_EXECUTION_TOKEN: 'test'.repeat(8),
     REDIS_URL: 'redis://:secret@localhost:6379',
 });
 

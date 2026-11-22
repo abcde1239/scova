@@ -1,4 +1,4 @@
-import { requiredDatabaseValue } from '@/utils/database.ts';
+import { requiredDatabaseValue } from '../../../server/src/utils/execution/database.ts';
 import {
     runs as dbRuns,
     eq,
@@ -15,7 +15,7 @@ import {
     type CallContext,
 } from '@scova/connectors';
 import { expect, it } from 'vite-plus/test';
-import { createAgentRuntime } from '../../src/service/agent.ts';
+import { createLocalAgentRuntime as createAgentRuntime } from '../support/local-agent-runtime.ts';
 import { RunService } from '../../src/service/runs.ts';
 import { prepareTestCheckpointSchema } from '../support/checkpoint-schema.ts';
 import { setup, sessionFixture, fixture, usage, expireAfterEvidence, runs } from './fixture.ts';

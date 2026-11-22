@@ -5,7 +5,10 @@
         class="report-content report-artifact-panel"
         :class="[
             `report-artifact-panel--${activeFormat}`,
-            { 'report-artifact-panel--reading': reading },
+            {
+                'report-artifact-panel--reading': reading,
+                'report-artifact-panel--printable': printable && projected,
+            },
         ]"
         aria-label="报告交付物"
         :role="reading ? 'dialog' : undefined"
@@ -22,6 +25,9 @@
                 </p>
             </div>
             <div v-if="report" class="artifact-actions">
+                <n-button v-if="projected" quaternary @click="printReport">
+                    打印 / 另存为 PDF
+                </n-button>
                 <n-button v-if="reading" @click="emit('conversation')">
                     <app-icon name="back" />返回对话
                 </n-button>
@@ -122,7 +128,7 @@
 const readButtonAccessibility = { 'aria-expanded': 'false' };
 const chartOpen = ref(false);
 const attachmentsOpen = ref(false);
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { NButton } from 'naive-ui';
 import type { Report } from '@scova/models';
 import AppIcon from '@/component/common/AppIcon.vue';
@@ -141,6 +147,7 @@ import { artifactReport, savedArtifactFormats } from '@/utils/report/artifacts';
 const props = defineProps<{
     report?: Report;
     reading: boolean;
+    printable?: boolean;
     loading: boolean;
     errorMessage: string;
     retryable: boolean;
@@ -153,6 +160,37 @@ const emit = defineEmits<{
     retry: [];
 }>();
 const panel = ref<HTMLElement>();
+const printDisclosures = new Set<HTMLDetailsElement>();
+
+function preparePrint() {
+    if (!props.printable || !projected.value) return;
+    const disclosures = panel.value?.querySelectorAll<HTMLDetailsElement>(
+        ':is(.artifact-document, .report-changes, .evidence-appendix) details:not([open])',
+    );
+    for (const details of disclosures ?? []) {
+        printDisclosures.add(details);
+        details.open = true;
+    }
+}
+
+function restoreAfterPrint() {
+    for (const details of printDisclosures) details.open = false;
+    printDisclosures.clear();
+}
+
+function printReport() {
+    window.print();
+}
+
+onMounted(() => {
+    window.addEventListener('beforeprint', preparePrint);
+    window.addEventListener('afterprint', restoreAfterPrint);
+});
+onBeforeUnmount(() => {
+    window.removeEventListener('beforeprint', preparePrint);
+    window.removeEventListener('afterprint', restoreAfterPrint);
+    restoreAfterPrint();
+});
 const formatLabels = {
     brief: '简报',
     list: '主题清单',
@@ -408,6 +446,63 @@ function onKeydown(event: KeyboardEvent) {
     }
     .artifact-formats button {
         @apply [transition:none];
+    }
+}
+</style>
+
+<style>
+@media print {
+    /* Remove the workbench and conversation chrome from the report's ancestor chain. */
+    :where(body, body *):has(.report-artifact-panel--printable)
+        > :not(:has(.report-artifact-panel--printable), .report-artifact-panel--printable),
+    .report-artifact-panel--printable .deliverable-heading,
+    .report-artifact-panel--printable
+        .artifact-scroll
+        > :not(.artifact-document, .report-changes, .evidence-appendix) {
+        display: none !important;
+    }
+
+    :where(body, body *):has(.report-artifact-panel--printable),
+    .report-artifact-panel--printable,
+    .report-artifact-panel--printable :is(.artifact-scroll, .artifact-document) {
+        display: block !important;
+        position: static !important;
+        transform: none !important;
+        width: auto !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        max-width: none !important;
+        height: auto !important;
+        overflow: visible !important;
+        background: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    .report-artifact-panel--printable {
+        color-scheme: light;
+        --scova-text: #171717;
+        --scova-muted: #404040;
+        --scova-primary: #174076;
+        --scova-border: #c7c7c7;
+        --scova-canvas: #fff;
+        --scova-surface: #fff;
+        --scova-selected: #f3f3f3;
+        color: var(--scova-text);
+    }
+
+    .report-artifact-panel--printable :is(.matrix-scroll, .findings-scroll) {
+        overflow: visible;
+    }
+
+    .report-artifact-panel--printable table {
+        min-width: 0;
+    }
+
+    .report-artifact-panel--printable :is(h2, h3, h4, summary) {
+        break-after: avoid;
     }
 }
 </style>

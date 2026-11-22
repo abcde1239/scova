@@ -117,6 +117,9 @@
                         <span class="font-semibold"
                             >{{ nodeLabels[node.type] }} · {{ statusLabels[node.status] }}</span
                         >
+                        <span v-if="node.parallelGroup">
+                            并行组 {{ parallelGroups.indexOf(node.parallelGroup) + 1 }}
+                        </span>
                         <span v-if="node.type === 'study'">执行尝试 {{ node.attempt }}</span>
                         <span v-if="node.failureCode">{{ node.failureCode }}</span>
                         <router-link
@@ -249,6 +252,11 @@ const runQuery = useQuery(
     lifecycle.queryClient,
 );
 const run = computed(() => runQuery.data.value?.data);
+const parallelGroups = computed(() => [
+    ...new Set(
+        run.value?.nodes.flatMap((node) => (node.parallelGroup ? [node.parallelGroup] : [])),
+    ),
+]);
 const canCancel = computed(() => run.value?.status === 'queued' || run.value?.status === 'running');
 
 function childStatusLabel(status: Run['status']) {

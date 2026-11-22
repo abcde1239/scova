@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vite-plus/test';
-import { terminalNotificationKind } from '../src/utils/notifications.ts';
+import { terminalNotificationKind } from '../../server/src/utils/execution/notifications.ts';
 
 describe('terminal notification preferences', () => {
     for (const mode of ['summary', 'important_change', 'off'] as const)

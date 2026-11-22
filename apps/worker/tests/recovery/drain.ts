@@ -8,7 +8,7 @@ import {
 } from '@scova/db';
 import { createConnectorBundle } from '@scova/connectors';
 import { expect, it } from 'vite-plus/test';
-import { type AgentRepository } from '../../src/repo/agent.ts';
+import { type AgentRepository } from '../../../server/src/repo/execution/agent.ts';
 import { setup, fixture, sessionFixture } from './fixture.ts';
 
 export function registerDrain() {

@@ -110,6 +110,7 @@
                     v-model:format="selectedFormat"
                     :report="readingReport"
                     :reading="readingOnly"
+                    :printable="artifactOpen || readingOnly || !report"
                     :loading="valid && readingQuery.isPending.value"
                     :error-message="readingError.message"
                     :retryable="

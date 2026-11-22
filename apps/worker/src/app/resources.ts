@@ -1,70 +1,69 @@
-import {
-    createDatabaseClient,
-    type DatabaseClient,
-    connectDatabase,
-    closeDatabase,
-} from '@scova/db';
 import type { WorkerConfig } from '@/app/config.ts';
-import { createRunRepository } from '@/repo/runs.ts';
+import { createExecutionClient } from '@/repo/execution.ts';
 import { createRunHandler } from '@/handler/runs.ts';
 import { RunService, type RunExecutor } from '@/service/runs.ts';
 import { createRunConsumer } from '@/app/queue/runs.ts';
+import { createSqliteRunConsumer } from '@/app/queue/sqlite-runs.ts';
 import { createAgentRuntime } from '@/service/agent.ts';
+import type { ConnectorBundle } from '@scova/connectors';
 
 export interface WorkerResources {
-    connect(): Promise<void>;
+    connect(signal?: AbortSignal): Promise<void>;
     isReady(): boolean;
     stop(): Promise<void>;
     finished(): Promise<void>;
     close(): Promise<void>;
 }
 
-/** Worker 仅装配 Run consumer 和当前执行所需的 Agent 依赖。 */
 export function createWorkerResources(
     config: WorkerConfig,
-    options: { executor?: RunExecutor } = {},
+    options: { executor?: RunExecutor; bundle?: ConnectorBundle } = {},
 ): WorkerResources {
-    let database: DatabaseClient | undefined;
+    const execution = createExecutionClient(config.executionUrl, config.executionToken);
     let connecting: Promise<void> | undefined;
     let closing: Promise<void> | undefined;
-    let consumer: ReturnType<typeof createRunConsumer> | undefined;
+    let consumer: ReturnType<typeof createRunConsumer | typeof createSqliteRunConsumer> | undefined;
     let agent: ReturnType<typeof createAgentRuntime> | undefined;
     const stop = () => consumer?.stop() ?? Promise.resolve();
     return {
-        connect: () =>
+        connect: (signal) =>
             (connecting ??= (async () => {
-                database = createDatabaseClient({
-                    connectionString: config.databaseUrl,
-                    applicationName: 'scova-worker',
-                });
-                await connectDatabase(database);
+                const { queue, queueName } = await execution.waitUntilReady(signal);
+                if (config.queueName !== queueName)
+                    throw new Error('Worker 与 Server 的队列名称不一致');
+                if (queue === 'bullmq' && !config.redisUrl) throw new Error('缺少 REDIS_URL');
                 if (!options.executor) {
                     agent = createAgentRuntime({
-                        databaseUrl: config.databaseUrl,
-                        database,
+                        persistence: { ...execution.persistence, ready: async () => undefined },
                         env: { ...process.env, REDIS_URL: config.redisUrl },
-                        enableDelivery: true,
+                        localSearch: queue === 'sqlite' ? execution.sqliteSearch : undefined,
+                        bundle: options.bundle,
                     });
                     await agent.connect();
                 }
                 const leaseMs = config.runLeaseSeconds * 1000;
                 const runHandler = createRunHandler(
                     new RunService({
-                        repository: createRunRepository(database),
+                        repository: execution.runs,
                         executor: options.executor,
-                        executorFactory: agent
-                            ? (token) => agent!.executorFactory(token)
-                            : undefined,
+                        executorFactory: agent?.executorFactory.bind(agent),
                         leaseMs,
                         renewIntervalMs: Math.min(10_000, Math.floor(leaseMs / 3)),
                     }),
                 );
-                consumer = createRunConsumer(
-                    config.redisUrl,
-                    config.queueName,
-                    runHandler,
-                    config.runConcurrency,
-                );
+                consumer =
+                    queue === 'sqlite'
+                        ? createSqliteRunConsumer(
+                              execution.sqliteQueue,
+                              runHandler,
+                              config.runConcurrency,
+                          )
+                        : createRunConsumer(
+                              config.redisUrl,
+                              config.queueName,
+                              runHandler,
+                              config.runConcurrency,
+                          );
                 await consumer.start();
             })()),
         isReady: () => consumer?.isReady() ?? false,
@@ -75,11 +74,7 @@ export function createWorkerResources(
                 try {
                     await stop();
                 } finally {
-                    try {
-                        await agent?.close();
-                    } finally {
-                        if (database) await closeDatabase(database);
-                    }
+                    await agent?.close();
                 }
             })()),
     };

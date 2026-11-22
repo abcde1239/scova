@@ -11,10 +11,10 @@ import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import pg from 'pg';
 import { afterAll, beforeAll, expect } from 'vite-plus/test';
 import { createConnectorBundle } from '@scova/connectors';
-import { createAgentRepository } from '../../src/repo/agent.ts';
-import { createRunRepository } from '../../src/repo/runs.ts';
+import { createAgentRepository } from '../../../server/src/repo/execution/agent.ts';
+import { createRunRepository } from '../../../server/src/repo/execution/runs.ts';
 import { createAgentSession } from '../../src/service/agent.ts';
-import { createDeliveryService } from '../../src/service/delivery.ts';
+import { createDeliveryService } from '../../../server/src/service/execution/delivery.ts';
 import { outboxDatabase } from '../support/outbox-database.ts';
 import { seedRun } from '../support/run-database.ts';
 

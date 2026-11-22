@@ -20,7 +20,7 @@ import {
     type WorkflowStore,
 } from '@/repo/workflows.ts';
 import { ownedTask } from '@/service/tasks.ts';
-import { checkpointNode, orderWorkflow } from '@/service/workflow-graph.ts';
+import { workflowCheckpointNodes, workflowStages } from '@/service/workflow-graph.ts';
 import { ApiError } from '@/utils/errors.ts';
 
 function requireId(id: string) {
@@ -166,7 +166,7 @@ export function createWorkflowService(services: Pick<ApiServices, 'db' | 'clock'
                 checkRevision(row, expectedRevision);
                 const latest = await store.findVersion(userId, row.id);
                 if (latest?.draftRevision === row.revision) return detail(row, latest);
-                const ordered = orderWorkflow(row.draftJson);
+                const ordered = workflowStages(row.draftJson).flat();
                 const taskIds = [
                     ...new Set(
                         ordered.flatMap((node) =>
@@ -234,16 +234,7 @@ export function createWorkflowService(services: Pick<ApiServices, 'db' | 'clock'
                 }
                 const version = await store.findVersion(userId, workflow.id, versionId);
                 if (!version) notFound();
-                const bindings = new Map(
-                    version.bindingsJson.map((binding) => [binding.nodeId, binding]),
-                );
-                const nodes = orderWorkflow(version.graphJson).map((node) => {
-                    if (node.type !== 'study') return checkpointNode(node, null);
-                    const binding = bindings.get(node.id);
-                    if (!binding || binding.taskId !== node.taskId.toLowerCase())
-                        throw new Error('研究节点与已发布任务绑定不一致');
-                    return checkpointNode(node, binding.taskVersionId);
-                });
+                const nodes = workflowCheckpointNodes(version.graphJson, version.bindingsJson);
                 const now = services.clock();
                 const run = await store.insertRun({
                     userId,

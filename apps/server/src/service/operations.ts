@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { migrateDatabase } from '@scova/db/migrate';
+import { openSqliteState } from '@scova/db/sqlite-state';
 
 import { constants } from 'node:fs';
 import { open, unlink, link } from 'node:fs/promises';
@@ -8,7 +9,7 @@ import type pg from 'pg';
 import type { OperationConfig } from '@/app/operations.ts';
 import { provisionAgentCheckpointSchema } from '@/service/agent-checkpoint-schema.ts';
 import { createOperationRepository } from '@/repo/operations.ts';
-import { removeAccountJobs } from '@/repo/queue/maintenance.ts';
+import { removeAccountJobs, removeLocalAccountJobs } from '@/repo/queue/maintenance.ts';
 import { assertRedisReady } from '@/repo/redis.ts';
 import { backupPath, type parseOperation } from '@/utils/operations.ts';
 
@@ -28,8 +29,11 @@ export function createOperationService(pool: pg.Pool, config: OperationConfig) {
         async execute(input: ReturnType<typeof parseOperation>) {
             if (input.command === 'ready') {
                 await repo.readiness();
-                if (!config.redisUrl) throw new Error('缺少 REDIS_URL');
-                await assertRedisReady(config.redisUrl);
+                if (config.sqliteStatePath) openSqliteState(config.sqliteStatePath).close();
+                else {
+                    if (!config.redisUrl) throw new Error('缺少 REDIS_URL');
+                    await assertRedisReady(config.redisUrl);
+                }
                 return { ready: true };
             }
             // Compose may revisit an exited migration service while healthy apps are already running.
@@ -103,10 +107,14 @@ export function createOperationService(pool: pg.Pool, config: OperationConfig) {
             await repo.readiness();
             if (input.command === 'retention') return repo.retention(input.apply);
             if (input.apply) {
-                if (!config.redisUrl) throw new Error('账号删除需要 Redis，以先移除账号队列作业');
                 const runs = await repo.accountRuns(input.userId!);
                 const outbox = await repo.accountOutbox(input.userId!);
-                await removeAccountJobs(config.redisUrl, config.queueName, runs, outbox);
+                if (config.sqliteStatePath)
+                    removeLocalAccountJobs(config.sqliteStatePath, config.queueName, runs, outbox);
+                else {
+                    if (!config.redisUrl) throw new Error('缺少 REDIS_URL，无法移除账号队列作业');
+                    await removeAccountJobs(config.redisUrl, config.queueName, runs, outbox);
+                }
             }
             // Queue cleanup precedes the transaction. A failed DB delete is recoverable from its retained Outbox.
             return repo.deleteAccount(input.userId!, input.apply);

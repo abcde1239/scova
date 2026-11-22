@@ -2,6 +2,7 @@ import { writeFile, unlink } from 'node:fs/promises';
 import { readWorkerConfig, type WorkerConfig } from '@/app/config.ts';
 import { createWorkerResources, type WorkerResources } from '@/app/resources.ts';
 import { waitForPoll } from '@/utils/wait.ts';
+import type { ConnectorBundle } from '@scova/connectors';
 import type { RunExecutor } from '@/service/runs.ts';
 
 export interface WorkerAppOptions {
@@ -10,13 +11,15 @@ export interface WorkerAppOptions {
     logger?: Pick<Console, 'info'>;
     wait?: (milliseconds: number, signal: AbortSignal) => Promise<void>;
     executor?: RunExecutor;
+    bundle?: ConnectorBundle;
 }
 
 /** 启动 consumer、更新就绪心跳、清理与幂等停止；构造时不连接外部服务。 */
 export function createWorkerApp(options: WorkerAppOptions = {}) {
     const config = options.config ?? readWorkerConfig();
     const resources =
-        options.resources ?? createWorkerResources(config, { executor: options.executor });
+        options.resources ??
+        createWorkerResources(config, { executor: options.executor, bundle: options.bundle });
     const logger = options.logger ?? console;
     const wait = options.wait ?? waitForPoll;
     const controller = new AbortController();
@@ -49,7 +52,7 @@ export function createWorkerApp(options: WorkerAppOptions = {}) {
         return (starting ??= (async () => {
             try {
                 await clearHeartbeat();
-                await resources.connect();
+                await resources.connect(signal);
                 consumer = resources.finished();
                 void consumer.catch(() => controller.abort());
                 if (signal.aborted) return;

@@ -2,18 +2,18 @@
     <section class="layout-grid gap-3 p-4" aria-labelledby="report-attachments-title">
         <h3 id="report-attachments-title" class="sr-only">附件管理</h3>
         <form class="layout-grid gap-2" method="post" @submit.prevent="upload">
-            <label for="report-csv-file">选择 CSV 文件</label>
-            <p id="report-csv-help" class="m-0 text-muted">
-                UTF-8 编码，最大 {{ maxFileKiB }} KiB。附件仅供参考。
+            <label for="report-attachment-file">选择附件</label>
+            <p id="report-attachment-help" class="m-0 text-muted">
+                支持 UTF-8 CSV、TXT 和仅供下载的 PDF，每个文件最大 {{ maxFileKiB }} KiB。
             </p>
             <div class="flex items-center flex-wrap gap-2">
                 <input
                     ref="picker"
-                    id="report-csv-file"
+                    id="report-attachment-file"
                     name="file"
                     type="file"
-                    accept=".csv,text/csv"
-                    aria-describedby="report-csv-help"
+                    accept=".csv,.txt,.pdf"
+                    aria-describedby="report-attachment-help"
                     class="min-w-0 max-w-full min-h-11 keyboard-focus-wide"
                     required
                     @change="selectFile"
@@ -46,7 +46,9 @@
                     {{
                         item.status === 'ready'
                             ? `可查看 ${item.rowCount} 行`
-                            : failureLabels[item.failureCode]
+                            : item.status === 'failed'
+                              ? failureLabels[item.failureCode]
+                              : 'PDF · 可下载原文件'
                     }}
                 </p>
                 <div class="flex flex-wrap items-center gap-3">
@@ -95,6 +97,8 @@
 import { computed, ref, shallowRef, watch } from 'vue';
 import {
     REPORT_ATTACHMENT_MAX_BYTES,
+    REPORT_ATTACHMENT_MEDIA_TYPES,
+    reportAttachmentFormat,
     type ReportAttachment,
     type ReportAttachmentFailure,
 } from '@scova/models';
@@ -143,6 +147,8 @@ const failureLabels: Record<ReportAttachmentFailure, string> = {
     INVALID_UTF8: '无法解析：文件不是有效的 UTF-8 文本。',
     INVALID_CSV: '无法解析：CSV 格式无效。',
     CSV_LIMIT_EXCEEDED: '无法解析：行、列或单元格超出限制。',
+    INVALID_TEXT: '无法解析：纯文本无内容或含不支持的控制字符。',
+    TEXT_LIMIT_EXCEEDED: '无法解析：纯文本的行数或单行长度超出限制。',
 };
 const picker = ref<HTMLInputElement>();
 const file = shallowRef<File>();
@@ -165,8 +171,9 @@ function selectFile(event: Event) {
 async function upload() {
     const source = file.value;
     if (!source || uploadMutation.isPending.value) return;
-    if (!/\.csv$/i.test(source.name) || !source.size || source.size > REPORT_ATTACHMENT_MAX_BYTES) {
-        notice.error(`请选择非空且不超过 ${maxFileKiB} KiB 的 CSV`);
+    const format = reportAttachmentFormat(source.name);
+    if (!format || !source.size || source.size > REPORT_ATTACHMENT_MAX_BYTES) {
+        notice.error(`请选择非空且不超过 ${maxFileKiB} KiB 的 CSV、TXT 或 PDF 文件`);
         return;
     }
     const scope = lifecycle.capture();
@@ -176,13 +183,14 @@ async function upload() {
             input: {
                 params: { reportId },
                 query: { filename: source.name },
-                body: source.slice(0, source.size, 'text/csv'),
+                body: source.slice(0, source.size, REPORT_ATTACHMENT_MEDIA_TYPES[format]),
             },
         });
         if (!scope.isCurrent() || props.reportId !== reportId) return;
         resetFile();
-        if (data.status === 'ready') notice.success('已上传并解析附件');
-        else notice.warning('已保留原文件', failureLabels[data.failureCode]);
+        if (data.status === 'failed')
+            notice.warning('已保留原文件', failureLabels[data.failureCode]);
+        else notice.success(data.status === 'ready' ? '已上传并解析附件' : '已上传 PDF 附件');
         await query.refetch();
     } catch (error) {
         if (scope.isCurrent() && props.reportId === reportId)

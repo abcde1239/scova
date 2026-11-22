@@ -4,29 +4,31 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "dev": "vpx ../../scripts/run-bun.mjs --env-file=../../.env.local --watch src/main.ts",
-        "dev:node": "vpx --watch --env-file-if-exists=../../.env.local --env-file-if-exists=.env src/node.ts",
-        "start": "vpx ../../scripts/run-bun.mjs run src/main.ts",
-        "start:node": "vpx --env-file-if-exists=.env src/node.ts",
+        "dev": "vpx ../../scripts/run-worker.mjs bun dev",
+        "dev:node": "vpx ../../scripts/run-worker.mjs node dev",
+        "start": "vpx ../../scripts/run-worker.mjs bun start",
+        "start:node": "vpx ../../scripts/run-worker.mjs node start",
         "build": "tsc --noEmit",
         "test": "vp test",
         "check": "vp check"
     },
     "dependencies": {
         "@langchain/core": "catalog:",
-        "@langchain/langgraph-checkpoint-postgres": "catalog:",
+        "@langchain/langgraph": "catalog:",
         "@scova/agent-core": "workspace:*",
         "@scova/connectors": "workspace:*",
-        "@scova/db": "workspace:*",
         "@scova/models": "workspace:*",
         "@scova/shared": "workspace:*",
         "bullmq": "catalog:",
         "ioredis": "catalog:",
-        "pg": "catalog:"
+        "requestlane": "catalog:"
     },
     "devDependencies": {
+        "@langchain/langgraph-checkpoint-postgres": "catalog:",
+        "@scova/db": "workspace:*",
         "@types/node": "catalog:",
         "@types/pg": "catalog:",
+        "pg": "catalog:",
         "typescript": "catalog:"
     }
 }

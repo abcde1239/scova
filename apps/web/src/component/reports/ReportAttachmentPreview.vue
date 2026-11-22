@@ -1,15 +1,19 @@
 <template>
     <div class="layout-grid gap-2">
         <p class="m-0" role="status">记录 {{ start }}–{{ end }}，共 {{ attachment.rowCount }} 条</p>
-        <state-panel v-if="rows.isPending.value" state="loading" message="正在读取 CSV 记录" />
+        <state-panel v-if="rows.isPending.value" state="loading" message="正在读取附件内容" />
         <state-panel
             v-else-if="rows.isError.value"
             state="error"
-            message="无法查看 CSV 记录"
+            message="无法查看附件内容"
             retryable
             @retry="rows.refetch()"
         />
-        <ol v-else class="layout-grid gap-2 m-0 p-0 list-none" aria-label="CSV 提取内容">
+        <ol
+            v-else
+            class="layout-grid gap-2 m-0 p-0 list-none"
+            :aria-label="attachment.format === 'txt' ? '纯文本内容' : 'CSV 提取内容'"
+        >
             <li
                 v-for="row in rows.data.value?.data.rows"
                 :key="row.rowNumber"
@@ -22,7 +26,10 @@
                             : `第 ${row.startLine}–${row.endLine} 行`
                     }}
                 </p>
-                <ol class="m-0 pl-6">
+                <p v-if="attachment.format === 'txt'" class="m-0 whitespace-pre-wrap">
+                    {{ row.cells[0] || '（空）' }}
+                </p>
+                <ol v-else class="m-0 pl-6">
                     <li v-for="(cell, index) in row.cells" :key="index" class="whitespace-pre-wrap">
                         {{ cell || '（空）' }}
                     </li>

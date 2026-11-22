@@ -13,7 +13,7 @@ import {
     type SearchResponse,
 } from '@scova/connectors';
 import type { Usage } from '@scova/models';
-import { AgentPersistenceError } from '@/repo/agent.ts';
+import { AgentPersistenceError } from '@scova/shared/execution/agent';
 import { readSource } from '@/service/source-reader.ts';
 import { type AgentSessionOptions } from '@/service/agent/session.ts';
 import { digest, emptyUsage, readPage } from '@/service/agent/tool-results.ts';

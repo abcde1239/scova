@@ -1,7 +1,7 @@
 <template>
     <section class="surface-card p-4 layout-grid gap-4" aria-labelledby="workflow-draft-heading">
         <h2 id="workflow-draft-heading" class="m-0">工作流草稿</h2>
-        <state-panel v-if="!graph" state="error" message="此草稿无法在串行编辑器中打开。" />
+        <state-panel v-if="!graph" state="error" message="此草稿的连线无法在编辑器中打开。" />
         <form v-else class="layout-grid gap-4" method="post" @submit.prevent="save">
             <div class="layout-grid gap-2">
                 <label for="workflow-draft-title">工作流名称</label>
@@ -19,7 +19,7 @@
             <fieldset class="layout-grid gap-2 min-w-0 m-0 p-0 border-none" :disabled="busy">
                 <legend class="font-semibold p-0">节点顺序</legend>
                 <p id="workflow-order-hint" class="my-2 text-muted">
-                    拖动研究节点调整顺序，也可以使用检查器中的上移或下移按钮。
+                    拖动研究节点或使用上移和下移按钮调整位置。在检查器中可合并相邻阶段。
                 </p>
                 <div class="workflow-board">
                     <div class="workflow-rail">
@@ -55,7 +55,8 @@
                                     <app-icon class="workflow-node-icon" name="workflows" />
                                     <span class="min-w-0">
                                         <span class="workflow-node-label"
-                                            >研究 {{ index + 1 }}</span
+                                            >研究 {{ index + 1
+                                            }}{{ groupLabels.get(node.id) ?? '' }}</span
                                         >
                                         <span
                                             class="workflow-node-task"
@@ -155,6 +156,23 @@
                                 @click="tasksQuery.refetch()"
                                 >重试读取任务</action-button
                             >
+                            <div class="layout-grid gap-2">
+                                <p class="m-0 text-muted">
+                                    并行组中的研究全部成功后，工作流才会进入下一阶段。
+                                </p>
+                                <div class="flex flex-wrap gap-2">
+                                    <action-button
+                                        :disabled="selectedStageIndex < 1"
+                                        @click="mergeWithPrevious"
+                                        >与上一阶段并行</action-button
+                                    >
+                                    <action-button
+                                        :disabled="!groupLabels.has(selectedStudy.id)"
+                                        @click="runSeparately"
+                                        >移到下一独立阶段</action-button
+                                    >
+                                </div>
+                            </div>
                             <div class="workflow-inspector-actions flex flex-wrap gap-2">
                                 <action-button
                                     v-bind="{
@@ -239,7 +257,7 @@ import AppIcon from '@/component/common/AppIcon.vue';
 import StatePanel from '@/component/common/StatePanel.vue';
 import { useSessionLifecycle, useSessionMutation } from '@/composable/useSessionQuery';
 import { useTasks } from '@/composable/useTasks';
-import { readSerialGraph, serialGraph, type StudyNode } from '@/utils/workflow/serial';
+import { readEditorGraph, stagedGraph, type StudyNode } from '@/utils/workflow/serial';
 
 const props = defineProps<{ snapshot: ApiResponse<WorkflowDetail> }>();
 const lifecycle = useSessionLifecycle();
@@ -253,20 +271,34 @@ onScopeDispose(() => lifetime.abort());
 
 const baseline = shallowRef(props.snapshot);
 const revision = computed(() => baseline.value.data.workflow.revision);
-const graph = computed(() => readSerialGraph(baseline.value.data.draft));
+const graph = computed(() => readEditorGraph(baseline.value.data.draft));
 const title = ref(baseline.value.data.workflow.title);
-const studies = ref<StudyNode[]>(graph.value?.studies.map((node) => ({ ...node })) ?? []);
+const stages = ref<StudyNode[][]>(copyStages());
+const studies = computed(() => stages.value.flat());
+const groupLabels = computed(
+    () =>
+        new Map(
+            stages.value.flatMap((stage, index) =>
+                stage.length > 1
+                    ? stage.map((node) => [node.id, ` · 阶段 ${index + 1}（并行）`] as const)
+                    : [],
+            ),
+        ),
+);
 const selectedId = ref(studies.value[0]?.id);
 const selectedIndex = computed(() =>
     studies.value.findIndex((node) => node.id === selectedId.value),
 );
 const selectedStudy = computed(() => studies.value[selectedIndex.value]);
+const selectedStageIndex = computed(() =>
+    stages.value.findIndex((stage) => stage.some((node) => node.id === selectedId.value)),
+);
 const selectedPosition = computed(() => selectedIndex.value + 1);
 const maxStudies = workflowNodeLimit - 2;
 const dirty = computed(
     () =>
         title.value.trim() !== baseline.value.data.workflow.title ||
-        JSON.stringify(studies.value) !== JSON.stringify(graph.value?.studies ?? []),
+        JSON.stringify(stages.value) !== JSON.stringify(graph.value?.stages ?? []),
 );
 const conflict = ref(false);
 const reloading = ref(false);
@@ -288,10 +320,14 @@ const errorSummary = ref<HTMLElement>();
 const dragged = ref('');
 const hovered = ref('');
 
+function copyStages() {
+    return graph.value?.stages.map((stage) => stage.map((node) => ({ ...node }))) ?? [];
+}
+
 function adopt(snapshot: ApiResponse<WorkflowDetail>) {
     baseline.value = snapshot;
     title.value = snapshot.data.workflow.title;
-    studies.value = graph.value?.studies.map((node) => ({ ...node })) ?? [];
+    stages.value = copyStages();
     if (!selectedStudy.value) selectedId.value = studies.value[0]?.id;
     conflict.value = false;
 }
@@ -308,7 +344,7 @@ watch(
     },
 );
 watch(
-    [title, studies],
+    [title, stages],
     () => {
         announcement.value = '';
     },
@@ -327,7 +363,7 @@ function focusTask() {
 function add() {
     if (busy.value || studies.value.length >= maxStudies) return;
     const id = crypto.randomUUID();
-    studies.value.push({ id, type: 'study', taskId: '' });
+    stages.value.push([{ id, type: 'study', taskId: '' }]);
     selectedId.value = id;
     announcement.value = `已添加研究 ${studies.value.length}`;
     focusTask();
@@ -336,17 +372,53 @@ function add() {
 function removeSelected() {
     const index = selectedIndex.value;
     if (busy.value || index < 0) return;
-    studies.value.splice(index, 1);
+    const stageIndex = selectedStageIndex.value;
+    const stage = stages.value[stageIndex]!;
+    stage.splice(
+        stage.findIndex((node) => node.id === selectedId.value),
+        1,
+    );
+    if (!stage.length) stages.value.splice(stageIndex, 1);
     announcement.value = `已删除研究 ${index + 1}`;
     selectedId.value = (studies.value[index] ?? studies.value.at(-1))?.id;
     if (selectedId.value) focusTask();
     else void nextTick(() => addButton.value?.focus());
 }
 
+function mergeWithPrevious() {
+    const index = selectedStageIndex.value;
+    if (busy.value || index < 1) return;
+    const merged = [...stages.value[index - 1]!, ...stages.value[index]!];
+    stages.value.splice(index - 1, 2, merged);
+    announcement.value = `已合并为包含 ${merged.length} 项研究的并行组`;
+    focusTask();
+}
+
+function runSeparately() {
+    const index = selectedStageIndex.value;
+    const node = selectedStudy.value;
+    if (busy.value || !node || !groupLabels.value.has(node.id)) return;
+    const stage = stages.value[index]!;
+    stages.value.splice(
+        index,
+        1,
+        stage.filter((study) => study.id !== node.id),
+        [node],
+    );
+    announcement.value = '已移到下一独立阶段';
+    focusTask();
+}
+
 function move(from: number, to: number) {
     const node = studies.value[from];
     if (busy.value || !node || from === to || to < 0 || to >= studies.value.length) return;
-    studies.value = studies.value.toSpliced(from, 1).toSpliced(to, 0, node);
+    const ordered = studies.value.toSpliced(from, 1).toSpliced(to, 0, node);
+    let position = 0;
+    stages.value = stages.value.map((stage) => {
+        const next = ordered.slice(position, position + stage.length);
+        position += stage.length;
+        return next;
+    });
     announcement.value = `研究 ${from + 1} 已移到第 ${to + 1} 个位置`;
 }
 
@@ -447,7 +519,7 @@ async function save() {
     const { start, end } = graph.value;
     await write('save', {
         title: title.value.trim(),
-        graph: serialGraph(start, studies.value, end),
+        graph: stagedGraph(start, stages.value, end),
     });
 }
 

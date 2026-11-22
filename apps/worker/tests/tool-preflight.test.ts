@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vite-plus/test';
 import { ConnectorError } from '@scova/connectors';
-import { AgentPersistenceError } from '../src/repo/agent.ts';
+import { AgentPersistenceError } from '../../server/src/repo/execution/agent.ts';
 import { createToolCaller } from '../src/service/agent/tool-call.ts';
 import { emptyUsage } from '../src/service/agent/tool-results.ts';
 

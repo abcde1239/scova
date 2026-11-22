@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
-import type { ClaimedRun, RunRepository } from '../src/repo/runs.ts';
+import type { ClaimedRun, RunRepository } from '../../server/src/repo/execution/runs.ts';
 import type { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
-import type { AgentRepository } from '../src/repo/agent.ts';
+import type { AgentRepository } from '../../server/src/repo/execution/agent.ts';
 import { createSessionPersistence } from '../src/service/agent/persistence.ts';
 import { RunService, type RunExecutionContext } from '../src/service/runs.ts';
-import { RunExecutionError, RunFenceError } from '../src/utils/runs.ts';
-import { AgentPersistenceError } from '../src/repo/agent.ts';
+import { RunExecutionError, RunFenceError } from '@scova/shared/execution/runs';
+import { AgentPersistenceError } from '../../server/src/repo/execution/agent.ts';
 import { ConnectorError } from '@scova/connectors';
 import { within } from '../src/utils/timeout.ts';
 

@@ -1,23 +1,10 @@
 import {
-    createDatabaseClient,
-    toolCalls as dbToolCalls,
-    eq,
-    and,
-    sql,
-    connectDatabase,
-    closeDatabase,
-} from '@scova/db';
-
-import {
     createConnectorBundle,
     type ConnectorBundle,
     type StructuredInput,
     type CallContext,
 } from '@scova/connectors';
-import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
-import pg from 'pg';
-import { createRunRepository } from '../../src/repo/runs.ts';
-import { createAgentRepository } from '../../src/repo/agent.ts';
+import { createExecutionClient } from '../../src/repo/execution.ts';
 import { createAgentSession } from '../../src/service/agent.ts';
 
 // Test-only process fault boundary. Production has no pause or checkpoint bypass hook.
@@ -29,80 +16,80 @@ if (
 ) {
     throw new Error('Invalid recovery fixture arguments');
 }
-const databaseUrl = process.env.DATABASE_URL!;
-const schema = new URL(databaseUrl).searchParams.get('schema');
-if (!schema || !/^scova_worker_[a-f0-9]{32}$/.test(schema))
-    throw new Error('Invalid recovery schema');
-const db = createDatabaseClient({ connectionString: databaseUrl });
-const pool = new pg.Pool({ connectionString: databaseUrl, max: 2 });
+const execution = createExecutionClient(
+    process.env.WORKER_EXECUTION_URL!,
+    process.env.WORKER_EXECUTION_TOKEN!,
+);
 const never = new Promise<void>(() => {});
+let boundarySettled = false;
 let blocked = false;
 async function beforeCheckpointWrite() {
-    if (phase !== 'crash') return;
-    if (blocked) return never;
-    const succeeded = await db.query.toolCalls.findFirst({
-        where: and(
-            eq(dbToolCalls.runId, runId),
-            eq(dbToolCalls.tool, boundary),
-            eq(dbToolCalls.status, 'succeeded'),
-        ),
-    });
-    if (!succeeded) return;
-    blocked = true;
-    process.send?.({
-        type: 'settled-before-checkpoint',
-        toolCallId: succeeded.id,
-        pid: process.pid,
-    });
+    if (phase !== 'crash' || !boundarySettled) return;
+    if (!blocked) {
+        blocked = true;
+        process.send?.({ type: 'settled-before-checkpoint', pid: process.pid });
+    }
     await never;
 }
-class FaultBoundarySaver extends PostgresSaver {
-    override async put(...args: Parameters<PostgresSaver['put']>) {
-        await beforeCheckpointWrite();
-        return super.put(...args);
-    }
-    override async putWrites(...args: Parameters<PostgresSaver['putWrites']>) {
-        await beforeCheckpointWrite();
-        return super.putWrites(...args);
-    }
-}
-const saver = new FaultBoundarySaver(pool, undefined, { schema });
 const base = createConnectorBundle();
-async function count(kind: string, input: string) {
-    await db.execute(
-        sql`INSERT INTO recovery_external_calls (run_id, kind, input) VALUES (${runId}::uuid, ${kind}, ${input})`,
-    );
+function count(kind: string) {
+    process.send?.({ type: 'connector', kind });
 }
 const bundle: ConnectorBundle = {
     ...base,
     search: {
         async search(query, context) {
-            await count('search', query);
+            count('search');
             return base.search.search(query, context);
         },
     },
     reader: {
         async read(url, context) {
-            await count('read', url);
+            count('read');
             return base.reader.read(url, context);
         },
     },
     model: {
         async generateStructured<T>(input: StructuredInput, context?: CallContext) {
-            await count('model', input.prompt);
+            count('model');
             return base.model.generateStructured<T>(input, context);
         },
     },
 };
 try {
-    await connectDatabase(db);
-    await saver.setup();
-    const runs = createRunRepository(db);
+    await execution.ready();
+    const { runs } = execution;
     const claimed = await runs.claim(runId!, `agent-${phase}-${process.pid}`, 60_000);
     if (claimed.kind !== 'claimed') throw new Error(`Cannot claim recovery run: ${claimed.kind}`);
     const { run, token } = claimed;
+    const repository = execution.persistence.repository(token);
+    const reserve = repository.reserve.bind(repository);
+    const settle = repository.settle.bind(repository);
+    const boundaryIds = new Set<string>();
+    repository.reserve = async (input) => {
+        const result = await reserve(input);
+        if (input.tool === boundary && result.kind === 'reserved')
+            boundaryIds.add(result.toolCallId);
+        return result;
+    };
+    repository.settle = async (input) => {
+        const result = await settle(input);
+        if (boundaryIds.has(input.toolCallId)) boundarySettled = true;
+        return result;
+    };
+    const saver = execution.persistence.checkpoints(token);
+    const put = saver.put.bind(saver);
+    const putWrites = saver.putWrites.bind(saver);
+    saver.put = async (...args) => {
+        await beforeCheckpointWrite();
+        return put(...args);
+    };
+    saver.putWrites = async (...args) => {
+        await beforeCheckpointWrite();
+        return putWrites(...args);
+    };
     const session = createAgentSession({
-        repository: createAgentRepository(db, token),
+        repository,
         saver,
         token,
         bundle,
@@ -128,7 +115,5 @@ try {
     console.error(error);
     process.exitCode = 1;
 } finally {
-    await saver.end();
-    await closeDatabase(db);
     process.disconnect?.();
 }

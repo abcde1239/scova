@@ -23,7 +23,9 @@ import {
 import { readDatabaseMigrations, scopeMigrationSql } from '@scova/db/migrate';
 import { afterAll, beforeAll, describe, expect, it } from 'vite-plus/test';
 import { createApiApp } from '@/app/index';
-import { createDefaultServices } from '@/app/services';
+import { createDefaultServices, type ApiServiceOverrides } from '@/app/services';
+import { createQuestionBudgetRepo } from '@/repo/report-questions';
+import { createTaskDraftRepo } from '@/repo/task-drafts';
 import { tokenHash } from '@/utils/security';
 
 const origin = 'https://scova.test';
@@ -41,17 +43,23 @@ const redis = new Redis(process.env.SCOVA_TEST_REDIS_URL ?? 'redis://127.0.0.1:5
     lazyConnect: true,
 });
 const draftLookups = new Map<string, () => ModelProvider | null | Promise<ModelProvider | null>>();
-const app = createApiApp(
-    'node',
-    createDefaultServices({
+function testServices(overrides: ApiServiceOverrides = {}) {
+    return createDefaultServices({
         db: () => db,
         redis: () => redis,
         clock: () => now,
         origin,
         taskDraftModel: (userId) => (userId ? draftLookups.get(userId)?.() : undefined) ?? null,
         reportQuestionModel: () => null,
-    }),
-);
+        ...overrides,
+        taskDraftPolicy: { keyPrefix: `${schema}:draft:`, ...overrides.taskDraftPolicy },
+        reportQuestionPolicy: {
+            keyPrefix: `${schema}:question:`,
+            ...overrides.reportQuestionPolicy,
+        },
+    });
+}
+const app = createApiApp('node', testServices());
 let schemaCreated = false;
 
 type Account = Awaited<ReturnType<typeof seedAccount>>;
@@ -133,6 +141,7 @@ function request(
         csrf = true,
         key,
         revision,
+        server = app,
     }: {
         account?: Account;
         method?: string;
@@ -140,6 +149,7 @@ function request(
         csrf?: boolean;
         key?: string;
         revision?: number;
+        server?: typeof app;
     } = {},
 ) {
     const headers = new Headers({ origin });
@@ -150,7 +160,7 @@ function request(
     if (key) headers.set('idempotency-key', key);
     if (revision !== undefined) headers.set('if-match', `"${revision}"`);
     if (body !== undefined) headers.set('content-type', 'application/json');
-    return app.handle(
+    return server.handle(
         new Request(`${origin}${url}`, {
             method,
             headers,
@@ -189,6 +199,10 @@ beforeAll(async () => {
 }, 120_000);
 
 afterAll(async () => {
+    if (redis.status === 'ready') {
+        const keys = await redis.keys(`${schema}:*`);
+        if (keys.length) await redis.del(...keys);
+    }
     redis.disconnect();
     await closeDatabase(db);
     if (schemaCreated) await admin.query(`DROP SCHEMA "${schema}" CASCADE`);
@@ -674,6 +688,200 @@ describe('project task submissions', () => {
 });
 
 describe('project conversation', () => {
+    async function reportFixture() {
+        const owner = await seedAccount();
+        const project = await createProject(owner, '问答控制');
+        const task = await seedTask(owner.id, '报告任务');
+        const { reportId } = await seedHistory(task);
+        await request(membershipPath(project.id, task.id), { account: owner, method: 'PUT' });
+        return {
+            owner,
+            project,
+            url: `${path}/${project.id}/conversation`,
+            body: { turnId: randomUUID(), kind: 'ask', message: '报告结论？', reportId },
+        };
+    }
+
+    it.each(['question', 'draft'] as const)(
+        'uses only the question budget when the %s budget is exhausted',
+        async (exhausted) => {
+            const { owner, url, body } = await reportFixture();
+            let calls = 0;
+            const services = testServices({
+                taskDraftPolicy: { userRequests: 1 },
+                reportQuestionPolicy: { userRequests: 1 },
+                reportQuestionModel: () => ({
+                    async generateStructured<T>(
+                        _input: StructuredInput,
+                        context: CallContext = {},
+                    ) {
+                        await context.beforeAttempt?.('model');
+                        calls++;
+                        return {
+                            mode: 'live',
+                            data: { answer: '测试回答' } as T,
+                            usage: { inputTokens: 1, outputTokens: 1, estimated: false },
+                        };
+                    },
+                }),
+            });
+            const budget =
+                exhausted === 'question'
+                    ? createQuestionBudgetRepo(services)
+                    : createTaskDraftRepo(services);
+            await budget.begin(owner.id, new AbortController().signal);
+            const response = await request(`${url}/turns`, {
+                account: owner,
+                method: 'POST',
+                body,
+                server: createApiApp('node', services),
+            });
+            expect(response.status).toBe(200);
+            expect(await response.json()).toMatchObject({
+                turns: [
+                    {
+                        id: body.turnId,
+                        status: exhausted === 'question' ? 'failed' : 'completed',
+                        answer:
+                            exhausted === 'question'
+                                ? '报告问答额度已用尽，请稍后重试'
+                                : '测试回答',
+                    },
+                ],
+            });
+            expect(calls).toBe(exhausted === 'question' ? 0 : 1);
+        },
+    );
+
+    it.each([
+        ['same-instance', 'ask'],
+        ['another-instance', 'ask'],
+        ['another-instance', 'draft'],
+        ['timeout', 'ask'],
+        ['deleted', 'ask'],
+    ] as const)('stops the model and rejects late answers after %s (%s)', async (stop, kind) => {
+        const { owner, project, url, body: question } = await reportFixture();
+        const body = {
+            ...question,
+            kind,
+            reportId: kind === 'ask' ? question.reportId : undefined,
+        };
+        const entered = Promise.withResolvers<AbortSignal>();
+        const release = Promise.withResolvers<void>();
+        const model: ModelProvider = {
+            async generateStructured<T>(_input: StructuredInput, context: CallContext = {}) {
+                await context.beforeAttempt?.('model');
+                entered.resolve(context.signal!);
+                await release.promise;
+                return {
+                    mode: 'live',
+                    data: { answer: '迟到回答' } as T,
+                    usage: { inputTokens: 1, outputTokens: 1, estimated: false },
+                };
+            },
+        };
+        const services = testServices({
+            taskDraftPolicy: { timeoutMs: 10_000 },
+            reportQuestionPolicy: { timeoutMs: stop === 'timeout' ? 600 : 10_000 },
+            reportQuestionModel: () => model,
+            taskDraftModel: () => model,
+        });
+        const server = createApiApp('node', services);
+        const pending = request(`${url}/turns`, {
+            account: owner,
+            method: 'POST',
+            body,
+            server,
+        });
+        try {
+            const signal = await Promise.race([
+                entered.promise,
+                pending.then(() => {
+                    throw new Error('模型未启动');
+                }),
+            ]);
+            const [running] = await db
+                .select()
+                .from(projectConversationTurns)
+                .where(eq(projectConversationTurns.id, body.turnId));
+            if (stop === 'deleted') {
+                await db.delete(projects).where(eq(projects.id, project.id));
+            } else if (stop !== 'timeout') {
+                const canceled = await request(`${url}/turns/${body.turnId}/cancel`, {
+                    account: owner,
+                    method: 'POST',
+                    server: stop === 'same-instance' ? server : createApiApp('node', services),
+                });
+                expect(await canceled.json()).toMatchObject({
+                    turns: [{ status: 'canceled' }],
+                });
+            }
+            await expect.poll(() => signal.aborted, { timeout: 2000 }).toBe(true);
+            expect(running?.expiresAt.getTime()).toBe(
+                now.getTime() + services.reportQuestionPolicy.timeoutMs + 5000,
+            );
+            const response = await pending;
+            if (stop === 'deleted') expect(response.status).toBe(404);
+            else
+                expect(await response.json()).toMatchObject({
+                    turns: [{ status: stop === 'timeout' ? 'failed' : 'canceled' }],
+                    drafts: [],
+                });
+        } finally {
+            release.resolve();
+            await pending;
+        }
+        const rows = await db
+            .select()
+            .from(projectConversationTurns)
+            .where(eq(projectConversationTurns.id, body.turnId));
+        expect(rows.every((row) => row.answer !== '迟到回答')).toBe(true);
+    });
+
+    it('does not dispatch a model returned after another instance canceled the turn', async () => {
+        const { owner, url, body } = await reportFixture();
+        const entered = Promise.withResolvers<void>();
+        const lookup = Promise.withResolvers<ModelProvider>();
+        let calls = 0;
+        const services = testServices({
+            reportQuestionModel: () => {
+                entered.resolve();
+                return lookup.promise;
+            },
+        });
+        const pending = request(`${url}/turns`, {
+            account: owner,
+            method: 'POST',
+            body,
+            server: createApiApp('node', services),
+        });
+        try {
+            await Promise.race([
+                entered.promise,
+                pending.then(() => {
+                    throw new Error('模型查找未启动');
+                }),
+            ]);
+            await request(`${url}/turns/${body.turnId}/cancel`, {
+                account: owner,
+                method: 'POST',
+                server: createApiApp('node', services),
+            });
+            expect(await (await pending).json()).toMatchObject({ turns: [{ status: 'canceled' }] });
+        } finally {
+            lookup.resolve({
+                generateStructured() {
+                    calls++;
+                    throw new Error('取消后不应调用模型');
+                },
+            });
+            await pending;
+        }
+        // Let the suspended lookup continuation run before asserting no outbound attempt.
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(calls).toBe(0);
+    });
+
     it('reopens read-only answers and persists one draft shared by editor and confirmation', async () => {
         const owner = await seedAccount();
         const other = await seedAccount();

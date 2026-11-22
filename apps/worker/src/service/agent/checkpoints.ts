@@ -1,6 +1,6 @@
 import type { RunnableConfig } from '@langchain/core/runnables';
-import { AgentPersistenceError, type AgentCheckpointRef } from '@/repo/agent.ts';
-import { type RunLeaseToken } from '@/utils/runs.ts';
+import { AgentPersistenceError, type AgentCheckpointRef } from '@scova/shared/execution/agent';
+import { type RunLeaseToken } from '@scova/shared/execution/runs';
 import { type AgentSessionOptions } from '@/service/agent/session.ts';
 
 const thread = (token: RunLeaseToken) => `run-${token.runId}-epoch-${token.leaseEpoch}`;

@@ -1,6 +1,6 @@
 # 工程治理与验证
 
-Scova 使用 Vite+ 1.4.0 与 pnpm 工作区。`pnpm-workspace.yaml` 是当前版本支持的工作区配置；Bun 是治理工具及后续服务的运行时，依赖继续由 `vp install` 管理。
+Scova 使用 Vite+ 1.4.0 与 pnpm 工作区。`pnpm-workspace.yaml` 是当前版本支持的工作区配置；Bun 是后端主运行时和治理工具运行时，Node.js 是后端兼容运行时，并承载 Vite+ 工具链与 Reader 子进程。依赖继续由 `vp install` 管理。
 
 ## 命令
 
@@ -41,6 +41,10 @@ Worker 的配置与生命周期、Agent 有限图与原文校验单元纳入根�
 任务图中不包含 `ready`、`harness-lint` 或 `harness-verify`，避免递归。检查退出码：0 表示所请求门禁通过，1 表示规则或任务失败，2 表示配置或执行条件错误。查看 JSON 中每个工作区和任务的状态，不以外层命令成功替代测试覆盖判断。
 
 根 Vitest 只扫描 `apps/*`、`packages/*` 的 `tests` 下 `*.test.ts` 和 `*.spec.ts`，排除产物、E2E 和 `*.integration.test.ts`，避免临时快照被重复发现。数据库、认证、任务、执行与 Outbox 集成须启动专用服务，再依次运行 `vp test --config tests/<suite>.vite.config.ts`，其中 suite 分别为 `database`、`auth`、`tasks`、`runs`、`worker-outbox`；使用同一测试 Redis 的套件不要并行。根命令和覆盖声明不能代替这些真实集成。
+
+验证日志、浏览器报告、截图和 trace 保存在 `artifacts/`。现有项目脚本沿用各自配置的输出路径。已有新版 Harness Kit 技能时，临时人工验收可通过技能 CLI 的 `artifacts create <名称>` 分配 `artifacts/runs/<id>/`，写入结束后执行 `artifacts finish <id>`，长期引用的证据用 `artifacts keep <id>` 保留。`artifacts clean` 预览已登记跑次的清理范围。
+
+`.harness/` 保存 Harness Kit 的托管清单、验证摘要和任务续作状态。仓库内置 `vp run harness-lint` 和 `vp run harness-verify` 使用固定工具快照。上述产物管理与 `doctor` 由已安装技能的 `scripts/harness.mjs` 提供，可用 `node <技能目录>/scripts/harness.mjs <命令> --root <项目绝对路径> --json` 调用。两个本地目录均由 Git 忽略。
 
 脚本缓存关闭，确保治理每次读取 Git index；需要构建缓存时使用显式 Vite task，不能缓存外层入口。Vite/Vitest 使用原生 `resolve.tsconfigPaths` 按导入文件解析工作区别名。
 

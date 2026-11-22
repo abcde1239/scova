@@ -1,90 +1,79 @@
 <template>
     <main id="main-content" class="auth-layout" tabindex="-1" aria-labelledby="page-title">
-        <aside class="auth-showcase" :aria-label="t('auth.highlights.label')">
-            <div class="auth-wordmark">
-                <span class="auth-mark" aria-hidden="true">S</span>
-                <span lang="en">Scova</span>
-            </div>
-            <div class="auth-pitch">
-                <p class="auth-headline">
-                    {{ t('auth.showcase.lead') }}<br /><em>{{ t('auth.showcase.emphasis') }}</em>
-                </p>
-                <div class="auth-preview" aria-hidden="true">
-                    <div class="preview-card">
-                        <div class="preview-row">
-                            <span class="preview-status preview-status--done">{{
-                                t('auth.showcase.reportStatus')
-                            }}</span>
-                            <span class="preview-meta">{{ t('auth.showcase.reportMeta') }}</span>
-                        </div>
-                        <strong class="preview-title">{{ t('auth.showcase.reportTitle') }}</strong>
-                        <div class="preview-claim">
-                            <span class="preview-label">{{ t('auth.showcase.fact') }}</span>
-                            <span
-                                >{{ t('auth.showcase.factText') }}<span class="preview-cite">1</span
-                                ><span class="preview-cite">2</span></span
-                            >
-                        </div>
-                        <div class="preview-claim">
-                            <span class="preview-label preview-label--inference">{{
-                                t('auth.showcase.inference')
-                            }}</span>
-                            <span
-                                >{{ t('auth.showcase.inferenceText')
-                                }}<span class="preview-cite">4</span></span
-                            >
-                        </div>
-                    </div>
-                    <div class="preview-card preview-card--run">
-                        <div class="preview-row">
-                            <span class="preview-status">{{ t('auth.showcase.runStatus') }}</span>
-                            <span class="preview-meta preview-meta--end">{{
-                                t('auth.showcase.runProgress')
-                            }}</span>
-                        </div>
-                        <span class="preview-progress"><i /></span>
-                    </div>
-                </div>
-            </div>
-            <ul class="auth-highlights">
-                <li v-for="item in highlights" :key="item.label">
-                    <app-icon :name="item.icon" />{{ t(item.label) }}
-                </li>
-            </ul>
-        </aside>
-        <div class="auth-form-column">
-            <div class="auth-tools">
-                <app-select
-                    id="auth-accent"
-                    v-model="accent"
-                    :label="t('auth.theme')"
-                    :options="themes"
-                    compact
-                />
-                <app-select
-                    id="auth-appearance"
-                    v-model="mode"
-                    :label="t('pages.appearance')"
-                    :options="modes"
-                    compact
-                />
-                <interface-language-select />
-            </div>
-            <div class="auth-panel">
-                <div class="auth-brand">
+        <div class="auth-hero">
+            <aside
+                ref="showcase"
+                class="auth-showcase"
+                :class="{ 'auth-showcase--tour': !register }"
+                :tabindex="register ? undefined : 0"
+                :aria-label="t('auth.highlights.label')"
+            >
+                <div id="auth-start" class="auth-showcase-intro">
                     <div class="auth-wordmark">
                         <span class="auth-mark" aria-hidden="true">S</span>
                         <span lang="en">Scova</span>
                     </div>
-                    <p>{{ t('auth.tagline') }}</p>
+                    <div class="auth-pitch">
+                        <p class="auth-headline">
+                            {{ t('auth.showcase.lead') }}<br /><em>{{
+                                t('auth.showcase.emphasis')
+                            }}</em>
+                        </p>
+                        <auth-report-preview :interactive="!register" />
+                    </div>
+                    <div class="auth-showcase-footer">
+                        <ul class="auth-highlights">
+                            <li v-for="item in highlights" :key="item.label">
+                                <app-icon :name="item.icon" />{{ t(item.label) }}
+                            </li>
+                        </ul>
+                        <a
+                            v-if="!register"
+                            ref="explore"
+                            class="auth-explore keyboard-focus"
+                            href="#auth-demo-title"
+                            @click.prevent="showDemo"
+                        >
+                            {{ t('auth.demo.explore') }} <app-icon name="expand" />
+                        </a>
+                    </div>
                 </div>
-                <header class="auth-heading">
-                    <h1 id="page-title">{{ title }}</h1>
-                    <p>{{ t(register ? 'auth.start' : 'auth.resume') }}</p>
-                </header>
-                <section class="auth-form" aria-labelledby="page-title">
-                    <slot />
-                </section>
+                <auth-product-demo v-if="!register" @back="showIntro" />
+            </aside>
+            <div class="auth-form-column">
+                <div class="auth-tools">
+                    <app-select
+                        id="auth-accent"
+                        v-model="accent"
+                        :label="t('auth.theme')"
+                        :options="themes"
+                        compact
+                    />
+                    <app-select
+                        id="auth-appearance"
+                        v-model="mode"
+                        :label="t('pages.appearance')"
+                        :options="modes"
+                        compact
+                    />
+                    <interface-language-select />
+                </div>
+                <div class="auth-panel">
+                    <div class="auth-brand">
+                        <div class="auth-wordmark">
+                            <span class="auth-mark" aria-hidden="true">S</span>
+                            <span lang="en">Scova</span>
+                        </div>
+                        <p>{{ t('auth.tagline') }}</p>
+                    </div>
+                    <header class="auth-heading">
+                        <h1 id="page-title">{{ title }}</h1>
+                        <p>{{ t(register ? 'auth.start' : 'auth.resume') }}</p>
+                    </header>
+                    <section class="auth-form" aria-labelledby="page-title">
+                        <slot />
+                    </section>
+                </div>
             </div>
         </div>
     </main>
@@ -92,16 +81,50 @@
 
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n';
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 import InterfaceLanguageSelect from '@/component/common/InterfaceLanguageSelect.vue';
 import AppIcon from '@/component/common/AppIcon.vue';
 import AppSelect from '@/component/common/AppSelect.vue';
+import AuthReportPreview from '@/component/auth/AuthReportPreview.vue';
+import AuthProductDemo from '@/component/auth/AuthProductDemo.vue';
 import { useAppearanceStore } from '@/store/appearance';
 import { accentOptions, modeOptions, themeTokens } from '@/utils/theme/tokens';
 
-defineProps<{ title: string; register: boolean }>();
+const props = defineProps<{ title: string; register: boolean }>();
 const appearance = useAppearanceStore();
 const { t } = useI18n({ useScope: 'global' });
+
+const showcase = ref<HTMLElement>();
+const explore = ref<HTMLAnchorElement>();
+
+function scrollShowcase(top: number) {
+    showcase.value?.scrollTo({
+        top,
+        behavior: window.matchMedia('(prefers-reduced-motion: no-preference)').matches
+            ? 'smooth'
+            : 'instant',
+    });
+}
+function showDemo() {
+    const scroller = showcase.value;
+    const demo = scroller?.querySelector<HTMLElement>('#auth-demo');
+    const title = demo?.querySelector<HTMLElement>('#auth-demo-title');
+    if (!scroller || !demo || !title) return;
+    title.focus({ preventScroll: true });
+    scrollShowcase(
+        demo.getBoundingClientRect().top -
+            scroller.getBoundingClientRect().top +
+            scroller.scrollTop,
+    );
+}
+function showIntro() {
+    explore.value?.focus({ preventScroll: true });
+    scrollShowcase(0);
+}
+watch(
+    () => props.register,
+    () => showcase.value?.scrollTo(0, 0),
+);
 
 const highlights = [
     { label: 'auth.highlights.track', icon: 'search' },
@@ -139,11 +162,13 @@ const mode = computed({
 </script>
 
 <style scoped>
-/* Static split layout: product showcase on wide screens, a single form column otherwise. */
 .auth-layout {
     --auth-line: color-mix(in srgb, var(--scova-border) 24%, transparent);
     --auth-shadow-ink: var(--scova-text);
-    @apply grid min-w-0 min-h-[100dvh] [background:var(--scova-surface)] focus:[outline:none];
+    @apply min-w-0 [background:var(--scova-surface)] focus:[outline:none];
+}
+.auth-hero {
+    @apply grid min-w-0 min-h-[100dvh];
 }
 .scova-theme--dark .auth-layout {
     --auth-shadow-ink: var(--scova-canvas);
@@ -183,18 +208,32 @@ const mode = computed({
         [box-shadow:inset_0_0_0_0.0625rem_color-mix(in_srgb,_var(--scova-border)_70%,_transparent)];
 }
 
+.auth-showcase-footer {
+    @apply grid gap-3;
+}
+.auth-explore {
+    @apply inline-flex items-center gap-2 min-h-11 justify-self-start rounded-2
+        text-primary text-[0.875rem] font-medium underline underline-offset-4;
+}
+
 @media (min-width: 54rem) {
-    .auth-layout {
+    .auth-hero {
         @apply [grid-template-columns:minmax(0,_1.1fr)_minmax(0,_1fr)];
     }
     .auth-showcase {
-        @apply relative [isolation:isolate] grid [grid-template-rows:auto_1fr_auto] gap-8 min-w-0
-            overflow-hidden py-10 px-[clamp(2rem,_4vw,_4rem)]
+        @apply block min-w-0 overflow-hidden
             [background:color-mix(in_srgb,_var(--scova-primary)_6%,_var(--scova-canvas))]
-            [border-right:0.0625rem_solid_var(--auth-line)];
+            [border-inline-end:0.0625rem_solid_var(--auth-line)];
+    }
+    .auth-showcase--tour {
+        @apply h-[100dvh] [overflow-y:auto] [overscroll-behavior-y:contain] keyboard-focus-inset;
+    }
+    .auth-showcase-intro {
+        @apply relative [isolation:isolate] grid [grid-template-rows:auto_1fr_auto] gap-8 min-w-0 min-h-[100dvh]
+            overflow-hidden py-8 px-[clamp(2rem,_4vw,_4rem)];
     }
     /* Static grid that fades toward the lower right; purely decorative. */
-    .auth-showcase::before {
+    .auth-showcase-intro::before {
         @apply content-[''] absolute [inset:0] z-[-1] opacity-70
             [background-image:linear-gradient(var(--auth-line)_1px,_transparent_1px),linear-gradient(90deg,_var(--auth-line)_1px,_transparent_1px)]
             [background-size:2.5rem_2.5rem]
@@ -215,60 +254,6 @@ const mode = computed({
 .auth-headline em {
     @apply not-italic text-primary;
 }
-.auth-preview {
-    @apply grid gap-0 max-w-[28rem];
-}
-.preview-card {
-    @apply grid gap-2.5 border-subtle rounded-3.5 bg-surface py-4 px-4.5 text-[0.8125rem]
-        [transform:rotate(-1deg)]
-        [box-shadow:0_0.0625rem_0.125rem_color-mix(in_srgb,_var(--auth-shadow-ink)_6%,_transparent),0_1rem_2.5rem_-0.75rem_color-mix(in_srgb,_var(--auth-shadow-ink)_18%,_transparent)];
-}
-.preview-card--run {
-    @apply max-w-[19rem] ml-10 mt-[-0.5rem] [transform:rotate(1deg)];
-}
-.preview-row {
-    @apply flex items-center gap-2 min-w-0;
-}
-.preview-status {
-    @apply inline-flex items-center gap-1.5 text-[0.75rem] font-semibold text-primary;
-}
-.preview-status::before {
-    @apply content-[''] w-1.75 h-1.75 rounded-full [background:currentColor];
-}
-.preview-status--done {
-    @apply [color:var(--scova-success)];
-}
-.preview-meta {
-    @apply text-muted text-[0.75rem] overflow-hidden text-ellipsis whitespace-nowrap;
-}
-.preview-meta--end {
-    @apply ml-auto;
-}
-.preview-title {
-    @apply text-default text-[0.9375rem] font-semibold;
-}
-.preview-claim {
-    @apply grid [grid-template-columns:auto_1fr] gap-2 leading-[1.6];
-}
-.preview-label {
-    @apply self-start rounded-1 px-1.5 text-[0.6875rem] font-bold whitespace-nowrap
-        [color:var(--scova-success)]
-        [background:color-mix(in_srgb,_var(--scova-success)_12%,_transparent)];
-}
-.preview-label--inference {
-    @apply [color:var(--scova-partial)]
-        [background:color-mix(in_srgb,_var(--scova-partial)_12%,_transparent)];
-}
-.preview-cite {
-    @apply inline-grid place-items-center min-w-4.25 h-4.25 ml-0.5 rounded-1 text-[0.625rem]
-        font-bold text-muted [vertical-align:0.1em] [background:var(--scova-selected)];
-}
-.preview-progress {
-    @apply block h-1 rounded-full overflow-hidden [background:var(--scova-selected)];
-}
-.preview-progress i {
-    @apply block w-[58%] h-full [background:var(--scova-primary)];
-}
 .auth-highlights {
     @apply flex flex-wrap gap-x-5 gap-y-2 m-0 p-0 [list-style:none] text-muted text-[0.8125rem];
 }
@@ -280,7 +265,7 @@ const mode = computed({
 }
 
 @media (prefers-reduced-transparency: reduce) {
-    .auth-showcase::before {
+    .auth-showcase-intro::before {
         @apply hidden;
     }
 }

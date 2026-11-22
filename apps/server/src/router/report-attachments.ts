@@ -56,12 +56,16 @@ export function createReportAttachmentPlugin(services: ApiServices) {
                 detail: {
                     operationId: 'uploadReportAttachment',
                     tags: ['报告'],
-                    summary: '上传并解析私有参考 CSV 文件',
+                    summary: '上传私有参考附件',
                     description:
-                        '仅本人可上传，要求会话及请求校验。接收不超过二百五十六千字节的 CSV 原始请求体。',
+                        '仅本人可上传，要求会话及请求校验。接收不超过 256 KiB 的 CSV、UTF-8 纯文本或 PDF 原始请求体，PDF 仅供下载。',
                     requestBody: {
                         required: true,
-                        content: { 'text/csv': { schema: { type: 'string', format: 'binary' } } },
+                        content: {
+                            'text/csv': { schema: { type: 'string', format: 'binary' } },
+                            'text/plain': { schema: { type: 'string', format: 'binary' } },
+                            'application/pdf': { schema: { type: 'string', format: 'binary' } },
+                        },
                     },
                 },
             },
@@ -96,7 +100,7 @@ export function createReportAttachmentPlugin(services: ApiServices) {
                 detail: {
                     operationId: 'readReportAttachmentRows',
                     tags: ['报告'],
-                    summary: '读取 CSV 逻辑行和对应原文行区间',
+                    summary: '读取 CSV 或纯文本的预览行和对应原文行区间',
                     description:
                         '仅本人会话可读取已解析文本，每次最多一百个逻辑记录，包含其对应的原文物理行号。',
                 },
@@ -113,10 +117,10 @@ export function createReportAttachmentPlugin(services: ApiServices) {
                     operationId: 'downloadReportAttachment',
                     tags: ['报告'],
                     summary: '下载本人私有附件的原始内容',
-                    description: '会话归属校验后返回原始字节，即使 CSV 解析失败也可以下载原件。',
+                    description: '会话归属校验后返回原始字节，文本解析失败时仍可下载原件。',
                     responses: {
                         200: {
-                            description: '可下载的私有 CSV 原件',
+                            description: '可下载的私有附件原件',
                             content: {
                                 'application/octet-stream': {
                                     schema: { type: 'string', format: 'binary' },

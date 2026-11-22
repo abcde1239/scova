@@ -1,7 +1,9 @@
+import { createExecutionClient } from '../src/repo/execution.ts';
+import { testWorkerExecution } from './support/worker-execution.ts';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createRunControl } from '../../server/src/app/run-control.ts';
 import { readRunControlConfig } from '../../server/src/app/run-control-config.ts';
-import { requiredDatabaseValue } from '@/utils/database.ts';
+import { requiredDatabaseValue } from '../../server/src/utils/execution/database.ts';
 import {
     outbox as dbOutbox,
     eq,
@@ -38,9 +40,13 @@ function launch(runtime: 'bun' | 'node', env: NodeJS.ProcessEnv) {
         runtime === 'bun'
             ? { executable: bun, args: ['run', 'src/main.ts'] }
             : nodeScriptCommand('src/node.ts');
+    const workerEnv = { ...process.env, ...env };
+    delete workerEnv.DATABASE_URL;
+    delete workerEnv.AGENT_CREDENTIAL_KEY;
+    delete workerEnv.SCOVA_SQLITE_STATE_PATH;
     const child = spawn(command.executable, command.args, {
         cwd: workerRoot,
-        env: { ...process.env, ...env },
+        env: workerEnv,
         stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
         windowsHide: true,
     });
@@ -131,9 +137,14 @@ describe('Worker Bun/Node 真实进程', () => {
                     WORKER_POLL_INTERVAL_MS: '20',
                 }),
             );
-            const process = launch(runtime, {
+            const execution = await testWorkerExecution(fixture.db, {
                 DATABASE_URL: fixture.databaseUrl,
                 AGENT_CHECKPOINT_SCHEMA: fixture.checkpointSchema,
+                WORKER_QUEUE_NAME: queueName,
+            });
+            const process = launch(runtime, {
+                WORKER_EXECUTION_URL: execution.url,
+                WORKER_EXECUTION_TOKEN: execution.token,
                 REDIS_URL: fixture.redisUrl,
                 WORKER_QUEUE_NAME: queueName,
                 WORKER_POLL_INTERVAL_MS: '20',
@@ -205,6 +216,7 @@ describe('Worker Bun/Node 真实进程', () => {
                     }
                 }
                 await control.stop();
+                await execution.stop();
                 await publisher.queue.obliterate({ force: true });
                 await publisher.close();
                 connection.disconnect();
@@ -214,7 +226,7 @@ describe('Worker Bun/Node 真实进程', () => {
 
     it.each(['bun', 'node'] as const)('%s 缺少配置明确失败且不输出凭据', async (runtime) => {
         const process = launch(runtime, {
-            DATABASE_URL: 'credential-must-not-be-logged',
+            WORKER_EXECUTION_TOKEN: 'credential-must-not-be-logged',
             REDIS_URL: fixture.redisUrl,
         });
         try {
@@ -228,9 +240,14 @@ describe('Worker Bun/Node 真实进程', () => {
         }
     });
 
-    it('Redis 初始化失败时释放已建立的数据库连接并退出', async () => {
-        const process = launch('node', {
+    it('Redis 初始化失败时 Worker 退出，Server 执行入口保持可用', async () => {
+        const execution = await testWorkerExecution(fixture.db, {
             DATABASE_URL: fixture.databaseUrl,
+            AGENT_CHECKPOINT_SCHEMA: fixture.checkpointSchema,
+        });
+        const process = launch('node', {
+            WORKER_EXECUTION_URL: execution.url,
+            WORKER_EXECUTION_TOKEN: execution.token,
             REDIS_URL: 'redis://127.0.0.1:1',
         });
         try {
@@ -238,8 +255,12 @@ describe('Worker Bun/Node 真实进程', () => {
             expect(process.exit?.code).toBe(1);
             expect(process.output).toContain('Worker 启动或运行失败');
             expect(process.output).not.toContain('Run consumer running');
+            await expect(
+                createExecutionClient(execution.url, execution.token).ready(),
+            ).resolves.toMatchObject({ queue: 'bullmq' });
         } finally {
             if (!process.exit) process.child.kill();
+            await execution.stop();
         }
     });
 });

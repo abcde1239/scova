@@ -1,7 +1,7 @@
-import { requiredDatabaseValue } from '@/utils/database.ts';
+import { requiredDatabaseValue } from '../../../server/src/utils/execution/database.ts';
 import { eq, toolCalls as dbToolCalls } from '@scova/db';
 import { expect, it } from 'vite-plus/test';
-import { createAgentRepository } from '../../src/repo/agent.ts';
+import { createAgentRepository } from '../../../server/src/repo/execution/agent.ts';
 import { setup, search, takeover, fixture, usage } from './fixture.ts';
 
 export function registerLeaseFencing() {

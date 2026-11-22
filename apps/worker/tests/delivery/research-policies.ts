@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { expect, it } from 'vite-plus/test';
 import { eq, runs as dbRuns, baselines as dbBaselines, toolCalls as dbToolCalls } from '@scova/db';
 import { candidateFromCheckpoint } from '@scova/agent-core';
-import { createAgentRepository } from '../../src/repo/agent.ts';
+import { createAgentRepository } from '../../../server/src/repo/execution/agent.ts';
 import { createDefaultServices } from '../../../server/src/app/services.ts';
 import { createReportService } from '../../../server/src/service/reports.ts';
 import { liveResearch } from './live-research.ts';

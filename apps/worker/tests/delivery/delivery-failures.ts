@@ -1,4 +1,4 @@
-import { requiredDatabaseValue } from '@/utils/database.ts';
+import { requiredDatabaseValue } from '../../../server/src/utils/execution/database.ts';
 import {
     reports as dbReports,
     eq,
@@ -8,7 +8,7 @@ import {
 } from '@scova/db';
 import { expect, it } from 'vite-plus/test';
 import { ConnectorError, createConnectorBundle, type ConnectorBundle } from '@scova/connectors';
-import { createAgentRuntime } from '../../src/service/agent.ts';
+import { createLocalAgentRuntime as createAgentRuntime } from '../support/local-agent-runtime.ts';
 import { RunService } from '../../src/service/runs.ts';
 import { seedRun } from '../support/run-database.ts';
 import { research, fixture, runs, delivery, assertEmpty, schema } from './fixture.ts';

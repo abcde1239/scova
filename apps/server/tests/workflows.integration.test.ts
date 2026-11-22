@@ -1,3 +1,8 @@
+import { testWorkerExecution } from '../../worker/tests/support/worker-execution.ts';
+import { prepareTestCheckpointSchema } from '../../worker/tests/support/checkpoint-schema.ts';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { randomBytes, randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { Queue } from 'bullmq';
@@ -341,12 +346,13 @@ describe('工作流 HTTP、PostgreSQL 与研究队列', () => {
             'study_1',
             'end',
         ]);
+        const [child] = await db.select().from(runs).where(eq(runs.id, firstChild));
         expect(
             await db.select().from(runEvents).where(eq(runEvents.runId, firstChild)),
-        ).toHaveLength(1);
+        ).toMatchObject([{ type: 'run.queued', occurredAt: child!.queuedAt }]);
         expect(
             await db.select().from(outbox).where(eq(outbox.aggregateId, firstChild)),
-        ).toMatchObject([{ eventType: 'run.enqueue' }]);
+        ).toMatchObject([{ eventType: 'run.enqueue', availableAt: child!.queuedAt }]);
         expect(await db.select().from(runs).where(eq(runs.userId, owner.id))).toHaveLength(1);
 
         // Given a durable Worker result, a fresh Server batch resumes from the actual child record.
@@ -388,6 +394,103 @@ describe('工作流 HTTP、PostgreSQL 与研究队列', () => {
         expect(await db.select().from(runs).where(eq(runs.userId, owner.id))).toHaveLength(2);
     });
 
+    it('从冻结并行版本启动两个子执行，重建批次后等候汇合，再取消下一个阶段', async () => {
+        const owner = await account();
+        const [first, second, last] = await Promise.all([
+            task(owner.id),
+            task(owner.id),
+            task(owner.id),
+        ]);
+        const serial = graph(first.id, second.id, last.id);
+        const parallel: WorkflowGraph = {
+            nodes: serial.nodes.toReversed(),
+            edges: [
+                ...serial.edges.filter((edge) => edge.from.nodeId !== 'study_0'),
+                { from: { nodeId: 'start', port: 'out' }, to: { nodeId: 'study_1', port: 'in' } },
+                { from: { nodeId: 'study_0', port: 'out' }, to: { nodeId: 'study_2', port: 'in' } },
+            ],
+        };
+        const draft = await create(owner, parallel);
+        const workflowId = draft.workflow.id;
+        const pinned = await publish(owner, workflowId);
+        await addVersion(owner.id, first.id, 2);
+        const edit = await request(
+            `${workflowsPath}/${workflowId}/draft`,
+            owner,
+            'PATCH',
+            { title: '串行草稿', graph: serial },
+            { 'if-match': '"1"' },
+        );
+        expect(edit.status).toBe(200);
+        const currentVersion = await publish(owner, workflowId, 2);
+        expect(currentVersion.graph.edges).toEqual(serial.edges);
+        expect(pinned.graph.edges).toEqual(parallel.edges);
+
+        const key = randomUUID();
+        const { run } = await start(owner, workflowId, pinned.id, key);
+        expect((await start(owner, workflowId, pinned.id, key)).run.id).toBe(run.id);
+        const signal = new AbortController().signal;
+        const tick = () =>
+            createWorkflowBatch(db, { batchSize: 10, intervalMs: 1000, clock })(signal);
+        let at = Date.now() + 60_000;
+        const clock = () => new Date(at);
+        await tick();
+        const launched = await get(owner, run.id);
+        const [left, right] = launched.nodes.slice(1, 3);
+        expect(left).toMatchObject({
+            status: 'running',
+            parallelGroup: 'study_0',
+            taskVersionId: first.version,
+        });
+        expect(right).toMatchObject({
+            status: 'running',
+            parallelGroup: 'study_0',
+            taskVersionId: second.version,
+        });
+        expect(left?.childRunId).toBeTruthy();
+        expect(right?.childRunId).toBeTruthy();
+        expect(left?.childRunId).not.toBe(right?.childRunId);
+        for (const child of [left!, right!]) {
+            expect(
+                await db.select().from(runs).where(eq(runs.id, child.childRunId!)),
+            ).toMatchObject([{ taskVersionId: child.taskVersionId, status: 'queued' }]);
+            expect(
+                await db.select().from(outbox).where(eq(outbox.aggregateId, child.childRunId!)),
+            ).toMatchObject([{ eventType: 'run.enqueue' }]);
+        }
+
+        async function settle(childId: string, status: 'succeeded' | 'canceled') {
+            await db
+                .update(runs)
+                .set({
+                    status,
+                    finishedAt: clock(),
+                    coverageJson: status === 'succeeded' ? { completeness: 'complete' } : null,
+                })
+                .where(eq(runs.id, childId));
+            at += 1000;
+            await tick();
+        }
+        await settle(left!.childRunId!, 'succeeded');
+        const waiting = await get(owner, run.id);
+        expect(waiting.nodes.map((node) => node.status)).toEqual([
+            'succeeded',
+            'succeeded',
+            'running',
+            'pending',
+            'pending',
+        ]);
+        expect(waiting.nodes[2]?.childRunId).toBe(right?.childRunId);
+        expect(await db.select().from(runs).where(eq(runs.userId, owner.id))).toHaveLength(2);
+        await settle(right!.childRunId!, 'succeeded');
+        const joined = await get(owner, run.id);
+        expect(joined.nodes[3]).toMatchObject({ status: 'running', taskVersionId: last.version });
+        expect(await db.select().from(runs).where(eq(runs.userId, owner.id))).toHaveLength(3);
+        const canceled = await request(`${runPath}/${run.id}/cancel`, owner, 'POST');
+        expect(canceled.status).toBe(200);
+        await settle(joined.nodes[3]!.childRunId!, 'canceled');
+        expect((await get(owner, run.id)).status).toBe('canceled');
+    });
     it('拒绝复用同 Task 活动 Run，也拒绝冒充当前节点的同账号 Run', async () => {
         const owner = await account();
         const first = await task(owner.id);
@@ -439,90 +542,126 @@ describe('工作流 HTTP、PostgreSQL 与研究队列', () => {
             .where(eq(runs.id, real.id));
     });
 
-    it('通过已装配的 Server 控制面和真实 Worker 消费处理取消，并跳过后续节点', async () => {
-        const owner = await account();
-        const first = await task(owner.id);
-        const draft = await create(owner, graph(first.id, first.id));
-        const version = await publish(owner, draft.workflow.id);
-        const { run } = await start(owner, draft.workflow.id, version.id);
-        const queueName = `${namespace}_queue`;
-        const redis = new Redis(redisUrl, { maxRetriesPerRequest: 1 });
-        const queue = new Queue(queueName, { connection: redis });
-        const control = createRunControl(
-            readRunControlConfig({
+    it.each(['redis', 'sqlite'] as const)(
+        '%s：Server 和 Worker 处理取消并跳过后续节点',
+        async (transport) => {
+            const owner = await account();
+            const first = await task(owner.id);
+            const draft = await create(owner, graph(first.id, first.id));
+            const version = await publish(owner, draft.workflow.id);
+            const { run } = await start(owner, draft.workflow.id, version.id);
+            const queueName = `${namespace}_${transport}`;
+            const directory =
+                transport === 'sqlite'
+                    ? mkdtempSync(join(tmpdir(), 'scova-sqlite-workflow-'))
+                    : undefined;
+            const sqliteStatePath = directory ? join(directory, 'state.sqlite') : undefined;
+            const redis = directory ? undefined : new Redis(redisUrl, { maxRetriesPerRequest: 1 });
+            const queue = redis ? new Queue(queueName, { connection: redis }) : undefined;
+            const selectedRedisUrl = sqliteStatePath ? '' : redisUrl;
+            const control = createRunControl(
+                readRunControlConfig({
+                    DATABASE_URL: databaseUrl,
+                    REDIS_URL: selectedRedisUrl,
+                    SCOVA_SQLITE_STATE_PATH: sqliteStatePath,
+                    WORKER_QUEUE_NAME: queueName,
+                    WORKER_POLL_INTERVAL_MS: '25',
+                    WORKER_FAILURE_DELAY_MS: '25',
+                }),
+            );
+            let activeContext:
+                | { runId: string; taskVersionId: string; signal: AbortSignal }
+                | undefined;
+            const checkpointSchema = `scova_agent_${randomUUID().replaceAll('-', '')}`;
+            await prepareTestCheckpointSchema(databaseUrl, checkpointSchema);
+            const execution = await testWorkerExecution(db, {
                 DATABASE_URL: databaseUrl,
-                REDIS_URL: redisUrl,
+                AGENT_CHECKPOINT_SCHEMA: checkpointSchema,
                 WORKER_QUEUE_NAME: queueName,
-                WORKER_POLL_INTERVAL_MS: '25',
-                WORKER_FAILURE_DELAY_MS: '25',
-            }),
-        );
-        let activeContext:
-            | { runId: string; taskVersionId: string; signal: AbortSignal }
-            | undefined;
-        const worker = createWorkerApp({
-            config: { databaseUrl, redisUrl, queueName, runLeaseSeconds: 3, runConcurrency: 2 },
-            logger: { info() {} },
-            executor: {
-                async execute(context: {
-                    userId: string;
-                    runId: string;
-                    taskVersionId: string;
-                    signal: AbortSignal;
-                }) {
-                    if (context.userId !== owner.id) return;
-                    activeContext = context;
-                    await new Promise<void>((resolve) => {
-                        if (context.signal.aborted) resolve();
-                        else
-                            context.signal.addEventListener('abort', () => resolve(), {
-                                once: true,
-                            });
-                    });
+                SCOVA_SQLITE_STATE_PATH: sqliteStatePath,
+            });
+            const worker = createWorkerApp({
+                config: {
+                    executionUrl: execution.url,
+                    executionToken: execution.token,
+                    redisUrl: selectedRedisUrl,
+                    queueName,
+                    runLeaseSeconds: 3,
+                    runConcurrency: 2,
                 },
-            },
-        });
-        try {
-            control.start();
-            await worker.start();
-            await vi.waitFor(() => expect(activeContext).toBeDefined(), { timeout: 10_000 });
-            const running = await get(owner, run.id);
-            const childId = running.nodes[1]?.childRunId;
-            expect(activeContext).toMatchObject({ runId: childId, taskVersionId: first.version });
-            const stranger = await account();
-            expect((await request(`${runPath}/${run.id}/cancel`, stranger, 'POST')).status).toBe(
-                404,
-            );
-            const response = await request(`${runPath}/${run.id}/cancel`, owner, 'POST');
-            expect(response.status).toBe(200);
-            expect(await response.json()).toMatchObject({ status: 'cancel_requested' });
-            expect((await request(`${runPath}/${run.id}/cancel`, owner, 'POST')).status).toBe(200);
-            await vi.waitFor(
-                async () => expect(await get(owner, run.id)).toMatchObject({ status: 'canceled' }),
-                { timeout: 10_000 },
-            );
-            expect(activeContext?.signal.aborted).toBe(true);
-            const completed = await get(owner, run.id);
-            expect(completed.nodes.map((node) => node.status)).toEqual([
-                'succeeded',
-                'canceled',
-                'skipped',
-                'skipped',
-            ]);
-            expect(
-                (await db.select().from(outbox).where(eq(outbox.aggregateId, childId!))).filter(
-                    (entry) => entry.eventType === 'run.cancel_requested',
-                ),
-            ).toHaveLength(1);
-            expect(await db.select().from(runs).where(eq(runs.userId, owner.id))).toHaveLength(1);
-        } finally {
+                logger: { info() {} },
+                executor: {
+                    async execute(context: {
+                        userId: string;
+                        runId: string;
+                        taskVersionId: string;
+                        signal: AbortSignal;
+                    }) {
+                        if (context.userId !== owner.id) return;
+                        activeContext = context;
+                        await new Promise<void>((resolve) => {
+                            if (context.signal.aborted) resolve();
+                            else
+                                context.signal.addEventListener('abort', () => resolve(), {
+                                    once: true,
+                                });
+                        });
+                    },
+                },
+            });
             try {
-                await Promise.all([control.stop(), worker.stop()]);
-                await queue.obliterate({ force: true });
+                control.start();
+                await worker.start();
+                await vi.waitFor(() => expect(activeContext).toBeDefined(), { timeout: 10_000 });
+                const running = await get(owner, run.id);
+                const childId = running.nodes[1]?.childRunId;
+                expect(activeContext).toMatchObject({
+                    runId: childId,
+                    taskVersionId: first.version,
+                });
+                const stranger = await account();
+                expect(
+                    (await request(`${runPath}/${run.id}/cancel`, stranger, 'POST')).status,
+                ).toBe(404);
+                const response = await request(`${runPath}/${run.id}/cancel`, owner, 'POST');
+                expect(response.status).toBe(200);
+                expect(await response.json()).toMatchObject({ status: 'cancel_requested' });
+                expect((await request(`${runPath}/${run.id}/cancel`, owner, 'POST')).status).toBe(
+                    200,
+                );
+                await vi.waitFor(
+                    async () =>
+                        expect(await get(owner, run.id)).toMatchObject({ status: 'canceled' }),
+                    { timeout: 10_000 },
+                );
+                expect(activeContext?.signal.aborted).toBe(true);
+                const completed = await get(owner, run.id);
+                expect(completed.nodes.map((node) => node.status)).toEqual([
+                    'succeeded',
+                    'canceled',
+                    'skipped',
+                    'skipped',
+                ]);
+                expect(
+                    (await db.select().from(outbox).where(eq(outbox.aggregateId, childId!))).filter(
+                        (entry) => entry.eventType === 'run.cancel_requested',
+                    ),
+                ).toHaveLength(1);
+                expect(await db.select().from(runs).where(eq(runs.userId, owner.id))).toHaveLength(
+                    1,
+                );
             } finally {
-                await queue.close();
-                redis.disconnect();
+                try {
+                    await Promise.all([control.stop(), worker.stop()]);
+                    await execution.stop();
+                    await admin.query(`DROP SCHEMA IF EXISTS "${checkpointSchema}" CASCADE`);
+                    await queue?.obliterate({ force: true });
+                } finally {
+                    await queue?.close();
+                    redis?.disconnect();
+                    if (directory) rmSync(directory, { recursive: true, force: true });
+                }
             }
-        }
-    });
+        },
+    );
 });

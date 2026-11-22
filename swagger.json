@@ -108506,7 +108506,7 @@
                                 "schema": {
                                     "properties": {
                                         "items": {
-                                            "description": "报告附带的私有 CSV 文件",
+                                            "description": "报告附带的私有文件",
                                             "items": {
                                                 "anyOf": [
                                                     {
@@ -108533,10 +108533,23 @@
                                                                 "type": "null"
                                                             },
                                                             "filename": {
-                                                                "description": "原始 CSV 文件名",
+                                                                "description": "原始 CSV、TXT 或 PDF 文件名",
                                                                 "maxLength": 120,
                                                                 "minLength": 5,
                                                                 "type": "string"
+                                                            },
+                                                            "format": {
+                                                                "anyOf": [
+                                                                    {
+                                                                        "const": "csv",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "txt",
+                                                                        "type": "string"
+                                                                    }
+                                                                ],
+                                                                "description": "文本格式，省略表示 CSV"
                                                             },
                                                             "id": {
                                                                 "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
@@ -108549,7 +108562,7 @@
                                                                 "type": "string"
                                                             },
                                                             "rowCount": {
-                                                                "description": "CSV 逻辑记录的行号或总数",
+                                                                "description": "CSV 逻辑记录或纯文本行的行号或总数",
                                                                 "maximum": 2000,
                                                                 "minimum": 1,
                                                                 "type": "integer"
@@ -108605,15 +108618,36 @@
                                                                     {
                                                                         "const": "CSV_LIMIT_EXCEEDED",
                                                                         "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "INVALID_TEXT",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "TEXT_LIMIT_EXCEEDED",
+                                                                        "type": "string"
                                                                     }
                                                                 ],
                                                                 "description": "解析失败原因"
                                                             },
                                                             "filename": {
-                                                                "description": "原始 CSV 文件名",
+                                                                "description": "原始 CSV、TXT 或 PDF 文件名",
                                                                 "maxLength": 120,
                                                                 "minLength": 5,
                                                                 "type": "string"
+                                                            },
+                                                            "format": {
+                                                                "anyOf": [
+                                                                    {
+                                                                        "const": "csv",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "txt",
+                                                                        "type": "string"
+                                                                    }
+                                                                ],
+                                                                "description": "文本格式，省略表示 CSV"
                                                             },
                                                             "id": {
                                                                 "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
@@ -108642,6 +108676,74 @@
                                                             "byteLength",
                                                             "createdAt",
                                                             "downloadUrl",
+                                                            "status",
+                                                            "rowCount",
+                                                            "failureCode"
+                                                        ],
+                                                        "type": "object"
+                                                    },
+                                                    {
+                                                        "additionalProperties": false,
+                                                        "properties": {
+                                                            "byteLength": {
+                                                                "description": "原始文件字节数",
+                                                                "maximum": 262144,
+                                                                "minimum": 1,
+                                                                "type": "integer"
+                                                            },
+                                                            "createdAt": {
+                                                                "description": "带 UTC 偏移的 ISO 8601 时间",
+                                                                "format": "scova-instant",
+                                                                "type": "string"
+                                                            },
+                                                            "downloadUrl": {
+                                                                "description": "本人会话可访问的原件下载路径",
+                                                                "minLength": 1,
+                                                                "type": "string"
+                                                            },
+                                                            "failureCode": {
+                                                                "description": "无解析错误",
+                                                                "type": "null"
+                                                            },
+                                                            "filename": {
+                                                                "description": "原始 CSV、TXT 或 PDF 文件名",
+                                                                "maxLength": 120,
+                                                                "minLength": 5,
+                                                                "type": "string"
+                                                            },
+                                                            "format": {
+                                                                "const": "pdf",
+                                                                "description": "PDF 文件",
+                                                                "type": "string"
+                                                            },
+                                                            "id": {
+                                                                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                                                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                                                "type": "string"
+                                                            },
+                                                            "reportId": {
+                                                                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                                                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                                                "type": "string"
+                                                            },
+                                                            "rowCount": {
+                                                                "description": "无预览行数",
+                                                                "type": "null"
+                                                            },
+                                                            "status": {
+                                                                "const": "download_only",
+                                                                "description": "可下载原件",
+                                                                "type": "string"
+                                                            }
+                                                        },
+                                                        "required": [
+                                                            "id",
+                                                            "reportId",
+                                                            "filename",
+                                                            "byteLength",
+                                                            "createdAt",
+                                                            "downloadUrl",
+                                                            "format",
                                                             "status",
                                                             "rowCount",
                                                             "failureCode"
@@ -108661,7 +108763,7 @@
                                 "schema": {
                                     "properties": {
                                         "items": {
-                                            "description": "报告附带的私有 CSV 文件",
+                                            "description": "报告附带的私有文件",
                                             "items": {
                                                 "anyOf": [
                                                     {
@@ -108688,10 +108790,23 @@
                                                                 "type": "null"
                                                             },
                                                             "filename": {
-                                                                "description": "原始 CSV 文件名",
+                                                                "description": "原始 CSV、TXT 或 PDF 文件名",
                                                                 "maxLength": 120,
                                                                 "minLength": 5,
                                                                 "type": "string"
+                                                            },
+                                                            "format": {
+                                                                "anyOf": [
+                                                                    {
+                                                                        "const": "csv",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "txt",
+                                                                        "type": "string"
+                                                                    }
+                                                                ],
+                                                                "description": "文本格式，省略表示 CSV"
                                                             },
                                                             "id": {
                                                                 "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
@@ -108704,7 +108819,7 @@
                                                                 "type": "string"
                                                             },
                                                             "rowCount": {
-                                                                "description": "CSV 逻辑记录的行号或总数",
+                                                                "description": "CSV 逻辑记录或纯文本行的行号或总数",
                                                                 "maximum": 2000,
                                                                 "minimum": 1,
                                                                 "type": "integer"
@@ -108760,15 +108875,36 @@
                                                                     {
                                                                         "const": "CSV_LIMIT_EXCEEDED",
                                                                         "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "INVALID_TEXT",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "TEXT_LIMIT_EXCEEDED",
+                                                                        "type": "string"
                                                                     }
                                                                 ],
                                                                 "description": "解析失败原因"
                                                             },
                                                             "filename": {
-                                                                "description": "原始 CSV 文件名",
+                                                                "description": "原始 CSV、TXT 或 PDF 文件名",
                                                                 "maxLength": 120,
                                                                 "minLength": 5,
                                                                 "type": "string"
+                                                            },
+                                                            "format": {
+                                                                "anyOf": [
+                                                                    {
+                                                                        "const": "csv",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "txt",
+                                                                        "type": "string"
+                                                                    }
+                                                                ],
+                                                                "description": "文本格式，省略表示 CSV"
                                                             },
                                                             "id": {
                                                                 "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
@@ -108797,6 +108933,74 @@
                                                             "byteLength",
                                                             "createdAt",
                                                             "downloadUrl",
+                                                            "status",
+                                                            "rowCount",
+                                                            "failureCode"
+                                                        ],
+                                                        "type": "object"
+                                                    },
+                                                    {
+                                                        "additionalProperties": false,
+                                                        "properties": {
+                                                            "byteLength": {
+                                                                "description": "原始文件字节数",
+                                                                "maximum": 262144,
+                                                                "minimum": 1,
+                                                                "type": "integer"
+                                                            },
+                                                            "createdAt": {
+                                                                "description": "带 UTC 偏移的 ISO 8601 时间",
+                                                                "format": "scova-instant",
+                                                                "type": "string"
+                                                            },
+                                                            "downloadUrl": {
+                                                                "description": "本人会话可访问的原件下载路径",
+                                                                "minLength": 1,
+                                                                "type": "string"
+                                                            },
+                                                            "failureCode": {
+                                                                "description": "无解析错误",
+                                                                "type": "null"
+                                                            },
+                                                            "filename": {
+                                                                "description": "原始 CSV、TXT 或 PDF 文件名",
+                                                                "maxLength": 120,
+                                                                "minLength": 5,
+                                                                "type": "string"
+                                                            },
+                                                            "format": {
+                                                                "const": "pdf",
+                                                                "description": "PDF 文件",
+                                                                "type": "string"
+                                                            },
+                                                            "id": {
+                                                                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                                                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                                                "type": "string"
+                                                            },
+                                                            "reportId": {
+                                                                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                                                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                                                "type": "string"
+                                                            },
+                                                            "rowCount": {
+                                                                "description": "无预览行数",
+                                                                "type": "null"
+                                                            },
+                                                            "status": {
+                                                                "const": "download_only",
+                                                                "description": "可下载原件",
+                                                                "type": "string"
+                                                            }
+                                                        },
+                                                        "required": [
+                                                            "id",
+                                                            "reportId",
+                                                            "filename",
+                                                            "byteLength",
+                                                            "createdAt",
+                                                            "downloadUrl",
+                                                            "format",
                                                             "status",
                                                             "rowCount",
                                                             "failureCode"
@@ -108816,7 +109020,7 @@
                                 "schema": {
                                     "properties": {
                                         "items": {
-                                            "description": "报告附带的私有 CSV 文件",
+                                            "description": "报告附带的私有文件",
                                             "items": {
                                                 "anyOf": [
                                                     {
@@ -108843,10 +109047,23 @@
                                                                 "type": "null"
                                                             },
                                                             "filename": {
-                                                                "description": "原始 CSV 文件名",
+                                                                "description": "原始 CSV、TXT 或 PDF 文件名",
                                                                 "maxLength": 120,
                                                                 "minLength": 5,
                                                                 "type": "string"
+                                                            },
+                                                            "format": {
+                                                                "anyOf": [
+                                                                    {
+                                                                        "const": "csv",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "txt",
+                                                                        "type": "string"
+                                                                    }
+                                                                ],
+                                                                "description": "文本格式，省略表示 CSV"
                                                             },
                                                             "id": {
                                                                 "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
@@ -108859,7 +109076,7 @@
                                                                 "type": "string"
                                                             },
                                                             "rowCount": {
-                                                                "description": "CSV 逻辑记录的行号或总数",
+                                                                "description": "CSV 逻辑记录或纯文本行的行号或总数",
                                                                 "maximum": 2000,
                                                                 "minimum": 1,
                                                                 "type": "integer"
@@ -108915,15 +109132,36 @@
                                                                     {
                                                                         "const": "CSV_LIMIT_EXCEEDED",
                                                                         "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "INVALID_TEXT",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "TEXT_LIMIT_EXCEEDED",
+                                                                        "type": "string"
                                                                     }
                                                                 ],
                                                                 "description": "解析失败原因"
                                                             },
                                                             "filename": {
-                                                                "description": "原始 CSV 文件名",
+                                                                "description": "原始 CSV、TXT 或 PDF 文件名",
                                                                 "maxLength": 120,
                                                                 "minLength": 5,
                                                                 "type": "string"
+                                                            },
+                                                            "format": {
+                                                                "anyOf": [
+                                                                    {
+                                                                        "const": "csv",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "txt",
+                                                                        "type": "string"
+                                                                    }
+                                                                ],
+                                                                "description": "文本格式，省略表示 CSV"
                                                             },
                                                             "id": {
                                                                 "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
@@ -108952,6 +109190,74 @@
                                                             "byteLength",
                                                             "createdAt",
                                                             "downloadUrl",
+                                                            "status",
+                                                            "rowCount",
+                                                            "failureCode"
+                                                        ],
+                                                        "type": "object"
+                                                    },
+                                                    {
+                                                        "additionalProperties": false,
+                                                        "properties": {
+                                                            "byteLength": {
+                                                                "description": "原始文件字节数",
+                                                                "maximum": 262144,
+                                                                "minimum": 1,
+                                                                "type": "integer"
+                                                            },
+                                                            "createdAt": {
+                                                                "description": "带 UTC 偏移的 ISO 8601 时间",
+                                                                "format": "scova-instant",
+                                                                "type": "string"
+                                                            },
+                                                            "downloadUrl": {
+                                                                "description": "本人会话可访问的原件下载路径",
+                                                                "minLength": 1,
+                                                                "type": "string"
+                                                            },
+                                                            "failureCode": {
+                                                                "description": "无解析错误",
+                                                                "type": "null"
+                                                            },
+                                                            "filename": {
+                                                                "description": "原始 CSV、TXT 或 PDF 文件名",
+                                                                "maxLength": 120,
+                                                                "minLength": 5,
+                                                                "type": "string"
+                                                            },
+                                                            "format": {
+                                                                "const": "pdf",
+                                                                "description": "PDF 文件",
+                                                                "type": "string"
+                                                            },
+                                                            "id": {
+                                                                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                                                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                                                "type": "string"
+                                                            },
+                                                            "reportId": {
+                                                                "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                                                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                                                "type": "string"
+                                                            },
+                                                            "rowCount": {
+                                                                "description": "无预览行数",
+                                                                "type": "null"
+                                                            },
+                                                            "status": {
+                                                                "const": "download_only",
+                                                                "description": "可下载原件",
+                                                                "type": "string"
+                                                            }
+                                                        },
+                                                        "required": [
+                                                            "id",
+                                                            "reportId",
+                                                            "filename",
+                                                            "byteLength",
+                                                            "createdAt",
+                                                            "downloadUrl",
+                                                            "format",
                                                             "status",
                                                             "rowCount",
                                                             "failureCode"
@@ -110174,7 +110480,7 @@
                 "tags": ["报告"]
             },
             "post": {
-                "description": "仅本人可上传，要求会话及请求校验。接收不超过二百五十六千字节的 CSV 原始请求体。",
+                "description": "仅本人可上传，要求会话及请求校验。接收不超过 256 KiB 的 CSV、UTF-8 纯文本或 PDF 原始请求体，PDF 仅供下载。",
                 "operationId": "uploadReportAttachment",
                 "parameters": [
                     {
@@ -110188,7 +110494,7 @@
                         }
                     },
                     {
-                        "description": "原始 CSV 文件名",
+                        "description": "原始 CSV、TXT 或 PDF 文件名",
                         "in": "query",
                         "name": "filename",
                         "required": true,
@@ -110201,7 +110507,19 @@
                 ],
                 "requestBody": {
                     "content": {
+                        "application/pdf": {
+                            "schema": {
+                                "format": "binary",
+                                "type": "string"
+                            }
+                        },
                         "text/csv": {
+                            "schema": {
+                                "format": "binary",
+                                "type": "string"
+                            }
+                        },
+                        "text/plain": {
                             "schema": {
                                 "format": "binary",
                                 "type": "string"
@@ -110237,10 +110555,23 @@
                                         "type": "null"
                                     },
                                     "filename": {
-                                        "description": "原始 CSV 文件名",
+                                        "description": "原始 CSV、TXT 或 PDF 文件名",
                                         "maxLength": 120,
                                         "minLength": 5,
                                         "type": "string"
+                                    },
+                                    "format": {
+                                        "anyOf": [
+                                            {
+                                                "const": "csv",
+                                                "type": "string"
+                                            },
+                                            {
+                                                "const": "txt",
+                                                "type": "string"
+                                            }
+                                        ],
+                                        "description": "文本格式，省略表示 CSV"
                                     },
                                     "id": {
                                         "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
@@ -110253,7 +110584,7 @@
                                         "type": "string"
                                     },
                                     "rowCount": {
-                                        "description": "CSV 逻辑记录的行号或总数",
+                                        "description": "CSV 逻辑记录或纯文本行的行号或总数",
                                         "maximum": 2000,
                                         "minimum": 1,
                                         "type": "integer"
@@ -110309,15 +110640,36 @@
                                             {
                                                 "const": "CSV_LIMIT_EXCEEDED",
                                                 "type": "string"
+                                            },
+                                            {
+                                                "const": "INVALID_TEXT",
+                                                "type": "string"
+                                            },
+                                            {
+                                                "const": "TEXT_LIMIT_EXCEEDED",
+                                                "type": "string"
                                             }
                                         ],
                                         "description": "解析失败原因"
                                     },
                                     "filename": {
-                                        "description": "原始 CSV 文件名",
+                                        "description": "原始 CSV、TXT 或 PDF 文件名",
                                         "maxLength": 120,
                                         "minLength": 5,
                                         "type": "string"
+                                    },
+                                    "format": {
+                                        "anyOf": [
+                                            {
+                                                "const": "csv",
+                                                "type": "string"
+                                            },
+                                            {
+                                                "const": "txt",
+                                                "type": "string"
+                                            }
+                                        ],
+                                        "description": "文本格式，省略表示 CSV"
                                     },
                                     "id": {
                                         "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
@@ -110346,6 +110698,74 @@
                                     "byteLength",
                                     "createdAt",
                                     "downloadUrl",
+                                    "status",
+                                    "rowCount",
+                                    "failureCode"
+                                ],
+                                "type": "object"
+                            },
+                            {
+                                "additionalProperties": false,
+                                "properties": {
+                                    "byteLength": {
+                                        "description": "原始文件字节数",
+                                        "maximum": 262144,
+                                        "minimum": 1,
+                                        "type": "integer"
+                                    },
+                                    "createdAt": {
+                                        "description": "带 UTC 偏移的 ISO 8601 时间",
+                                        "format": "scova-instant",
+                                        "type": "string"
+                                    },
+                                    "downloadUrl": {
+                                        "description": "本人会话可访问的原件下载路径",
+                                        "minLength": 1,
+                                        "type": "string"
+                                    },
+                                    "failureCode": {
+                                        "description": "无解析错误",
+                                        "type": "null"
+                                    },
+                                    "filename": {
+                                        "description": "原始 CSV、TXT 或 PDF 文件名",
+                                        "maxLength": 120,
+                                        "minLength": 5,
+                                        "type": "string"
+                                    },
+                                    "format": {
+                                        "const": "pdf",
+                                        "description": "PDF 文件",
+                                        "type": "string"
+                                    },
+                                    "id": {
+                                        "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                        "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                        "type": "string"
+                                    },
+                                    "reportId": {
+                                        "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                        "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                        "type": "string"
+                                    },
+                                    "rowCount": {
+                                        "description": "无预览行数",
+                                        "type": "null"
+                                    },
+                                    "status": {
+                                        "const": "download_only",
+                                        "description": "可下载原件",
+                                        "type": "string"
+                                    }
+                                },
+                                "required": [
+                                    "id",
+                                    "reportId",
+                                    "filename",
+                                    "byteLength",
+                                    "createdAt",
+                                    "downloadUrl",
+                                    "format",
                                     "status",
                                     "rowCount",
                                     "failureCode"
@@ -110381,10 +110801,23 @@
                                                     "type": "null"
                                                 },
                                                 "filename": {
-                                                    "description": "原始 CSV 文件名",
+                                                    "description": "原始 CSV、TXT 或 PDF 文件名",
                                                     "maxLength": 120,
                                                     "minLength": 5,
                                                     "type": "string"
+                                                },
+                                                "format": {
+                                                    "anyOf": [
+                                                        {
+                                                            "const": "csv",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "txt",
+                                                            "type": "string"
+                                                        }
+                                                    ],
+                                                    "description": "文本格式，省略表示 CSV"
                                                 },
                                                 "id": {
                                                     "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
@@ -110397,7 +110830,7 @@
                                                     "type": "string"
                                                 },
                                                 "rowCount": {
-                                                    "description": "CSV 逻辑记录的行号或总数",
+                                                    "description": "CSV 逻辑记录或纯文本行的行号或总数",
                                                     "maximum": 2000,
                                                     "minimum": 1,
                                                     "type": "integer"
@@ -110453,15 +110886,36 @@
                                                         {
                                                             "const": "CSV_LIMIT_EXCEEDED",
                                                             "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "INVALID_TEXT",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "TEXT_LIMIT_EXCEEDED",
+                                                            "type": "string"
                                                         }
                                                     ],
                                                     "description": "解析失败原因"
                                                 },
                                                 "filename": {
-                                                    "description": "原始 CSV 文件名",
+                                                    "description": "原始 CSV、TXT 或 PDF 文件名",
                                                     "maxLength": 120,
                                                     "minLength": 5,
                                                     "type": "string"
+                                                },
+                                                "format": {
+                                                    "anyOf": [
+                                                        {
+                                                            "const": "csv",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "txt",
+                                                            "type": "string"
+                                                        }
+                                                    ],
+                                                    "description": "文本格式，省略表示 CSV"
                                                 },
                                                 "id": {
                                                     "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
@@ -110490,6 +110944,74 @@
                                                 "byteLength",
                                                 "createdAt",
                                                 "downloadUrl",
+                                                "status",
+                                                "rowCount",
+                                                "failureCode"
+                                            ],
+                                            "type": "object"
+                                        },
+                                        {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                                "byteLength": {
+                                                    "description": "原始文件字节数",
+                                                    "maximum": 262144,
+                                                    "minimum": 1,
+                                                    "type": "integer"
+                                                },
+                                                "createdAt": {
+                                                    "description": "带 UTC 偏移的 ISO 8601 时间",
+                                                    "format": "scova-instant",
+                                                    "type": "string"
+                                                },
+                                                "downloadUrl": {
+                                                    "description": "本人会话可访问的原件下载路径",
+                                                    "minLength": 1,
+                                                    "type": "string"
+                                                },
+                                                "failureCode": {
+                                                    "description": "无解析错误",
+                                                    "type": "null"
+                                                },
+                                                "filename": {
+                                                    "description": "原始 CSV、TXT 或 PDF 文件名",
+                                                    "maxLength": 120,
+                                                    "minLength": 5,
+                                                    "type": "string"
+                                                },
+                                                "format": {
+                                                    "const": "pdf",
+                                                    "description": "PDF 文件",
+                                                    "type": "string"
+                                                },
+                                                "id": {
+                                                    "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                                    "type": "string"
+                                                },
+                                                "reportId": {
+                                                    "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                                    "type": "string"
+                                                },
+                                                "rowCount": {
+                                                    "description": "无预览行数",
+                                                    "type": "null"
+                                                },
+                                                "status": {
+                                                    "const": "download_only",
+                                                    "description": "可下载原件",
+                                                    "type": "string"
+                                                }
+                                            },
+                                            "required": [
+                                                "id",
+                                                "reportId",
+                                                "filename",
+                                                "byteLength",
+                                                "createdAt",
+                                                "downloadUrl",
+                                                "format",
                                                 "status",
                                                 "rowCount",
                                                 "failureCode"
@@ -110526,10 +111048,23 @@
                                                     "type": "null"
                                                 },
                                                 "filename": {
-                                                    "description": "原始 CSV 文件名",
+                                                    "description": "原始 CSV、TXT 或 PDF 文件名",
                                                     "maxLength": 120,
                                                     "minLength": 5,
                                                     "type": "string"
+                                                },
+                                                "format": {
+                                                    "anyOf": [
+                                                        {
+                                                            "const": "csv",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "txt",
+                                                            "type": "string"
+                                                        }
+                                                    ],
+                                                    "description": "文本格式，省略表示 CSV"
                                                 },
                                                 "id": {
                                                     "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
@@ -110542,7 +111077,7 @@
                                                     "type": "string"
                                                 },
                                                 "rowCount": {
-                                                    "description": "CSV 逻辑记录的行号或总数",
+                                                    "description": "CSV 逻辑记录或纯文本行的行号或总数",
                                                     "maximum": 2000,
                                                     "minimum": 1,
                                                     "type": "integer"
@@ -110598,15 +111133,36 @@
                                                         {
                                                             "const": "CSV_LIMIT_EXCEEDED",
                                                             "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "INVALID_TEXT",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "TEXT_LIMIT_EXCEEDED",
+                                                            "type": "string"
                                                         }
                                                     ],
                                                     "description": "解析失败原因"
                                                 },
                                                 "filename": {
-                                                    "description": "原始 CSV 文件名",
+                                                    "description": "原始 CSV、TXT 或 PDF 文件名",
                                                     "maxLength": 120,
                                                     "minLength": 5,
                                                     "type": "string"
+                                                },
+                                                "format": {
+                                                    "anyOf": [
+                                                        {
+                                                            "const": "csv",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "txt",
+                                                            "type": "string"
+                                                        }
+                                                    ],
+                                                    "description": "文本格式，省略表示 CSV"
                                                 },
                                                 "id": {
                                                     "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
@@ -110635,6 +111191,74 @@
                                                 "byteLength",
                                                 "createdAt",
                                                 "downloadUrl",
+                                                "status",
+                                                "rowCount",
+                                                "failureCode"
+                                            ],
+                                            "type": "object"
+                                        },
+                                        {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                                "byteLength": {
+                                                    "description": "原始文件字节数",
+                                                    "maximum": 262144,
+                                                    "minimum": 1,
+                                                    "type": "integer"
+                                                },
+                                                "createdAt": {
+                                                    "description": "带 UTC 偏移的 ISO 8601 时间",
+                                                    "format": "scova-instant",
+                                                    "type": "string"
+                                                },
+                                                "downloadUrl": {
+                                                    "description": "本人会话可访问的原件下载路径",
+                                                    "minLength": 1,
+                                                    "type": "string"
+                                                },
+                                                "failureCode": {
+                                                    "description": "无解析错误",
+                                                    "type": "null"
+                                                },
+                                                "filename": {
+                                                    "description": "原始 CSV、TXT 或 PDF 文件名",
+                                                    "maxLength": 120,
+                                                    "minLength": 5,
+                                                    "type": "string"
+                                                },
+                                                "format": {
+                                                    "const": "pdf",
+                                                    "description": "PDF 文件",
+                                                    "type": "string"
+                                                },
+                                                "id": {
+                                                    "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                                    "type": "string"
+                                                },
+                                                "reportId": {
+                                                    "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                                    "type": "string"
+                                                },
+                                                "rowCount": {
+                                                    "description": "无预览行数",
+                                                    "type": "null"
+                                                },
+                                                "status": {
+                                                    "const": "download_only",
+                                                    "description": "可下载原件",
+                                                    "type": "string"
+                                                }
+                                            },
+                                            "required": [
+                                                "id",
+                                                "reportId",
+                                                "filename",
+                                                "byteLength",
+                                                "createdAt",
+                                                "downloadUrl",
+                                                "format",
                                                 "status",
                                                 "rowCount",
                                                 "failureCode"
@@ -110671,10 +111295,23 @@
                                                     "type": "null"
                                                 },
                                                 "filename": {
-                                                    "description": "原始 CSV 文件名",
+                                                    "description": "原始 CSV、TXT 或 PDF 文件名",
                                                     "maxLength": 120,
                                                     "minLength": 5,
                                                     "type": "string"
+                                                },
+                                                "format": {
+                                                    "anyOf": [
+                                                        {
+                                                            "const": "csv",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "txt",
+                                                            "type": "string"
+                                                        }
+                                                    ],
+                                                    "description": "文本格式，省略表示 CSV"
                                                 },
                                                 "id": {
                                                     "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
@@ -110687,7 +111324,7 @@
                                                     "type": "string"
                                                 },
                                                 "rowCount": {
-                                                    "description": "CSV 逻辑记录的行号或总数",
+                                                    "description": "CSV 逻辑记录或纯文本行的行号或总数",
                                                     "maximum": 2000,
                                                     "minimum": 1,
                                                     "type": "integer"
@@ -110743,15 +111380,36 @@
                                                         {
                                                             "const": "CSV_LIMIT_EXCEEDED",
                                                             "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "INVALID_TEXT",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "TEXT_LIMIT_EXCEEDED",
+                                                            "type": "string"
                                                         }
                                                     ],
                                                     "description": "解析失败原因"
                                                 },
                                                 "filename": {
-                                                    "description": "原始 CSV 文件名",
+                                                    "description": "原始 CSV、TXT 或 PDF 文件名",
                                                     "maxLength": 120,
                                                     "minLength": 5,
                                                     "type": "string"
+                                                },
+                                                "format": {
+                                                    "anyOf": [
+                                                        {
+                                                            "const": "csv",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "txt",
+                                                            "type": "string"
+                                                        }
+                                                    ],
+                                                    "description": "文本格式，省略表示 CSV"
                                                 },
                                                 "id": {
                                                     "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
@@ -110780,6 +111438,74 @@
                                                 "byteLength",
                                                 "createdAt",
                                                 "downloadUrl",
+                                                "status",
+                                                "rowCount",
+                                                "failureCode"
+                                            ],
+                                            "type": "object"
+                                        },
+                                        {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                                "byteLength": {
+                                                    "description": "原始文件字节数",
+                                                    "maximum": 262144,
+                                                    "minimum": 1,
+                                                    "type": "integer"
+                                                },
+                                                "createdAt": {
+                                                    "description": "带 UTC 偏移的 ISO 8601 时间",
+                                                    "format": "scova-instant",
+                                                    "type": "string"
+                                                },
+                                                "downloadUrl": {
+                                                    "description": "本人会话可访问的原件下载路径",
+                                                    "minLength": 1,
+                                                    "type": "string"
+                                                },
+                                                "failureCode": {
+                                                    "description": "无解析错误",
+                                                    "type": "null"
+                                                },
+                                                "filename": {
+                                                    "description": "原始 CSV、TXT 或 PDF 文件名",
+                                                    "maxLength": 120,
+                                                    "minLength": 5,
+                                                    "type": "string"
+                                                },
+                                                "format": {
+                                                    "const": "pdf",
+                                                    "description": "PDF 文件",
+                                                    "type": "string"
+                                                },
+                                                "id": {
+                                                    "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                                    "type": "string"
+                                                },
+                                                "reportId": {
+                                                    "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
+                                                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                                    "type": "string"
+                                                },
+                                                "rowCount": {
+                                                    "description": "无预览行数",
+                                                    "type": "null"
+                                                },
+                                                "status": {
+                                                    "const": "download_only",
+                                                    "description": "可下载原件",
+                                                    "type": "string"
+                                                }
+                                            },
+                                            "required": [
+                                                "id",
+                                                "reportId",
+                                                "filename",
+                                                "byteLength",
+                                                "createdAt",
+                                                "downloadUrl",
+                                                "format",
                                                 "status",
                                                 "rowCount",
                                                 "failureCode"
@@ -111992,7 +112718,7 @@
                         "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
                     }
                 },
-                "summary": "上传并解析私有参考 CSV 文件",
+                "summary": "上传私有参考附件",
                 "tags": ["报告"]
             }
         },
@@ -113273,7 +113999,7 @@
         },
         "/api/v1/reports/{reportId}/attachments/{attachmentId}/download": {
             "get": {
-                "description": "会话归属校验后返回原始字节，即使 CSV 解析失败也可以下载原件。",
+                "description": "会话归属校验后返回原始字节，文本解析失败时仍可下载原件。",
                 "operationId": "downloadReportAttachment",
                 "parameters": [
                     {
@@ -113307,7 +114033,7 @@
                                 }
                             }
                         },
-                        "description": "可下载的私有 CSV 原件"
+                        "description": "可下载的私有附件原件"
                     }
                 },
                 "summary": "下载本人私有附件的原始内容",
@@ -113402,7 +114128,7 @@
                                             "type": "string"
                                         },
                                         "rowCount": {
-                                            "description": "CSV 逻辑记录的行号或总数",
+                                            "description": "CSV 逻辑记录或纯文本行的行号或总数",
                                             "maximum": 2000,
                                             "minimum": 1,
                                             "type": "integer"
@@ -113428,7 +114154,7 @@
                                                         "type": "integer"
                                                     },
                                                     "rowNumber": {
-                                                        "description": "CSV 逻辑记录的行号或总数",
+                                                        "description": "CSV 逻辑记录或纯文本行的行号或总数",
                                                         "maximum": 2000,
                                                         "minimum": 1,
                                                         "type": "integer"
@@ -113464,7 +114190,7 @@
                                             "type": "string"
                                         },
                                         "rowCount": {
-                                            "description": "CSV 逻辑记录的行号或总数",
+                                            "description": "CSV 逻辑记录或纯文本行的行号或总数",
                                             "maximum": 2000,
                                             "minimum": 1,
                                             "type": "integer"
@@ -113490,7 +114216,7 @@
                                                         "type": "integer"
                                                     },
                                                     "rowNumber": {
-                                                        "description": "CSV 逻辑记录的行号或总数",
+                                                        "description": "CSV 逻辑记录或纯文本行的行号或总数",
                                                         "maximum": 2000,
                                                         "minimum": 1,
                                                         "type": "integer"
@@ -113526,7 +114252,7 @@
                                             "type": "string"
                                         },
                                         "rowCount": {
-                                            "description": "CSV 逻辑记录的行号或总数",
+                                            "description": "CSV 逻辑记录或纯文本行的行号或总数",
                                             "maximum": 2000,
                                             "minimum": 1,
                                             "type": "integer"
@@ -113552,7 +114278,7 @@
                                                         "type": "integer"
                                                     },
                                                     "rowNumber": {
-                                                        "description": "CSV 逻辑记录的行号或总数",
+                                                        "description": "CSV 逻辑记录或纯文本行的行号或总数",
                                                         "maximum": 2000,
                                                         "minimum": 1,
                                                         "type": "integer"
@@ -114782,7 +115508,7 @@
                         "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
                     }
                 },
-                "summary": "读取 CSV 逻辑行和对应原文行区间",
+                "summary": "读取 CSV 或纯文本的预览行和对应原文行区间",
                 "tags": ["报告"]
             }
         },
@@ -219295,6 +220021,11 @@
                                                         "pattern": "^[A-Za-z0-9_-]{1,64}$",
                                                         "type": "string"
                                                     },
+                                                    "parallelGroup": {
+                                                        "description": "图内唯一节点标识",
+                                                        "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                                                        "type": "string"
+                                                    },
                                                     "startedAt": {
                                                         "anyOf": [
                                                             {
@@ -219617,6 +220348,11 @@
                                                         "pattern": "^[A-Za-z0-9_-]{1,64}$",
                                                         "type": "string"
                                                     },
+                                                    "parallelGroup": {
+                                                        "description": "图内唯一节点标识",
+                                                        "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                                                        "type": "string"
+                                                    },
                                                     "startedAt": {
                                                         "anyOf": [
                                                             {
@@ -219935,6 +220671,11 @@
                                                         "description": "开始时间，可为空"
                                                     },
                                                     "id": {
+                                                        "description": "图内唯一节点标识",
+                                                        "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                                                        "type": "string"
+                                                    },
+                                                    "parallelGroup": {
                                                         "description": "图内唯一节点标识",
                                                         "pattern": "^[A-Za-z0-9_-]{1,64}$",
                                                         "type": "string"
@@ -221486,6 +222227,11 @@
                                                         "pattern": "^[A-Za-z0-9_-]{1,64}$",
                                                         "type": "string"
                                                     },
+                                                    "parallelGroup": {
+                                                        "description": "图内唯一节点标识",
+                                                        "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                                                        "type": "string"
+                                                    },
                                                     "startedAt": {
                                                         "anyOf": [
                                                             {
@@ -221808,6 +222554,11 @@
                                                         "pattern": "^[A-Za-z0-9_-]{1,64}$",
                                                         "type": "string"
                                                     },
+                                                    "parallelGroup": {
+                                                        "description": "图内唯一节点标识",
+                                                        "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                                                        "type": "string"
+                                                    },
                                                     "startedAt": {
                                                         "anyOf": [
                                                             {
@@ -222126,6 +222877,11 @@
                                                         "description": "开始时间，可为空"
                                                     },
                                                     "id": {
+                                                        "description": "图内唯一节点标识",
+                                                        "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                                                        "type": "string"
+                                                    },
+                                                    "parallelGroup": {
                                                         "description": "图内唯一节点标识",
                                                         "pattern": "^[A-Za-z0-9_-]{1,64}$",
                                                         "type": "string"
@@ -224972,7 +225728,7 @@
                                 "properties": {
                                     "graph": {
                                         "additionalProperties": false,
-                                        "description": "串行工作流画布，发布时验证节点与连线",
+                                        "description": "工作流画布，发布时验证串行阶段与并行组的连线",
                                         "properties": {
                                             "edges": {
                                                 "description": "接口字段 edges 的配置或结果",
@@ -225019,7 +225775,7 @@
                                                     "required": ["from", "to"],
                                                     "type": "object"
                                                 },
-                                                "maxItems": 15,
+                                                "maxItems": 63,
                                                 "type": "array"
                                             },
                                             "nodes": {
@@ -225109,7 +225865,7 @@
                                 "properties": {
                                     "graph": {
                                         "additionalProperties": false,
-                                        "description": "串行工作流画布，发布时验证节点与连线",
+                                        "description": "工作流画布，发布时验证串行阶段与并行组的连线",
                                         "properties": {
                                             "edges": {
                                                 "description": "接口字段 edges 的配置或结果",
@@ -225156,7 +225912,7 @@
                                                     "required": ["from", "to"],
                                                     "type": "object"
                                                 },
-                                                "maxItems": 15,
+                                                "maxItems": 63,
                                                 "type": "array"
                                             },
                                             "nodes": {
@@ -225246,7 +226002,7 @@
                                 "properties": {
                                     "graph": {
                                         "additionalProperties": false,
-                                        "description": "串行工作流画布，发布时验证节点与连线",
+                                        "description": "工作流画布，发布时验证串行阶段与并行组的连线",
                                         "properties": {
                                             "edges": {
                                                 "description": "接口字段 edges 的配置或结果",
@@ -225293,7 +226049,7 @@
                                                     "required": ["from", "to"],
                                                     "type": "object"
                                                 },
-                                                "maxItems": 15,
+                                                "maxItems": 63,
                                                 "type": "array"
                                             },
                                             "nodes": {
@@ -225388,7 +226144,7 @@
                                     "properties": {
                                         "draft": {
                                             "additionalProperties": false,
-                                            "description": "串行工作流画布，发布时验证节点与连线",
+                                            "description": "工作流画布，发布时验证串行阶段与并行组的连线",
                                             "properties": {
                                                 "edges": {
                                                     "description": "接口字段 edges 的配置或结果",
@@ -225435,7 +226191,7 @@
                                                         "required": ["from", "to"],
                                                         "type": "object"
                                                     },
-                                                    "maxItems": 15,
+                                                    "maxItems": 63,
                                                     "type": "array"
                                                 },
                                                 "nodes": {
@@ -225554,7 +226310,7 @@
                                                         },
                                                         "graph": {
                                                             "additionalProperties": false,
-                                                            "description": "串行工作流画布，发布时验证节点与连线",
+                                                            "description": "工作流画布，发布时验证串行阶段与并行组的连线",
                                                             "properties": {
                                                                 "edges": {
                                                                     "description": "接口字段 edges 的配置或结果",
@@ -225607,7 +226363,7 @@
                                                                         "required": ["from", "to"],
                                                                         "type": "object"
                                                                     },
-                                                                    "maxItems": 15,
+                                                                    "maxItems": 63,
                                                                     "type": "array"
                                                                 },
                                                                 "nodes": {
@@ -225788,7 +226544,7 @@
                                     "properties": {
                                         "draft": {
                                             "additionalProperties": false,
-                                            "description": "串行工作流画布，发布时验证节点与连线",
+                                            "description": "工作流画布，发布时验证串行阶段与并行组的连线",
                                             "properties": {
                                                 "edges": {
                                                     "description": "接口字段 edges 的配置或结果",
@@ -225835,7 +226591,7 @@
                                                         "required": ["from", "to"],
                                                         "type": "object"
                                                     },
-                                                    "maxItems": 15,
+                                                    "maxItems": 63,
                                                     "type": "array"
                                                 },
                                                 "nodes": {
@@ -225954,7 +226710,7 @@
                                                         },
                                                         "graph": {
                                                             "additionalProperties": false,
-                                                            "description": "串行工作流画布，发布时验证节点与连线",
+                                                            "description": "工作流画布，发布时验证串行阶段与并行组的连线",
                                                             "properties": {
                                                                 "edges": {
                                                                     "description": "接口字段 edges 的配置或结果",
@@ -226007,7 +226763,7 @@
                                                                         "required": ["from", "to"],
                                                                         "type": "object"
                                                                     },
-                                                                    "maxItems": 15,
+                                                                    "maxItems": 63,
                                                                     "type": "array"
                                                                 },
                                                                 "nodes": {
@@ -226188,7 +226944,7 @@
                                     "properties": {
                                         "draft": {
                                             "additionalProperties": false,
-                                            "description": "串行工作流画布，发布时验证节点与连线",
+                                            "description": "工作流画布，发布时验证串行阶段与并行组的连线",
                                             "properties": {
                                                 "edges": {
                                                     "description": "接口字段 edges 的配置或结果",
@@ -226235,7 +226991,7 @@
                                                         "required": ["from", "to"],
                                                         "type": "object"
                                                     },
-                                                    "maxItems": 15,
+                                                    "maxItems": 63,
                                                     "type": "array"
                                                 },
                                                 "nodes": {
@@ -226354,7 +227110,7 @@
                                                         },
                                                         "graph": {
                                                             "additionalProperties": false,
-                                                            "description": "串行工作流画布，发布时验证节点与连线",
+                                                            "description": "工作流画布，发布时验证串行阶段与并行组的连线",
                                                             "properties": {
                                                                 "edges": {
                                                                     "description": "接口字段 edges 的配置或结果",
@@ -226407,7 +227163,7 @@
                                                                         "required": ["from", "to"],
                                                                         "type": "object"
                                                                     },
-                                                                    "maxItems": 15,
+                                                                    "maxItems": 63,
                                                                     "type": "array"
                                                                 },
                                                                 "nodes": {
@@ -227812,7 +228568,7 @@
                                     "properties": {
                                         "draft": {
                                             "additionalProperties": false,
-                                            "description": "串行工作流画布，发布时验证节点与连线",
+                                            "description": "工作流画布，发布时验证串行阶段与并行组的连线",
                                             "properties": {
                                                 "edges": {
                                                     "description": "接口字段 edges 的配置或结果",
@@ -227859,7 +228615,7 @@
                                                         "required": ["from", "to"],
                                                         "type": "object"
                                                     },
-                                                    "maxItems": 15,
+                                                    "maxItems": 63,
                                                     "type": "array"
                                                 },
                                                 "nodes": {
@@ -227978,7 +228734,7 @@
                                                         },
                                                         "graph": {
                                                             "additionalProperties": false,
-                                                            "description": "串行工作流画布，发布时验证节点与连线",
+                                                            "description": "工作流画布，发布时验证串行阶段与并行组的连线",
                                                             "properties": {
                                                                 "edges": {
                                                                     "description": "接口字段 edges 的配置或结果",
@@ -228031,7 +228787,7 @@
                                                                         "required": ["from", "to"],
                                                                         "type": "object"
                                                                     },
-                                                                    "maxItems": 15,
+                                                                    "maxItems": 63,
                                                                     "type": "array"
                                                                 },
                                                                 "nodes": {
@@ -228212,7 +228968,7 @@
                                     "properties": {
                                         "draft": {
                                             "additionalProperties": false,
-                                            "description": "串行工作流画布，发布时验证节点与连线",
+                                            "description": "工作流画布，发布时验证串行阶段与并行组的连线",
                                             "properties": {
                                                 "edges": {
                                                     "description": "接口字段 edges 的配置或结果",
@@ -228259,7 +229015,7 @@
                                                         "required": ["from", "to"],
                                                         "type": "object"
                                                     },
-                                                    "maxItems": 15,
+                                                    "maxItems": 63,
                                                     "type": "array"
                                                 },
                                                 "nodes": {
@@ -228378,7 +229134,7 @@
                                                         },
                                                         "graph": {
                                                             "additionalProperties": false,
-                                                            "description": "串行工作流画布，发布时验证节点与连线",
+                                                            "description": "工作流画布，发布时验证串行阶段与并行组的连线",
                                                             "properties": {
                                                                 "edges": {
                                                                     "description": "接口字段 edges 的配置或结果",
@@ -228431,7 +229187,7 @@
                                                                         "required": ["from", "to"],
                                                                         "type": "object"
                                                                     },
-                                                                    "maxItems": 15,
+                                                                    "maxItems": 63,
                                                                     "type": "array"
                                                                 },
                                                                 "nodes": {
@@ -228612,7 +229368,7 @@
                                     "properties": {
                                         "draft": {
                                             "additionalProperties": false,
-                                            "description": "串行工作流画布，发布时验证节点与连线",
+                                            "description": "工作流画布，发布时验证串行阶段与并行组的连线",
                                             "properties": {
                                                 "edges": {
                                                     "description": "接口字段 edges 的配置或结果",
@@ -228659,7 +229415,7 @@
                                                         "required": ["from", "to"],
                                                         "type": "object"
                                                     },
-                                                    "maxItems": 15,
+                                                    "maxItems": 63,
                                                     "type": "array"
                                                 },
                                                 "nodes": {
@@ -228778,7 +229534,7 @@
                                                         },
                                                         "graph": {
                                                             "additionalProperties": false,
-                                                            "description": "串行工作流画布，发布时验证节点与连线",
+                                                            "description": "工作流画布，发布时验证串行阶段与并行组的连线",
                                                             "properties": {
                                                                 "edges": {
                                                                     "description": "接口字段 edges 的配置或结果",
@@ -228831,7 +229587,7 @@
                                                                         "required": ["from", "to"],
                                                                         "type": "object"
                                                                     },
-                                                                    "maxItems": 15,
+                                                                    "maxItems": 63,
                                                                     "type": "array"
                                                                 },
                                                                 "nodes": {
@@ -230247,7 +231003,7 @@
                                 "properties": {
                                     "graph": {
                                         "additionalProperties": false,
-                                        "description": "串行工作流画布，发布时验证节点与连线",
+                                        "description": "工作流画布，发布时验证串行阶段与并行组的连线",
                                         "properties": {
                                             "edges": {
                                                 "description": "接口字段 edges 的配置或结果",
@@ -230294,7 +231050,7 @@
                                                     "required": ["from", "to"],
                                                     "type": "object"
                                                 },
-                                                "maxItems": 15,
+                                                "maxItems": 63,
                                                 "type": "array"
                                             },
                                             "nodes": {
@@ -230384,7 +231140,7 @@
                                 "properties": {
                                     "graph": {
                                         "additionalProperties": false,
-                                        "description": "串行工作流画布，发布时验证节点与连线",
+                                        "description": "工作流画布，发布时验证串行阶段与并行组的连线",
                                         "properties": {
                                             "edges": {
                                                 "description": "接口字段 edges 的配置或结果",
@@ -230431,7 +231187,7 @@
                                                     "required": ["from", "to"],
                                                     "type": "object"
                                                 },
-                                                "maxItems": 15,
+                                                "maxItems": 63,
                                                 "type": "array"
                                             },
                                             "nodes": {
@@ -230521,7 +231277,7 @@
                                 "properties": {
                                     "graph": {
                                         "additionalProperties": false,
-                                        "description": "串行工作流画布，发布时验证节点与连线",
+                                        "description": "工作流画布，发布时验证串行阶段与并行组的连线",
                                         "properties": {
                                             "edges": {
                                                 "description": "接口字段 edges 的配置或结果",
@@ -230568,7 +231324,7 @@
                                                     "required": ["from", "to"],
                                                     "type": "object"
                                                 },
-                                                "maxItems": 15,
+                                                "maxItems": 63,
                                                 "type": "array"
                                             },
                                             "nodes": {
@@ -230663,7 +231419,7 @@
                                     "properties": {
                                         "draft": {
                                             "additionalProperties": false,
-                                            "description": "串行工作流画布，发布时验证节点与连线",
+                                            "description": "工作流画布，发布时验证串行阶段与并行组的连线",
                                             "properties": {
                                                 "edges": {
                                                     "description": "接口字段 edges 的配置或结果",
@@ -230710,7 +231466,7 @@
                                                         "required": ["from", "to"],
                                                         "type": "object"
                                                     },
-                                                    "maxItems": 15,
+                                                    "maxItems": 63,
                                                     "type": "array"
                                                 },
                                                 "nodes": {
@@ -230829,7 +231585,7 @@
                                                         },
                                                         "graph": {
                                                             "additionalProperties": false,
-                                                            "description": "串行工作流画布，发布时验证节点与连线",
+                                                            "description": "工作流画布，发布时验证串行阶段与并行组的连线",
                                                             "properties": {
                                                                 "edges": {
                                                                     "description": "接口字段 edges 的配置或结果",
@@ -230882,7 +231638,7 @@
                                                                         "required": ["from", "to"],
                                                                         "type": "object"
                                                                     },
-                                                                    "maxItems": 15,
+                                                                    "maxItems": 63,
                                                                     "type": "array"
                                                                 },
                                                                 "nodes": {
@@ -231063,7 +231819,7 @@
                                     "properties": {
                                         "draft": {
                                             "additionalProperties": false,
-                                            "description": "串行工作流画布，发布时验证节点与连线",
+                                            "description": "工作流画布，发布时验证串行阶段与并行组的连线",
                                             "properties": {
                                                 "edges": {
                                                     "description": "接口字段 edges 的配置或结果",
@@ -231110,7 +231866,7 @@
                                                         "required": ["from", "to"],
                                                         "type": "object"
                                                     },
-                                                    "maxItems": 15,
+                                                    "maxItems": 63,
                                                     "type": "array"
                                                 },
                                                 "nodes": {
@@ -231229,7 +231985,7 @@
                                                         },
                                                         "graph": {
                                                             "additionalProperties": false,
-                                                            "description": "串行工作流画布，发布时验证节点与连线",
+                                                            "description": "工作流画布，发布时验证串行阶段与并行组的连线",
                                                             "properties": {
                                                                 "edges": {
                                                                     "description": "接口字段 edges 的配置或结果",
@@ -231282,7 +232038,7 @@
                                                                         "required": ["from", "to"],
                                                                         "type": "object"
                                                                     },
-                                                                    "maxItems": 15,
+                                                                    "maxItems": 63,
                                                                     "type": "array"
                                                                 },
                                                                 "nodes": {
@@ -231463,7 +232219,7 @@
                                     "properties": {
                                         "draft": {
                                             "additionalProperties": false,
-                                            "description": "串行工作流画布，发布时验证节点与连线",
+                                            "description": "工作流画布，发布时验证串行阶段与并行组的连线",
                                             "properties": {
                                                 "edges": {
                                                     "description": "接口字段 edges 的配置或结果",
@@ -231510,7 +232266,7 @@
                                                         "required": ["from", "to"],
                                                         "type": "object"
                                                     },
-                                                    "maxItems": 15,
+                                                    "maxItems": 63,
                                                     "type": "array"
                                                 },
                                                 "nodes": {
@@ -231629,7 +232385,7 @@
                                                         },
                                                         "graph": {
                                                             "additionalProperties": false,
-                                                            "description": "串行工作流画布，发布时验证节点与连线",
+                                                            "description": "工作流画布，发布时验证串行阶段与并行组的连线",
                                                             "properties": {
                                                                 "edges": {
                                                                     "description": "接口字段 edges 的配置或结果",
@@ -231682,7 +232438,7 @@
                                                                         "required": ["from", "to"],
                                                                         "type": "object"
                                                                     },
-                                                                    "maxItems": 15,
+                                                                    "maxItems": 63,
                                                                     "type": "array"
                                                                 },
                                                                 "nodes": {
@@ -233098,7 +233854,7 @@
                                     "properties": {
                                         "draft": {
                                             "additionalProperties": false,
-                                            "description": "串行工作流画布，发布时验证节点与连线",
+                                            "description": "工作流画布，发布时验证串行阶段与并行组的连线",
                                             "properties": {
                                                 "edges": {
                                                     "description": "接口字段 edges 的配置或结果",
@@ -233145,7 +233901,7 @@
                                                         "required": ["from", "to"],
                                                         "type": "object"
                                                     },
-                                                    "maxItems": 15,
+                                                    "maxItems": 63,
                                                     "type": "array"
                                                 },
                                                 "nodes": {
@@ -233264,7 +234020,7 @@
                                                         },
                                                         "graph": {
                                                             "additionalProperties": false,
-                                                            "description": "串行工作流画布，发布时验证节点与连线",
+                                                            "description": "工作流画布，发布时验证串行阶段与并行组的连线",
                                                             "properties": {
                                                                 "edges": {
                                                                     "description": "接口字段 edges 的配置或结果",
@@ -233317,7 +234073,7 @@
                                                                         "required": ["from", "to"],
                                                                         "type": "object"
                                                                     },
-                                                                    "maxItems": 15,
+                                                                    "maxItems": 63,
                                                                     "type": "array"
                                                                 },
                                                                 "nodes": {
@@ -233498,7 +234254,7 @@
                                     "properties": {
                                         "draft": {
                                             "additionalProperties": false,
-                                            "description": "串行工作流画布，发布时验证节点与连线",
+                                            "description": "工作流画布，发布时验证串行阶段与并行组的连线",
                                             "properties": {
                                                 "edges": {
                                                     "description": "接口字段 edges 的配置或结果",
@@ -233545,7 +234301,7 @@
                                                         "required": ["from", "to"],
                                                         "type": "object"
                                                     },
-                                                    "maxItems": 15,
+                                                    "maxItems": 63,
                                                     "type": "array"
                                                 },
                                                 "nodes": {
@@ -233664,7 +234420,7 @@
                                                         },
                                                         "graph": {
                                                             "additionalProperties": false,
-                                                            "description": "串行工作流画布，发布时验证节点与连线",
+                                                            "description": "工作流画布，发布时验证串行阶段与并行组的连线",
                                                             "properties": {
                                                                 "edges": {
                                                                     "description": "接口字段 edges 的配置或结果",
@@ -233717,7 +234473,7 @@
                                                                         "required": ["from", "to"],
                                                                         "type": "object"
                                                                     },
-                                                                    "maxItems": 15,
+                                                                    "maxItems": 63,
                                                                     "type": "array"
                                                                 },
                                                                 "nodes": {
@@ -233898,7 +234654,7 @@
                                     "properties": {
                                         "draft": {
                                             "additionalProperties": false,
-                                            "description": "串行工作流画布，发布时验证节点与连线",
+                                            "description": "工作流画布，发布时验证串行阶段与并行组的连线",
                                             "properties": {
                                                 "edges": {
                                                     "description": "接口字段 edges 的配置或结果",
@@ -233945,7 +234701,7 @@
                                                         "required": ["from", "to"],
                                                         "type": "object"
                                                     },
-                                                    "maxItems": 15,
+                                                    "maxItems": 63,
                                                     "type": "array"
                                                 },
                                                 "nodes": {
@@ -234064,7 +234820,7 @@
                                                         },
                                                         "graph": {
                                                             "additionalProperties": false,
-                                                            "description": "串行工作流画布，发布时验证节点与连线",
+                                                            "description": "工作流画布，发布时验证串行阶段与并行组的连线",
                                                             "properties": {
                                                                 "edges": {
                                                                     "description": "接口字段 edges 的配置或结果",
@@ -234117,7 +234873,7 @@
                                                                         "required": ["from", "to"],
                                                                         "type": "object"
                                                                     },
-                                                                    "maxItems": 15,
+                                                                    "maxItems": 63,
                                                                     "type": "array"
                                                                 },
                                                                 "nodes": {
@@ -235707,6 +236463,11 @@
                                                                     "pattern": "^[A-Za-z0-9_-]{1,64}$",
                                                                     "type": "string"
                                                                 },
+                                                                "parallelGroup": {
+                                                                    "description": "图内唯一节点标识",
+                                                                    "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                                                                    "type": "string"
+                                                                },
                                                                 "startedAt": {
                                                                     "anyOf": [
                                                                         {
@@ -236054,6 +236815,11 @@
                                                                     "pattern": "^[A-Za-z0-9_-]{1,64}$",
                                                                     "type": "string"
                                                                 },
+                                                                "parallelGroup": {
+                                                                    "description": "图内唯一节点标识",
+                                                                    "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                                                                    "type": "string"
+                                                                },
                                                                 "startedAt": {
                                                                     "anyOf": [
                                                                         {
@@ -236397,6 +237163,11 @@
                                                                     "description": "开始时间，可为空"
                                                                 },
                                                                 "id": {
+                                                                    "description": "图内唯一节点标识",
+                                                                    "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                                                                    "type": "string"
+                                                                },
+                                                                "parallelGroup": {
                                                                     "description": "图内唯一节点标识",
                                                                     "pattern": "^[A-Za-z0-9_-]{1,64}$",
                                                                     "type": "string"
@@ -238046,6 +238817,11 @@
                                                                 "pattern": "^[A-Za-z0-9_-]{1,64}$",
                                                                 "type": "string"
                                                             },
+                                                            "parallelGroup": {
+                                                                "description": "图内唯一节点标识",
+                                                                "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                                                                "type": "string"
+                                                            },
                                                             "startedAt": {
                                                                 "anyOf": [
                                                                     {
@@ -238380,6 +239156,11 @@
                                                                 "pattern": "^[A-Za-z0-9_-]{1,64}$",
                                                                 "type": "string"
                                                             },
+                                                            "parallelGroup": {
+                                                                "description": "图内唯一节点标识",
+                                                                "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                                                                "type": "string"
+                                                            },
                                                             "startedAt": {
                                                                 "anyOf": [
                                                                     {
@@ -238710,6 +239491,11 @@
                                                                 "description": "开始时间，可为空"
                                                             },
                                                             "id": {
+                                                                "description": "图内唯一节点标识",
+                                                                "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                                                                "type": "string"
+                                                            },
+                                                            "parallelGroup": {
                                                                 "description": "图内唯一节点标识",
                                                                 "pattern": "^[A-Za-z0-9_-]{1,64}$",
                                                                 "type": "string"
@@ -240194,7 +240980,7 @@
                                                     },
                                                     "graph": {
                                                         "additionalProperties": false,
-                                                        "description": "串行工作流画布，发布时验证节点与连线",
+                                                        "description": "工作流画布，发布时验证串行阶段与并行组的连线",
                                                         "properties": {
                                                             "edges": {
                                                                 "description": "接口字段 edges 的配置或结果",
@@ -240247,7 +241033,7 @@
                                                                     "required": ["from", "to"],
                                                                     "type": "object"
                                                                 },
-                                                                "maxItems": 15,
+                                                                "maxItems": 63,
                                                                 "type": "array"
                                                             },
                                                             "nodes": {
@@ -240436,7 +241222,7 @@
                                                     },
                                                     "graph": {
                                                         "additionalProperties": false,
-                                                        "description": "串行工作流画布，发布时验证节点与连线",
+                                                        "description": "工作流画布，发布时验证串行阶段与并行组的连线",
                                                         "properties": {
                                                             "edges": {
                                                                 "description": "接口字段 edges 的配置或结果",
@@ -240489,7 +241275,7 @@
                                                                     "required": ["from", "to"],
                                                                     "type": "object"
                                                                 },
-                                                                "maxItems": 15,
+                                                                "maxItems": 63,
                                                                 "type": "array"
                                                             },
                                                             "nodes": {
@@ -240678,7 +241464,7 @@
                                                     },
                                                     "graph": {
                                                         "additionalProperties": false,
-                                                        "description": "串行工作流画布，发布时验证节点与连线",
+                                                        "description": "工作流画布，发布时验证串行阶段与并行组的连线",
                                                         "properties": {
                                                             "edges": {
                                                                 "description": "接口字段 edges 的配置或结果",
@@ -240731,7 +241517,7 @@
                                                                     "required": ["from", "to"],
                                                                     "type": "object"
                                                                 },
-                                                                "maxItems": 15,
+                                                                "maxItems": 63,
                                                                 "type": "array"
                                                             },
                                                             "nodes": {
@@ -242143,7 +242929,7 @@
                                         },
                                         "graph": {
                                             "additionalProperties": false,
-                                            "description": "串行工作流画布，发布时验证节点与连线",
+                                            "description": "工作流画布，发布时验证串行阶段与并行组的连线",
                                             "properties": {
                                                 "edges": {
                                                     "description": "接口字段 edges 的配置或结果",
@@ -242190,7 +242976,7 @@
                                                         "required": ["from", "to"],
                                                         "type": "object"
                                                     },
-                                                    "maxItems": 15,
+                                                    "maxItems": 63,
                                                     "type": "array"
                                                 },
                                                 "nodes": {
@@ -242345,7 +243131,7 @@
                                         },
                                         "graph": {
                                             "additionalProperties": false,
-                                            "description": "串行工作流画布，发布时验证节点与连线",
+                                            "description": "工作流画布，发布时验证串行阶段与并行组的连线",
                                             "properties": {
                                                 "edges": {
                                                     "description": "接口字段 edges 的配置或结果",
@@ -242392,7 +243178,7 @@
                                                         "required": ["from", "to"],
                                                         "type": "object"
                                                     },
-                                                    "maxItems": 15,
+                                                    "maxItems": 63,
                                                     "type": "array"
                                                 },
                                                 "nodes": {
@@ -242547,7 +243333,7 @@
                                         },
                                         "graph": {
                                             "additionalProperties": false,
-                                            "description": "串行工作流画布，发布时验证节点与连线",
+                                            "description": "工作流画布，发布时验证串行阶段与并行组的连线",
                                             "properties": {
                                                 "edges": {
                                                     "description": "接口字段 edges 的配置或结果",
@@ -242594,7 +243380,7 @@
                                                         "required": ["from", "to"],
                                                         "type": "object"
                                                     },
-                                                    "maxItems": 15,
+                                                    "maxItems": 63,
                                                     "type": "array"
                                                 },
                                                 "nodes": {

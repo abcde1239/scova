@@ -1,6 +1,6 @@
 import { createRunControl } from '../../server/src/app/run-control.ts';
 import { readRunControlConfig } from '../../server/src/app/run-control-config.ts';
-import { requiredDatabaseValue } from '@/utils/database.ts';
+import { requiredDatabaseValue } from '../../server/src/utils/execution/database.ts';
 import {
     runs as dbRuns,
     eq,
@@ -29,7 +29,11 @@ import { createDefaultServices } from '../../server/src/app/services.ts';
 import { createRunService as createCommandService } from '../../server/src/service/runs.ts';
 import { eventMessage } from '../../server/src/service/run-events.ts';
 import { nodeScriptCommand } from '../../../scripts/process-runtime.mjs';
-import { createRunRepository, withRunFence, type ClaimedRun } from '../src/repo/runs.ts';
+import {
+    createRunRepository,
+    withRunFence,
+    type ClaimedRun,
+} from '../../server/src/repo/execution/runs.ts';
 import { RunService, type RunExecutionContext } from '../src/service/runs.ts';
 import { createRunHandler } from '../src/handler/runs.ts';
 import { createRunConsumer } from '../src/app/queue/runs.ts';

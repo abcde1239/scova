@@ -2,12 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 import type { DatabaseClient, Run } from '@scova/db';
 import type { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import type { AgentCandidate } from '@scova/agent-core';
-import { createDeliveryService } from '../src/service/delivery.ts';
+import { createDeliveryService } from '../../server/src/service/execution/delivery.ts';
 const state = vi.hoisted(() => ({
     run: undefined as unknown,
     authenticate: vi.fn((_run, _context, proof) => proof.candidate),
 }));
-vi.mock('../src/repo/delivery.ts', () => ({
+vi.mock('../../server/src/repo/execution/delivery.ts', () => ({
     createDeliveryRepository: () => ({
         inRunFence: async (
             _token: unknown,
@@ -20,7 +20,7 @@ vi.mock('../src/repo/delivery.ts', () => ({
     findBaseline: async () => null,
     saveReport: async () => ({ reportId: 'report', reused: false }),
 }));
-vi.mock('../src/service/delivery-proof.ts', () => ({
+vi.mock('../../server/src/service/execution/delivery-proof.ts', () => ({
     authenticateCandidate: state.authenticate,
     finalizeCoverage: vi.fn(),
     applyBaselineGaps: vi.fn(),

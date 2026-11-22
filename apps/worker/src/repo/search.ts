@@ -1,18 +1,7 @@
 import type { Redis } from 'ioredis';
 
-export interface SearchStateRepository {
-    status(engines: string[]): Promise<{ engines: string[]; waitMs: number }>;
-    acquire(engines: string[], owner: string): Promise<{ engines: string[]; waitMs: number }>;
-    finish(
-        engines: string[],
-        owner: string,
-        failures: { engine: string; error: string; retryAfterMs?: number }[],
-    ): Promise<void>;
-    cached(key: string): Promise<string | null>;
-    lock(key: string, owner: string): Promise<boolean>;
-    publish(key: string, owner: string, value: string, ttlMs: number): Promise<void>;
-    unlock(key: string, owner: string): Promise<void>;
-}
+import { searchCooldown, type SearchStateRepository } from '@scova/shared/execution/search';
+export type { SearchStateRepository } from '@scova/shared/execution/search';
 
 const clock = "local t=redis.call('TIME'); local now=t[1]*1000+math.floor(t[2]/1000); ";
 const eligible = `${clock}
@@ -58,17 +47,8 @@ export function createSearchStateRepository(
         acquire: (engines, owner) => select(engines, 'acquire', owner),
         async finish(engines, owner, failures) {
             for (const engine of engines) {
-                const failure = failures.find((failure) => failure.engine === engine);
-                const error = failure?.error;
-                const baseline =
-                    error === 'captcha'
-                        ? 3_600_000
-                        : error === 'rate_limited' || error === 'access_denied'
-                          ? 1_800_000
-                          : 0;
-                const cooldown = Math.max(
-                    baseline,
-                    Math.min(failure?.retryAfterMs ?? 0, 7 * 86_400_000),
+                const cooldown = searchCooldown(
+                    failures.find((failure) => failure.engine === engine),
                 );
                 await redis.eval(
                     `${clock}

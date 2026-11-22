@@ -1,4 +1,4 @@
-import { requiredDatabaseValue } from '@/utils/database.ts';
+import { requiredDatabaseValue } from '../../../server/src/utils/execution/database.ts';
 import {
     reports as dbReports,
     eq,
@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { nodeScriptCommand } from '../../../../scripts/process-runtime.mjs';
 import type { Report } from '@scova/models';
 import { expect, it } from 'vite-plus/test';
-import { createAgentRepository } from '../../src/repo/agent.ts';
+import { createAgentRepository } from '../../../server/src/repo/execution/agent.ts';
 import { createAgentSession } from '../../src/service/agent.ts';
 import { liveResearch } from './live-research.ts';
 import { delivery, fixture, runs, saver } from './fixture.ts';

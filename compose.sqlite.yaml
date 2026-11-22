@@ -1,0 +1,22 @@
+services:
+    redis:
+        profiles: [redis]
+    api:
+        environment: &sqlite
+            REDIS_URL: ''
+            SCOVA_SQLITE_STATE_PATH: /var/lib/scova/state.sqlite
+        volumes: [sqlite-state:/var/lib/scova]
+        depends_on: !override
+            migrate: { condition: service_completed_successfully }
+    worker:
+        environment:
+            REDIS_URL: ''
+        depends_on: !override
+            api: { condition: service_healthy }
+    operations:
+        environment: *sqlite
+        volumes: [sqlite-state:/var/lib/scova]
+        depends_on: !override
+            postgres: { condition: service_healthy }
+volumes:
+    sqlite-state:
