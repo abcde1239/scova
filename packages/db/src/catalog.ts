@@ -2,7 +2,7 @@ import type pg from 'pg';
 
 export type SchemaSignature = Record<string, Record<string, unknown>[]>;
 
-/** Compare physical invariants, not just table existence or an ORM migration count. */
+/** Compare physical invariants. Nullability is read from columns across PostgreSQL versions. */
 export async function catalogSignature(
     client: pg.Client | pg.PoolClient,
     namespace: string,
@@ -31,7 +31,8 @@ export async function catalogSignature(
             pg_get_constraintdef(co.oid,true) AS definition,co.convalidated AS validated
             FROM pg_constraint co JOIN pg_class c ON c.oid=co.conrelid
             JOIN pg_namespace n ON n.oid=c.relnamespace
-            WHERE n.nspname=$1 AND c.relname NOT IN ('_prisma_migrations','_scova_migrations')
+            WHERE n.nspname=$1 AND co.contype <> 'n'
+              AND c.relname NOT IN ('_prisma_migrations','_scova_migrations')
             ORDER BY c.relname,co.conname`,
         indexes: `SELECT t.relname AS table_name,c.relname AS name,pg_get_indexdef(i.indexrelid) AS definition,
             i.indisvalid AS valid,i.indisready AS ready

@@ -20,6 +20,7 @@ import {
     taskVersions,
     users,
     workflowRuns,
+    workflowNotifications,
 } from '@scova/db';
 import { migrateDatabase } from '@scova/db/migrate';
 import {
@@ -29,7 +30,8 @@ import {
     WorkflowRunSchema,
     WorkflowStartResponseSchema,
     WorkflowVersionListSchema,
-    type WorkflowGraph,
+    type LegacyWorkflowGraph,
+    type WorkflowCanvasGraph,
 } from '@scova/models';
 import { createApiApp } from '@/app/index.ts';
 import { createRunControl } from '@/app/run-control.ts';
@@ -115,8 +117,8 @@ async function task(userId: string, withConfig = true) {
     const id = stored!.id;
     return { id, version: withConfig ? await addVersion(userId, id, 1) : null };
 }
-function graph(...taskIds: string[]): WorkflowGraph {
-    const nodes: WorkflowGraph['nodes'] = [
+function graph(...taskIds: string[]): LegacyWorkflowGraph {
+    const nodes: LegacyWorkflowGraph['nodes'] = [
         { id: 'start', type: 'start' },
         ...taskIds.map((taskId, index) => ({
             id: `study_${index}`,
@@ -125,7 +127,7 @@ function graph(...taskIds: string[]): WorkflowGraph {
         })),
         { id: 'end', type: 'end' },
     ];
-    const edges: WorkflowGraph['edges'] = nodes.slice(1).map((node, index) => ({
+    const edges: LegacyWorkflowGraph['edges'] = nodes.slice(1).map((node, index) => ({
         from: { nodeId: nodes[index]!.id, port: 'out' },
         to: { nodeId: node.id, port: 'in' },
     }));
@@ -153,7 +155,7 @@ function request(
         }),
     );
 }
-async function create(user: Account, graph: WorkflowGraph) {
+async function create(user: Account, graph: LegacyWorkflowGraph | WorkflowCanvasGraph) {
     const response = await request(workflowsPath, user, 'POST', { title: '研究工作流', graph });
     expect(response.status).toBe(201);
     expect(response.headers.get('etag')).toBe('"1"');
@@ -402,7 +404,7 @@ describe('工作流 HTTP、PostgreSQL 与研究队列', () => {
             task(owner.id),
         ]);
         const serial = graph(first.id, second.id, last.id);
-        const parallel: WorkflowGraph = {
+        const parallel: LegacyWorkflowGraph = {
             nodes: serial.nodes.toReversed(),
             edges: [
                 ...serial.edges.filter((edge) => edge.from.nodeId !== 'study_0'),
@@ -664,4 +666,150 @@ describe('工作流 HTTP、PostgreSQL 与研究队列', () => {
             }
         },
     );
+});
+
+describe('自定义工作流画布', () => {
+    const canvas: WorkflowCanvasGraph = {
+        version: 2,
+        nodes: [
+            { id: 'start', type: 'start' },
+            { id: 'all', type: 'csv', config: { filters: [] } },
+            {
+                id: 'west',
+                type: 'csv',
+                config: {
+                    source: 'all',
+                    filters: [{ column: 'region', operator: 'equals', value: 'west' }],
+                },
+            },
+            { id: 'gate', type: 'merge' },
+            {
+                id: 'deliver',
+                type: 'deliver',
+                config: { format: 'csv', filename: 'west.csv', source: 'west' },
+            },
+            {
+                id: 'notice',
+                type: 'notify',
+                config: { source: 'deliver', title: '已交付', body: '有 {{west.count}} 行' },
+            },
+            { id: 'end', type: 'end' },
+        ],
+        edges: [
+            ['start', 'all'],
+            ['all', 'west'],
+            ['start', 'gate'],
+            ['west', 'gate'],
+            ['gate', 'deliver'],
+            ['deliver', 'notice'],
+            ['notice', 'end'],
+        ].map(([from, to]) => ({
+            from: { nodeId: from!, port: 'out' },
+            to: { nodeId: to!, port: 'in' },
+        })),
+        layout: {
+            positions: { west: { x: -25, y: 320 } },
+            groups: [{ id: 'region', title: '区域筛选', nodeIds: ['all', 'west'] }],
+        },
+    };
+    const input = { csv: 'name,region\nApple,west\nBanana,east\n' };
+
+    async function submit(user: Account, workflowId: string, body: object, key = randomUUID()) {
+        const response = await request(`${workflowsPath}/${workflowId}/runs`, user, 'POST', body, {
+            'idempotency-key': key,
+        });
+        expect(response.status).toBe(202);
+        return parseContract(WorkflowStartResponseSchema, await response.json());
+    }
+
+    it('保留布局、固定执行版本，并在重进批次后恢复，只为正式运行创建通知', async () => {
+        const owner = await account();
+        const stranger = await account();
+        const { workflow } = await create(owner, canvas);
+        const pending = await submit(owner, workflow.id, {
+            draftRevision: 1,
+            preview: true,
+            input,
+        });
+        const published = await publish(owner, workflow.id);
+        expect(published.graph).toEqual(canvas);
+        const key = randomUUID();
+        const live = await submit(owner, workflow.id, { versionId: published.id, input }, key);
+        expect(
+            (await submit(owner, workflow.id, { versionId: published.id, input }, key)).reused,
+        ).toBe(true);
+        expect(
+            (
+                await request(
+                    `${workflowsPath}/${workflow.id}/runs`,
+                    owner,
+                    'POST',
+                    { versionId: published.id, input: { ...input, notify: false } },
+                    { 'idempotency-key': key },
+                )
+            ).status,
+        ).toBe(409);
+        const quiet = await submit(owner, workflow.id, {
+            versionId: published.id,
+            input: { ...input, notify: false },
+        });
+        const canceled = await submit(owner, workflow.id, { versionId: published.id, input });
+        expect((await request(`${runPath}/${canceled.run.id}/cancel`, owner, 'POST')).status).toBe(
+            200,
+        );
+        await createWorkflowBatch(db, { batchSize: 2, intervalMs: 0 })(signal);
+        const resume = createWorkflowBatch(db, { batchSize: 50, intervalMs: 0 });
+        await resume(signal);
+        expect(await resume(signal)).toBe(0);
+
+        const preview = await get(owner, pending.run.id);
+        expect(preview).toMatchObject({
+            status: 'succeeded',
+            versionId: null,
+            preview: true,
+            draftSnapshot: canvas,
+        });
+        expect(preview.nodes.find((node) => node.id === 'notice')?.output?.notification).toEqual({
+            title: '已交付',
+            body: '有 1 行',
+            artifactNodeId: 'deliver',
+        });
+        const result = await get(owner, live.run.id);
+        expect(result.status).toBe('succeeded');
+        expect(result.nodes.find((node) => node.id === 'deliver')?.output?.artifact).toMatchObject({
+            filename: 'west.csv',
+            content: 'name,region\r\nApple,west\r\n',
+        });
+        expect(
+            (await get(owner, quiet.run.id)).nodes.find((node) => node.id === 'notice')?.status,
+        ).toBe('skipped');
+        expect((await get(owner, canceled.run.id)).status).toBe('canceled');
+        const notices = await db
+            .select()
+            .from(workflowNotifications)
+            .where(eq(workflowNotifications.userId, owner.id));
+        expect(notices).toMatchObject([
+            { workflowRunId: live.run.id, nodeId: 'notice', artifactNodeId: 'deliver' },
+        ]);
+        expect((await request(`${runPath}/${live.run.id}`, stranger)).status).toBe(404);
+    });
+
+    it('发布时拒绝循环和缺少有效上游的工作流', async () => {
+        const owner = await account();
+        const invalid = structuredClone(canvas);
+        invalid.edges.push({
+            from: { nodeId: 'gate', port: 'out' },
+            to: { nodeId: 'west', port: 'in' },
+        });
+        const { workflow } = await create(owner, invalid);
+        const response = await request(
+            `${workflowsPath}/${workflow.id}/publish`,
+            owner,
+            'POST',
+            undefined,
+            { 'if-match': '"1"' },
+        );
+        expect(response.status).toBe(422);
+        expect(await response.json()).toMatchObject({ code: 'WORKFLOW_INVALID_GRAPH' });
+    });
 });

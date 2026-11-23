@@ -1,10 +1,10 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
-import type { Notification } from '../../packages/models/src/notifications.ts';
+import type { ResearchNotification } from '../../packages/models/src/notifications.ts';
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const instant = '2026-10-31T02:00:00Z';
 const cursor = 'same-time:+/ cursor=第二页';
-function item(n: number): Notification {
+function item(n: number): ResearchNotification {
     const kind = (['summary', 'important_change', 'run_issue'] as const)[(n - 1) % 3]!;
     const partial = kind === 'run_issue' && n % 2 === 0;
     return {
@@ -20,7 +20,7 @@ function item(n: number): Notification {
         readAt: n > 12 ? instant : null,
     };
 }
-function report(entry: Notification) {
+function report(entry: ResearchNotification) {
     return {
         id: entry.reportId!,
         runId: entry.runId,
@@ -65,7 +65,7 @@ function report(entry: Notification) {
         publishedAt: instant,
     };
 }
-function run(entry: Notification) {
+function run(entry: ResearchNotification) {
     return {
         id: entry.runId,
         taskId: entry.taskId,

@@ -1,91 +1,178 @@
 import {
-    queryRows,
     and,
+    desc,
     eq,
     inArray,
-    isNull,
     isNotNull,
-    desc,
-    sql,
+    isNull,
     notifications,
+    sql,
+    workflowNotifications,
     type DatabaseExecutor,
-    type SQL,
 } from '@scova/db';
-import type { ApiServices } from '@/app/services';
 import type { NotificationListQuery } from '@scova/models';
-const withRun = {
-    run: { columns: { id: true, taskId: true, mode: true, status: true, failureCode: true } },
+import type { ApiServices } from '@/app/services';
+
+const researchRun = {
+    run: { columns: { taskId: true, mode: true, status: true, failureCode: true } },
 } as const;
-const readNotification = (db: DatabaseExecutor, where: SQL) =>
-    db.query.notifications.findFirst({ where, with: withRun });
-export type StoredNotification = NonNullable<Awaited<ReturnType<typeof readNotification>>>;
+const researchIdentity = (userId: string, id: string) =>
+    and(eq(notifications.userId, userId), eq(notifications.id, id));
+const workflowIdentity = (userId: string, id: string) =>
+    and(eq(workflowNotifications.userId, userId), eq(workflowNotifications.id, id));
+const readResearch = (db: DatabaseExecutor, userId: string, id: string) =>
+    db.query.notifications.findFirst({ where: researchIdentity(userId, id), with: researchRun });
+const readWorkflow = (db: DatabaseExecutor, userId: string, id: string) =>
+    db.query.workflowNotifications.findFirst({
+        where: workflowIdentity(userId, id),
+    });
+export type StoredNotification = NonNullable<
+    Awaited<ReturnType<typeof readResearch | typeof readWorkflow>>
+>;
+type Source = 'research' | 'workflow';
+type Cursor = { id: string; source: Source };
+
 export function createNotificationRepo(services: Pick<ApiServices, 'db'>) {
     return {
-        anchor(userId: string, id: string) {
-            return services.db().query.notifications.findFirst({
-                where: and(eq(notifications.id, id), eq(notifications.userId, userId)),
+        async anchor(userId: string, id: string, source?: Source) {
+            const db = services.db();
+            if (source !== 'workflow') {
+                const research = await db.query.notifications.findFirst({
+                    where: researchIdentity(userId, id),
+                    columns: { createdAt: true },
+                });
+                if (research) return { ...research, source: 'research' as const };
+            }
+            if (source === 'research') return;
+            const workflow = await db.query.workflowNotifications.findFirst({
+                where: workflowIdentity(userId, id),
+                columns: { createdAt: true },
             });
+            if (workflow) return { ...workflow, source: 'workflow' as const };
         },
         list(
             userId: string,
             filters: Pick<NotificationListQuery, 'kind' | 'unread'>,
             take: number,
-            cursor?: { id: string; time: Date },
+            cursor?: Cursor,
         ) {
-            // ID选择与DTO加载共享同一短快照，保留PostgreSQL微秒时间边界。
             return services.db().transaction(
                 async (tx) => {
-                    const kind = filters.kind ? sql`AND kind::text=${filters.kind}` : sql.empty();
                     const read =
                         filters.unread === undefined
-                            ? sql.empty()
+                            ? undefined
                             : filters.unread
-                              ? sql`AND read_at IS NULL`
-                              : sql`AND read_at IS NOT NULL`;
-                    const boundary = cursor
-                        ? sql`AND (created_at,id)<(SELECT created_at,id FROM notifications WHERE user_id=${userId}::uuid AND id=${cursor.id}::uuid)`
-                        : sql.empty();
-                    const ids = await queryRows<{ id: string }>(
-                        tx,
-                        sql`SELECT id FROM notifications WHERE user_id=${userId}::uuid ${kind} ${read} ${boundary} ORDER BY created_at DESC,id DESC LIMIT ${take}`,
-                    );
-                    return tx.query.notifications.findMany({
-                        where: and(
-                            eq(notifications.userId, userId),
-                            filters.kind ? eq(notifications.kind, filters.kind) : undefined,
-                            filters.unread === undefined
-                                ? undefined
-                                : filters.unread
-                                  ? isNull(notifications.readAt)
-                                  : isNotNull(notifications.readAt),
-                            inArray(
-                                notifications.id,
-                                ids.map((row) => row.id),
+                              ? isNull
+                              : isNotNull;
+                    const anchorTable =
+                        cursor?.source === 'workflow' ? workflowNotifications : notifications;
+                    // Use the stored timestamp for the keyset boundary to preserve microseconds.
+                    const boundary = (table: typeof notifications | typeof workflowNotifications) =>
+                        cursor &&
+                        sql`(${table.createdAt}, ${table.id}) < (
+                            SELECT ${anchorTable.createdAt}, ${anchorTable.id} FROM ${anchorTable}
+                            WHERE ${anchorTable.userId} = ${userId} AND ${anchorTable.id} = ${cursor.id}
+                        )`;
+                    const research = tx
+                        .select({
+                            id: notifications.id,
+                            createdAt: notifications.createdAt,
+                            source: sql<Source>`'research'`.as('source'),
+                        })
+                        .from(notifications)
+                        .where(
+                            and(
+                                eq(notifications.userId, userId),
+                                filters.kind && filters.kind !== 'workflow'
+                                    ? eq(notifications.kind, filters.kind)
+                                    : undefined,
+                                read?.(notifications.readAt),
+                                boundary(notifications),
                             ),
-                        ),
-                        with: withRun,
-                        orderBy: [desc(notifications.createdAt), desc(notifications.id)],
-                    });
+                        );
+                    const workflow = tx
+                        .select({
+                            id: workflowNotifications.id,
+                            createdAt: workflowNotifications.createdAt,
+                            source: sql<Source>`'workflow'`.as('source'),
+                        })
+                        .from(workflowNotifications)
+                        .where(
+                            and(
+                                eq(workflowNotifications.userId, userId),
+                                read?.(workflowNotifications.readAt),
+                                boundary(workflowNotifications),
+                            ),
+                        );
+                    const candidates = (
+                        filters.kind === 'workflow'
+                            ? workflow
+                            : filters.kind
+                              ? research
+                              : research.unionAll(workflow)
+                    ).as('candidates');
+                    const page = await tx
+                        .select({ id: candidates.id, source: candidates.source })
+                        .from(candidates)
+                        .orderBy(desc(candidates.createdAt), desc(candidates.id))
+                        .limit(take);
+                    const researchIds = page
+                        .filter((row) => row.source === 'research')
+                        .map((row) => row.id);
+                    const workflowIds = page
+                        .filter((row) => row.source === 'workflow')
+                        .map((row) => row.id);
+                    const researchRows = researchIds.length
+                        ? await tx.query.notifications.findMany({
+                              where: and(
+                                  eq(notifications.userId, userId),
+                                  inArray(notifications.id, researchIds),
+                              ),
+                              with: researchRun,
+                          })
+                        : [];
+                    const workflowRows = workflowIds.length
+                        ? await tx.query.workflowNotifications.findMany({
+                              where: and(
+                                  eq(workflowNotifications.userId, userId),
+                                  inArray(workflowNotifications.id, workflowIds),
+                              ),
+                          })
+                        : [];
+                    const researchById = new Map(researchRows.map((row) => [row.id, row]));
+                    const workflowById = new Map(workflowRows.map((row) => [row.id, row]));
+                    return page.map(
+                        ({ id, source }): StoredNotification =>
+                            (source === 'research' ? researchById.get(id) : workflowById.get(id))!,
+                    );
                 },
                 { isolationLevel: 'repeatable read' },
             );
         },
         setRead(userId: string, id: string, read: boolean, now: Date) {
             return services.db().transaction(async (tx) => {
+                const readAt = read ? now : null;
                 await tx
                     .update(notifications)
-                    .set({ readAt: read ? now : null })
+                    .set({ readAt })
                     .where(
                         and(
-                            eq(notifications.id, id),
-                            eq(notifications.userId, userId),
+                            researchIdentity(userId, id),
                             read ? isNull(notifications.readAt) : undefined,
                         ),
                     );
-                return readNotification(
-                    tx,
-                    and(eq(notifications.id, id), eq(notifications.userId, userId))!,
-                );
+                const research = await readResearch(tx, userId, id);
+                if (research) return research;
+                await tx
+                    .update(workflowNotifications)
+                    .set({ readAt })
+                    .where(
+                        and(
+                            workflowIdentity(userId, id),
+                            read ? isNull(workflowNotifications.readAt) : undefined,
+                        ),
+                    );
+                return readWorkflow(tx, userId, id);
             });
         },
     };

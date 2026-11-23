@@ -10,6 +10,7 @@ import {
     WorkflowStartInputSchema,
     WorkflowStartResponseSchema,
     WorkflowVersionListSchema,
+    WorkflowVersionSchema,
     type PageQuery,
 } from '@scova/models';
 import { defineApiEndpoint } from '@/api/endpoints';
@@ -132,4 +133,21 @@ export const workflowVersionsEndpoint = defineApiEndpoint<{
     path: '/workflows/:workflowId/versions',
     inputValidators: { params: workflowParams, query: modelValidator(PageQuerySchema) },
     validator: modelValidator(WorkflowVersionListSchema),
+});
+
+export const workflowVersionEndpoint = defineApiEndpoint<{
+    params: WorkflowParams & { versionId: string };
+    data: typeof WorkflowVersionSchema.static;
+}>({
+    method: 'GET',
+    path: '/workflows/:workflowId/versions/:versionId',
+    inputValidators: {
+        params: {
+            parse: (input) => ({
+                ...workflowParams.parse(input),
+                versionId: uuidParam(input, 'versionId'),
+            }),
+        },
+    },
+    validator: modelValidator(WorkflowVersionSchema),
 });

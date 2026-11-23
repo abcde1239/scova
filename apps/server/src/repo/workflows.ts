@@ -4,6 +4,7 @@ import {
     eq,
     inArray,
     lt,
+    notExists,
     lte,
     sql,
     type DatabaseClient,
@@ -11,6 +12,7 @@ import {
     type DatabaseTransaction,
 } from '@scova/db';
 import { workflows, workflowRuns, workflowVersions, type WorkflowRunRow } from '@scova/db';
+import { workflowTemplateExecutions } from '@scova/db';
 import { firstRow } from '@/utils/database.ts';
 
 export const activeWorkflowStatuses = ['queued', 'running', 'cancel_requested'] as const;
@@ -26,6 +28,17 @@ export function createWorkflowStore(database: DatabaseExecutor) {
                 .where(
                     and(
                         eq(workflows.userId, userId),
+                        notExists(
+                            database
+                                .select({ id: workflowTemplateExecutions.workflowId })
+                                .from(workflowTemplateExecutions)
+                                .where(
+                                    and(
+                                        eq(workflowTemplateExecutions.userId, userId),
+                                        eq(workflowTemplateExecutions.workflowId, workflows.id),
+                                    ),
+                                ),
+                        ),
                         anchor
                             ? sql`(${workflows.createdAt}, ${workflows.id}) < (
                     SELECT ${workflows.createdAt}, ${workflows.id} FROM ${workflows}

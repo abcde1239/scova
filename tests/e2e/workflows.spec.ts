@@ -1,5 +1,12 @@
 import { expect, test, type Page } from '@playwright/test';
-import type { WorkflowGraph, WorkflowRun, WorkflowRunNode } from '@scova/models';
+import {
+    isWorkflowCanvasGraph,
+    type LegacyWorkflowGraph,
+    type WorkflowCanvasGraph,
+    type WorkflowGraph,
+    type WorkflowRun,
+    type WorkflowRunNode,
+} from '@scova/models';
 import type { WorkflowDetail, WorkflowDraft } from '../../apps/web/src/api/workflows.ts';
 import { mockFixtureSession } from './support/session-sample.ts';
 
@@ -10,7 +17,7 @@ const runId = id(13);
 const childId = id(14);
 const tasks = [id(21), id(22)];
 const instant = '2026-10-31T00:00:00Z';
-const graph: WorkflowGraph = {
+const legacyGraph: LegacyWorkflowGraph = {
     nodes: [
         { id: 'start', type: 'start' },
         { id: 'end', type: 'end' },
@@ -19,7 +26,7 @@ const graph: WorkflowGraph = {
 };
 
 // HTTP contract samples exercise the real UI. Workflow orchestration is verified separately.
-async function fixtures(page: Page) {
+async function fixtures(page: Page, draft: WorkflowGraph = legacyGraph) {
     await mockFixtureSession(page);
     const state = {
         detail: {
@@ -30,7 +37,7 @@ async function fixtures(page: Page) {
                 createdAt: instant,
                 updatedAt: instant,
             },
-            draft: graph,
+            draft,
             publishedVersion: null,
         } as WorkflowDetail,
         saveCalls: [] as { tag: string | undefined; body: WorkflowDraft }[],
@@ -133,9 +140,14 @@ async function fixtures(page: Page) {
             const key = request.headers()['idempotency-key'];
             expect(key).toBeTruthy();
             expect(request.headers()['x-csrf-token']).toBe('fixture-only');
-            expect(request.postDataJSON()).toEqual({ versionId });
-            state.startKeys.push(key);
             const published = state.detail.publishedVersion!;
+            expect(request.postDataJSON()).toEqual({
+                versionId,
+                ...(isWorkflowCanvasGraph(published.graph) ? { input: {} } : {}),
+            });
+            state.startKeys.push(key);
+            const runningNode = published.graph.edges.find(({ from }) => from.nodeId === 'start')
+                ?.to.nodeId;
             state.run ??= {
                 id: runId,
                 workflowId,
@@ -146,19 +158,24 @@ async function fixtures(page: Page) {
                 startedAt: instant,
                 finishedAt: null,
                 failureCode: null,
-                nodes: published.graph.nodes.map((node, index): WorkflowRunNode => ({
+                nodes: published.graph.nodes.map((node): WorkflowRunNode => ({
                     id: node.id,
                     type: node.type,
-                    status: index === 0 ? 'succeeded' : index === 1 ? 'running' : 'pending',
-                    attempt: index === 1 ? 1 : 0,
-                    startedAt: index < 2 ? instant : null,
-                    finishedAt: index === 0 ? instant : null,
+                    status:
+                        node.type === 'start'
+                            ? 'succeeded'
+                            : node.id === runningNode
+                              ? 'running'
+                              : 'pending',
+                    attempt: node.id === runningNode ? 1 : 0,
+                    startedAt: node.type === 'start' || node.id === runningNode ? instant : null,
+                    finishedAt: node.type === 'start' ? instant : null,
                     taskId: node.type === 'study' ? node.taskId : null,
                     taskVersionId:
                         published.bindings.find((binding) => binding.nodeId === node.id)
                             ?.taskVersionId ?? null,
-                    childRunId: index === 1 ? childId : null,
-                    childStatus: index === 1 ? 'queued' : null,
+                    childRunId: node.id === runningNode ? childId : null,
+                    childStatus: node.id === runningNode ? 'queued' : null,
                     failureCode: null,
                 })),
             };
@@ -176,7 +193,7 @@ async function fixtures(page: Page) {
     return state;
 }
 
-test('serial editor saves order and runs a frozen version with idempotent retries', async ({
+test('a new canvas saves explicit dependencies and runs a frozen version with idempotent retries', async ({
     page,
 }, testInfo) => {
     await page.setViewportSize({ width: 1280, height: 900 });
@@ -186,45 +203,53 @@ test('serial editor saves order and runs a frozen version with idempotent retrie
     await page.getByLabel('新工作流名称').fill('研究工作流');
     await page.getByRole('button', { name: '创建工作流' }).click();
     await expect(page).toHaveURL(`/workflows/${workflowId}`);
-    const add = page.getByRole('button', { name: '添加研究节点' });
-    await add.focus();
-    await page.keyboard.press('Enter');
-    const first = page.getByLabel('研究 1 的任务');
-    await expect(first).toBeFocused();
-    await expect(first.getByRole('option', { name: '调研任务 1' })).toHaveCount(1);
-    await first.press('ArrowDown');
-    await first.press('Enter');
-    await expect(first).toHaveValue(tasks[0]!);
+    expect(isWorkflowCanvasGraph(state.detail.draft)).toBe(true);
+    const canvas = page.getByRole('region', { name: '工作流画布编辑器' });
+    const list = canvas.getByRole('region', { name: '工作流步骤' });
+    await canvas.getByRole('button', { name: '步骤列表', exact: true }).click();
+    await list.getByRole('button', { name: /^结束/ }).click();
+    await canvas.getByRole('button', { name: '移除 开始 到 结束 的连线' }).press('Enter');
+
+    const add = canvas
+        .getByRole('region', { name: '节点库' })
+        .getByRole('button', { name: /研究/ });
+    const task = canvas.getByRole('combobox', { name: '研究任务' });
+    const name = canvas.getByRole('textbox', { name: '节点名称' });
+    const upstream = canvas.getByRole('combobox', { name: '添加上游连线' });
+    const connect = canvas.getByRole('button', { name: '连接', exact: true });
+    await add.press('Enter');
+    await expect(task.getByRole('option', { name: '调研任务 1' })).toHaveCount(1);
+    await task.selectOption(tasks[0]!);
+    await name.fill('第一项研究');
+    await name.press('Enter');
+    await upstream.selectOption({ label: '开始' });
+    await connect.press('Enter');
     await add.click();
-    const second = page.getByLabel('研究 2 的任务');
-    await second.selectOption(tasks[1]!);
-    const moveUp = page.getByRole('button', { name: '上移研究 2' });
-    await moveUp.focus();
-    await moveUp.press('Enter');
-    await expect(first).toHaveValue(tasks[1]!);
-    await expect(page.getByRole('button', { name: '下移研究 1' })).toBeFocused();
-    const handle = page.locator('[draggable="true"]').nth(1);
-    const firstStudy = page.locator('[data-node-id]').first();
-    await handle.dragTo(firstStudy);
-    const firstNode = page.getByRole('button', { name: /研究 1\s*调研任务 1/ });
-    await firstNode.click();
-    await expect(firstNode).toHaveAttribute('aria-pressed', 'true');
-    await expect(first).toHaveValue(tasks[0]!);
-    await page
-        .locator('.workflow-board')
-        .screenshot({ path: testInfo.outputPath('workflow-editor-1280.png') });
-    await page.getByRole('button', { name: '保存草稿' }).click();
+    await task.selectOption(tasks[1]!);
+    await name.fill('第二项研究');
+    await name.press('Enter');
+    await upstream.selectOption({ label: '第一项研究' });
+    await connect.click();
+    await list.getByRole('button', { name: /^结束/ }).click();
+    await upstream.selectOption({ label: '第二项研究' });
+    await connect.click();
+    await canvas.getByRole('button', { name: '画布', exact: true }).click();
+    await canvas.getByRole('button', { name: '自动排列' }).click();
+    await canvas.screenshot({ path: testInfo.outputPath('workflow-editor-1280.png') });
+
+    await page.getByRole('button', { name: '保存草稿', exact: true }).click();
     await expect(page.getByText('已保存草稿', { exact: true })).toBeVisible();
     const save = state.saveCalls[0]!;
     expect(save.tag).toBe('"1"');
-    expect(
-        save.body.graph.nodes.flatMap((node) => (node.type === 'study' ? [node.taskId] : [])),
-    ).toEqual(tasks);
-    expect(save.body.graph.edges.map((edge) => edge.to.nodeId)).toEqual(
-        save.body.graph.nodes.slice(1).map((node) => node.id),
+    expect(isWorkflowCanvasGraph(save.body.graph)).toBe(true);
+    const studies = save.body.graph.nodes.filter((node) => node.type === 'study');
+    expect(studies.map((node) => node.taskId)).toEqual(tasks);
+    const chain = ['start', ...studies.map(({ id }) => id), 'end'];
+    expect(save.body.graph.edges.map(({ from, to }) => [from.nodeId, to.nodeId])).toEqual(
+        chain.slice(1).map((nodeId, index) => [chain[index], nodeId]),
     );
     await page.getByRole('button', { name: '发布版本' }).click();
-    const version = page.getByLabel('发布版本');
+    const version = page.getByRole('combobox', { name: '发布版本', exact: true });
     await expect(version).toHaveValue(versionId);
     await version.selectOption(id(40));
     await expect(page.getByText('尚未运行的发布版本', { exact: false })).toBeVisible();
@@ -232,21 +257,21 @@ test('serial editor saves order and runs a frozen version with idempotent retrie
     expect(state.publishTags).toEqual(['"2"']);
     await page.getByRole('button', { name: '启动运行' }).click();
     await expect(page.getByText('启动响应暂时不可用')).toBeVisible();
-    await page.getByRole('button', { name: '重试启动' }).click();
+    await page.getByRole('button', { name: '启动运行' }).click();
     await expect(page.getByRole('heading', { name: '运行详情' })).toBeFocused();
     await expect(page.getByText('执行尝试 1')).toBeVisible();
-    await expect(page.getByRole('link', { name: '查看研究执行（排队中）' })).toHaveAttribute(
+    await expect(page.getByRole('link', { name: '查看研究执行', exact: true })).toHaveAttribute(
         'href',
         `/runs/${childId}`,
     );
     expect(state.startKeys[0]).toBe(state.startKeys[1]);
     await page.getByRole('button', { name: '取消运行' }).click();
-    await expect(page.getByText('取消中 · 实际运行')).toBeVisible();
+    await expect(page.getByText('取消中 · 正式运行')).toBeVisible();
     if (state.run) {
         state.run.status = 'canceled';
         state.run.finishedAt = instant;
     }
-    await expect(page.getByText('已取消 · 实际运行')).toBeVisible({ timeout: 8_000 });
+    await expect(page.getByText('已取消 · 正式运行')).toBeVisible({ timeout: 8_000 });
 });
 
 test('draft conflict preserves local input and can reload on a narrow viewport', async ({
@@ -259,7 +284,7 @@ test('draft conflict preserves local input and can reload on a narrow viewport',
     await title.fill('本地草稿');
     state.detail.workflow.revision = 2;
     state.detail.workflow.title = '其他窗口保存的草稿';
-    await page.getByRole('button', { name: '保存草稿' }).click();
+    await page.getByRole('button', { name: '保存草稿', exact: true }).click();
     await expect(page.getByText('草稿已在其他位置更新。', { exact: false })).toBeFocused();
     await expect(title).toHaveValue('本地草稿');
     await page.getByRole('button', { name: '重新载入草稿' }).click();
@@ -270,9 +295,7 @@ test('draft conflict preserves local input and can reload on a narrow viewport',
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(360);
 });
 
-test('parallel groups can be created by keyboard, reopened and split into separate stages', async ({
-    page,
-}) => {
+test('a seeded legacy graph can form parallel stages, reopen and split them', async ({ page }) => {
     const state = await fixtures(page);
     await page.goto(`/workflows/${workflowId}`);
     const add = page.getByRole('button', { name: '添加研究节点' });
@@ -289,7 +312,7 @@ test('parallel groups can be created by keyboard, reopened and split into separa
     const groupLabels = page.getByText(/研究 [12] · 阶段 1（并行）/);
     await expect(groupLabels).toHaveCount(2);
 
-    const save = page.getByRole('button', { name: '保存草稿' });
+    const save = page.getByRole('button', { name: '保存草稿', exact: true });
     const publish = page.getByRole('button', { name: '发布版本' });
     await save.click();
     await expect(publish).toBeEnabled();
@@ -308,4 +331,174 @@ test('parallel groups can be created by keyboard, reopened and split into separa
     await expect(publish).toBeEnabled();
     expect(state.saveCalls[1]!.body.graph.edges).toHaveLength(3);
     expect(state.detail.publishedVersion?.graph).toEqual(fork);
+});
+
+test('canvas persists two-dimensional layout and edited edges across reopening', async ({
+    page,
+}) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const initial: WorkflowCanvasGraph = {
+        version: 2,
+        nodes: [
+            { id: 'start', type: 'start' },
+            { id: 'clean', type: 'csv', config: { filters: [] } },
+            { id: 'end', type: 'end' },
+        ],
+        edges: [
+            { from: { nodeId: 'start', port: 'out' }, to: { nodeId: 'clean', port: 'in' } },
+            { from: { nodeId: 'clean', port: 'out' }, to: { nodeId: 'end', port: 'in' } },
+        ],
+        layout: {
+            positions: {
+                start: { x: 40, y: 60 },
+                clean: { x: 320, y: 60 },
+                end: { x: 600, y: 60 },
+            },
+            groups: [],
+        },
+    };
+    const state = await fixtures(page, initial);
+    await page.goto(`/workflows/${workflowId}`);
+    const canvas = page.getByRole('region', { name: '工作流画布编辑器' });
+    await canvas.getByRole('button', { name: '画布', exact: true }).click();
+    const handle = canvas.getByRole('button', { name: '移动整理 CSV，使用方向键' });
+    const node = canvas.locator('.canvas-node').filter({
+        has: page.getByRole('button', { name: '移动整理 CSV，使用方向键' }),
+    });
+    const edges = canvas.locator('.canvas-edge-line');
+    const left = async () =>
+        node.evaluate((element) => Number.parseInt((element as HTMLElement).style.left, 10));
+    const top = async () =>
+        node.evaluate((element) => Number.parseInt((element as HTMLElement).style.top, 10));
+    await expect(edges).toHaveCount(2);
+    await expect.poll(left).toBe(320);
+    await handle.scrollIntoViewIfNeeded();
+    const bounds = await handle.boundingBox();
+    expect(bounds).not.toBeNull();
+    const x = bounds!.x + bounds!.width / 2;
+    const y = bounds!.y + bounds!.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + 38, y + 81, { steps: 8 });
+    await page.mouse.up();
+    await expect.poll(left).toBeGreaterThan(320);
+    await expect.poll(top).toBeGreaterThan(60);
+    const moved = { x: await left(), y: await top() };
+    await expect(edges).toHaveCount(2);
+    await canvas.getByRole('button', { name: '撤销' }).click();
+    await expect.poll(left).toBe(320);
+    await expect.poll(top).toBe(60);
+    await canvas.getByRole('button', { name: '重做' }).click();
+    await expect.poll(top).toBe(moved.y);
+
+    await canvas.getByRole('button', { name: '开始的输出端口' }).click();
+    await canvas.getByRole('button', { name: '结束的输入端口' }).click();
+    await expect(edges).toHaveCount(3);
+    const remove = canvas.getByRole('button', { name: '移除 开始 到 结束 的连线' });
+    await remove.press('Enter');
+    await expect(edges).toHaveCount(2);
+    await canvas.getByRole('button', { name: '撤销' }).click();
+    await expect(edges).toHaveCount(3);
+    await page.getByRole('button', { name: '保存草稿', exact: true }).click();
+    await expect(page.getByText('已保存草稿', { exact: true })).toBeVisible();
+    const saved = state.saveCalls[0]!.body.graph;
+    if (!isWorkflowCanvasGraph(saved)) throw new Error('Expected a V2 workflow draft');
+    expect(saved.layout.positions.clean).toEqual(moved);
+    expect(saved.edges).toEqual([
+        ...initial.edges,
+        { from: { nodeId: 'start', port: 'out' }, to: { nodeId: 'end', port: 'in' } },
+    ]);
+
+    await page.reload();
+    await canvas.getByRole('button', { name: '画布', exact: true }).click();
+    await expect.poll(left).toBe(moved.x);
+    await expect.poll(top).toBe(moved.y);
+    await expect(edges).toHaveCount(3);
+    await expect(canvas.getByRole('button', { name: '撤销' })).toBeDisabled();
+    await canvas.getByRole('button', { name: '结束的输入端口' }).press('Enter');
+    await expect(remove).toBeVisible();
+});
+
+test('canvas source pickers match the material each upstream node can produce', async ({
+    page,
+}) => {
+    const nodes: WorkflowCanvasGraph['nodes'] = [
+        { id: 'start', type: 'start' },
+        { id: 'table', type: 'csv', label: '上游表格', config: { filters: [] } },
+        {
+            id: 'csv-file',
+            type: 'deliver',
+            label: '上游 CSV 文件',
+            config: { source: 'table', format: 'csv', filename: 'table.csv' },
+        },
+        { id: 'study', type: 'study', taskId: tasks[0]! },
+        {
+            id: 'markdown-file',
+            type: 'deliver',
+            label: '上游 Markdown 文件',
+            config: { source: 'study', format: 'markdown', filename: 'study.md' },
+        },
+        {
+            id: 'generated',
+            type: 'generate',
+            label: '上游生成',
+            config: { sources: [], instructions: '总结' },
+        },
+        { id: 'merge', type: 'merge' },
+        { id: 'csv-target', type: 'csv', label: '下游整理', config: { filters: [] } },
+        {
+            id: 'csv-delivery',
+            type: 'deliver',
+            label: '下游 CSV 交付',
+            config: { source: '', format: 'csv', filename: '' },
+        },
+        {
+            id: 'markdown-delivery',
+            type: 'deliver',
+            label: '下游 Markdown 交付',
+            config: { source: '', format: 'markdown', filename: '' },
+        },
+        { id: 'notice', type: 'notify', config: { title: '结果已就绪', body: '查看交付文件' } },
+        {
+            id: 'generate-target',
+            type: 'generate',
+            label: '下游生成',
+            config: { sources: [], instructions: '' },
+        },
+        { id: 'end', type: 'end' },
+    ];
+    const inputs = nodes.slice(0, 7);
+    const targets = nodes.slice(7, -1);
+    const edge = (from: string, to: string): WorkflowCanvasGraph['edges'][number] => ({
+        from: { nodeId: from, port: 'out' },
+        to: { nodeId: to, port: 'in' },
+    });
+    await fixtures(page, {
+        version: 2,
+        nodes,
+        edges: [
+            ...inputs.slice(1).map((node, index) => edge(inputs[index]!.id, node.id)),
+            edge('study', 'merge'),
+            ...targets.flatMap((node) => [edge('merge', node.id), edge(node.id, 'end')]),
+        ],
+        layout: { positions: {}, groups: [] },
+    });
+    await page.goto(`/workflows/${workflowId}`);
+    const canvas = page.getByRole('region', { name: '工作流画布编辑器' });
+    await canvas.getByRole('button', { name: '步骤列表', exact: true }).click();
+    const list = canvas.getByRole('region', { name: '工作流步骤' });
+    const material = canvas.getByRole('combobox', { name: '数据来源' });
+    for (const [name, choices] of [
+        ['下游整理', ['使用本次运行的 CSV', '开始', '上游表格', '上游 CSV 文件']],
+        ['下游 CSV 交付', ['选择上游节点', '上游表格', '上游 CSV 文件']],
+        ['下游 Markdown 交付', ['选择上游节点', '开始', '研究', '上游 Markdown 文件', '上游生成']],
+        ['通知', ['不附加交付文件', '上游 CSV 文件', '上游 Markdown 文件']],
+    ] as const) {
+        await list.getByRole('button', { name: new RegExp(`^${name}`) }).click();
+        await expect(material.getByRole('option')).toHaveText([...choices]);
+    }
+    await list.getByRole('button', { name: /^下游生成/ }).click();
+    const generation = canvas.getByRole('group', { name: '生成来源' });
+    await expect(generation.getByRole('checkbox', { name: '汇合' })).toHaveCount(0);
+    await expect(generation.getByRole('checkbox', { name: '上游 Markdown 文件' })).toBeVisible();
 });

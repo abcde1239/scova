@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import {
+    boolean,
     check,
     foreignKey,
     index,
@@ -12,7 +13,14 @@ import {
     uuid,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import type { WorkflowBinding, WorkflowGraph, WorkflowRun, WorkflowRunNode } from '@scova/models';
+import type {
+    WorkflowBinding,
+    WorkflowCanvasGraph,
+    WorkflowCanvasInput,
+    WorkflowGraph,
+    WorkflowRun,
+    WorkflowRunNode,
+} from '@scova/models';
 import { serviceModeEnum } from './enums.ts';
 import { users } from './identity.ts';
 
@@ -79,11 +87,17 @@ export const workflowRuns = pgTable(
         id: uuid('id').notNull().primaryKey().$defaultFn(randomUUID),
         userId: uuid('user_id').notNull(),
         workflowId: uuid('workflow_id').notNull(),
-        versionId: uuid('version_id').notNull(),
+        versionId: uuid('version_id'),
         mode: serviceModeEnum('mode').notNull(),
         status: text('status').$type<WorkflowRun['status']>().notNull().default('queued'),
         nodesJson: jsonb('nodes_json').$type<WorkflowRunNode[]>().notNull(),
         startKeyHash: text('start_key_hash').notNull(),
+        inputJson: jsonb('input_json').$type<WorkflowCanvasInput>(),
+        preview: boolean('preview').notNull().default(false),
+        draftPreviewJson: jsonb('draft_preview_json').$type<{
+            revision: number;
+            graph: WorkflowCanvasGraph;
+        }>(),
         createdAt: instant('created_at').notNull().defaultNow(),
         startedAt: instant('started_at'),
         finishedAt: instant('finished_at'),
@@ -100,6 +114,16 @@ export const workflowRuns = pgTable(
                 workflowVersions.id,
             ],
         }).onDelete('cascade'),
+        foreignKey({
+            name: 'workflow_runs_workflow_fkey',
+            columns: [table.userId, table.workflowId],
+            foreignColumns: [workflows.userId, workflows.id],
+        }).onDelete('cascade'),
+        check(
+            'workflow_runs_source_valid',
+            sql`(version_id IS NOT NULL AND draft_preview_json IS NULL) OR (version_id IS NULL AND preview AND draft_preview_json IS NOT NULL)`,
+        ),
+        uniqueIndex('workflow_runs_owner_id_key').on(table.userId, table.id),
         uniqueIndex('workflow_runs_start_key').on(
             table.userId,
             table.workflowId,

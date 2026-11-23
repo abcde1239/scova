@@ -2,7 +2,7 @@ import { deferred } from './support/deferred';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 import { effectScope, nextTick, ref } from 'vue';
 import { createMemoryHistory } from 'vue-router';
-import type { Notification, SessionResponse } from '@scova/models';
+import type { Notification, ResearchNotification, SessionResponse } from '@scova/models';
 import { createSessionLifecycle } from '@/api/session';
 import { notificationsEndpoint, notificationReadEndpoint } from '@/api/notifications';
 import {
@@ -19,9 +19,10 @@ import {
 import { createWorkbenchRouter } from '@/router';
 import notificationRoutes from '@/router/pages/notifications';
 import workbenchRoutes from '@/router/pages/workbench';
+import workflowRoutes from '@/router/pages/workflows';
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
-function item(n = 1, kind: Notification['kind'] = 'summary'): Notification {
+function item(n = 1, kind: ResearchNotification['kind'] = 'summary'): ResearchNotification {
     return {
         id: id(n),
         runId: id(n + 100),
@@ -188,6 +189,50 @@ describe('notifications', () => {
         expect(notificationTarget({ ...item(2, 'run_issue'), reportId: id(302) }).name).toBe(
             'report-detail',
         );
+    });
+    it('shows, opens and marks workflow notifications using their own run and artifact IDs', async () => {
+        const notice = {
+            id: id(10),
+            kind: 'workflow',
+            workflowRunId: id(11),
+            nodeId: 'notify',
+            artifactNodeId: 'deliver',
+            title: '报告已交付',
+            body: '请查看周报。',
+            readAt: null,
+            createdAt: '2026-10-31T02:00:00Z',
+        } satisfies Notification;
+        expect(readNotificationFilters('workflow', 'unread')).toEqual({
+            kind: 'workflow',
+            read: 'unread',
+        });
+        expect(notificationLabel(notice)).toBe(notice.title);
+        expect(notificationMessage(notice)).toBe(notice.body);
+        expect(notificationTarget(notice)).toEqual({
+            name: 'workflow-run-detail',
+            params: { runId: notice.workflowRunId },
+            query: { artifact: notice.artifactNodeId },
+        });
+        const router = createWorkbenchRouter(createMemoryHistory(), workflowRoutes);
+        expect(router.resolve(notificationTarget(notice)).fullPath).toBe(
+            '/workflow-runs/' + notice.workflowRunId + '?artifact=deliver',
+        );
+        expect(notificationTarget({ ...notice, artifactNodeId: undefined })).toEqual({
+            name: 'workflow-run-detail',
+            params: { runId: notice.workflowRunId },
+        });
+
+        let readAt: string | null = null;
+        const notifications = setup(async (_url, init) => {
+            if (init?.method === 'PATCH') {
+                readAt = '2026-10-31T03:00:00Z';
+                return Response.json({ ...notice, readAt });
+            }
+            return Response.json({ items: [{ ...notice, readAt }, item()], nextCursor: null });
+        });
+        await vi.waitFor(() => expect(notifications.items.value).toHaveLength(2));
+        expect(await notifications.setRead(notice, true)).toBe(true);
+        expect(notifications.items.value[0]?.readAt).toBe(readAt);
     });
     it('enforces current Worker terminal-kind invariants without inventing failure-report constraints', () => {
         // Worker terminalNotificationKind + atomic delivery; notification_report_required DB CHECK.

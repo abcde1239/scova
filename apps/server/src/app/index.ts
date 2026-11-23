@@ -8,6 +8,7 @@ import { createAuthPlugin } from '@/router/auth.ts';
 import { createTaskPlugin } from '@/router/tasks.ts';
 import { createProjectPlugin } from '@/router/projects';
 import { createWorkflowPlugin } from '@/router/workflows';
+import { createWorkflowTemplatePlugin } from '@/router/workflow-templates';
 import { createReportChartPlugin } from '@/router/report-charts';
 import { createReportAttachmentPlugin } from '@/router/report-attachments';
 import { createTaskDraftPlugin } from '@/router/task-drafts.ts';
@@ -62,6 +63,7 @@ export const createApiApp = (
         .use(createTaskPlugin(services))
         .use(createProjectPlugin(services))
         .use(createWorkflowPlugin(services))
+        .use(createWorkflowTemplatePlugin(services))
         .use(createTaskDraftPlugin(services))
         .use(createFeedbackPlugin(services))
         .use(createRunPlugin(services))

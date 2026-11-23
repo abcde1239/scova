@@ -62,6 +62,9 @@ function row(source = graph): WorkflowRunRow {
         finishedAt: null,
         nextCheckAt: now,
         startKeyHash: 'a'.repeat(64),
+        inputJson: null,
+        preview: false,
+        draftPreviewJson: null,
         failureCode: null,
     };
 }
@@ -207,7 +210,15 @@ it('工作流 HTTP 路由提供完整 OpenAPI 中文契约', async () => {
     const paths = Object.fromEntries(
         Object.entries(document.paths).filter(([path]) => path.startsWith('/api/v1/workflow')),
     );
-    expect(Object.keys(paths)).toHaveLength(9);
+    expect(Object.keys(paths)).toEqual(
+        expect.arrayContaining([
+            '/api/v1/workflows',
+            '/api/v1/workflow-runs/{runId}',
+            '/api/v1/workflow-templates',
+            '/api/v1/workflow-templates/{templateId}/versions/{templateVersion}/copy',
+            '/api/v1/workflow-templates/{templateId}/versions/{templateVersion}/start',
+        ]),
+    );
     expect(() => validateOpenApi({ ...document, paths })).not.toThrow();
 });
 

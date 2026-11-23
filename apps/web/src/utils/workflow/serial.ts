@@ -1,5 +1,8 @@
 import {
     readWorkflowStages,
+    isWorkflowCanvasGraph,
+    type LegacyWorkflowGraph,
+    type WorkflowCanvasGraph,
     type WorkflowGraph,
     type WorkflowNode,
     type WorkflowRun,
@@ -12,7 +15,7 @@ export function serialGraph(
     start: BoundaryNode,
     studies: readonly StudyNode[],
     end: BoundaryNode,
-): WorkflowGraph {
+): LegacyWorkflowGraph {
     return stagedGraph(
         start,
         studies.map((node) => [node]),
@@ -24,7 +27,7 @@ export function stagedGraph(
     start: BoundaryNode,
     studies: readonly StudyNode[][],
     end: BoundaryNode,
-): WorkflowGraph {
+): LegacyWorkflowGraph {
     const stages = [[start], ...studies, [end]];
     return {
         nodes: stages.flat(),
@@ -40,6 +43,7 @@ export function stagedGraph(
 }
 
 export function readEditorGraph(graph: WorkflowGraph) {
+    if (isWorkflowCanvasGraph(graph)) return null;
     const stages = readWorkflowStages(graph);
     const start = stages?.[0]?.[0];
     const end = stages?.at(-1)?.[0];
@@ -54,3 +58,31 @@ export function readEditorGraph(graph: WorkflowGraph) {
 export function workflowRunIsActive(run: WorkflowRun) {
     return run.status === 'queued' || run.status === 'running' || run.status === 'cancel_requested';
 }
+
+export function upgradeWorkflowGraph(graph: LegacyWorkflowGraph): WorkflowCanvasGraph {
+    const stages = readWorkflowStages(graph) ?? graph.nodes.map((node) => [node]);
+    return {
+        version: 2,
+        nodes: graph.nodes.map((node) => ({ ...node })),
+        edges: graph.edges.map(({ from, to }) => ({ from: { ...from }, to: { ...to } })),
+        layout: {
+            positions: Object.fromEntries(
+                stages.flatMap((stage, x) =>
+                    stage.map((node, y) => [node.id, { x: 40 + x * 260, y: 60 + y * 130 }]),
+                ),
+            ),
+            groups: [],
+        },
+    };
+}
+
+export const workflowStatusLabels = {
+    queued: '排队中',
+    running: '运行中',
+    cancel_requested: '取消中',
+    succeeded: '已完成',
+    canceled: '已取消',
+    failed: '失败',
+    pending: '待运行',
+    skipped: '已跳过',
+};

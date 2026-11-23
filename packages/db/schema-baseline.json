@@ -60,6 +60,10 @@
         {
             "name": "0014_project_conversations",
             "hash": "bbbd599c35fc4a46a74d0eecab024e9b5e42534b828ddb11a593cb5dc67f2203"
+        },
+        {
+            "name": "0015_futuristic_speed",
+            "hash": "146dfa2c72b1a932889914a63e7a1405c9e28edb9439f9f38af5740d1d8d5c85"
         }
     ],
     "signature": {
@@ -317,7 +321,28 @@
                 "force_row_security": false
             },
             {
+                "name": "workflow_notifications",
+                "kind": "r",
+                "persistence": "p",
+                "row_security": false,
+                "force_row_security": false
+            },
+            {
                 "name": "workflow_runs",
+                "kind": "r",
+                "persistence": "p",
+                "row_security": false,
+                "force_row_security": false
+            },
+            {
+                "name": "workflow_template_executions",
+                "kind": "r",
+                "persistence": "p",
+                "row_security": false,
+                "force_row_security": false
+            },
+            {
+                "name": "workflow_templates",
                 "kind": "r",
                 "persistence": "p",
                 "row_security": false,
@@ -3827,6 +3852,116 @@
                 "collation": null
             },
             {
+                "table_name": "workflow_notifications",
+                "name": "id",
+                "position": 1,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_notifications",
+                "name": "user_id",
+                "position": 2,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_notifications",
+                "name": "workflow_run_id",
+                "position": 3,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_notifications",
+                "name": "node_id",
+                "position": 4,
+                "type": "text",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "workflow_notifications",
+                "name": "artifact_node_id",
+                "position": 5,
+                "type": "text",
+                "not_null": false,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "workflow_notifications",
+                "name": "channel",
+                "position": 6,
+                "type": "text",
+                "not_null": true,
+                "default_value": "'in_app'::text",
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "workflow_notifications",
+                "name": "title",
+                "position": 7,
+                "type": "text",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "workflow_notifications",
+                "name": "body",
+                "position": 8,
+                "type": "text",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "workflow_notifications",
+                "name": "read_at",
+                "position": 9,
+                "type": "timestamp(6) with time zone",
+                "not_null": false,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_notifications",
+                "name": "created_at",
+                "position": 10,
+                "type": "timestamp(6) with time zone",
+                "not_null": true,
+                "default_value": "now()",
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
                 "table_name": "workflow_runs",
                 "name": "id",
                 "position": 1,
@@ -3864,7 +3999,7 @@
                 "name": "version_id",
                 "position": 4,
                 "type": "uuid",
-                "not_null": true,
+                "not_null": false,
                 "default_value": null,
                 "identity": "",
                 "generated": "",
@@ -3968,6 +4103,193 @@
                 "identity": "",
                 "generated": "",
                 "collation": "default"
+            },
+            {
+                "table_name": "workflow_runs",
+                "name": "input_json",
+                "position": 14,
+                "type": "jsonb",
+                "not_null": false,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_runs",
+                "name": "preview",
+                "position": 15,
+                "type": "boolean",
+                "not_null": true,
+                "default_value": "false",
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_runs",
+                "name": "draft_preview_json",
+                "position": 16,
+                "type": "jsonb",
+                "not_null": false,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_template_executions",
+                "name": "user_id",
+                "position": 1,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_template_executions",
+                "name": "template_id",
+                "position": 2,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_template_executions",
+                "name": "template_version",
+                "position": 3,
+                "type": "integer",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_template_executions",
+                "name": "workflow_id",
+                "position": 4,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_template_executions",
+                "name": "version_id",
+                "position": 5,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_templates",
+                "name": "id",
+                "position": 1,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_templates",
+                "name": "user_id",
+                "position": 2,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_templates",
+                "name": "version",
+                "position": 3,
+                "type": "integer",
+                "not_null": true,
+                "default_value": "1",
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_templates",
+                "name": "title",
+                "position": 4,
+                "type": "text",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "workflow_templates",
+                "name": "description",
+                "position": 5,
+                "type": "text",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "workflow_templates",
+                "name": "delivery",
+                "position": 6,
+                "type": "text",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "workflow_templates",
+                "name": "graph_json",
+                "position": 7,
+                "type": "jsonb",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_templates",
+                "name": "fields_json",
+                "position": 8,
+                "type": "jsonb",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_templates",
+                "name": "created_at",
+                "position": 9,
+                "type": "timestamp(6) with time zone",
+                "not_null": true,
+                "default_value": "now()",
+                "identity": "",
+                "generated": "",
+                "collation": null
             },
             {
                 "table_name": "workflow_versions",
@@ -5564,6 +5886,27 @@
                 "validated": true
             },
             {
+                "table_name": "workflow_notifications",
+                "name": "workflow_notifications_channel_valid",
+                "type": "c",
+                "definition": "CHECK (channel = 'in_app'::text)",
+                "validated": true
+            },
+            {
+                "table_name": "workflow_notifications",
+                "name": "workflow_notifications_owner_run_fkey",
+                "type": "f",
+                "definition": "FOREIGN KEY (user_id, workflow_run_id) REFERENCES workflow_runs(user_id, id) ON DELETE CASCADE",
+                "validated": true
+            },
+            {
+                "table_name": "workflow_notifications",
+                "name": "workflow_notifications_pkey",
+                "type": "p",
+                "definition": "PRIMARY KEY (id)",
+                "validated": true
+            },
+            {
                 "table_name": "workflow_runs",
                 "name": "workflow_runs_checkpoint_valid",
                 "type": "c",
@@ -5579,9 +5922,65 @@
             },
             {
                 "table_name": "workflow_runs",
+                "name": "workflow_runs_source_valid",
+                "type": "c",
+                "definition": "CHECK (version_id IS NOT NULL AND draft_preview_json IS NULL OR version_id IS NULL AND preview AND draft_preview_json IS NOT NULL)",
+                "validated": true
+            },
+            {
+                "table_name": "workflow_runs",
                 "name": "workflow_runs_version_fkey",
                 "type": "f",
                 "definition": "FOREIGN KEY (user_id, workflow_id, version_id) REFERENCES workflow_versions(user_id, workflow_id, id) ON DELETE CASCADE",
+                "validated": true
+            },
+            {
+                "table_name": "workflow_runs",
+                "name": "workflow_runs_workflow_fkey",
+                "type": "f",
+                "definition": "FOREIGN KEY (user_id, workflow_id) REFERENCES workflows(user_id, id) ON DELETE CASCADE",
+                "validated": true
+            },
+            {
+                "table_name": "workflow_template_executions",
+                "name": "workflow_template_executions_user_id_template_id_template_versi",
+                "type": "p",
+                "definition": "PRIMARY KEY (user_id, template_id, template_version)",
+                "validated": true
+            },
+            {
+                "table_name": "workflow_template_executions",
+                "name": "workflow_template_executions_version_fkey",
+                "type": "f",
+                "definition": "FOREIGN KEY (user_id, workflow_id, version_id) REFERENCES workflow_versions(user_id, workflow_id, id) ON DELETE CASCADE",
+                "validated": true
+            },
+            {
+                "table_name": "workflow_template_executions",
+                "name": "workflow_template_executions_version_valid",
+                "type": "c",
+                "definition": "CHECK (template_version >= 1)",
+                "validated": true
+            },
+            {
+                "table_name": "workflow_templates",
+                "name": "workflow_templates_pkey",
+                "type": "p",
+                "definition": "PRIMARY KEY (id)",
+                "validated": true
+            },
+            {
+                "table_name": "workflow_templates",
+                "name": "workflow_templates_user_id_users_id_fk",
+                "type": "f",
+                "definition": "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE",
+                "validated": true
+            },
+            {
+                "table_name": "workflow_templates",
+                "name": "workflow_templates_version_valid",
+                "type": "c",
+                "definition": "CHECK (version >= 1)",
                 "validated": true
             },
             {
@@ -6539,6 +6938,27 @@
                 "ready": true
             },
             {
+                "table_name": "workflow_notifications",
+                "name": "workflow_notifications_delivery_key",
+                "definition": "CREATE UNIQUE INDEX workflow_notifications_delivery_key ON workflow_notifications USING btree (workflow_run_id, node_id, user_id, channel)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "workflow_notifications",
+                "name": "workflow_notifications_history_idx",
+                "definition": "CREATE INDEX workflow_notifications_history_idx ON workflow_notifications USING btree (user_id, created_at DESC NULLS LAST, id DESC NULLS LAST)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "workflow_notifications",
+                "name": "workflow_notifications_pkey",
+                "definition": "CREATE UNIQUE INDEX workflow_notifications_pkey ON workflow_notifications USING btree (id)",
+                "valid": true,
+                "ready": true
+            },
+            {
                 "table_name": "workflow_runs",
                 "name": "workflow_runs_due_idx",
                 "definition": "CREATE INDEX workflow_runs_due_idx ON workflow_runs USING btree (next_check_at, id) WHERE (status = ANY (ARRAY['queued'::text, 'running'::text, 'cancel_requested'::text]))",
@@ -6554,6 +6974,13 @@
             },
             {
                 "table_name": "workflow_runs",
+                "name": "workflow_runs_owner_id_key",
+                "definition": "CREATE UNIQUE INDEX workflow_runs_owner_id_key ON workflow_runs USING btree (user_id, id)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "workflow_runs",
                 "name": "workflow_runs_pkey",
                 "definition": "CREATE UNIQUE INDEX workflow_runs_pkey ON workflow_runs USING btree (id)",
                 "valid": true,
@@ -6563,6 +6990,34 @@
                 "table_name": "workflow_runs",
                 "name": "workflow_runs_start_key",
                 "definition": "CREATE UNIQUE INDEX workflow_runs_start_key ON workflow_runs USING btree (user_id, workflow_id, start_key_hash)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "workflow_template_executions",
+                "name": "workflow_template_executions_user_id_template_id_template_versi",
+                "definition": "CREATE UNIQUE INDEX workflow_template_executions_user_id_template_id_template_versi ON workflow_template_executions USING btree (user_id, template_id, template_version)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "workflow_template_executions",
+                "name": "workflow_template_executions_workflow_idx",
+                "definition": "CREATE INDEX workflow_template_executions_workflow_idx ON workflow_template_executions USING btree (user_id, workflow_id)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "workflow_templates",
+                "name": "workflow_templates_pkey",
+                "definition": "CREATE UNIQUE INDEX workflow_templates_pkey ON workflow_templates USING btree (id)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "workflow_templates",
+                "name": "workflow_templates_user_created_idx",
+                "definition": "CREATE INDEX workflow_templates_user_created_idx ON workflow_templates USING btree (user_id, created_at DESC NULLS LAST, id DESC NULLS LAST)",
                 "valid": true,
                 "ready": true
             },
@@ -8540,6 +8995,18 @@
             },
             {
                 "table_name": "users",
+                "constraint_name": "workflow_templates_user_id_users_id_fk",
+                "event": 9,
+                "enabled": "O"
+            },
+            {
+                "table_name": "users",
+                "constraint_name": "workflow_templates_user_id_users_id_fk",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "users",
                 "constraint_name": "workflows_user_id_users_id_fk",
                 "event": 9,
                 "enabled": "O"
@@ -8551,6 +9018,30 @@
                 "enabled": "O"
             },
             {
+                "table_name": "workflow_notifications",
+                "constraint_name": "workflow_notifications_owner_run_fkey",
+                "event": 5,
+                "enabled": "O"
+            },
+            {
+                "table_name": "workflow_notifications",
+                "constraint_name": "workflow_notifications_owner_run_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "workflow_runs",
+                "constraint_name": "workflow_notifications_owner_run_fkey",
+                "event": 9,
+                "enabled": "O"
+            },
+            {
+                "table_name": "workflow_runs",
+                "constraint_name": "workflow_notifications_owner_run_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
                 "table_name": "workflow_runs",
                 "constraint_name": "workflow_runs_version_fkey",
                 "event": 5,
@@ -8559,6 +9050,42 @@
             {
                 "table_name": "workflow_runs",
                 "constraint_name": "workflow_runs_version_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "workflow_runs",
+                "constraint_name": "workflow_runs_workflow_fkey",
+                "event": 5,
+                "enabled": "O"
+            },
+            {
+                "table_name": "workflow_runs",
+                "constraint_name": "workflow_runs_workflow_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "workflow_template_executions",
+                "constraint_name": "workflow_template_executions_version_fkey",
+                "event": 5,
+                "enabled": "O"
+            },
+            {
+                "table_name": "workflow_template_executions",
+                "constraint_name": "workflow_template_executions_version_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "workflow_templates",
+                "constraint_name": "workflow_templates_user_id_users_id_fk",
+                "event": 5,
+                "enabled": "O"
+            },
+            {
+                "table_name": "workflow_templates",
+                "constraint_name": "workflow_templates_user_id_users_id_fk",
                 "event": 17,
                 "enabled": "O"
             },
@@ -8576,6 +9103,18 @@
             },
             {
                 "table_name": "workflow_versions",
+                "constraint_name": "workflow_template_executions_version_fkey",
+                "event": 9,
+                "enabled": "O"
+            },
+            {
+                "table_name": "workflow_versions",
+                "constraint_name": "workflow_template_executions_version_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "workflow_versions",
                 "constraint_name": "workflow_versions_workflow_fkey",
                 "event": 5,
                 "enabled": "O"
@@ -8583,6 +9122,18 @@
             {
                 "table_name": "workflow_versions",
                 "constraint_name": "workflow_versions_workflow_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "workflows",
+                "constraint_name": "workflow_runs_workflow_fkey",
+                "event": 9,
+                "enabled": "O"
+            },
+            {
+                "table_name": "workflows",
+                "constraint_name": "workflow_runs_workflow_fkey",
                 "event": 17,
                 "enabled": "O"
             },

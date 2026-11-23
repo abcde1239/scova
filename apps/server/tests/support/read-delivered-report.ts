@@ -49,9 +49,12 @@ try {
         );
         if (notifications.status !== 200) throw new Error('已交付通知API读取失败');
         const page = parseContract(NotificationListResponseSchema, await notifications.json());
-        const matching = page.items.filter((item) => item.runId === report.runId);
+        const matching = page.items.filter(
+            (item) => item.kind !== 'workflow' && item.runId === report.runId,
+        );
         if (
             matching.length !== 1 ||
+            matching[0]?.kind === 'workflow' ||
             matching[0]?.kind !== expectedKind ||
             matching[0].reportId !== report.id
         )

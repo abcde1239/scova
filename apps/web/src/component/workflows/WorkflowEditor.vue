@@ -1,7 +1,11 @@
 <template>
     <section class="surface-card p-4 layout-grid gap-4" aria-labelledby="workflow-draft-heading">
         <h2 id="workflow-draft-heading" class="m-0">工作流草稿</h2>
-        <state-panel v-if="!graph" state="error" message="此草稿的连线无法在编辑器中打开。" />
+        <state-panel
+            v-if="!graph && !canvasGraph"
+            state="error"
+            message="此草稿的连线无法在编辑器中打开。"
+        />
         <form v-else class="layout-grid gap-4" method="post" @submit.prevent="save">
             <div class="layout-grid gap-2">
                 <label for="workflow-draft-title">工作流名称</label>
@@ -16,7 +20,24 @@
                     :disabled="busy"
                 />
             </div>
-            <fieldset class="layout-grid gap-2 min-w-0 m-0 p-0 border-none" :disabled="busy">
+            <workflow-canvas
+                v-if="canvasGraph"
+                v-model:graph="canvasGraph"
+                :tasks="taskOptions"
+                :readonly="busy"
+            />
+            <div v-if="canvasGraph && tasksQuery.hasNextPage.value">
+                <action-button
+                    :busy="tasksQuery.isFetchingNextPage.value"
+                    @click="tasksQuery.fetchNextPage()"
+                    >加载更多可选任务</action-button
+                >
+            </div>
+            <fieldset
+                v-if="!canvasGraph"
+                class="layout-grid gap-2 min-w-0 m-0 p-0 border-none"
+                :disabled="busy"
+            >
                 <legend class="font-semibold p-0">节点顺序</legend>
                 <p id="workflow-order-hint" class="my-2 text-muted">
                     拖动研究节点或使用上移和下移按钮调整位置。在检查器中可合并相邻阶段。
@@ -206,6 +227,11 @@
                 </div>
             </fieldset>
 
+            <div v-if="!canvasGraph && graph">
+                <action-button :disabled="busy || conflict" @click="upgrade"
+                    >预览自定义画布</action-button
+                >
+            </div>
             <p v-if="conflict" ref="errorSummary" tabindex="-1" class="m-0" role="alert">
                 草稿已在其他位置更新。当前编辑仍保留，重新载入将采用服务端草稿。
             </p>
@@ -241,7 +267,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onScopeDispose, ref, shallowRef, watch } from 'vue';
 import { RouterLink } from 'vue-router';
-import { workflowNodeLimit } from '@scova/models';
+import {
+    isWorkflowCanvasGraph,
+    workflowNodeLimit,
+    type WorkflowCanvasGraph,
+    type WorkflowGraph,
+} from '@scova/models';
 import type { ApiResponse } from '@/api/client';
 import { toApiError } from '@/api/errors';
 import { shouldReportQueryError } from '@/api/query';
@@ -254,12 +285,19 @@ import {
 } from '@/api/workflows';
 import ActionButton from '@/component/common/ActionButton.vue';
 import AppIcon from '@/component/common/AppIcon.vue';
+import WorkflowCanvas from '@/component/workflows/WorkflowCanvas.vue';
 import StatePanel from '@/component/common/StatePanel.vue';
 import { useSessionLifecycle, useSessionMutation } from '@/composable/useSessionQuery';
 import { useTasks } from '@/composable/useTasks';
-import { readEditorGraph, stagedGraph, type StudyNode } from '@/utils/workflow/serial';
+import {
+    readEditorGraph,
+    stagedGraph,
+    upgradeWorkflowGraph,
+    type StudyNode,
+} from '@/utils/workflow/serial';
 
 const props = defineProps<{ snapshot: ApiResponse<WorkflowDetail> }>();
+const emit = defineEmits<{ dirty: [value: boolean] }>();
 const lifecycle = useSessionLifecycle();
 const { query: tasksQuery, items: taskItems } = useTasks('all', lifecycle);
 const taskOptions = computed(() => taskItems.value.filter((task) => task.status !== 'archived'));
@@ -272,6 +310,7 @@ onScopeDispose(() => lifetime.abort());
 const baseline = shallowRef(props.snapshot);
 const revision = computed(() => baseline.value.data.workflow.revision);
 const graph = computed(() => readEditorGraph(baseline.value.data.draft));
+const canvasGraph = ref<WorkflowCanvasGraph | null>(copyCanvas(baseline.value.data.draft));
 const title = ref(baseline.value.data.workflow.title);
 const stages = ref<StudyNode[][]>(copyStages());
 const studies = computed(() => stages.value.flat());
@@ -298,7 +337,9 @@ const maxStudies = workflowNodeLimit - 2;
 const dirty = computed(
     () =>
         title.value.trim() !== baseline.value.data.workflow.title ||
-        JSON.stringify(stages.value) !== JSON.stringify(graph.value?.stages ?? []),
+        (canvasGraph.value
+            ? JSON.stringify(canvasGraph.value) !== JSON.stringify(baseline.value.data.draft)
+            : JSON.stringify(stages.value) !== JSON.stringify(graph.value?.stages ?? [])),
 );
 const conflict = ref(false);
 const reloading = ref(false);
@@ -308,7 +349,7 @@ const canPublish = computed(
     () =>
         !dirty.value &&
         !conflict.value &&
-        studies.value.length > 0 &&
+        (canvasGraph.value !== null || studies.value.length > 0) &&
         baseline.value.data.publishedVersion?.draftRevision !== revision.value,
 );
 const problem = ref('');
@@ -320,6 +361,19 @@ const errorSummary = ref<HTMLElement>();
 const dragged = ref('');
 const hovered = ref('');
 
+function copyCanvas(source: WorkflowGraph) {
+    return isWorkflowCanvasGraph(source)
+        ? (JSON.parse(JSON.stringify(source)) as WorkflowCanvasGraph)
+        : null;
+}
+
+function upgrade() {
+    if (!graph.value) return;
+    const { start, end } = graph.value;
+    canvasGraph.value = upgradeWorkflowGraph(stagedGraph(start, stages.value, end));
+    announcement.value = '已载入自定义画布预览，保存草稿后应用。';
+}
+
 function copyStages() {
     return graph.value?.stages.map((stage) => stage.map((node) => ({ ...node }))) ?? [];
 }
@@ -328,6 +382,7 @@ function adopt(snapshot: ApiResponse<WorkflowDetail>) {
     baseline.value = snapshot;
     title.value = snapshot.data.workflow.title;
     stages.value = copyStages();
+    canvasGraph.value = copyCanvas(snapshot.data.draft);
     if (!selectedStudy.value) selectedId.value = studies.value[0]?.id;
     conflict.value = false;
 }
@@ -344,7 +399,7 @@ watch(
     },
 );
 watch(
-    [title, stages],
+    [title, stages, canvasGraph],
     () => {
         announcement.value = '';
     },
@@ -506,8 +561,15 @@ async function reload() {
     }
 }
 
+watch(dirty, (value) => emit('dirty', value), { immediate: true });
+
 async function save() {
-    if (!graph.value || busy.value || !dirty.value || conflict.value) return;
+    if (busy.value || !dirty.value || conflict.value) return;
+    if (canvasGraph.value) {
+        await write('save', { title: title.value.trim(), graph: canvasGraph.value });
+        return;
+    }
+    if (!graph.value) return;
     const unassigned = studies.value.find((node) => !node.taskId);
     if (unassigned) {
         selectedId.value = unassigned.id;

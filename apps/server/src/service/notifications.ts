@@ -13,14 +13,28 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const invalidCursor = () => new ApiError(400, 'INVALID_CURSOR', '通知游标无效或与筛选范围不一致');
 const missing = () => new ApiError(404, 'NOT_FOUND', '资源不存在');
 function dto(row: StoredNotification) {
-    return parseContract(NotificationSchema, {
+    const shared = {
         id: row.id,
+        readAt: row.readAt?.toISOString() ?? null,
+        createdAt: row.createdAt.toISOString(),
+    };
+    if ('workflowRunId' in row) {
+        return parseContract(NotificationSchema, {
+            ...shared,
+            kind: 'workflow',
+            workflowRunId: row.workflowRunId,
+            nodeId: row.nodeId,
+            ...(row.artifactNodeId === null ? {} : { artifactNodeId: row.artifactNodeId }),
+            title: row.title,
+            body: row.body,
+        });
+    }
+    return parseContract(NotificationSchema, {
+        ...shared,
         runId: row.runId,
         taskId: row.run.taskId,
         reportId: row.reportId,
         kind: row.kind,
-        readAt: row.readAt?.toISOString() ?? null,
-        createdAt: row.createdAt.toISOString(),
         runStatus: row.run.status,
         mode: row.run.mode,
         failureCode: row.run.failureCode,
@@ -37,7 +51,7 @@ export function createNotificationService(services: ApiServices) {
                 page.unread ?? null,
             ]);
             const take = Math.min(page.limit ?? 50, 100);
-            let cursor: { id: string; time: Date } | undefined;
+            let cursor: { id: string; source: 'research' | 'workflow' } | undefined;
             if (page.cursor) {
                 try {
                     const parsed = JSON.parse(
@@ -45,17 +59,21 @@ export function createNotificationService(services: ApiServices) {
                     );
                     if (
                         parsed.scope !== scope ||
+                        typeof parsed.id !== 'string' ||
                         !uuid.test(parsed.id) ||
+                        (parsed.source !== undefined &&
+                            parsed.source !== 'research' &&
+                            parsed.source !== 'workflow') ||
                         typeof parsed.time !== 'string'
                     )
                         throw invalidCursor();
                     const time = new Date(parsed.time);
                     if (!Number.isFinite(time.getTime()) || time.toISOString() !== parsed.time)
                         throw invalidCursor();
-                    const anchor = await repo.anchor(userId, parsed.id);
+                    const anchor = await repo.anchor(userId, parsed.id, parsed.source);
                     if (!anchor || anchor.createdAt.getTime() !== time.getTime())
                         throw invalidCursor();
-                    cursor = { id: parsed.id, time };
+                    cursor = { id: parsed.id, source: anchor.source };
                 } catch {
                     throw invalidCursor();
                 }
@@ -69,6 +87,7 @@ export function createNotificationService(services: ApiServices) {
                         ? Buffer.from(
                               JSON.stringify({
                                   id: last.id,
+                                  source: 'workflowRunId' in last ? 'workflow' : 'research',
                                   time: last.createdAt.toISOString(),
                                   scope,
                               }),

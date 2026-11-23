@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import { PageQuerySchema, TaskConfigSchema, UuidSchema, parseContract } from '@scova/models';
 import {
+    isWorkflowCanvasGraph,
     WorkflowDetailSchema,
     WorkflowDraftInputSchema,
     WorkflowRunSchema,
@@ -8,11 +10,18 @@ import {
     WorkflowStartInputSchema,
     WorkflowVersionSchema,
     type WorkflowBinding,
+    type WorkflowGraph,
 } from '@scova/models';
-import type { WorkflowRow, WorkflowRunRow, WorkflowVersionRow } from '@scova/db';
+import type {
+    DatabaseTransaction,
+    WorkflowRow,
+    WorkflowRunRow,
+    WorkflowVersionRow,
+} from '@scova/db';
 import type { ApiServices } from '@/app/services';
 import { createTaskStore } from '@/repo/tasks.ts';
 import { bindWorkflowResearch } from '@/repo/workflow-research.ts';
+import { cancelCanvasRun } from '@/service/workflow-canvas-run.ts';
 import { advanceWorkflow } from '@/service/workflow-checkpoint.ts';
 import {
     activeWorkflowStatuses,
@@ -20,7 +29,11 @@ import {
     type WorkflowStore,
 } from '@/repo/workflows.ts';
 import { ownedTask } from '@/service/tasks.ts';
-import { workflowCheckpointNodes, workflowStages } from '@/service/workflow-graph.ts';
+import {
+    workflowCanvasOrder,
+    workflowCheckpointNodes,
+    workflowStages,
+} from '@/service/workflow-graph.ts';
 import { ApiError } from '@/utils/errors.ts';
 
 function requireId(id: string) {
@@ -69,14 +82,20 @@ function detail(row: WorkflowRow, version: WorkflowVersionRow | null) {
         publishedVersion: version ? versionDto(version) : null,
     });
 }
-function runDto(row: WorkflowRunRow) {
+function runDto(row: WorkflowRunRow, includeOutputs = true) {
     return parseContract(WorkflowRunSchema, {
         id: row.id,
         workflowId: row.workflowId,
         versionId: row.versionId,
         mode: row.mode,
         status: row.status,
-        nodes: row.nodesJson,
+        nodes: includeOutputs
+            ? row.nodesJson
+            : row.nodesJson.map(({ output: _output, ...node }) => node),
+        ...(row.preview ? { preview: true } : {}),
+        ...(includeOutputs && row.draftPreviewJson
+            ? { draftSnapshot: row.draftPreviewJson.graph }
+            : {}),
         createdAt: row.createdAt.toISOString(),
         startedAt: row.startedAt?.toISOString() ?? null,
         finishedAt: row.finishedAt?.toISOString() ?? null,
@@ -99,6 +118,50 @@ function page<Row extends { id: string }, Item>(
     if (!rows) invalidCursor();
     const items = rows.slice(0, limit).map(map);
     return { items, nextCursor: rows.length > limit ? rows[limit - 1]!.id : null };
+}
+
+async function freezeBindings(
+    tx: DatabaseTransaction,
+    userId: string,
+    graph: WorkflowGraph,
+): Promise<WorkflowBinding[]> {
+    const ordered = isWorkflowCanvasGraph(graph)
+        ? workflowCanvasOrder(graph)
+        : workflowStages(graph).flat();
+    const taskIds = [
+        ...new Set(
+            ordered.flatMap((node) => (node.type === 'study' ? [node.taskId.toLowerCase()] : [])),
+        ),
+    ].sort();
+    const tasks = createTaskStore(tx);
+    const pinned = new Map<string, string>();
+    // Acquire shared Task locks in UUID order even when workflows order their nodes differently.
+    for (const taskId of taskIds) {
+        await tasks.lockTask(taskId, userId);
+        const task = await ownedTask(taskId, userId, tasks);
+        if (task.status === 'archived')
+            throw new ApiError(409, 'TASK_ARCHIVED', '已归档任务不能发布为研究节点');
+        const version =
+            task.currentVersionId &&
+            (await tasks.findVersion(task.currentVersionId, userId, taskId));
+        if (!version) throw new ApiError(422, 'TASK_VERSION_MISSING', '研究节点缺少有效任务配置');
+        const config = parseContract(TaskConfigSchema, version.configJson);
+        if (
+            config.agentProviderId &&
+            !(await tasks.findAgentProvider(userId, config.agentProviderId))
+        )
+            throw new ApiError(
+                422,
+                'AGENT_PROVIDER_UNAVAILABLE',
+                '研究节点的执行 Agent 配置不可用',
+            );
+        pinned.set(taskId, version.id);
+    }
+    return ordered.flatMap((node) => {
+        if (node.type !== 'study') return [];
+        const taskId = node.taskId.toLowerCase();
+        return [{ nodeId: node.id, taskId, taskVersionId: pinned.get(taskId)! }];
+    });
 }
 
 export function createWorkflowService(services: Pick<ApiServices, 'db' | 'clock'>) {
@@ -166,44 +229,7 @@ export function createWorkflowService(services: Pick<ApiServices, 'db' | 'clock'
                 checkRevision(row, expectedRevision);
                 const latest = await store.findVersion(userId, row.id);
                 if (latest?.draftRevision === row.revision) return detail(row, latest);
-                const ordered = workflowStages(row.draftJson).flat();
-                const taskIds = [
-                    ...new Set(
-                        ordered.flatMap((node) =>
-                            node.type === 'study' ? [node.taskId.toLowerCase()] : [],
-                        ),
-                    ),
-                ].sort();
-                const tasks = createTaskStore(tx);
-                const pinned = new Map<string, string>();
-                // Acquire shared Task locks in UUID order even when workflows order their nodes differently.
-                for (const taskId of taskIds) {
-                    await tasks.lockTask(taskId, userId);
-                    const task = await ownedTask(taskId, userId, tasks);
-                    if (task.status === 'archived')
-                        throw new ApiError(409, 'TASK_ARCHIVED', '已归档任务不能发布为研究节点');
-                    const version =
-                        task.currentVersionId &&
-                        (await tasks.findVersion(task.currentVersionId, userId, taskId));
-                    if (!version)
-                        throw new ApiError(422, 'TASK_VERSION_MISSING', '研究节点缺少有效任务配置');
-                    const config = parseContract(TaskConfigSchema, version.configJson);
-                    if (
-                        config.agentProviderId &&
-                        !(await tasks.findAgentProvider(userId, config.agentProviderId))
-                    )
-                        throw new ApiError(
-                            422,
-                            'AGENT_PROVIDER_UNAVAILABLE',
-                            '研究节点的执行 Agent 配置不可用',
-                        );
-                    pinned.set(taskId, version.id);
-                }
-                const bindings: WorkflowBinding[] = ordered.flatMap((node) => {
-                    if (node.type !== 'study') return [];
-                    const taskId = node.taskId.toLowerCase();
-                    return [{ nodeId: node.id, taskId, taskVersionId: pinned.get(taskId)! }];
-                });
+                const bindings = await freezeBindings(tx, userId, row.draftJson);
                 const version = await store.publish({
                     userId,
                     workflowId: row.id,
@@ -218,13 +244,34 @@ export function createWorkflowService(services: Pick<ApiServices, 'db' | 'clock'
             });
         },
         async start(userId: string, workflowId: string, input: unknown, key: string) {
-            const { versionId, mode = 'live' } = parseContract(WorkflowStartInputSchema, input);
+            const {
+                versionId,
+                draftRevision,
+                mode = 'live',
+                preview = false,
+                input: canvasInput,
+            } = parseContract(WorkflowStartInputSchema, input);
+            if (
+                (versionId === undefined) === (draftRevision === undefined) ||
+                (draftRevision !== undefined && !preview)
+            )
+                throw new ApiError(
+                    422,
+                    'WORKFLOW_RUN_SOURCE_INVALID',
+                    '请选择发布版本，或指定要试跑的草稿修订',
+                );
             const keyHash = createHash('sha256').update(key).digest('hex');
-            return repository.transaction(async (store) => {
+            return repository.transaction(async (store, tx) => {
                 const workflow = await requireWorkflow(store, userId, workflowId, true);
                 const replay = await store.findStartedRun(userId, workflow.id, keyHash);
                 if (replay) {
-                    if (replay.versionId !== versionId.toLowerCase() || replay.mode !== mode)
+                    if (
+                        replay.versionId !== (versionId?.toLowerCase() ?? null) ||
+                        replay.mode !== mode ||
+                        replay.preview !== preview ||
+                        replay.draftPreviewJson?.revision !== draftRevision ||
+                        !isDeepStrictEqual(replay.inputJson, canvasInput ?? null)
+                    )
                         throw new ApiError(
                             409,
                             'IDEMPOTENCY_PAYLOAD_MISMATCH',
@@ -232,14 +279,43 @@ export function createWorkflowService(services: Pick<ApiServices, 'db' | 'clock'
                         );
                     return { run: runDto(replay), reused: true };
                 }
-                const version = await store.findVersion(userId, workflow.id, versionId);
-                if (!version) notFound();
-                const nodes = workflowCheckpointNodes(version.graphJson, version.bindingsJson);
+                let version: WorkflowVersionRow | null = null;
+                let graph: WorkflowGraph;
+                let bindings: WorkflowBinding[];
+                if (versionId) {
+                    version = await store.findVersion(userId, workflow.id, versionId);
+                    if (!version) notFound();
+                    graph = version.graphJson;
+                    bindings = version.bindingsJson;
+                } else {
+                    checkRevision(workflow, draftRevision!);
+                    graph = workflow.draftJson;
+                    bindings = await freezeBindings(tx, userId, graph);
+                }
+                const canvas = isWorkflowCanvasGraph(graph);
+                if (!canvas && (preview || canvasInput))
+                    throw new ApiError(
+                        422,
+                        'WORKFLOW_CANVAS_REQUIRED',
+                        '请先将工作流升级为自定义画布',
+                    );
+                if (
+                    canvasInput?.providerId &&
+                    !(await createTaskStore(tx).findAgentProvider(userId, canvasInput.providerId))
+                )
+                    throw new ApiError(422, 'AGENT_PROVIDER_UNAVAILABLE', '所选模型不可用');
+                const nodes = workflowCheckpointNodes(graph, bindings);
                 const now = services.clock();
                 const run = await store.insertRun({
                     userId,
                     workflowId: workflow.id,
-                    versionId: version.id,
+                    versionId: version?.id ?? null,
+                    inputJson: canvasInput ?? null,
+                    preview,
+                    draftPreviewJson:
+                        isWorkflowCanvasGraph(graph) && draftRevision !== undefined
+                            ? { revision: draftRevision, graph }
+                            : null,
                     mode,
                     nodesJson: nodes,
                     startKeyHash: keyHash,
@@ -256,7 +332,7 @@ export function createWorkflowService(services: Pick<ApiServices, 'db' | 'clock'
             return page(
                 await store.listRuns(userId, workflow.id, limit + 1, cursor),
                 limit,
-                runDto,
+                (row) => runDto(row, false),
             );
         },
         async getRun(userId: string, runId: string) {
@@ -271,6 +347,18 @@ export function createWorkflowService(services: Pick<ApiServices, 'db' | 'clock'
                 )
                     return runDto(row);
                 const now = services.clock();
+                const version = row.versionId
+                    ? await store.findVersion(userId, row.workflowId, row.versionId)
+                    : null;
+                const graph = row.draftPreviewJson?.graph ?? version?.graphJson;
+                if (graph && isWorkflowCanvasGraph(graph)) {
+                    return runDto(
+                        await store.writeCheckpoint(
+                            row,
+                            await cancelCanvasRun(row, now, bindWorkflowResearch(tx, row, now)),
+                        ),
+                    );
+                }
                 const checkpoint = await advanceWorkflow(
                     { ...row, status: 'cancel_requested' },
                     now,

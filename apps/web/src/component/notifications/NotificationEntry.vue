@@ -14,8 +14,11 @@
                 <strong class="text-default font-medium">{{
                     item.readAt ? '已读' : '未读'
                 }}</strong>
-                <span>{{ item.mode === 'demo' ? '演示执行' : '任务执行' }}</span>
-                <span>{{ notificationStatus[item.runStatus] }}</span>
+                <span v-if="item.kind === 'workflow'">工作流通知</span>
+                <template v-else>
+                    <span>{{ item.mode === 'demo' ? '演示执行' : '任务执行' }}</span>
+                    <span>{{ notificationStatus[item.runStatus] }}</span>
+                </template>
                 <time :datetime="item.createdAt">{{ localTaskTime(item.createdAt) }}</time>
             </p>
             <p class="m-0">{{ notificationMessage(item) }}</p>
@@ -24,8 +27,12 @@
                 :id="`notification-target-${item.id}`"
                 :to="notificationTarget(item)"
             >
-                <app-icon :name="item.reportId ? 'report' : 'run'" />{{
-                    item.reportId ? '阅读报告' : '查看执行'
+                <app-icon :name="item.kind !== 'workflow' && item.reportId ? 'report' : 'run'" />{{
+                    item.kind === 'workflow'
+                        ? '查看工作流运行'
+                        : item.reportId
+                          ? '阅读报告'
+                          : '查看执行'
                 }}<app-icon name="chevron" />
             </router-link>
         </div>

@@ -48,5 +48,8 @@ vp run api:openapi:check
 
 - `POST /api/v1/tasks/start` 使用任务配置和必需的 `Idempotency-Key` 创建未归类任务并排队一次执行，返回 `{ detail, runId }`。`GET /api/v1/tasks/:taskId/project` 返回当前归属，未归类时为 `{ project: null }`。对同一路径 `POST` 可为未归类任务原子创建项目并归类，若已有归属则返回 409。
 - `/api/v1/projects` 分页读取及创建项目。项目详情包含关联任务分页和最近执行、报告。使用 `PUT` 或 `DELETE /api/v1/projects/:projectId/tasks/:taskId` 关联、移动或解除关联。删除项目时保留任务、计划和历史成果。
-- `/api/v1/workflows` 管理工作流草稿，保存和发布使用 `If-Match`，启动使用 `Idempotency-Key`。发布版本冻结可执行图与研究任务版本，`/workflows/:workflowId/versions` 列出所有已发布版本。`/workflow-runs/:runId` 返回持久化节点快照和研究子执行标识，客户端据此恢复展示；子执行继续提供原有 SSE。
+- `/api/v1/workflows` 管理工作流草稿。保存和发布使用 `If-Match`。新版画布用有向无环图保存节点及依赖，并单独保存坐标和分组。发布冻结图及研究任务版本，`/workflows/:workflowId/versions` 返回已发布版本。
+- 工作流启动使用 `Idempotency-Key`。正式运行传入 `versionId`，试跑已保存的画布需指定 `draftRevision` 和 `preview: true`。`/workflow-runs/:runId` 返回归属当前账号的节点状态、成果、通知以及研究子执行标识。研究子执行继续提供原有 SSE。
+- `/api/v1/workflow-templates` 返回内置和个人模板。模板的启动与复制接口使用固定模板版本，复制会建立独立草稿。内置模板间的文件、模型和通知配置通过本次运行参数传入。
+- `/api/v1/notifications` 同时返回研究通知和 `kind: workflow` 的站内通知。后者引用实际工作流运行，可附带交付节点标识。
 - 报告的 `charts/source-hosts` 生成可读的来源分组数据和私有 SVG 下载，下载有效期 24 小时。`attachments` 接收 UTF-8 CSV 原始字节，单件上限 256 KiB，支持按逻辑记录区间返回原文件行号。解析失败仍保留原件。所有资源按报告和账号授权，随报告删除回收。
