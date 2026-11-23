@@ -5,6 +5,7 @@ import {
     gt,
     isNull,
     asc,
+    getTableColumns,
     type DatabaseClient,
     type Run,
     type RunEvent,
@@ -25,6 +26,8 @@ export interface EventPage {
     reset: boolean;
 }
 
+const pageSize = 100;
+
 /** 短快照同时读取终态与事件上界；不持有跨网络等待的事务或 Run 锁。 */
 export function createRunEventRepository(database: () => DatabaseClient, clock: () => Date) {
     return {
@@ -36,99 +39,85 @@ export function createRunEventRepository(database: () => DatabaseClient, clock: 
         ): Promise<EventPage> {
             return database().transaction(
                 async (tx) => {
-                    const current = await tx.query.sessions
-                        .findFirst({
-                            where: and(
+                    const eventScope = and(
+                        eq(tables.runEvents.runId, tables.runs.id),
+                        eq(tables.runEvents.userId, tables.runs.userId),
+                    );
+                    // A nullable Run distinguishes a valid session without access (404) from
+                    // an expired/revoked session (401). Correlate event lookups to that Run.
+                    const [head] = await tx
+                        .select({
+                            run: getTableColumns(tables.runs),
+                            projectionSeq: tables.runGraphSnapshots.seq,
+                            retainedSeq: querySql<number | null>`(
+                                select max(${tables.runEvents.seq})
+                                from ${tables.runEvents}
+                                where ${eventScope}
+                            )`,
+                            previousSeq: lastEventId
+                                ? querySql<number | null>`(
+                                    select ${tables.runEvents.seq}
+                                    from ${tables.runEvents}
+                                    where ${and(eventScope, eq(tables.runEvents.id, lastEventId))}
+                                )`
+                                : querySql<null>`null`,
+                        })
+                        .from(tables.sessions)
+                        .leftJoin(
+                            tables.runs,
+                            and(
+                                eq(tables.runs.id, runId),
+                                eq(tables.runs.userId, tables.sessions.userId),
+                            ),
+                        )
+                        .leftJoin(
+                            tables.runGraphSnapshots,
+                            and(
+                                eq(tables.runGraphSnapshots.runId, tables.runs.id),
+                                eq(tables.runGraphSnapshots.userId, tables.runs.userId),
+                            ),
+                        )
+                        .where(
+                            and(
                                 eq(tables.sessions.id, session.id),
                                 eq(tables.sessions.userId, session.userId),
                                 isNull(tables.sessions.revokedAt),
                                 gt(tables.sessions.expiresAt, clock()),
                             ),
-                            columns: { id: true },
-                        })
-                        .then((row) => row ?? null);
-                    if (!current) throw new ApiError(401, 'SESSION_REQUIRED', '请先登录');
-                    const run = await tx.query.runs
-                        .findFirst({
-                            where: and(
-                                eq(tables.runs.id, runId),
-                                eq(tables.runs.userId, session.userId),
-                            ),
-                        })
-                        .then((row) => row ?? null);
-                    if (!run) throw new ApiError(404, 'NOT_FOUND', '资源不存在');
-                    const [bounds] = await tx
-                        .select({
-                            minimum: querySql<number | null>`min(${tables.runEvents.seq})`,
-                            maximum: querySql<number | null>`max(${tables.runEvents.seq})`,
-                        })
-                        .from(tables.runEvents)
-                        .where(
-                            and(
-                                eq(tables.runEvents.runId, runId),
-                                eq(tables.runEvents.userId, session.userId),
-                            ),
                         );
-                    const [projection] = await tx
-                        .select({ seq: tables.runGraphSnapshots.seq })
-                        .from(tables.runGraphSnapshots)
-                        .where(
-                            and(
-                                eq(tables.runGraphSnapshots.runId, runId),
-                                eq(tables.runGraphSnapshots.userId, session.userId),
-                            ),
+                    if (!head) throw new ApiError(401, 'SESSION_REQUIRED', '请先登录');
+                    if (!head.run) throw new ApiError(404, 'NOT_FOUND', '资源不存在');
+                    const { run, previousSeq } = head;
+                    const retained = head.retainedSeq ?? 0;
+                    const latest = Math.max(retained, head.projectionSeq ?? 0);
+                    if (lastEventId && previousSeq === null)
+                        return { run, latest, cursor: latest, reset: true, events: [] };
+                    if (previousSeq !== null && after !== undefined && after !== previousSeq)
+                        throw new ApiError(
+                            400,
+                            'EVENT_CURSOR_MISMATCH',
+                            'after 与 Last-Event-ID 必须指向同一事件',
                         );
-                    const latest = Math.max(bounds!.maximum ?? 0, projection?.seq ?? 0);
-                    let cursor = after ?? 0;
-                    let reset = false;
-                    if (lastEventId) {
-                        const previous = await tx.query.runEvents
-                            .findFirst({
-                                where: and(
-                                    eq(tables.runEvents.id, lastEventId),
-                                    eq(tables.runEvents.runId, runId),
-                                    eq(tables.runEvents.userId, session.userId),
-                                ),
-                                columns: { seq: true },
-                            })
-                            .then((row) => row ?? null);
-                        if (!previous) reset = true;
-                        else {
-                            if (after !== undefined && after !== previous.seq)
-                                throw new ApiError(
-                                    400,
-                                    'EVENT_CURSOR_MISMATCH',
-                                    'after 与 Last-Event-ID 必须指向同一事件',
-                                );
-                            cursor = previous.seq;
-                        }
-                    }
-                    if (!reset && cursor > latest)
+                    const cursor = previousSeq ?? after ?? 0;
+                    if (cursor > latest)
                         throw new ApiError(400, 'INVALID_EVENT_CURSOR', '事件游标超出当前执行范围');
-                    if (bounds!.minimum !== null && cursor < bounds!.minimum - 1) reset = true;
-                    if (bounds!.minimum === null && cursor < latest) reset = true;
-                    const events = reset
-                        ? []
-                        : await tx.query.runEvents.findMany({
-                              where: and(
-                                  eq(tables.runEvents.runId, runId),
-                                  eq(tables.runEvents.userId, session.userId),
-                                  gt(tables.runEvents.seq, cursor),
-                              ),
-                              orderBy: [asc(tables.runEvents.seq)],
-                              limit: 100,
-                          });
-                    if (
-                        events.some(
-                            (event, index) =>
-                                event.seq !== (index === 0 ? cursor : events[index - 1]!.seq) + 1,
-                        )
-                    )
-                        reset = true;
-                    // The durable high-water may outlive a pruned tail as well as a prefix.
-                    // A short page below that high-water proves retained events cannot bridge it.
-                    if (!reset && events.length < 100 && (events.at(-1)?.seq ?? cursor) < latest)
-                        reset = true;
+                    const events =
+                        cursor < retained
+                            ? await tx.query.runEvents.findMany({
+                                  where: and(
+                                      eq(tables.runEvents.runId, runId),
+                                      eq(tables.runEvents.userId, session.userId),
+                                      gt(tables.runEvents.seq, cursor),
+                                  ),
+                                  orderBy: [asc(tables.runEvents.seq)],
+                                  limit: pageSize,
+                              })
+                            : [];
+                    // A discontinuity detects a pruned prefix or interior. A short page below
+                    // the durable projection detects a pruned tail, including an empty table.
+                    const reset =
+                        events.some((event, index) => event.seq !== cursor + index + 1) ||
+                        (events.length < pageSize && (events.at(-1)?.seq ?? cursor) < latest);
                     return {
                         run,
                         latest,

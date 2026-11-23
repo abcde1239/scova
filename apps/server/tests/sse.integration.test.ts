@@ -7,6 +7,7 @@ import { createObservedDatabase } from './support/query-observer.ts';
 import { afterAll, beforeAll, describe, expect, it } from 'vite-plus/test';
 import { createApiApp } from '../src/app/index.ts';
 import { createDefaultServices } from '../src/app/services.ts';
+import { createRunEventRepository } from '../src/repo/run-events.ts';
 import { csrfForSession, tokenHash } from '../src/utils/security.ts';
 import { outboxDatabase } from '../../worker/tests/support/outbox-database.ts';
 import { seedRun } from '../../worker/tests/support/run-database.ts';
@@ -251,6 +252,27 @@ describe('SSE 真实 PostgreSQL 回放与连接清理', () => {
         expect((await reader.read()).done).toBe(true);
     });
 
+    it('追平后每次空轮询只执行一条读取 SQL', async () => {
+        const s = await seed(3);
+        const statements: string[] = [];
+        const database = createObservedDatabase(fixture.databaseUrl, {
+            before(query) {
+                statements.push(query.text);
+            },
+        });
+        observedClients.push(database);
+        const repository = createRunEventRepository(
+            () => database,
+            () => new Date(),
+        );
+        const page = await repository.readPage(s.session, s.run.id, 3);
+        expect(page).toMatchObject({ cursor: 3, latest: 3, reset: false, events: [] });
+        expect(statements).toHaveLength(3);
+        expect(statements[0]).toMatch(/^begin\b/i);
+        expect(statements[1]).toMatch(/^select\b/i);
+        expect(statements[2]).toMatch(/^commit\b/i);
+    });
+
     it('空页快照与终态并发提交，下一快照仍发送最后事件', async () => {
         const s = await seed();
         let armed = false;
@@ -269,6 +291,7 @@ describe('SSE 真实 PostgreSQL 回放与连接清理', () => {
         armed = true;
         let event = await reader.read();
         while (text(event.value).startsWith(':')) event = await reader.read();
+        expect(armed).toBe(false);
         expect(message(text(event.value))?.seq).toBe(2);
         expect((await reader.read()).done).toBe(true);
     });

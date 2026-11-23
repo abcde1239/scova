@@ -38,3 +38,18 @@ vp run test:search:read
 - 十个真实会话并发读取四类列表。每账号 20 个任务、400 个 Run/Report/Inbox；每接口预热 3 轮，采样 20 轮，每轮 10 并发，完整 HTTP 响应与 JSON 解析 p95 要求低于 500ms。测试输出数据规模、运行时、平台和实测值；这是本机 Node loopback 基准。
 
 上述后端集成用例不证明前端页面或浏览器用户旅程；`ready` 的浏览器任务提供独立证据。固定供应商响应不能证明远程模型或公网网站可用；来源验证码、抓取失败、官方身份未核验等情况仍须如实报告不足。
+
+## SSE 与 Outbox 定向验证
+
+启动专用 PostgreSQL 和 Redis 后，从仓库根目录依次运行以下命令。
+
+```sh
+vp test apps/server/tests/sse.test.ts
+vp test --config tests/sse.vite.config.ts
+vp test --config tests/acceptance.vite.config.ts apps/server/tests/acceptance-sse.integration.test.ts
+vp test --config tests/worker-outbox.vite.config.ts apps/worker/tests/outbox.integration.test.ts apps/worker/tests/outbox-architecture.integration.test.ts
+```
+
+SSE 集成验证游标追平后，每次读取在一个可重复读事务内执行一条查询。回放继续覆盖事件缺口、续传、并发提交终态和账号隔离。真实 socket 验收测量新提交事件在已打开连接上可见的时间，上限为两秒。
+
+Outbox 集成验证投递者能跳过被锁定的队首，释放行锁后仍可领取该项。领取租约、BullMQ 发布和投递确认是三个独立步骤。评估发布性能时记录每批 SQL 数、批次耗时和成功发布数。评估 Worker 启动延迟时，另测从入队到执行入口的耗时。

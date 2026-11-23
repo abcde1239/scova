@@ -16,27 +16,21 @@ export function createOutboxRepository(db: DatabaseClient): OutboxRepository {
                 lte(outbox.availableAt, now),
                 or(isNull(outbox.leaseExpiresAt), lte(outbox.leaseExpiresAt, now)),
             );
-            const candidate = await db.query.outbox.findFirst({
-                where: eligible,
-                orderBy: [asc(outbox.availableAt), asc(outbox.id)],
-            });
-            if (!candidate) return null;
-            const updated = await db
+            // Select and take the lease in one statement. A concurrent dispatcher can skip
+            // the row locked by another claim and continue with the next available job.
+            const candidate = db
+                .select({ id: outbox.id })
+                .from(outbox)
+                .where(eligible)
+                .orderBy(asc(outbox.availableAt), asc(outbox.id))
+                .limit(1)
+                .for('update', { skipLocked: true });
+            const [claimed] = await db
                 .update(outbox)
                 .set({ leaseExpiresAt, attempts: sql`${outbox.attempts} + 1` })
-                .where(
-                    and(
-                        eligible,
-                        eq(outbox.id, candidate.id),
-                        eq(outbox.attempts, candidate.attempts),
-                        candidate.leaseExpiresAt === null
-                            ? isNull(outbox.leaseExpiresAt)
-                            : eq(outbox.leaseExpiresAt, candidate.leaseExpiresAt),
-                    ),
-                )
-                .returning({ id: outbox.id });
-            if (updated.length !== 1) return null;
-            return { ...candidate, leaseExpiresAt, attempts: candidate.attempts + 1 };
+                .where(eq(outbox.id, sql`(${candidate})`))
+                .returning();
+            return claimed ? { ...claimed, leaseExpiresAt } : null;
         },
         async ack(item, now) {
             const updated = await db
