@@ -1,4 +1,5 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
+import { mockFixtureSession } from './support/session-sample.ts';
 import type { ResearchNotification } from '../../packages/models/src/notifications.ts';
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -327,6 +328,9 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
         await kindSelect(page).focus();
         await kindSelect(page).press('End');
         await kindSelect(page).press('Enter');
+        await expect(kindSelect(page)).toHaveValue('workflow');
+        await kindSelect(page).press('ArrowUp');
+        await kindSelect(page).press('Enter');
         await expect(kindSelect(page)).toHaveValue('run_issue');
         await expect(kindSelect(page)).toBeFocused();
         await readSelect(page).focus();
@@ -539,3 +543,74 @@ for (const location of ['initial', 'next', 'refresh'] as const) {
         });
     }
 }
+
+test('工作流通知可标记已读并打开本次交付下载', async ({ page }) => {
+    await mockFixtureSession(page);
+    const workflowRunId = id(901);
+    const notice = {
+        id: id(902),
+        kind: 'workflow',
+        workflowRunId,
+        nodeId: 'notify',
+        artifactNodeId: 'deliver',
+        title: '库存预警清单已生成',
+        body: '打开本次交付文件。',
+        createdAt: instant,
+        readAt: null as string | null,
+    };
+    await page.route('**/api/v1/notifications**', async (route) => {
+        if (route.request().method() === 'PATCH') {
+            expect(route.request().postDataJSON()).toEqual({ read: true });
+            notice.readAt = instant;
+            return route.fulfill({ json: notice });
+        }
+        return route.fulfill({ json: { items: [notice], nextCursor: null } });
+    });
+    await page.route(`**/api/v1/workflow-runs/${workflowRunId}`, (route) =>
+        route.fulfill({
+            json: {
+                id: workflowRunId,
+                workflowId: id(903),
+                versionId: id(904),
+                mode: 'live',
+                status: 'succeeded',
+                nodes: [
+                    {
+                        id: 'deliver',
+                        type: 'deliver',
+                        status: 'succeeded',
+                        attempt: 1,
+                        startedAt: instant,
+                        finishedAt: instant,
+                        taskId: null,
+                        taskVersionId: null,
+                        childRunId: null,
+                        childStatus: null,
+                        failureCode: null,
+                        output: {
+                            artifact: {
+                                filename: 'inventory.csv',
+                                format: 'csv',
+                                content: 'name,count\r\nApple,1\r\n',
+                            },
+                        },
+                    },
+                ],
+                createdAt: instant,
+                startedAt: instant,
+                finishedAt: instant,
+                failureCode: null,
+            },
+        }),
+    );
+    await page.goto('/notifications');
+    const card = region(page).getByRole('article', { name: notice.title });
+    await expect(card.getByText(notice.body)).toBeVisible();
+    await card.getByRole('button', { name: '标记已读' }).click();
+    await expect(card.getByRole('button', { name: '恢复未读' })).toBeVisible();
+    await card.getByRole('link', { name: '查看工作流运行' }).click();
+    await expect(page).toHaveURL(new RegExp(`/workflow-runs/${workflowRunId}\\?artifact=deliver$`));
+    const download = page.waitForEvent('download');
+    await page.getByRole('button', { name: '下载 inventory.csv' }).click();
+    expect((await download).suggestedFilename()).toBe('inventory.csv');
+});
