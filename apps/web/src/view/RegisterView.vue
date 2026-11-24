@@ -1,5 +1,5 @@
 <template>
-    <register-form @success="router.replace('/tasks')" />
+    <register-form @success="router.replace('/')" />
 </template>
 
 <script setup lang="ts">

@@ -29,7 +29,7 @@ export default {
         brand: 'Scova',
         language: 'Interface language',
         skip: 'Skip to main content',
-        taskHome: 'Scova, tasks home',
+        workspaceHome: 'Scova, workspace home',
         primaryNav: 'Main navigation',
         toolsNav: 'Global tools',
         breadcrumbs: 'Breadcrumbs',

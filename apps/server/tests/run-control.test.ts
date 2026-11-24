@@ -6,6 +6,8 @@ const mocks = vi.hoisted(() => ({
     publishBatch: vi.fn<() => Promise<number>>(),
     scheduleBatch: vi.fn<() => Promise<number>>(),
     workflowBatch: vi.fn<() => Promise<number>>(),
+    threadResults: vi.fn<() => Promise<number>>(),
+    expireTurns: vi.fn<() => Promise<void>>(),
     findRecoverable: vi.fn<() => Promise<unknown[]>>(),
     enqueueRecovery: vi.fn<() => Promise<number>>(),
     closeQueue: vi.fn<() => Promise<void>>(),
@@ -35,6 +37,11 @@ vi.mock('../src/repo/queue/recoverable-runs.ts', () => ({
 vi.mock('../src/service/workflow-batch.ts', () => ({
     createWorkflowBatch: () => mocks.workflowBatch,
 }));
+vi.mock('../src/service/thread-attachments.ts', () => ({ cleanThreadAttachments: vi.fn() }));
+vi.mock('../src/service/thread-run-results.ts', () => ({
+    createThreadRunResultBatch: () => mocks.threadResults,
+}));
+vi.mock('../src/service/project-turns.ts', () => ({ expireProjectTurns: mocks.expireTurns }));
 vi.mock('../src/service/outbox.ts', () => ({
     OutboxService: class {
         dispatchOnce = mocks.publishBatch;
@@ -59,6 +66,8 @@ beforeEach(() => {
     mocks.publishBatch.mockResolvedValue(0);
     mocks.scheduleBatch.mockResolvedValue(0);
     mocks.workflowBatch.mockResolvedValue(0);
+    mocks.threadResults.mockResolvedValue(0);
+    mocks.expireTurns.mockResolvedValue(undefined);
     mocks.findRecoverable.mockResolvedValue([]);
     mocks.enqueueRecovery.mockResolvedValue(0);
 });
@@ -82,6 +91,8 @@ describe('Server Run 控制面', () => {
             );
             expect(mocks.publishBatch).toHaveBeenCalledOnce();
             expect(mocks.workflowBatch).toHaveBeenCalled();
+            expect(mocks.threadResults).toHaveBeenCalled();
+            expect(mocks.expireTurns).toHaveBeenCalled();
             const stop = control.stop();
             expect(control.stop()).toBe(stop);
             expect(mocks.closeQueue).not.toHaveBeenCalled();

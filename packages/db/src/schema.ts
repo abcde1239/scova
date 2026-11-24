@@ -145,4 +145,16 @@ export {
     questionEvidenceRelations,
 } from './schema/relations/questions.ts';
 export { projects, projectTasks } from './schema/projects.ts';
+export { projectSettings } from './schema/project-settings.ts';
 export { projectConversationTurns, projectResearchDrafts } from './schema/project-conversations.ts';
+export {
+    projectThreadItems,
+    projectThreadRunOrigins,
+    projectThreads,
+    type ProjectThreadItemRow,
+    type ProjectThreadRow,
+} from './schema/project-conversations.ts';
+export {
+    projectThreadAttachments,
+    type ProjectThreadAttachmentRow,
+} from './schema/project-thread-attachments.ts';

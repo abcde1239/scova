@@ -58,6 +58,7 @@
                         <app-icon name="close" />
                     </button>
                 </div>
+                <slot name="projects" />
                 <nav class="menu-panel" :aria-label="t('shell.menu')">
                     <router-link
                         v-for="item in items"
@@ -154,7 +155,7 @@ function resize() {
 function containFocus(event: KeyboardEvent) {
     const controls = [
         ...(panel.value?.querySelectorAll<HTMLElement>(
-            'a[href], button:not(:disabled), [tabindex="0"]',
+            'a[href], button:not(:disabled), input:not(:disabled), summary, [tabindex="0"]',
         ) ?? []),
     ].filter((element) => element.getClientRects().length > 0);
     const first = controls[0];

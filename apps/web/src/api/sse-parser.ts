@@ -9,12 +9,12 @@ export type SseParseErrorCode =
     | 'INCOMPLETE_FRAME'
     | 'PARSER_CLOSED';
 
-export class SseParseError extends Error {
+export class SseParseError<T = SseMessage> extends Error {
     readonly code: SseParseErrorCode;
     /** 当前调用在错误帧之前已经完成校验的消息，供调用方按顺序处理。 */
-    readonly completedMessages: readonly SseMessage[];
+    readonly completedMessages: readonly T[];
 
-    constructor(code: SseParseErrorCode, completedMessages: SseMessage[] = []) {
+    constructor(code: SseParseErrorCode, completedMessages: T[] = []) {
         super(`SSE 解析失败：${code}`);
         this.name = 'SseParseError';
         this.code = code;
@@ -28,6 +28,26 @@ export interface SseParserOptions {
     maxFrameBytes?: number;
 }
 
+type SseFrame = { data: unknown; event: string | undefined; id: string | undefined };
+
+export function createSseParser({ runId, maxFrameBytes }: SseParserOptions) {
+    parseContract(UuidSchema, runId);
+    return createSseFrameParser((frame, fail) => {
+        let message: SseMessage;
+        try {
+            message = parseContract(SseMessageSchema, frame.data);
+        } catch {
+            return fail('INVALID_MESSAGE');
+        }
+        if (message.runId !== runId || frame.event !== message.type) fail('INVALID_ENVELOPE');
+        if (message.type === 'stream.reset') {
+            if (frame.id !== undefined || message.payload.snapshot.id !== runId)
+                fail('INVALID_ENVELOPE');
+        } else if (frame.id !== message.eventId) fail('INVALID_ENVELOPE');
+        return message;
+    }, maxFrameBytes);
+}
+
 /**
  * 只解析完整空行分隔的数据帧，不持有连接或游标。
  * CRLF 可跨 chunk；按完整行解码，保留跨 chunk 的 UTF-8 字节。
@@ -35,8 +55,10 @@ export interface SseParserOptions {
  * 失败调用中的完整消息由 SseParseError.completedMessages 返回，避免因分片不同丢失有效帧。
  * 解析错误后实例不可复用；重连应新建实例，游标只由已处理业务事件推进。
  */
-export function createSseParser({ runId, maxFrameBytes = 65_536 }: SseParserOptions) {
-    parseContract(UuidSchema, runId);
+export function createSseFrameParser<T>(
+    readMessage: (frame: SseFrame, fail: (code: SseParseErrorCode) => never) => T,
+    maxFrameBytes = 65_536,
+) {
     if (!Number.isSafeInteger(maxFrameBytes) || maxFrameBytes < 1)
         throw new RangeError('SSE 帧上限必须为正安全整数');
 
@@ -68,7 +90,7 @@ export function createSseParser({ runId, maxFrameBytes = 65_536 }: SseParserOpti
             return fail('INVALID_UTF8');
         }
     };
-    const dispatch = (messages: SseMessage[]) => {
+    const dispatch = (messages: T[]) => {
         if (data.length) {
             let input: unknown;
             try {
@@ -76,25 +98,14 @@ export function createSseParser({ runId, maxFrameBytes = 65_536 }: SseParserOpti
             } catch {
                 fail('INVALID_JSON');
             }
-            let message: SseMessage;
-            try {
-                message = parseContract(SseMessageSchema, input);
-            } catch {
-                return fail('INVALID_MESSAGE');
-            }
-            if (message.runId !== runId || event !== message.type) fail('INVALID_ENVELOPE');
-            if (message.type === 'stream.reset') {
-                if (id !== undefined || message.payload.snapshot.id !== runId)
-                    fail('INVALID_ENVELOPE');
-            } else if (id !== message.eventId) fail('INVALID_ENVELOPE');
-            messages.push(message);
+            messages.push(readMessage({ data: input, event, id }, fail));
         }
         data = [];
         event = undefined;
         id = undefined;
         frameBytes = 0;
     };
-    const endLine = (messages: SseMessage[]) => {
+    const endLine = (messages: T[]) => {
         let line = decodeLine();
         lineBytes = [];
         if (firstLine) {
@@ -120,9 +131,9 @@ export function createSseParser({ runId, maxFrameBytes = 65_536 }: SseParserOpti
     };
 
     return {
-        push(chunk: Uint8Array): SseMessage[] {
+        push(chunk: Uint8Array): T[] {
             checkOpen();
-            const messages: SseMessage[] = (completedMessages = []);
+            const messages: T[] = (completedMessages = []);
             for (const byte of chunk) {
                 if (pendingCr) {
                     pendingCr = false;
@@ -140,9 +151,9 @@ export function createSseParser({ runId, maxFrameBytes = 65_536 }: SseParserOpti
             }
             return messages;
         },
-        finish(): SseMessage[] {
+        finish(): T[] {
             checkOpen();
-            const messages: SseMessage[] = (completedMessages = []);
+            const messages: T[] = (completedMessages = []);
             if (pendingCr) {
                 pendingCr = false;
                 endLine(messages);

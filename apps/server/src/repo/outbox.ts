@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, isNull, lte, or, outbox, sql, type DatabaseClient } from '@scova/db';
+import { and, asc, eq, gt, isNull, lte, ne, or, outbox, sql, type DatabaseClient } from '@scova/db';
 import type { ClaimedOutbox } from '../utils/outbox.ts';
 
 export interface OutboxRepository {
@@ -8,10 +8,14 @@ export interface OutboxRepository {
 }
 
 /** Native database operations stay here; network publication never enters a transaction. */
-export function createOutboxRepository(db: DatabaseClient): OutboxRepository {
+export function createOutboxRepository(
+    db: DatabaseClient,
+    { excludeEventType }: { excludeEventType?: string } = {},
+): OutboxRepository {
     return {
         async claim(now, leaseExpiresAt) {
             const eligible = and(
+                excludeEventType === undefined ? undefined : ne(outbox.eventType, excludeEventType),
                 isNull(outbox.sentAt),
                 lte(outbox.availableAt, now),
                 or(isNull(outbox.leaseExpiresAt), lte(outbox.leaseExpiresAt, now)),

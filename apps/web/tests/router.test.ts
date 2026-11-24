@@ -32,9 +32,11 @@ describe('工作台路由契约', () => {
         expect(route.name).toBe('states-example');
     });
 
-    it('首页默认进入任务', () => {
-        const route = createWorkbenchRouter(createMemoryHistory()).resolve('/');
-        expect(route.matched[0]?.redirect).toBe('/tasks');
+    it('首页为工作台，任务与新建任务保留独立入口', () => {
+        const router = createWorkbenchRouter(createMemoryHistory());
+        expect(router.resolve('/').name).toBe('workspace-home');
+        expect(router.resolve('/tasks').name).toBe('tasks');
+        expect(router.resolve('/tasks/new').name).toBe('task-create');
     });
 
     it.each([true, false])('领域模块按名称替换未接入入口，顺序为 %s', (first) => {

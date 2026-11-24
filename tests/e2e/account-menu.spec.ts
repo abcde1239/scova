@@ -18,7 +18,7 @@ for (const { width, scale } of [
             document.documentElement.style.fontSize = `${value}%`;
         }, scale);
         const trigger = page.getByRole('button', { name: '打开个人侧栏', exact: true });
-        const brand = page.getByRole('banner').getByRole('link', { name: 'Scova，任务首页' });
+        const brand = page.getByRole('banner').getByRole('link', { name: 'Scova，工作台首页' });
         await expect(trigger).toBeVisible();
         await expect(brand).toBeVisible();
         const triggerBox = (await trigger.boundingBox())!;
@@ -42,14 +42,19 @@ for (const { width, scale } of [
             await trigger.locator('.trigger-avatar').click();
             await expect(drawer).toBeVisible();
             await expect(drawer).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 0)');
+            await expect(
+                drawer
+                    .getByRole('region', { name: '项目导航' })
+                    .getByRole('link', { name: '项目', exact: true }),
+            ).toHaveAttribute('href', '/projects');
             await expect(drawer.getByRole('navigation').getByRole('link')).toHaveText([
                 '新建任务',
                 '任务',
-                '项目',
                 '工作流',
-                '收件箱',
                 '资料库',
+                '收件箱',
                 '通知',
+                '报告历史',
                 'Agent 配置',
                 '外观',
             ]);

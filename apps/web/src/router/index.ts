@@ -65,7 +65,6 @@ export function createWorkbenchRouter(
     return createRouter({
         history,
         routes: [
-            { path: '/', redirect: '/tasks' },
             ...pages,
             {
                 path: '/service-unavailable',

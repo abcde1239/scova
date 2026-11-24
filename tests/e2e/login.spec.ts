@@ -57,7 +57,7 @@ test('本地HTTP样本：字段、401/429、键盘提交、忙碌拦截及成功
         page.locator('.scova-notifications .n-notification').last().getByRole('alert'),
     ).toHaveText('登录尝试过于频繁，请稍后重试');
     await page.getByRole('button', { name: '登录', exact: true }).click();
-    await expect(page).toHaveURL(/\/tasks$/);
+    await expect(page).toHaveURL(/^https?:\/\/[^/]+\/$/);
     expect(attempts).toBe(3);
     const stored = await page.evaluate(() => ({
         local: Object.fromEntries(

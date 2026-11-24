@@ -19,6 +19,7 @@ import {
     runGraphSnapshots,
 } from '@scova/db';
 import { randomUUID } from 'node:crypto';
+import { enqueueThreadRunResult } from '@/repo/thread-run-results.ts';
 import { createTerminalNotifications } from './notifications.ts';
 import {
     BudgetSchema,
@@ -208,6 +209,7 @@ async function finishLocked(tx: DatabaseTransaction, run: Run, now: Date, code: 
                   },
               },
     );
+    await enqueueThreadRunResult(tx, run, now);
 }
 
 function leaseExpiry(now: Date, leaseMs: number) {

@@ -29,7 +29,7 @@ export default {
         brand: '知巡 Scova',
         language: '界面语言',
         skip: '跳到主内容',
-        taskHome: 'Scova，任务首页',
+        workspaceHome: 'Scova，工作台首页',
         primaryNav: '主导航',
         toolsNav: '全局工具',
         breadcrumbs: '面包屑导航',

@@ -1,6 +1,9 @@
-import { createHash } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
-import type { DatabaseTransaction, projectResearchDrafts } from '@scova/db';
+import type {
+    DatabaseTransaction,
+    projectConversationTurns,
+    projectResearchDrafts,
+} from '@scova/db';
 import { estimateModelInputTokens, withDeadline } from '@scova/connectors';
 import {
     ProjectConversationInputSchema,
@@ -13,9 +16,15 @@ import {
 import type { ApiServices } from '@/app/services';
 import type { AuthenticatedSession } from '@/service/auth.ts';
 import { createProjectConversationStore } from '@/repo/project-conversations.ts';
+import {
+    appendProjectThreadItems,
+    createProjectThreadStore,
+    legacyProjectThread,
+} from '@/repo/project-threads.ts';
 import { createProjectStore } from '@/repo/projects.ts';
 import { createQuestionBudgetRepo } from '@/repo/report-questions.ts';
 import { createTaskDraftService } from '@/service/task-drafts.ts';
+import { confirmThreadDraft } from '@/service/thread-draft-confirmation.ts';
 import { createTaskService } from '@/service/tasks.ts';
 import { ApiError } from '@/utils/errors.ts';
 
@@ -37,23 +46,61 @@ export function createProjectConversationService(services: ApiServices) {
     function transaction<T>(
         userId: string,
         projectId: string,
-        work: (store: Store, tx: DatabaseTransaction, name: string) => Promise<T>,
+        work: (store: Store, tx: DatabaseTransaction, name: string, threadId: string) => Promise<T>,
     ) {
         return services.db().transaction(async (tx) => {
             const projects = createProjectStore(tx);
             const project = await projects.lockProject(userId, projectId);
             if (!project) throw missing();
-            return work(createProjectConversationStore(tx, userId, projectId), tx, project.name);
+            const threadId = await legacyProjectThread(tx, userId, projectId, services.clock());
+            await createProjectThreadStore(tx, userId).lock(threadId);
+            return work(
+                createProjectConversationStore(tx, userId, projectId, threadId),
+                tx,
+                project.name,
+                threadId,
+            );
         });
+    }
+    async function appendOutcome(
+        tx: DatabaseTransaction,
+        turn: typeof projectConversationTurns.$inferSelect | undefined,
+        now: Date,
+        draftId?: string,
+    ) {
+        if (!turn?.threadId || !turn.answer) return;
+        const message = {
+            turnId: turn.id,
+            kind: 'message' as const,
+            payload: { role: 'assistant', text: turn.answer },
+            refs: turn.input.reportId ? [{ kind: 'report', id: turn.input.reportId }] : [],
+            status: turn.status,
+        };
+        await appendProjectThreadItems(
+            tx,
+            turn.userId,
+            turn.threadId,
+            draftId
+                ? [message, { turnId: turn.id, kind: 'plan', payload: { draftId }, status: null }]
+                : [message],
+            now,
+        );
+    }
+    async function expire(store: Store, tx: DatabaseTransaction, now: Date) {
+        for (const turn of await store.expire(now)) await appendOutcome(tx, turn, now);
     }
     async function requireDraft(store: Store, draftId: string, revision: number) {
         const draft = await store.draft(draftId);
-        if (!draft) throw missing();
+        if (!draft || (await store.isAutomaticDraft(draftId))) throw missing();
         if (draft.revision !== revision) throw revisionConflict();
         return draft;
     }
     async function snapshot(store: Store): Promise<ProjectConversation> {
-        const turns = await store.listTurns(40);
+        const turns = (await store.listTurns(40)).flatMap((turn) => {
+            const input = turn.input;
+            if (input.kind === 'auto') return [];
+            return [{ ...turn, input: { ...input, kind: input.kind } }];
+        });
         const ids = [...new Set(turns.flatMap((turn) => (turn.draftId ? [turn.draftId] : [])))];
         const drafts = (await store.listDrafts(ids)).map(draftDto);
         const reportIds = [
@@ -142,8 +189,8 @@ export function createProjectConversationService(services: ApiServices) {
     }
     return {
         async get(userId: string, projectId: string) {
-            return transaction(userId, projectId, async (store) => {
-                await store.expire(services.clock());
+            return transaction(userId, projectId, async (store, tx) => {
+                await expire(store, tx, services.clock());
                 return snapshot(store);
             });
         },
@@ -157,59 +204,84 @@ export function createProjectConversationService(services: ApiServices) {
                 throw new ApiError(422, 'INVALID_TURN_TARGET', '请为当前操作选择对应的草案或报告');
             const policy =
                 input.kind === 'ask' ? services.reportQuestionPolicy : services.taskDraftPolicy;
-            const claim = await transaction(userId, projectId, async (store, tx, name) => {
-                const now = services.clock();
-                const turnInput = {
-                    ...input,
-                    ...(target ? { draftId: target.id, revision: target.revision } : {}),
-                };
-                await store.expire(now);
-                const result = await store.claim(
-                    turnId,
-                    turnInput,
-                    now,
-                    new Date(now.getTime() + policy.timeoutMs + 5000),
-                );
-                if (!result) {
-                    const previous = await store.turn(turnId);
-                    if (
-                        previous &&
-                        previous.input.message === turnInput.message &&
-                        previous.input.kind === turnInput.kind &&
-                        previous.input.reportId === turnInput.reportId &&
-                        previous.input.draftId === turnInput.draftId &&
-                        previous.input.revision === turnInput.revision
-                    )
-                        return { replay: await snapshot(store) };
-                    throw new ApiError(
-                        409,
-                        previous ? 'TURN_PAYLOAD_MISMATCH' : 'TURN_BUSY',
-                        previous ? '轮次标识已用于其他请求' : '项目正在处理另一轮对话',
+            const claim = await transaction(
+                userId,
+                projectId,
+                async (store, tx, name, threadId) => {
+                    const now = services.clock();
+                    const turnInput = {
+                        ...input,
+                        ...(target ? { draftId: target.id, revision: target.revision } : {}),
+                    };
+                    await expire(store, tx, now);
+                    const result = await store.claim(
+                        turnId,
+                        turnInput,
+                        now,
+                        new Date(now.getTime() + policy.timeoutMs + 5000),
+                        threadId,
                     );
-                }
-                const report = input.reportId ? await store.report(input.reportId) : undefined;
-                if (input.reportId && !report) throw missing();
-                const draft = target
-                    ? await requireDraft(store, target.id, target.revision)
-                    : undefined;
-                if (draft?.confirmedTaskId) throw revisionConflict();
-                const project = createProjectStore(tx);
-                return {
-                    name,
-                    report,
-                    draft,
-                    latest:
-                        input.kind === 'ask' && !report
-                            ? await project.recentReports(userId, projectId, 1)
-                            : [],
-                };
-            });
+                    if (!result) {
+                        const previous = await store.turn(turnId);
+                        if (
+                            previous &&
+                            previous.input.message === turnInput.message &&
+                            previous.input.kind === turnInput.kind &&
+                            previous.input.reportId === turnInput.reportId &&
+                            previous.input.draftId === turnInput.draftId &&
+                            previous.input.revision === turnInput.revision
+                        )
+                            return { replay: await snapshot(store) };
+                        throw new ApiError(
+                            409,
+                            previous ? 'TURN_PAYLOAD_MISMATCH' : 'TURN_BUSY',
+                            previous ? '轮次标识已用于其他请求' : '项目正在处理另一轮对话',
+                        );
+                    }
+                    await appendProjectThreadItems(
+                        tx,
+                        userId,
+                        threadId,
+                        [
+                            {
+                                turnId,
+                                kind: 'message',
+                                payload: { role: 'user', text: input.message },
+                                status: null,
+                            },
+                        ],
+                        now,
+                    );
+                    const report = input.reportId ? await store.report(input.reportId) : undefined;
+                    if (input.reportId && !report) throw missing();
+                    const draft = target
+                        ? await requireDraft(store, target.id, target.revision)
+                        : undefined;
+                    if (draft?.confirmedTaskId) throw revisionConflict();
+                    const project = createProjectStore(tx);
+                    return {
+                        name,
+                        report,
+                        draft,
+                        threadId,
+                        latest:
+                            input.kind === 'ask' && !report
+                                ? await project.recentReports(userId, projectId, 1)
+                                : [],
+                    };
+                },
+            );
             if ('replay' in claim) return claim.replay!;
             const controller = new AbortController();
             active.set(turnId, controller);
             const abort = controller.signal;
             const monitor = new AbortController();
-            const store = createProjectConversationStore(services.db(), userId, projectId);
+            const store = createProjectConversationStore(
+                services.db(),
+                userId,
+                projectId,
+                claim.threadId,
+            );
             const check = async () => {
                 const running = await withDeadline(1000, monitor.signal, () =>
                     store.isRunning(turnId, services.clock()),
@@ -262,7 +334,7 @@ export function createProjectConversationService(services: ApiServices) {
                         ? '请选择一份项目报告后继续提问。'
                         : '项目还没有可引用的报告。可以选择「起草研究」开始准备任务。';
                 }
-                return await transaction(userId, projectId, async (store) => {
+                return await transaction(userId, projectId, async (store, tx) => {
                     const current = await store.turn(turnId);
                     if (current?.status !== 'running') return snapshot(store);
                     abort.throwIfAborted();
@@ -274,24 +346,29 @@ export function createProjectConversationService(services: ApiServices) {
                             : undefined;
                         if (changed?.confirmedTaskId) throw revisionConflict();
                         // Lock the turn before publishing a draft. If cancellation wins, no draft is written.
-                        if (!(await store.finish(turnId, 'completed', response)))
-                            return snapshot(store);
+                        const finished = await store.finish(turnId, 'completed', response);
+                        if (!finished) return snapshot(store);
                         draftId = (
                             changed
                                 ? await store.updateDraft(changed.id, config, changed.revision + 1)
                                 : await store.newDraft(config)
                         ).id;
                         await store.linkDraft(turnId, draftId);
-                    } else await store.finish(turnId, 'completed', response);
+                        await appendOutcome(tx, finished, services.clock(), draftId);
+                    } else {
+                        const finished = await store.finish(turnId, 'completed', response);
+                        await appendOutcome(tx, finished, services.clock());
+                    }
                     return snapshot(store);
                 });
             } catch (error) {
-                return await transaction(userId, projectId, async (store) => {
-                    await store.finish(
+                return await transaction(userId, projectId, async (store, tx) => {
+                    const failed = await store.finish(
                         turnId,
                         'failed',
                         error instanceof ApiError ? error.message : '本轮处理失败，可以重新发送。',
                     );
+                    await appendOutcome(tx, failed, services.clock());
                     return snapshot(store);
                 });
             } finally {
@@ -301,9 +378,11 @@ export function createProjectConversationService(services: ApiServices) {
             }
         },
         async cancel(userId: string, projectId: string, turnId: string) {
-            const result = await transaction(userId, projectId, async (store) => {
-                if (!(await store.turn(turnId))) throw missing();
+            const result = await transaction(userId, projectId, async (store, tx) => {
+                const turn = await store.turn(turnId);
+                if (!turn || turn.input.kind === 'auto') throw missing();
                 const canceled = await store.finish(turnId, 'canceled', '已停止本轮对话。');
+                await appendOutcome(tx, canceled, services.clock());
                 return { canceled, view: await snapshot(store) };
             });
             if (result.canceled) active.get(turnId)?.abort();
@@ -321,30 +400,8 @@ export function createProjectConversationService(services: ApiServices) {
             const { revision, start } = parseContract(ProjectDraftConfirmSchema, body);
             return transaction(userId, projectId, async (store, tx) => {
                 const draft = await requireDraft(store, draftId, revision);
-                if (draft.confirmedStart !== null) {
-                    if (draft.confirmedStart !== Number(start))
-                        throw new ApiError(409, 'DRAFT_ALREADY_CONFIRMED', '草案已按其他方式提交');
-                    if (!draft.confirmedTaskId || (start && !draft.confirmedRunId)) throw missing();
-                    return tasks.replayProjectTask(
-                        userId,
-                        projectId,
-                        { taskId: draft.confirmedTaskId, runId: draft.confirmedRunId },
-                        tx,
-                    );
-                }
-                const key = createHash('sha256')
-                    .update(`project-draft:${draft.id}:${revision}`)
-                    .digest('hex');
-                const result = await tasks.createInProject(
-                    userId,
-                    projectId,
-                    { config: draft.config },
-                    key,
-                    start,
-                    tx,
-                );
-                await store.confirmDraft(draftId, result.detail.task.id, result.runId, start);
-                return result;
+                const receipt = await confirmThreadDraft(services, tx, store, draft, start);
+                return receipt.result ?? tasks.replayProjectTask(userId, projectId, receipt, tx);
             });
         },
     };

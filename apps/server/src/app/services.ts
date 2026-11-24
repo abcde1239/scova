@@ -36,6 +36,7 @@ export interface ApiServices {
     rateLimit: AuthRateLimitConfig;
     taskDraftPolicy: TaskDraftPolicy;
     reportQuestionPolicy: TaskDraftPolicy;
+    projectAutoRunsPerDay: number;
     reportQuestionModel(userId?: string): ModelProvider | null | Promise<ModelProvider | null>;
     taskDraftModel(userId?: string): ModelProvider | null | Promise<ModelProvider | null>;
     providerModels: typeof listProviderModels;
@@ -88,7 +89,13 @@ export function createDefaultServices(overrides: ApiServiceOverrides = {}): ApiS
         if (key !== 'keyPrefix' && (!Number.isSafeInteger(value) || Number(value) < 1))
             throw new Error('认证限流配置必须是正安全整数');
     }
+    const projectAutoRunsPerDay =
+        overrides.projectAutoRunsPerDay ??
+        (process.env.PROJECT_AGENT_AUTO_RUNS_PER_DAY === undefined
+            ? 0
+            : positiveSetting('PROJECT_AGENT_AUTO_RUNS_PER_DAY', 0));
     const services: ApiServices = {
+        projectAutoRunsPerDay,
         providerModels: overrides.providerModels ?? listProviderModels,
         providerBalance: overrides.providerBalance ?? readProviderBalance,
         objectStorage:

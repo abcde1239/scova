@@ -113,6 +113,34 @@
             "when": 1795420332346,
             "tag": "0015_futuristic_speed",
             "breakpoints": true
+        },
+        {
+            "idx": 16,
+            "version": "7",
+            "when": 1795533172201,
+            "tag": "0016_project_threads",
+            "breakpoints": true
+        },
+        {
+            "idx": 17,
+            "version": "7",
+            "when": 1795534180909,
+            "tag": "0017_project_thread_execution",
+            "breakpoints": true
+        },
+        {
+            "idx": 18,
+            "version": "7",
+            "when": 1795534977772,
+            "tag": "0018_project_settings",
+            "breakpoints": true
+        },
+        {
+            "idx": 19,
+            "version": "7",
+            "when": 1795535787073,
+            "tag": "0019_thread_attachments",
+            "breakpoints": true
         }
     ]
 }

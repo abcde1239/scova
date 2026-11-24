@@ -7,6 +7,11 @@ import { createDefaultServices, type ApiServices } from '@/app/services';
 import { createAuthPlugin } from '@/router/auth.ts';
 import { createTaskPlugin } from '@/router/tasks.ts';
 import { createProjectPlugin } from '@/router/projects';
+import { createThreadPlugin } from '@/router/threads.ts';
+import { createThreadAttachmentPlugin } from '@/router/thread-attachments.ts';
+import { createProjectEvidencePlugin } from '@/router/project-evidence.ts';
+import { createProjectSettingsPlugin } from '@/router/project-settings.ts';
+import { createWorkspaceIntakePlugin } from '@/router/workspace-intake.ts';
 import { createWorkflowPlugin } from '@/router/workflows';
 import { createWorkflowTemplatePlugin } from '@/router/workflow-templates';
 import { createReportChartPlugin } from '@/router/report-charts';
@@ -62,6 +67,11 @@ export const createApiApp = (
         .use(createSearchConfigurationPlugin(services))
         .use(createTaskPlugin(services))
         .use(createProjectPlugin(services))
+        .use(createThreadPlugin(services))
+        .use(createThreadAttachmentPlugin(services))
+        .use(createProjectEvidencePlugin(services))
+        .use(createProjectSettingsPlugin(services))
+        .use(createWorkspaceIntakePlugin(services))
         .use(createWorkflowPlugin(services))
         .use(createWorkflowTemplatePlugin(services))
         .use(createTaskDraftPlugin(services))

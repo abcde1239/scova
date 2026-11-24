@@ -10,6 +10,18 @@ export default [
     {
         name: 'project-detail',
         path: '/projects/:projectId',
+        component: () => import('@/view/ProjectEntryView.vue'),
+        meta: { titleKey: 'project', section: 'projects' },
+    },
+    {
+        name: 'project-thread',
+        path: '/projects/:projectId/threads/:threadId',
+        component: () => import('@/view/ProjectThreadRoute.vue'),
+        meta: { titleKey: 'project', section: 'projects' },
+    },
+    {
+        name: 'project-legacy',
+        path: '/projects/:projectId/legacy',
         component: () => import('@/view/ProjectDetailView.vue'),
         meta: { titleKey: 'project', section: 'projects' },
     },

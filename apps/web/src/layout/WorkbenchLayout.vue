@@ -1,17 +1,29 @@
 <template>
-    <div class="workbench min-h-[100dvh]">
+    <div
+        class="workbench min-h-[100dvh]"
+        :class="{ 'workbench--thread': threadPage }"
+        :style="{ '--project-sidebar-width': `${workspace.width('sidebar')}px` }"
+    >
         <a
             class="skip-link fixed top-2 left-2 z-10 inline-flex items-center min-h-11 text-default no-underline bg-surface -translate-y-[200%] py-2 px-4 keyboard-focus-wide focus:translate-y-0"
             href="#main-content"
             >{{ t('shell.skip') }}</a
         >
         <header class="workbench-header">
-            <mobile-navigation :items="mobileItems" />
-            <router-link class="brand" to="/tasks" :aria-label="t('shell.taskHome')">
+            <mobile-navigation :items="mobileItems">
+                <template #projects><project-sidebar v-if="!workspace.desktop.value" /></template>
+            </mobile-navigation>
+            <router-link class="brand" to="/" :aria-label="t('shell.workspaceHome')">
                 <img src="/favicon.ico?v=ebde566c" alt="" class="w-6 h-6 object-contain" />
                 <span lang="en">Scova</span>
             </router-link>
-            <nav class="primary-navigation" :aria-label="t('shell.primaryNav')">
+            <nav
+                id="workbench-project-sidebar"
+                class="primary-navigation"
+                :aria-label="t('shell.primaryNav')"
+            >
+                <project-sidebar v-if="workspace.desktop.value" />
+                <span class="px-2 pt-2 text-sm font-semibold" lang="zh-CN">管理</span>
                 <router-link
                     class="sidebar-link create-task"
                     :to="newTask.path"
@@ -29,6 +41,9 @@
                 >
                     <app-icon :name="navigationIcon(item.meta.section)" />{{ routeTitle(item, t) }}
                 </router-link>
+                <router-link class="sidebar-link" :to="{ name: 'report-history' }"
+                    ><app-icon name="report" />{{ t('pages.reportHistory') }}</router-link
+                >
             </nav>
             <div class="sidebar-footer">
                 <nav class="tool-navigation" :aria-label="t('shell.toolsNav')">
@@ -54,18 +69,29 @@
                 <interface-language-select class="interface-language" />
                 <account-menu />
             </div>
+            <workspace-separator
+                v-if="threadPage && workspace.desktop.value"
+                pane="sidebar"
+                label="项目导航宽度"
+                controls="workbench-project-sidebar"
+            />
         </header>
         <main
             id="main-content"
             class="workbench-main"
-            :class="{ 'workbench-main--form': route.meta.contentWidth === 'form' }"
+            :class="{
+                'workbench-main--form': route.meta.contentWidth === 'form',
+                'workbench-main--thread': threadPage,
+            }"
             tabindex="-1"
             aria-labelledby="page-title"
         >
             <page-breadcrumbs
+                v-if="!threadPage"
                 class="flex flex-wrap gap-2 [.page-heading_>_&]:(min-w-0 max-w-full break-anywhere)"
             />
             <div
+                v-if="!threadPage"
                 class="page-heading flex flex-wrap items-center justify-between gap-4 mb-4 [&.page-heading.page-heading--report]:(min-h-0 m-0) [.page-heading_>_&]:(min-w-0 max-w-full break-anywhere)"
                 :class="{ 'page-heading--report': route.name === 'report-detail' }"
             >
@@ -88,7 +114,13 @@
             >
                 <slot name="context" />
             </div>
-            <div v-if="route.name !== 'not-found'" lang="zh-CN"><slot /></div>
+            <div
+                v-if="route.name !== 'not-found'"
+                lang="zh-CN"
+                :class="{ 'workbench-thread-body': threadPage }"
+            >
+                <slot />
+            </div>
             <slot v-else />
             <div
                 lang="zh-CN"
@@ -114,6 +146,12 @@ import MobileNavigation from '@/layout/MobileNavigation.vue';
 import PageBreadcrumbs from '@/layout/PageBreadcrumbs.vue';
 import AccountMenu from '@/layout/AccountMenu.vue';
 import NotificationMenu from '@/component/notifications/NotificationMenu.vue';
+import ProjectSidebar from '@/layout/ProjectSidebar.vue';
+import WorkspaceSeparator from '@/layout/WorkspaceSeparator.vue';
+import {
+    projectWorkspaceLayoutKey,
+    useProjectWorkspaceLayout,
+} from '@/composable/useProjectWorkspaceLayout';
 
 const props = defineProps<{ title: string; navigation: RouteRecordNormalized[] }>();
 defineSlots<{ default(): unknown; context(): unknown; tools(): unknown; reading(): unknown }>();
@@ -121,10 +159,13 @@ const route = useRoute();
 const { t } = useI18n({ useScope: 'global' });
 
 provide(breadcrumbContext, shallowRef<BreadcrumbContext>());
-const sectionOrder = ['tasks', 'projects', 'workflows', 'inbox', 'library'];
+const workspace = useProjectWorkspaceLayout();
+provide(projectWorkspaceLayoutKey, workspace);
+const threadPage = computed(() => route.name === 'project-thread');
+const sectionOrder = ['tasks', 'workflows', 'library', 'inbox'];
 const primary = computed(() =>
     props.navigation
-        .filter((item) => item.meta.navigation === 'primary')
+        .filter((item) => item.meta.navigation === 'primary' && item.meta.section !== 'projects')
         .sort(
             (left, right) =>
                 sectionOrder.indexOf(String(left.meta.section)) -
@@ -162,6 +203,7 @@ const mobileItems = computed(() => [
         label: routeTitle(item, t),
         icon: navigationIcon(item.meta.section),
     })),
+    { path: '/tasks/reports', label: t('pages.reportHistory'), icon: 'report' as const },
     { path: '/account/agent', label: t('pages.agent'), icon: 'settings' as const },
     { path: '/account/appearance', label: t('pages.appearance'), icon: 'appearance' as const },
 ]);
@@ -198,7 +240,30 @@ const mobileItems = computed(() => [
 .workbench-main--form {
     @apply max-w-[calc(44rem_+_2_*_var(--workbench-gutter))];
 }
+.workbench--thread {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    block-size: 100dvh;
+}
+.workbench-main--thread {
+    display: grid;
+    grid-template-rows: minmax(0, 1fr);
+    max-inline-size: none;
+    min-block-size: 0;
+    padding: 0;
+}
+.workbench-main--thread > :not(.workbench-thread-body) {
+    display: none;
+}
+.workbench-thread-body {
+    min-inline-size: 0;
+    min-block-size: 0;
+}
 @media (min-width: 54rem) {
+    .workbench--thread {
+        grid-template-rows: minmax(0, 1fr);
+        grid-template-columns: var(--project-sidebar-width) minmax(24rem, 1fr);
+    }
     .workbench {
         @apply grid grid-cols-[min(15.5rem,_30vw)_minmax(0,_1fr)];
     }

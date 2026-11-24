@@ -5,16 +5,53 @@ import { encodeSse, type SsePolicy } from '@/utils/sse.ts';
 const terminal = new Set(['succeeded', 'partial', 'failed', 'canceled']);
 const encoder = new TextEncoder();
 
-/** 零预取、逐帧 pull；HTTP 适配器的 socket 背压不会变为无界事件缓冲。 */
-export function createSseBody(options: {
-    first: EventPage;
-    next(after: number): Promise<EventPage>;
+interface SseLifecycle {
     signal: AbortSignal;
     expiresAt: Date;
     clock(): Date;
     registry: ApiStreamRegistry;
     policy: SsePolicy;
-}): ReadableStream<Uint8Array> {
+}
+
+interface SsePage<Item> {
+    items: readonly Item[];
+    hasMore(after: number): boolean;
+    terminal?: boolean;
+    reset?(): Uint8Array;
+}
+
+export function createSseBody(
+    options: SseLifecycle & {
+        first: EventPage;
+        next(after: number): Promise<EventPage>;
+    },
+): ReadableStream<Uint8Array> {
+    function adapt(page: EventPage): SsePage<EventPage['events'][number]> {
+        return {
+            items: page.events,
+            hasMore: (after) => after < page.latest,
+            terminal: terminal.has(page.run.status),
+            reset: page.reset ? () => encodeSse(resetMessage(page)) : undefined,
+        };
+    }
+    return createPagedSseBody({
+        ...options,
+        cursor: options.first.cursor,
+        first: adapt(options.first),
+        next: async (after) => adapt(await options.next(after)),
+        encode: (event) => encodeSse(eventMessage(event)),
+    });
+}
+
+/** 零预取、逐帧 pull；HTTP 适配器的 socket 背压不会变为无界事件缓冲。 */
+export function createPagedSseBody<Item extends { seq: number }>(
+    options: SseLifecycle & {
+        cursor: number;
+        first: SsePage<Item>;
+        next(after: number): Promise<SsePage<Item>>;
+        encode(item: Item): Uint8Array;
+    },
+): ReadableStream<Uint8Array> {
     const { policy } = options;
     for (const value of Object.values(policy))
         if (!Number.isSafeInteger(value) || value < 1) throw new Error('SSE 配置必须为正安全整数');
@@ -25,14 +62,14 @@ export function createSseBody(options: {
         resolveDone = resolve;
     });
     let finishing: Promise<void> | undefined;
-    let pending: Promise<EventPage> | undefined;
+    let pending: Promise<SsePage<Item>> | undefined;
     let wake: (() => void) | undefined;
     let waiting: ReturnType<typeof setTimeout> | undefined;
     let slow: ReturnType<typeof setTimeout> | undefined;
     let expiry: ReturnType<typeof setTimeout> | undefined;
     let page = options.first;
     let index = 0;
-    let cursor = page.cursor;
+    let cursor = options.cursor;
     let resetSent = false;
     let lastFrameAt = performance.now();
 
@@ -112,20 +149,20 @@ export function createSseBody(options: {
                                 return;
                             }
                             resetSent = true;
-                            send(encodeSse(resetMessage(page)));
+                            send(page.reset());
                             return;
                         }
-                        const event = page.events[index++];
-                        if (event) {
-                            send(encodeSse(eventMessage(event)));
-                            cursor = event.seq;
+                        const item = page.items[index++];
+                        if (item) {
+                            send(options.encode(item));
+                            cursor = item.seq;
                             return;
                         }
-                        if (terminal.has(page.run.status) && cursor >= page.latest) {
-                            await finish();
-                            return;
-                        }
-                        if (cursor >= page.latest) {
+                        if (!page.hasMore(cursor)) {
+                            if (page.terminal) {
+                                await finish();
+                                return;
+                            }
                             const untilHeartbeat =
                                 policy.heartbeatMs - (performance.now() - lastFrameAt);
                             if (untilHeartbeat <= 0) {

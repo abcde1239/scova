@@ -10,6 +10,7 @@ import {
     idempotencyRecords,
     projectTasks,
     projectConversationTurns,
+    projectThreads,
     outbox,
     runEvents,
     projects,
@@ -817,7 +818,7 @@ describe('project conversation', () => {
                 });
             }
             await expect.poll(() => signal.aborted, { timeout: 2000 }).toBe(true);
-            expect(running?.expiresAt.getTime()).toBe(
+            expect(running?.executionDeadlineAt?.getTime()).toBe(
                 now.getTime() + services.reportQuestionPolicy.timeoutMs + 5000,
             );
             const response = await pending;
@@ -1063,11 +1064,16 @@ describe('project conversation', () => {
             });
         const first = await (await post('建立可编辑的初始草案')).json();
         const [draft] = first.drafts;
+        const [defaultThread] = await db
+            .select({ id: projectThreads.id })
+            .from(projectThreads)
+            .where(eq(projectThreads.projectId, project.id));
         await db.insert(projectConversationTurns).values(
             Array.from({ length: 40 }, (_, index) => ({
                 id: randomUUID(),
                 userId: owner.id,
                 projectId: project.id,
+                threadId: defaultThread!.id,
                 input: { kind: 'ask' as const, message: '后续问题' },
                 status: 'completed' as const,
                 createdAt: new Date(now.getTime() + index + 1),
@@ -1146,14 +1152,19 @@ describe('project conversation', () => {
             drafts: [],
         });
         const abandoned = randomUUID();
+        const [defaultThread] = await db
+            .select({ id: projectThreads.id })
+            .from(projectThreads)
+            .where(eq(projectThreads.projectId, project.id));
         await db.insert(projectConversationTurns).values({
             id: abandoned,
             userId: owner.id,
             projectId: project.id,
+            threadId: defaultThread!.id,
             input: { kind: 'ask', message: '进程退出前的轮次' },
             status: 'running',
             createdAt: new Date(now.getTime() - 2000),
-            expiresAt: new Date(now.getTime() - 1000),
+            executionDeadlineAt: new Date(now.getTime() - 1000),
         });
         const next = randomUUID();
         expect(

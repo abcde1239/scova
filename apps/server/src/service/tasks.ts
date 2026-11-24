@@ -136,6 +136,10 @@ function decodeCursor(value: string | undefined): { updatedAt: string; id: strin
 /** 任务业务规则与事务编排；持久化只通过 repo 的领域操作完成。 */
 export function createTaskService(services: ApiServices) {
     const repo = createTaskRepo(services);
+    const transact = <T>(
+        transaction: DatabaseTransaction | undefined,
+        work: (store: TaskStore) => Promise<T>,
+    ) => (transaction ? work(createTaskStore(transaction)) : repo.transaction(work));
     async function replayTaskSubmission(
         userId: string,
         receipt: { taskId?: string; runId: string | null },
@@ -361,84 +365,88 @@ export function createTaskService(services: ApiServices) {
             if (!version) throw new ApiError(500, 'TASK_VERSION_MISSING', '任务配置版本不可用');
             return taskResponse(task, version, false);
         },
-        async update(userId: string, taskId: string, body: unknown, expectedRevision: number) {
+        async update(
+            userId: string,
+            taskId: string,
+            body: unknown,
+            expectedRevision: number,
+            transaction?: DatabaseTransaction,
+        ) {
             const input = parseContract(UpdateTaskInputSchema, body);
             assertBudget(input.config);
-            const result = await repo
-                .transaction(async (store) => {
-                    if (!UUID.test(taskId) || !(await store.lockTask(taskId, userId)).length)
-                        throw new ApiError(404, 'NOT_FOUND', '资源不存在');
-                    const task = await ownedTask(taskId, userId, store);
-                    if (
-                        input.config.agentProviderId &&
-                        !(await store.findAgentProvider(userId, input.config.agentProviderId))
-                    )
-                        throw new ApiError(
-                            422,
-                            'AGENT_PROVIDER_UNAVAILABLE',
-                            '所选执行Agent配置不可用，请重新选择',
-                        );
-                    if (task.status === 'archived')
-                        throw new ApiError(409, 'TASK_ARCHIVED', '已归档任务不能再编辑');
-                    if (task.revision !== expectedRevision)
-                        throw new ApiError(
-                            409,
-                            'REVISION_CONFLICT',
-                            '任务已被其他请求修改，请刷新后重试',
-                        );
-                    const previous = await store.requireVersion(
-                        task.currentVersionId!,
-                        userId,
-                        task.id,
+            const result = await transact(transaction, async (store) => {
+                if (!UUID.test(taskId) || !(await store.lockTask(taskId, userId)).length)
+                    throw new ApiError(404, 'NOT_FOUND', '资源不存在');
+                const task = await ownedTask(taskId, userId, store);
+                if (
+                    input.config.agentProviderId &&
+                    !(await store.findAgentProvider(userId, input.config.agentProviderId))
+                )
+                    throw new ApiError(
+                        422,
+                        'AGENT_PROVIDER_UNAVAILABLE',
+                        '所选执行Agent配置不可用，请重新选择',
                     );
-                    const previousConfig = parseContract(TaskConfigSchema, previous.configJson);
-                    const scheduleChanged =
-                        previousConfig.timezone !== input.config.timezone ||
-                        JSON.stringify(stable(previousConfig.schedule)) !==
-                            JSON.stringify(stable(input.config.schedule));
-                    const scopeHash = comparisonScopeHash(input.config);
-                    // 先原子占位 revision，避免同一修订的并发编辑都创建新版本。
-                    const claimed = await store.claimRevision(task.id, userId, expectedRevision, {
-                        title: input.config.title,
-                        revision: task.revision + 1,
-                        ...(task.status !== 'active'
-                            ? { nextRunAt: null }
-                            : scheduleChanged
-                              ? { nextRunAt: nextRunAt(input.config, await store.now()) }
-                              : {}),
-                        ...(scheduleChanged ? { scheduleRevision: task.scheduleRevision + 1 } : {}),
-                    });
-                    if (claimed.count !== 1)
-                        throw new ApiError(
-                            409,
-                            'REVISION_CONFLICT',
-                            '任务已被其他请求修改，请刷新后重试',
-                        );
-                    const version = await store.createVersion({
-                        userId,
-                        taskId: task.id,
-                        version: previous.version + 1,
-                        inputText: input.inputText ?? previous.inputText,
-                        configSchemaVersion: 1,
-                        configJson: input.config,
-                        comparisonScopeHash: scopeHash,
-                    });
-                    const updated = await store.setCurrentVersion(task.id, version.id);
-                    return {
-                        task: updated,
-                        version,
-                        baselineResetRequired: previous.comparisonScopeHash !== scopeHash,
-                    };
-                })
-                .catch((error: unknown) => {
-                    if (repo.isUniqueConflict(error))
-                        throw new ApiError(
-                            409,
-                            'REVISION_CONFLICT',
-                            '任务已被其他请求修改，请刷新后重试',
-                        );
-                    throw error;
+                if (task.status === 'archived')
+                    throw new ApiError(409, 'TASK_ARCHIVED', '已归档任务不能再编辑');
+                if (task.revision !== expectedRevision)
+                    throw new ApiError(
+                        409,
+                        'REVISION_CONFLICT',
+                        '任务已被其他请求修改，请刷新后重试',
+                    );
+                const previous = await store.requireVersion(
+                    task.currentVersionId!,
+                    userId,
+                    task.id,
+                );
+                const previousConfig = parseContract(TaskConfigSchema, previous.configJson);
+                const scheduleChanged =
+                    previousConfig.timezone !== input.config.timezone ||
+                    JSON.stringify(stable(previousConfig.schedule)) !==
+                        JSON.stringify(stable(input.config.schedule));
+                const scopeHash = comparisonScopeHash(input.config);
+                // 先原子占位 revision，避免同一修订的并发编辑都创建新版本。
+                const claimed = await store.claimRevision(task.id, userId, expectedRevision, {
+                    title: input.config.title,
+                    revision: task.revision + 1,
+                    ...(task.status !== 'active'
+                        ? { nextRunAt: null }
+                        : scheduleChanged
+                          ? { nextRunAt: nextRunAt(input.config, await store.now()) }
+                          : {}),
+                    ...(scheduleChanged ? { scheduleRevision: task.scheduleRevision + 1 } : {}),
                 });
+                if (claimed.count !== 1)
+                    throw new ApiError(
+                        409,
+                        'REVISION_CONFLICT',
+                        '任务已被其他请求修改，请刷新后重试',
+                    );
+                const version = await store.createVersion({
+                    userId,
+                    taskId: task.id,
+                    version: previous.version + 1,
+                    inputText: input.inputText ?? previous.inputText,
+                    configSchemaVersion: 1,
+                    configJson: input.config,
+                    comparisonScopeHash: scopeHash,
+                });
+                const updated = await store.setCurrentVersion(task.id, version.id);
+                return {
+                    task: updated,
+                    version,
+                    baselineResetRequired: previous.comparisonScopeHash !== scopeHash,
+                };
+            }).catch((error: unknown) => {
+                if (repo.isUniqueConflict(error))
+                    throw new ApiError(
+                        409,
+                        'REVISION_CONFLICT',
+                        '任务已被其他请求修改，请刷新后重试',
+                    );
+                throw error;
+            });
             return taskResponse(result.task, result.version, result.baselineResetRequired);
         },
         async transition(
@@ -446,8 +454,9 @@ export function createTaskService(services: ApiServices) {
             taskId: string,
             action: 'pause' | 'resume' | 'archive',
             expectedRevision: number,
+            transaction?: DatabaseTransaction,
         ) {
-            return repo.transaction(async (store) => {
+            return transact(transaction, async (store) => {
                 if (!UUID.test(taskId) || !(await store.lockTask(taskId, userId)).length)
                     throw new ApiError(404, 'NOT_FOUND', '资源不存在');
                 const task = await ownedTask(taskId, userId, store);

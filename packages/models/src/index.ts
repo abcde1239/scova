@@ -37,3 +37,8 @@ export * from './workflow/schema.ts';
 export * from './workflow/templates.ts';
 export * from './report/resources.ts';
 export * from './report/attachments.ts';
+export * from './projects/threads.ts';
+export * from './projects/settings-evidence.ts';
+export * from './projects/workspace-intake.ts';
+export * from './projects/autonomy-actions.ts';
+export * from './projects/thread-attachments.ts';
