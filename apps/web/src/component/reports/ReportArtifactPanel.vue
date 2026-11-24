@@ -17,27 +17,83 @@
         @click="revealCitation"
     >
         <header class="deliverable-heading scova-interface">
-            <div>
-                <p class="artifact-name">{{ report?.title ?? '成果' }}</p>
-                <p v-if="report">
-                    <span class="artifact-kind">{{ formatLabels[activeFormat] }}</span
-                    ><time :datetime="report.publishedAt">{{ savedDate }}</time>
-                </p>
+            <div class="artifact-version">
+                <slot name="toolbar" />
             </div>
-            <div v-if="report" class="artifact-actions">
-                <n-button v-if="projected" quaternary @click="printReport">
-                    打印 / 另存为 PDF
-                </n-button>
-                <n-button v-if="reading" @click="emit('conversation')">
+            <div class="artifact-actions">
+                <template v-if="report">
+                    <report-workspace-menu
+                        ref="exportMenu"
+                        label="导出成果"
+                        icon="download"
+                        placement="bottom-end"
+                    >
+                        <template #default="{ close }">
+                            <report-export-button
+                                :key="`${report.id}:md`"
+                                :report-id="report.id"
+                                format="markdown"
+                                compact
+                            />
+                            <report-export-button
+                                :key="`${report.id}:json`"
+                                :report-id="report.id"
+                                format="json"
+                                compact
+                            />
+                            <button
+                                v-if="projected"
+                                type="button"
+                                class="workspace-menu-item"
+                                @click="
+                                    close();
+                                    printReport();
+                                "
+                            >
+                                打印 / 另存为 PDF
+                            </button>
+                        </template>
+                    </report-workspace-menu>
+                    <report-workspace-menu label="更多成果操作" icon="more" placement="bottom-end">
+                        <template #default="{ close }">
+                            <slot v-if="!reading" name="actions" :close="close" />
+                            <router-link class="workspace-menu-item" :to="`/runs/${report.runId}`"
+                                >执行详情</router-link
+                            >
+                            <router-link class="workspace-menu-item" to="/account/appearance"
+                                >阅读外观</router-link
+                            >
+                            <router-link
+                                class="workspace-menu-item"
+                                :to="`/tasks/${report.taskId}/edit`"
+                                >修改定期研究设置</router-link
+                            >
+                        </template>
+                    </report-workspace-menu>
+                </template>
+                <button
+                    v-if="reading"
+                    type="button"
+                    class="artifact-control artifact-return"
+                    @click="emit('conversation')"
+                >
                     <app-icon name="back" />返回对话
-                </n-button>
+                </button>
                 <template v-else>
-                    <n-button quaternary v-bind="readButtonAccessibility" @click="emit('read')">
-                        完整阅读<app-icon name="source" />
-                    </n-button>
+                    <button
+                        v-if="report"
+                        type="button"
+                        class="artifact-control"
+                        title="完整阅读"
+                        aria-label="完整阅读"
+                        @click="emit('read')"
+                    >
+                        <app-icon name="source" />
+                    </button>
                     <button
                         type="button"
-                        class="artifact-close"
+                        class="artifact-control artifact-close"
+                        title="关闭成果预览"
                         aria-label="关闭成果预览"
                         @click="emit('close')"
                     >
@@ -47,34 +103,21 @@
             </div>
         </header>
         <div class="artifact-scroll">
-            <slot name="toolbar" />
-            <div v-if="report" class="report-presentation scova-interface">
-                <nav v-if="formats.length > 1" class="artifact-formats" aria-label="已生成成果">
-                    <button
-                        v-for="key in formats"
-                        :key="key"
-                        type="button"
-                        :aria-pressed="activeFormat === key"
-                        @click="format = key"
-                    >
-                        {{ formatLabels[key] }}
-                    </button>
-                </nav>
-                <nav class="report-sections" aria-label="报告内容导航">
-                    <n-button
-                        v-for="section in sections"
-                        :key="section.id"
-                        tag="a"
-                        quaternary
-                        type="primary"
-                        v-bind="{ href: `#${section.id}` }"
-                        @click="jump($event, section.id)"
-                    >
-                        <app-icon :name="section.icon" />{{ section.label }}
-                    </n-button>
-                </nav>
-            </div>
-            <report-changes v-if="report" :report="report" />
+            <nav
+                v-if="report && formats.length > 1"
+                class="artifact-formats scova-interface"
+                aria-label="已生成成果"
+            >
+                <button
+                    v-for="key in formats"
+                    :key="key"
+                    type="button"
+                    :aria-pressed="activeFormat === key"
+                    @click="format = key"
+                >
+                    {{ formatLabels[key] }}
+                </button>
+            </nav>
             <div v-if="report && projected" class="artifact-document">
                 <keep-alive>
                     <component
@@ -83,7 +126,19 @@
                         :report="projected"
                         :show-changes="false"
                         :show-sources="false"
-                    />
+                    >
+                        <template #section-navigation>
+                            <nav class="report-sections scova-interface" aria-label="报告内容导航">
+                                <a
+                                    v-for="section in sections"
+                                    :key="section.id"
+                                    :href="`#${section.id}`"
+                                    @click="jump($event, section.id)"
+                                    >{{ section.label }}</a
+                                >
+                            </nav>
+                        </template>
+                    </component>
                 </keep-alive>
             </div>
             <state-panel
@@ -93,6 +148,7 @@
                 :retryable="retryable"
                 @retry="emit('retry')"
             />
+            <report-changes v-if="report" :report="report" />
             <report-sources v-if="appendixReport" :report="appendixReport" />
             <details
                 v-if="report"
@@ -125,14 +181,13 @@
 </template>
 
 <script setup lang="ts">
-const readButtonAccessibility = { 'aria-expanded': 'false' };
 const chartOpen = ref(false);
 const attachmentsOpen = ref(false);
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { NButton } from 'naive-ui';
+import ReportExportButton from '@/component/reports/ReportExportButton.vue';
+import ReportWorkspaceMenu from '@/component/reports/ReportWorkspaceMenu.vue';
 import type { Report } from '@scova/models';
 import AppIcon from '@/component/common/AppIcon.vue';
-import type { IconName } from '@/utils/icons';
 import StatePanel from '@/component/common/StatePanel.vue';
 import ReportBrief from '@/component/reports/ReportBrief.vue';
 import TopicListReport from '@/component/reports/TopicListReport.vue';
@@ -160,6 +215,8 @@ const emit = defineEmits<{
     retry: [];
 }>();
 const panel = ref<HTMLElement>();
+const exportMenu = ref<InstanceType<typeof ReportWorkspaceMenu>>();
+let returnToExport = false;
 const printDisclosures = new Set<HTMLDetailsElement>();
 
 function preparePrint() {
@@ -176,9 +233,12 @@ function preparePrint() {
 function restoreAfterPrint() {
     for (const details of printDisclosures) details.open = false;
     printDisclosures.clear();
+    if (returnToExport) exportMenu.value?.focus();
+    returnToExport = false;
 }
 
 function printReport() {
+    returnToExport = true;
     window.print();
 }
 
@@ -231,20 +291,10 @@ const appendixReport = computed(() => {
     };
 });
 const renderer = computed(() => renderers[activeFormat.value]);
-const savedDate = computed(() =>
-    props.report
-        ? new Intl.DateTimeFormat('zh-CN', {
-              month: 'long',
-              day: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit',
-          }).format(new Date(props.report.publishedAt))
-        : '',
-);
-const sections: { id: string; label: string; icon: IconName }[] = [
-    { id: 'report-title', label: '正文', icon: 'report' },
-    { id: 'report-changes-title', label: '变化', icon: 'retry' },
-    { id: 'saved-evidence-title', label: '来源', icon: 'source' },
+const sections = [
+    { id: 'report-title', label: '正文' },
+    { id: 'report-changes-title', label: '变化' },
+    { id: 'saved-evidence-title', label: '来源' },
 ];
 function jump(event: MouseEvent, id: string) {
     event.preventDefault();
@@ -322,130 +372,120 @@ function onKeydown(event: KeyboardEvent) {
 </script>
 
 <style scoped>
-/* Scoped UnoCSS keeps the long control/state combinations readable. */
 .report-artifact-panel {
-    @apply layout-grid grid-rows-[auto_minmax(0,_1fr)] gap-0 max-w-full
-        [border:0.0625rem_solid_color-mix(in_srgb,_var(--scova-border)_48%,_transparent)] rounded-5
-        [background:color-mix(in_srgb,_var(--scova-selected)_25%,_var(--scova-surface))]
-        [box-shadow:0_1rem_3rem_color-mix(in_srgb,_var(--scova-text)_9%,_transparent),_0_0.125rem_0.5rem_color-mix(in_srgb,_var(--scova-text)_3%,_transparent)]
-        break-anywhere [overflow:clip] [align-self:start] p-0;
+    @apply grid grid-rows-[auto_minmax(0,_1fr)] min-w-0 max-w-full gap-0 bg-surface break-anywhere;
+    border-inline-start: 1px solid color-mix(in srgb, var(--scova-border) 40%, transparent);
 }
 .report-artifact-panel--reading {
-    @apply w-full justify-self-center [box-shadow:none] max-h-[calc(100dvh_-_6rem)];
+    border-inline-start: 0;
+    max-block-size: calc(100dvh - 5rem);
 }
 .report-artifact-panel--reading .artifact-scroll {
-    @apply [overflow-y:auto] [overscroll-behavior-block:contain];
-}
-.artifact-document {
-    @apply w-full max-w-[64rem] mx-auto [box-sizing:border-box];
-}
-.report-artifact-panel--comparison .artifact-document {
-    @apply max-w-full;
-}
-.report-artifact-panel--list .artifact-document {
-    @apply max-w-[88rem];
+    overflow-y: auto;
+    overscroll-behavior-block: contain;
 }
 .artifact-scroll {
-    @apply layout-grid [align-content:start] gap-6 min-h-0 [scrollbar-gutter:stable]
-        [scroll-behavior:smooth] p-4;
+    @apply grid [align-content:start] gap-6 min-h-0 p-[clamp(0.875rem,_2.8vw,_2.75rem)];
+    scrollbar-gutter: stable;
+    overflow-x: clip;
 }
-.artifact-document {
-    @apply p-[clamp(0.5rem,_2vw,_1.5rem)];
+.artifact-scroll > * {
+    width: 100%;
+    max-width: 64rem;
+    min-width: 0;
+    margin-inline: auto;
+}
+.report-artifact-panel--comparison .artifact-document,
+.report-artifact-panel--list .artifact-document {
+    max-width: 88rem;
 }
 .deliverable-heading,
 .artifact-actions,
-.report-presentation,
+.artifact-formats,
 .report-sections {
-    @apply flex flex-wrap items-center gap-[0.5rem_0.75rem] min-w-0;
+    @apply flex flex-wrap items-center gap-1 min-w-0;
 }
 .deliverable-heading {
-    @apply items-start justify-between pt-4 pr-5 pb-4 pl-5
-        [border-bottom:0.0625rem_solid_color-mix(in_srgb,_var(--scova-border)_28%,_transparent)]
-        bg-surface;
+    @apply justify-between gap-2 py-2 px-3 bg-surface;
+    min-width: 0;
+    border-block-end: 1px solid color-mix(in srgb, var(--scova-border) 40%, transparent);
+    z-index: 1;
 }
-.deliverable-heading .artifact-name {
-    @apply text-[1rem] font-semibold m-0 [text-wrap:balance];
+.artifact-version {
+    flex: 1 1 7rem;
+    min-width: 0;
 }
-.deliverable-heading p:not(.artifact-name) {
-    @apply flex flex-wrap items-center gap-2.5 mt-1.5 mr-0 mb-0 ml-0 text-[0.875rem] leading-[1.6]
-        text-muted;
+.artifact-actions {
+    margin-inline-start: auto;
+    max-inline-size: 100%;
 }
-.artifact-kind {
-    @apply text-primary font-medium;
+.artifact-control,
+.artifact-formats button,
+.report-sections a {
+    @apply inline-flex flex-none items-center justify-center min-h-9 border-0 rounded-2 bg-transparent text-muted font-inherit cursor-pointer;
+    transition:
+        color 140ms ease,
+        background-color 140ms ease,
+        scale 140ms ease;
 }
-.deliverable-heading time {
-    @apply text-[0.8125rem];
+.artifact-control {
+    @apply min-w-9 gap-1 px-2;
 }
-.artifact-close {
-    @apply font-inherit inline-flex items-center justify-center flex-none min-w-11 min-h-11 [border:0]
-        rounded-2 bg-transparent text-default cursor-pointer p-2;
-}
-.artifact-close:hover {
-    @apply [background:var(--scova-selected)];
-}
-.artifact-close:focus-visible,
-.artifact-formats button:focus-visible {
-    @apply [outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.25rem];
-}
-.artifact-actions :deep(.n-button),
-.report-sections :deep(.n-button) {
-    @apply min-h-11 h-auto max-w-full pt-2.5 pb-2.5;
-}
-.artifact-actions :deep(.n-button__content),
-.report-sections :deep(.n-button__content) {
-    @apply gap-1.5 whitespace-normal;
+.artifact-return {
+    font-size: 0.8125rem;
 }
 .artifact-formats {
-    @apply flex flex-wrap gap-1.5 w-full;
+    @apply gap-2;
 }
-.artifact-formats button {
-    @apply min-h-11 pt-2.5 pr-4 pb-2.5 pl-4 [border:0.0625rem_solid_transparent] rounded-2.5
-        bg-transparent text-muted [font-family:inherit] text-[0.875rem] [font-weight:inherit]
-        [font-style:inherit] leading-[inherit] [font-variant:inherit] cursor-pointer
-        [transition:background-color_180ms_ease,_color_180ms_ease];
+.artifact-formats button,
+.report-sections a {
+    @apply px-3 text-sm;
 }
-.artifact-formats button[aria-pressed='true'] {
-    @apply bg-surface text-primary
-        [border-color:color-mix(in_srgb,_var(--scova-border)_35%,_transparent)]
-        [box-shadow:0_0.125rem_0.375rem_color-mix(in_srgb,_var(--scova-text)_4%,_transparent)];
+.artifact-control:hover,
+.artifact-formats button:hover,
+.artifact-formats button[aria-pressed='true'],
+.report-sections a:hover {
+    @apply [background:var(--scova-selected)] text-default;
 }
-.artifact-formats button:hover {
-    @apply bg-surface;
+.artifact-control:active {
+    scale: 0.96;
+}
+.artifact-control:focus-visible,
+.artifact-formats button:focus-visible,
+.report-sections a:focus-visible {
+    outline: 1px solid currentColor;
+    outline-offset: -1px;
 }
 .report-sections {
-    @apply [flex-basis:100%];
+    @apply gap-2;
 }
-.artifact-document {
-    @apply min-w-0;
+.report-sections a {
+    @apply no-underline;
 }
-@media (max-width: 39.999rem) {
-    .artifact-scroll {
-        @apply pt-2 pr-1 pb-2 pl-1;
+@media (pointer: coarse) {
+    .artifact-control,
+    .artifact-formats button,
+    .report-sections a {
+        @apply min-h-11;
     }
-    .deliverable-heading {
-        @apply p-3.5;
-    }
-    .artifact-document {
-        @apply pt-4 pr-1 pb-4 pl-1;
-    }
-    .report-sections :deep(.n-button) {
-        @apply pl-2.5 pr-2.5;
+    .artifact-control {
+        @apply min-w-11;
     }
 }
-@media (width >= 72rem) {
+@media (width >= 64rem) {
     .report-artifact-panel:not(.report-artifact-panel--reading) {
-        @apply sticky [top:1rem] max-h-[calc(100dvh_-_6rem)];
+        @apply sticky top-0 max-h-[100dvh];
     }
     .report-artifact-panel:not(.report-artifact-panel--reading) .artifact-scroll {
         @apply [overflow-y:auto] [overscroll-behavior-block:contain];
     }
 }
 @media (prefers-reduced-motion: reduce) {
-    .artifact-scroll {
-        @apply [scroll-behavior:auto];
-    }
-    .artifact-formats button {
-        @apply [transition:none];
+    .artifact-control,
+    .artifact-formats button,
+    .report-sections a {
+        transition: none;
+        scale: none;
     }
 }
 </style>

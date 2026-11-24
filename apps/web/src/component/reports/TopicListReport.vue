@@ -3,9 +3,13 @@
         :report="report"
         :show-sources="showSources"
         :show-changes="showChanges"
+        :workspace="!!$slots['section-navigation']"
         format="list"
         class="report-topic-list"
     >
+        <template v-if="$slots['section-navigation']" #after-summary
+            ><slot name="section-navigation"
+        /></template>
         <template #format-notice><report-format-banner format="list" :report="report" /></template>
         <section
             v-for="section in sections"

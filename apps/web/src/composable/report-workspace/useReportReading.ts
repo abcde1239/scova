@@ -24,7 +24,8 @@ export function useReportReading(
         await nextTick();
         if (
             !panel?.isConnected ||
-            !before ||
+            !before?.width ||
+            !before.height ||
             window.matchMedia('(prefers-reduced-motion: reduce)').matches
         )
             return;
@@ -38,14 +39,14 @@ export function useReportReading(
                 },
                 { transformOrigin: 'top left', transform: 'none' },
             ],
-            { duration: 420, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
+            { duration: 180, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
         );
         await readingAnimation.finished.catch(() => {});
     }
     async function openArtifact() {
         const identity = routeIdentity.value;
         artifactOpen.value = true;
-        readingOnly.value = window.matchMedia('(width < 72rem)').matches;
+        readingOnly.value ||= window.matchMedia('(width < 64rem)').matches;
         await nextTick();
         if (identity !== routeIdentity.value || !report.value) return;
         if (readingOnly.value)
@@ -73,7 +74,9 @@ export function useReportReading(
         await expandArtifact(false);
         if (identity !== routeIdentity.value || readingOnly.value) return;
         const target = detail.value?.querySelector<HTMLElement>('#report-conversation');
-        const input = target?.querySelector<HTMLTextAreaElement>('textarea:not([readonly])');
+        const input = target?.querySelector<HTMLTextAreaElement>(
+            '#report-question:not([readonly])',
+        );
         (input ?? target)?.focus({ preventScroll: true });
     }
     async function retry() {

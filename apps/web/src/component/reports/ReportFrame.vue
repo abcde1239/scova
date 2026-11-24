@@ -16,33 +16,29 @@
                             : formatNames[format]
                     }}
                 </p>
-                <p v-if="delivery" class="scova-interface report-delivery">
+                <p v-if="deliveryStatus" class="scova-interface report-delivery">
                     <a
                         v-if="organized"
-                        class="internal-link inline-flex items-center min-h-11"
+                        class="delivery-status-link"
                         href="#coverage-title"
                         @click="openCoverage"
-                        >{{
-                            hasAnswerGaps
-                                ? '部分交付 · 查看详情'
-                                : reportDeliveryLabels[delivery.status]
-                        }}</a
+                        >{{ deliveryStatus }}</a
                     >
-                    <strong v-else>{{
-                        hasAnswerGaps ? '部分内容待补充' : reportDeliveryLabels[delivery.status]
-                    }}</strong>
-                    <span v-if="delivery.questionCount && !organized">
-                        · {{ delivery.answeredQuestions }}/{{
-                            delivery.questionCount
-                        }}
-                        个问题已整理相关材料，逐项完整性见下方</span
+                    <strong v-else>{{ deliveryStatus }}</strong>
+                    <span
+                        v-if="
+                            delivery?.questionCount && deliveryStatus === '部分交付' && !organized
+                        "
                     >
+                        · {{ delivery.answeredQuestions }}/{{ delivery.questionCount }}
+                        个问题已整理相关材料
+                    </span>
                 </p>
                 <p class="published scova-interface">
                     <time :datetime="report.publishedAt">{{ published }}</time>
                 </p>
             </div>
-            <research-completion-summary :coverage="report.coverage" />
+            <research-completion-summary v-if="!workspace" :coverage="report.coverage" />
         </header>
 
         <report-changes v-if="showChanges" :report="report" />
@@ -75,7 +71,7 @@
                 >
             </p>
         </section>
-        <slot v-if="!document || structured" name="after-summary" />
+        <slot v-if="!document || structured || collectionList" name="after-summary" />
         <collection-results v-if="collectionList" :report="report" />
         <report-document
             v-if="!collectionList && document && !structured"
@@ -125,6 +121,7 @@
                     }}
                 </summary>
                 <div class="coverage-body">
+                    <research-completion-summary v-if="workspace" :coverage="report.coverage" />
                     <p>
                         {{
                             integrity.partial
@@ -197,7 +194,8 @@ import ReportChanges from '@/component/reports/ReportChanges.vue';
 import ReportDateScreening from '@/component/reports/ReportDateScreening.vue';
 import CollectionResults from '@/component/reports/CollectionResults.vue';
 import { computed, ref } from 'vue';
-import { classifyReportDelivery, reportDeliveryLabels, type Report } from '@scova/models';
+import type { Report } from '@scova/models';
+import { reportDeliveryStatus, savedReportDelivery } from '@/utils/report/summary';
 import { reportIntegrity, uniqueCoverageNotes } from '@/utils/report/summary';
 import { useReadingTypography } from '@/composable/useReadingTypography';
 import ReportSources from '@/component/reports/ReportSources.vue';
@@ -217,6 +215,7 @@ const props = withDefaults(
         format?: Report['format'];
         showSources?: boolean;
         showChanges?: boolean;
+        workspace?: boolean;
     }>(),
     {
         summaryTitle: '报告概述',
@@ -300,24 +299,24 @@ function compactLabel(text: string): string {
     const characters = [...text];
     return characters.length > 80 ? `${characters.slice(0, 80).join('')}…` : text;
 }
-const hasAnswerGaps = computed(() => answerGaps.value.length > 0);
 const notes = computed(() => {
     const limitations = new Set(uniqueCoverageNotes(integrity.value.limitations));
     return uniqueCoverageNotes(props.report.coverage.notes ?? []).filter(
         (note) => !limitations.has(note),
     );
 });
-const delivery = computed(
-    () =>
-        props.report.coverage.delivery ??
-        (props.report.coverage.reportValue
-            ? classifyReportDelivery(
-                  props.report.coverage.reportValue,
-                  props.report.claims,
-                  props.report.coverage.artifacts,
-              )
-            : undefined),
-);
+const delivery = computed(() => savedReportDelivery(props.report));
+const deliveryStatus = computed(() => {
+    const status = reportDeliveryStatus(props.report, delivery.value);
+    if (
+        !props.report.coverage.delivery &&
+        organized.value &&
+        answerGaps.value.length &&
+        status !== '仅保存来源'
+    )
+        return '部分交付';
+    return status;
+});
 const coverageDetails = ref<HTMLDetailsElement>();
 const published = computed(() =>
     new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(
@@ -411,7 +410,19 @@ h4 {
     @apply text-[1rem] font-semibold;
 }
 .mode {
-    @apply font-medium;
+    @apply text-muted text-[0.8125rem];
+}
+.report-delivery {
+    @apply flex flex-wrap items-baseline gap-1.5 text-sm;
+}
+.report-delivery :is(strong, a) {
+    @apply rounded-2 px-2 py-0.5 [background:var(--scova-selected)] text-default;
+}
+.delivery-status-link {
+    @apply no-underline font-semibold;
+}
+.delivery-status-link:hover {
+    @apply underline;
 }
 .published {
     @apply text-muted text-[0.875rem];

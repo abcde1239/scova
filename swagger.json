@@ -10668,6 +10668,11 @@
                         ],
                         "description": "接口字段 afterQuestionId 的配置或结果"
                     },
+                    "agentProviderId": {
+                        "description": "仅本轮问答使用的账号模型配置标识",
+                        "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                        "type": "string"
+                    },
                     "question": {
                         "description": "围绕报告的纯文本问题，最多2000字符",
                         "maxLength": 2000,
@@ -147018,7 +147023,7 @@
         },
         "/api/v1/reports/{reportId}/questions": {
             "post": {
-                "description": "结合原报告与有界历史对话，仅使用当前用户报告内授权引用，独立限流与计量；afterQuestionId核对最新轮次。必须携带会话、CSRF与Idempotency-Key，不会搜索或创建执行。",
+                "description": "结合原报告与有界历史对话，仅使用当前用户报告内授权引用，独立限流与计量；afterQuestionId核对最新轮次，agentProviderId可指定当前账号的模型配置且不更改默认设置。必须携带会话、CSRF与Idempotency-Key，不会搜索或创建执行。",
                 "operationId": "createReportQuestion",
                 "parameters": [
                     {
@@ -147051,6 +147056,11 @@
                                         ],
                                         "description": "接口字段 afterQuestionId 的配置或结果"
                                     },
+                                    "agentProviderId": {
+                                        "description": "仅本轮问答使用的账号模型配置标识",
+                                        "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                        "type": "string"
+                                    },
                                     "question": {
                                         "description": "围绕报告的纯文本问题，最多2000字符",
                                         "maxLength": 2000,
@@ -147082,6 +147092,11 @@
                                         ],
                                         "description": "接口字段 afterQuestionId 的配置或结果"
                                     },
+                                    "agentProviderId": {
+                                        "description": "仅本轮问答使用的账号模型配置标识",
+                                        "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                        "type": "string"
+                                    },
                                     "question": {
                                         "description": "围绕报告的纯文本问题，最多2000字符",
                                         "maxLength": 2000,
@@ -147112,6 +147127,11 @@
                                             }
                                         ],
                                         "description": "接口字段 afterQuestionId 的配置或结果"
+                                    },
+                                    "agentProviderId": {
+                                        "description": "仅本轮问答使用的账号模型配置标识",
+                                        "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                                        "type": "string"
                                     },
                                     "question": {
                                         "description": "围绕报告的纯文本问题，最多2000字符",

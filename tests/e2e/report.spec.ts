@@ -110,6 +110,9 @@ function report() {
 }
 async function samples(page: Page) {
     await page.route('**/api/v1/me', (route) => route.fulfill({ json: account() }));
+    await page.route('**/api/v1/me/agent-providers', (route) =>
+        route.fulfill({ json: { items: [], systemConfigured: true, storageReady: true } }),
+    );
     await page.route(`**/api/v1/reports/${id(1)}`, (route) => route.fulfill({ json: report() }));
 }
 for (const width of [320, 1440]) {
@@ -133,6 +136,8 @@ for (const width of [320, 1440]) {
             }),
         );
         await page.goto(reportPath);
+        await readOnMobile(page);
+        await page.getByRole('button', { name: '导出成果' }).click();
         const request = page.waitForRequest((req) => req.url().endsWith('/exports/markdown'));
         const download = page.waitForEvent('download');
         await page.getByRole('button', { name: '导出 Markdown' }).click();
@@ -212,6 +217,8 @@ for (const width of [320, 1440]) {
             });
         });
         await page.goto(reportPath);
+        await readOnMobile(page);
+        await page.getByRole('button', { name: '导出成果' }).click();
         const button = page.getByRole('button', { name: '导出 JSON' });
         const markdown = page.getByRole('button', { name: '导出 Markdown' });
         await expect(markdown).toBeEnabled();
@@ -252,6 +259,8 @@ test('报告 Markdown 导出失败可感知，可再次提交', async ({ page })
         });
     });
     await page.goto(reportPath);
+    await readOnMobile(page);
+    await page.getByRole('button', { name: '导出成果' }).click();
     const button = page.getByRole('button', { name: '导出 Markdown' });
     await button.click();
     await expect(
@@ -328,7 +337,11 @@ for (const width of [320, 1440]) {
             const state = await formatSamples(page, saved);
             await page.goto(reportPath);
             await readOnMobile(page);
-            await expect(page.locator('.report-delivery')).toContainText('部分内容待补充');
+            await expect(page.locator('.report-delivery')).toContainText(
+                { answered: '核心问题已回答', partial: '部分交付', sources_only: '仅保存来源' }[
+                    status
+                ],
+            );
             await expect(page.locator('.answer-gap-overview')).toBeVisible();
             await expect(page.locator('.answer-gaps')).toBeHidden();
             const coverageLink = page.getByRole('link', { name: '查看来源覆盖说明', exact: true });
@@ -379,10 +392,11 @@ test('宽屏左侧对话右侧成果、窄屏对话在前，基线在成果内�
     const reportDocument = await page.locator('.artifact-document').boundingBox();
     expect(baseline!.x).toBeGreaterThan(content!.x);
     expect(baseline!.x + baseline!.width).toBeLessThan(content!.x + content!.width);
-    expect(baseline!.y + baseline!.height).toBeLessThanOrEqual(reportDocument!.y);
+    expect(reportDocument!.y + reportDocument!.height).toBeLessThanOrEqual(baseline!.y);
     await expect(page.locator('.artifact-document .report-changes')).toHaveCount(0);
     await expect(page.locator('.report-content .report-changes')).toBeVisible();
     await expect(page.locator('#report-conversation')).toBeVisible();
+    await page.getByRole('button', { name: '更多成果操作' }).click();
     await expect(page.getByRole('link', { name: '执行详情', exact: true })).toHaveAttribute(
         'href',
         `/runs/${id(3)}`,
@@ -399,8 +413,7 @@ test('宽屏左侧对话右侧成果、窄屏对话在前，基线在成果内�
         await expect(page.locator('.report-content')).toBeVisible();
         await expect(page.locator('.report-companion')).toBeHidden();
         const jump = tools.getByRole('link', { name: '正文', exact: true });
-        await expect(jump).toHaveClass(/n-button/);
-        expect((await jump.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+        expect((await jump.boundingBox())!.height).toBeGreaterThanOrEqual(36);
         await jump.focus();
         await jump.press('Enter');
         await expect(page.locator('#report-title')).toBeFocused();
@@ -421,6 +434,7 @@ test('成果关闭恢复与完整阅读保留布局、问题和笔记草稿，�
     await expect(question).not.toHaveValue('');
     await expect(question).toBeFocused();
     await question.fill('阅读模式切换时保留的问题');
+    await page.locator('.secondary-report-tools > summary').click();
     await page.locator('.notes-tool > summary').click();
     await page.getByRole('button', { name: '新建笔记', exact: true }).click();
     const draft = page.getByLabel('本地笔记正文', { exact: true });
@@ -492,6 +506,9 @@ test('报告默认只展开问答，辅助工具按需打开且折叠保留笔�
     await page.goto(reportPath);
     await readOnMobile(page);
     await expect(page.getByLabel('问题', { exact: true })).toBeVisible();
+    const tools = page.locator('.secondary-report-tools');
+    await expect(tools).not.toHaveAttribute('open', '');
+    await tools.locator(':scope > summary').click();
     for (const tool of ['notes', 'bookmarks', 'feedback']) {
         const section = page.locator(`.${tool}-tool`);
         await expect(section).toBeVisible();
@@ -702,13 +719,13 @@ test('本地 HTTP 样本：断网可键盘重试，已展开报告退出换号�
     await expect(page.getByLabel('报告形式', { exact: true })).toHaveCount(0);
     await expect(page.locator('.report-brief')).toBeVisible();
     await logoutFromAccount(page);
-    await expect(page.locator('article, blockquote')).toHaveCount(0);
+    await expect(page.locator('.report-frame, #report-artifact blockquote')).toHaveCount(0);
     await expect(page.getByLabel('报告形式', { exact: true })).toHaveCount(0);
     await page.getByLabel('邮箱', { exact: true }).fill('reader@example.test');
     await page.getByLabel('密码', { exact: true }).fill('local-only-password');
     await page.getByRole('button', { name: '登录', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('报告不存在或当前账号无法访问');
-    await expect(page.locator('article, blockquote')).toHaveCount(0);
+    await expect(page.locator('.report-frame, #report-artifact blockquote')).toHaveCount(0);
     await expect(page.getByLabel('报告形式', { exact: true })).toHaveCount(0);
     await expectAccountReady(page);
 });
@@ -994,6 +1011,10 @@ async function formatSamples(page: Page, initial = formatReport()) {
         const path = new URL(request.url()).pathname;
         state.calls.push({ method: request.method(), path });
         if (request.method() === 'GET') {
+            if (path === '/api/v1/me/agent-providers')
+                return route.fulfill({
+                    json: { items: [], systemConfigured: true, storageReady: true },
+                });
             if (path === '/api/v1/me') return route.fulfill({ json: account(state.account) });
             if (path === `/api/v1/reports/${state.report.id}`) {
                 await state.beforeReport?.();
@@ -1118,7 +1139,7 @@ test('同网页仅列一次，同快照去除重复原文，其他快照与全�
     expect(state.unexpected).toEqual([]);
 });
 
-test('完整阅读从成果浮窗连续放大，保留滚动和节点，Escape收起且减少动态时直接切换', async ({
+test('完整阅读从成果面板连续展开，保留滚动和节点，Escape收起且减少动态时直接切换', async ({
     page,
 }) => {
     const state = await formatSamples(page, reportFormatSample('research_report'));
@@ -1140,8 +1161,8 @@ test('完整阅读从成果浮窗连续放大，保留滚动和节点，Escape�
     const bounds = await page.evaluate(async () => {
         const panel = document.querySelector<HTMLElement>('#report-artifact')!;
         const before = panel.getBoundingClientRect();
-        const button = [...panel.querySelectorAll('button')].find((node) =>
-            node.textContent?.includes('完整阅读'),
+        const button = [...panel.querySelectorAll('button')].find(
+            (node) => node.getAttribute('aria-label') === '完整阅读',
         )!;
         button.click();
         await new Promise(requestAnimationFrame);
@@ -1149,11 +1170,11 @@ test('完整阅读从成果浮窗连续放大，保留滚动和节点，Escape�
         animation.pause();
         animation.currentTime = 0;
         const start = panel.getBoundingClientRect();
-        animation.currentTime = 210;
+        animation.currentTime = 90;
         const middle = panel.getBoundingClientRect();
-        animation.currentTime = 420;
+        animation.currentTime = 180;
         const end = panel.getBoundingClientRect();
-        animation.currentTime = 210;
+        animation.currentTime = 90;
         return {
             before: before.width,
             start: start.width,
@@ -1162,7 +1183,7 @@ test('完整阅读从成果浮窗连续放大，保留滚动和节点，Escape�
             duration: animation.effect!.getTiming().duration,
         };
     });
-    expect(bounds.duration).toBe(420);
+    expect(bounds.duration).toBe(180);
     expect(bounds.start).toBeCloseTo(bounds.before, 0);
     expect(bounds.middle).toBeGreaterThan(bounds.start);
     expect(bounds.middle).toBeLessThan(bounds.end);
@@ -1196,7 +1217,7 @@ test('完整阅读从成果浮窗连续放大，保留滚动和节点，Escape�
         const record = (event: FocusEvent) => targets.push((event.target as HTMLElement).id);
         document.addEventListener('focusin', record);
         [...node.querySelectorAll('button')]
-            .find((button) => button.textContent?.includes('完整阅读'))!
+            .find((button) => button.getAttribute('aria-label') === '完整阅读')!
             .click();
         await new Promise(requestAnimationFrame);
         [...node.querySelectorAll('button')]
@@ -1671,6 +1692,7 @@ test('生产四视图：格式切换保留未提交问题和同页笔记编辑�
         expect(await questions!.evaluate((element) => element.isConnected)).toBe(true);
         expect(await notes!.evaluate((element) => element.isConnected)).toBe(true);
     }
+    await page.getByRole('button', { name: '添加功能' }).click();
     page.once('dialog', (dialog) => dialog.accept());
     await page.getByRole('button', { name: '清空问题', exact: true }).click();
     await expect(page.getByLabel('问题', { exact: true })).toHaveValue('');
@@ -1901,6 +1923,7 @@ for (const width of [1440, 390]) {
         const source = panel.locator('.evidence-source-group').first();
         await expect(source).toBeVisible();
         await expect(source).not.toHaveAttribute('open', '');
+        await panel.getByRole('button', { name: '导出成果' }).click();
         await panel.getByRole('button', { name: '打印 / 另存为 PDF' }).press('Enter');
         await expect(source).toHaveAttribute('open', '');
         await page.emulateMedia({ media: 'print' });
@@ -1915,6 +1938,7 @@ for (const width of [1440, 390]) {
         await page.emulateMedia({ media: 'screen' });
         await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
         await expect(source).not.toHaveAttribute('open', '');
+        await panel.getByRole('button', { name: '导出成果' }).click();
         await expect(panel.getByRole('button', { name: '打印 / 另存为 PDF' })).toBeVisible();
     });
 }

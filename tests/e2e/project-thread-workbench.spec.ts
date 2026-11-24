@@ -632,9 +632,14 @@ test('report sources share the reference limit and survive reload retry', async 
     await page.getByRole('combobox', { name: '关联项目任务' }).selectOption(taskId);
 
     async function openSources() {
-        await page.getByRole('button', { name: '项目概览', exact: true }).click();
-        await page.getByRole('tab', { name: '成果' }).click();
-        await page.getByRole('button', { name: /侧栏阅读\s*：季度能源报告/ }).click();
+        const readingToggle = page.getByRole('button', { name: '报告阅读', exact: true });
+        if (await readingToggle.isVisible()) {
+            await readingToggle.click();
+        } else {
+            await page.getByRole('button', { name: '项目概览', exact: true }).click();
+            await page.getByRole('tab', { name: '成果' }).click();
+            await page.getByRole('button', { name: /侧栏阅读\s*：季度能源报告/ }).click();
+        }
         const reader = page.getByRole('dialog', { name: '报告阅读' });
         const sources = reader.getByText('报告来源', { exact: true });
         await expect(sources).toBeVisible();

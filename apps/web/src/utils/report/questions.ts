@@ -37,15 +37,19 @@ export function questionAttempt(
     question: string,
     key: string = crypto.randomUUID(),
     afterQuestionId?: string | null,
+    agentProviderId?: string,
 ) {
     parseContract(UuidSchema, reportId);
-    parseContract(ReportQuestionInputSchema, { question });
+    const input = parseContract(ReportQuestionInputSchema, {
+        question,
+        ...(afterQuestionId !== undefined ? { afterQuestionId } : {}),
+        ...(agentProviderId ? { agentProviderId } : {}),
+    });
     parseContract(IdempotencyHeadersSchema, { 'idempotency-key': key });
     return Object.freeze({
         reportId,
-        question,
         key,
-        ...(afterQuestionId !== undefined ? { afterQuestionId } : {}),
+        ...input,
     });
 }
 export type QuestionAttempt = ReturnType<typeof questionAttempt>;

@@ -380,8 +380,14 @@ export function createAgentProviderService(services: ApiServices) {
                 await repo.remove(tx, userId, id);
             });
         },
-        async model(userId: string, purpose: AgentProviderPurpose = 'research') {
-            const row = await repo.active(userId, purpose);
+        async model(userId: string, purpose: AgentProviderPurpose = 'research', id?: string) {
+            const row = id ? await repo.get(userId, id) : await repo.active(userId, purpose);
+            if (!row && id)
+                throw new ApiError(
+                    422,
+                    'AGENT_CONFIGURATION_INVALID',
+                    '所选模型配置不可用，请重新选择',
+                );
             if (!row) return null;
             try {
                 return createModelProvider({

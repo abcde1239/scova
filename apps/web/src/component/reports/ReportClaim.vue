@@ -1,7 +1,7 @@
 <template>
     <div
         :id="`claim-${claim.id}`"
-        class="claim report-grid [.claim_+_&.claim]:(pt-6 [border-top:0.0625rem_solid_var(--scova-border)])"
+        class="claim report-grid grid-cols-[minmax(0,_1fr)] [.claim_+_&.claim]:(pt-6 [border-top:0.0625rem_solid_var(--scova-border)])"
         :class="{ 'document-claim': compact }"
     >
         <model-answer-tag v-if="claim.kind === 'model_answer'" />

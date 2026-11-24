@@ -3,9 +3,13 @@
         :report="report"
         :show-sources="showSources"
         :show-changes="showChanges"
+        :workspace="!!$slots['section-navigation']"
         summary-title="简报概述"
         class="report-brief"
     >
+        <template v-if="$slots['section-navigation']" #after-summary
+            ><slot name="section-navigation"
+        /></template>
         <section
             v-for="section in sections"
             :key="section.kind"

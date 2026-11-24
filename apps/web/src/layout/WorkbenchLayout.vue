@@ -1,7 +1,10 @@
 <template>
     <div
         class="workbench min-h-[100dvh]"
-        :class="{ 'workbench--thread': threadPage }"
+        :class="{
+            'workbench--thread': threadPage,
+            'workbench--report': route.name === 'report-detail',
+        }"
         :style="{ '--project-sidebar-width': `${workspace.width('sidebar')}px` }"
     >
         <a
@@ -82,12 +85,13 @@
             :class="{
                 'workbench-main--form': route.meta.contentWidth === 'form',
                 'workbench-main--thread': threadPage,
+                'workbench-main--report': route.name === 'report-detail',
             }"
             tabindex="-1"
             aria-labelledby="page-title"
         >
             <page-breadcrumbs
-                v-if="!threadPage"
+                v-if="!threadPage && route.name !== 'report-detail'"
                 class="flex flex-wrap gap-2 [.page-heading_>_&]:(min-w-0 max-w-full break-anywhere)"
             />
             <div
@@ -237,6 +241,10 @@ const mobileItems = computed(() => [
 .workbench-main:has(> .breadcrumbs) {
     @apply pt-3;
 }
+.workbench-main--report {
+    @apply max-w-none p-0;
+    overflow-wrap: anywhere;
+}
 .workbench-main--form {
     @apply max-w-[calc(44rem_+_2_*_var(--workbench-gutter))];
 }
@@ -266,6 +274,9 @@ const mobileItems = computed(() => [
     }
     .workbench {
         @apply grid grid-cols-[min(15.5rem,_30vw)_minmax(0,_1fr)];
+    }
+    .workbench--report {
+        @apply grid-cols-[min(12.5rem,_25vw)_minmax(0,_1fr)];
     }
     .workbench-header {
         @apply sticky top-0 z-[5] self-start grid grid-cols-[minmax(0,_1fr)]
