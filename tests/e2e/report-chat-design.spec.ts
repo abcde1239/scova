@@ -128,6 +128,8 @@ async function fixture(page: Page, initial = true) {
             method = req.method();
         const error = (status = 404, code = 'NOT_FOUND') =>
             route.fulfill({ status, json: { code, message: 'sample', requestId: 'chat-design' } });
+        if (path === '/projects' && method === 'GET')
+            return route.fulfill({ json: { items: [], nextCursor: null } });
         if (path === '/me')
             return route.fulfill({
                 json: {

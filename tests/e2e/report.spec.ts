@@ -1011,6 +1011,8 @@ async function formatSamples(page: Page, initial = formatReport()) {
         const path = new URL(request.url()).pathname;
         state.calls.push({ method: request.method(), path });
         if (request.method() === 'GET') {
+            if (path === '/api/v1/projects')
+                return route.fulfill({ json: { items: [], nextCursor: null } });
             if (path === '/api/v1/me/agent-providers')
                 return route.fulfill({
                     json: { items: [], systemConfigured: true, storageReady: true },

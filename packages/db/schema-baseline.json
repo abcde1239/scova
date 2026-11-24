@@ -80,6 +80,10 @@
         {
             "name": "0019_thread_attachments",
             "hash": "fc8ba53b22aafc804faad57036377bf0e58bdf0e498f81c7d41237f82477c236"
+        },
+        {
+            "name": "0020_project_thread_attachment_ownership",
+            "hash": "c17f268e0e6dcc9bcd79a6fb63e63e6f94f5d5a76bdd96fdf8ad13f1db853123"
         }
     ],
     "signature": {
@@ -2049,6 +2053,17 @@
                 "position": 10,
                 "type": "timestamp with time zone",
                 "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_thread_attachments",
+                "name": "user_id",
+                "position": 11,
+                "type": "uuid",
+                "not_null": false,
                 "default_value": null,
                 "identity": "",
                 "generated": "",
@@ -5876,6 +5891,20 @@
             },
             {
                 "table_name": "project_thread_attachments",
+                "name": "project_thread_attachments_owner_thread_check",
+                "type": "c",
+                "definition": "CHECK ((user_id IS NULL) = (thread_id IS NULL))",
+                "validated": true
+            },
+            {
+                "table_name": "project_thread_attachments",
+                "name": "project_thread_attachments_owner_thread_fkey",
+                "type": "f",
+                "definition": "FOREIGN KEY (user_id, thread_id) REFERENCES project_threads(user_id, id) ON DELETE SET NULL",
+                "validated": true
+            },
+            {
+                "table_name": "project_thread_attachments",
                 "name": "project_thread_attachments_pkey",
                 "type": "p",
                 "definition": "PRIMARY KEY (id)",
@@ -5886,13 +5915,6 @@
                 "name": "project_thread_attachments_size_check",
                 "type": "c",
                 "definition": "CHECK (byte_length >= 1 AND byte_length <= 262144)",
-                "validated": true
-            },
-            {
-                "table_name": "project_thread_attachments",
-                "name": "project_thread_attachments_thread_id_project_threads_id_fk",
-                "type": "f",
-                "definition": "FOREIGN KEY (thread_id) REFERENCES project_threads(id) ON DELETE SET NULL",
                 "validated": true
             },
             {
@@ -8476,13 +8498,13 @@
             },
             {
                 "table_name": "project_thread_attachments",
-                "constraint_name": "project_thread_attachments_thread_id_project_threads_id_fk",
+                "constraint_name": "project_thread_attachments_owner_thread_fkey",
                 "event": 5,
                 "enabled": "O"
             },
             {
                 "table_name": "project_thread_attachments",
-                "constraint_name": "project_thread_attachments_thread_id_project_threads_id_fk",
+                "constraint_name": "project_thread_attachments_owner_thread_fkey",
                 "event": 17,
                 "enabled": "O"
             },
@@ -8560,13 +8582,13 @@
             },
             {
                 "table_name": "project_threads",
-                "constraint_name": "project_thread_attachments_thread_id_project_threads_id_fk",
+                "constraint_name": "project_thread_attachments_owner_thread_fkey",
                 "event": 9,
                 "enabled": "O"
             },
             {
                 "table_name": "project_threads",
-                "constraint_name": "project_thread_attachments_thread_id_project_threads_id_fk",
+                "constraint_name": "project_thread_attachments_owner_thread_fkey",
                 "event": 17,
                 "enabled": "O"
             },

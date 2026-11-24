@@ -8,7 +8,6 @@ import {
     lte,
     or,
     projectThreadAttachments as attachments,
-    projectThreads,
     type DatabaseExecutor,
 } from '@scova/db';
 
@@ -23,7 +22,7 @@ export function createThreadAttachmentRepo(db: DatabaseExecutor) {
     }
 
     return {
-        async reserve(input: NewAttachment & { threadId: string }) {
+        async reserve(input: NewAttachment & { userId: string; threadId: string }) {
             const [row] = await db
                 .insert(attachments)
                 .values(input)
@@ -34,11 +33,17 @@ export function createThreadAttachmentRepo(db: DatabaseExecutor) {
                 .returning();
             return row!;
         },
-        async lock(id: string, threadId: string) {
+        async lock(userId: string, id: string, threadId: string) {
             const [row] = await db
                 .select()
                 .from(attachments)
-                .where(and(eq(attachments.id, id), eq(attachments.threadId, threadId)))
+                .where(
+                    and(
+                        eq(attachments.id, id),
+                        eq(attachments.threadId, threadId),
+                        eq(attachments.userId, userId),
+                    ),
+                )
                 .for('update');
             return row;
         },
@@ -53,18 +58,17 @@ export function createThreadAttachmentRepo(db: DatabaseExecutor) {
         async findReady(userId: string, threadId: string, ids: string[]) {
             if (!ids.length) return [];
             const rows = await db
-                .select({ attachment: attachments })
+                .select()
                 .from(attachments)
-                .innerJoin(projectThreads, eq(attachments.threadId, projectThreads.id))
                 .where(
                     and(
-                        eq(projectThreads.userId, userId),
-                        eq(projectThreads.id, threadId),
+                        eq(attachments.userId, userId),
+                        eq(attachments.threadId, threadId),
                         inArray(attachments.id, ids),
                         isNotNull(attachments.readyAt),
                     ),
                 );
-            return rows.map(({ attachment }) => attachment);
+            return rows;
         },
         candidates(cutoff: Date, limit: number) {
             return db

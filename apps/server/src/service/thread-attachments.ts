@@ -172,6 +172,7 @@ export function createThreadAttachmentService(
                 requireWritableThread(current);
                 return createThreadAttachmentRepo(tx).reserve({
                     id,
+                    userId,
                     threadId,
                     filename,
                     format,
@@ -186,7 +187,7 @@ export function createThreadAttachmentService(
             return db.transaction(async (tx) => {
                 const repo = createThreadAttachmentRepo(tx);
                 // The same row lock serializes retries with cleanup. Other attachments use separate locks.
-                const current = await repo.lock(reserved.id, threadId);
+                const current = await repo.lock(userId, reserved.id, threadId);
                 if (!current) throw threadMissing();
                 if (current.readyAt) return describe(current, threadId);
                 try {

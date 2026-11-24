@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
     check,
+    foreignKey,
     index,
     integer,
     pgTable,
@@ -17,7 +18,8 @@ export const projectThreadAttachments = pgTable(
     {
         id: uuid('id').primaryKey(),
         // Preserve the object locator after project removal so cleanup can retry independently.
-        threadId: uuid('thread_id').references(() => projectThreads.id, { onDelete: 'set null' }),
+        userId: uuid('user_id'),
+        threadId: uuid('thread_id'),
         filename: text('filename').notNull(),
         format: text('format').$type<ReportAttachmentFormat>().notNull(),
         byteLength: integer('byte_length').notNull(),
@@ -28,6 +30,15 @@ export const projectThreadAttachments = pgTable(
         updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull(),
     },
     (table) => [
+        foreignKey({
+            name: 'project_thread_attachments_owner_thread_fkey',
+            columns: [table.userId, table.threadId],
+            foreignColumns: [projectThreads.userId, projectThreads.id],
+        }).onDelete('set null'),
+        check(
+            'project_thread_attachments_owner_thread_check',
+            sql`(${table.userId} is null) = (${table.threadId} is null)`,
+        ),
         uniqueIndex('project_thread_attachments_content_key').on(table.threadId, table.digest),
         index('project_thread_attachments_cleanup_idx')
             .on(table.updatedAt)
