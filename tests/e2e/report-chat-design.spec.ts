@@ -115,6 +115,7 @@ async function fixture(page: Page, initial = true) {
         posts: [] as { path: string; body: any; key?: string }[],
         reports: new Map([[report.id, report]]),
         runs: new Map([[id(3), run(3, 'partial')]]),
+        loseQuestion: false,
         lost: false,
         loseMerge: false,
         loseCancel: false,
@@ -142,6 +143,43 @@ async function fixture(page: Page, initial = true) {
                     csrfToken: 'chat-design',
                 },
             });
+        if (path === '/me/agent-providers')
+            return route.fulfill({
+                json: {
+                    items: [
+                        {
+                            id: id(401),
+                            name: '默认研究',
+                            model: 'configured-default',
+                            active: true,
+                            hasApiKey: true,
+                        },
+                        {
+                            id: id(402),
+                            name: '备选研究',
+                            model: 'configured-alternative',
+                            active: false,
+                            hasApiKey: true,
+                        },
+                        {
+                            id: id(403),
+                            name: '未填密钥',
+                            model: 'configured-missing',
+                            active: false,
+                            hasApiKey: false,
+                        },
+                    ].map((provider) => ({
+                        ...provider,
+                        protocol: 'openai_chat_completions',
+                        baseUrl: 'https://provider.example/v1',
+                        draftActive: false,
+                        revision: 1,
+                        updatedAt: instant,
+                    })),
+                    systemConfigured: true,
+                    storageReady: true,
+                },
+            });
         if (method === 'POST')
             state.posts.push({
                 path,
@@ -165,6 +203,10 @@ async function fixture(page: Page, initial = true) {
                 },
             });
         if (path === `/reports/${report.id}/questions` && method === 'POST') {
+            if (state.loseQuestion) {
+                state.loseQuestion = false;
+                return route.abort('failed');
+            }
             const text = req.postDataJSON().question;
             const value = turn(state.turns.length + 1, text);
             state.turns.push(value);
@@ -313,6 +355,7 @@ async function fixture(page: Page, initial = true) {
     return { state, complete };
 }
 const input = (page: Page) => page.getByRole('textbox', { name: '问题', exact: true });
+const rootArtifacts = process.env.SCOVA_REPORT_SCREENSHOTS ?? 'artifacts/report-chat-design/v2';
 const chat = (page: Page) => page.getByRole('region', { name: '报告对话', exact: true });
 async function open(page: Page) {
     await page.goto(`/reports/${report.id}`);
@@ -347,6 +390,7 @@ test('retry follows the new run, survives refresh and replays uncertain stop wit
         dialogs++;
         await dialog.dismiss();
     });
+    await page.getByRole('button', { name: '更多成果操作', exact: true }).click();
     await page.getByRole('link', { name: '阅读外观', exact: true }).click();
     expect(dialogs).toBe(1);
     await followup.getByRole('button', { name: '使用同一命令确认', exact: true }).click();
@@ -401,14 +445,14 @@ test('desktop follows the design in both themes and reading keeps keyboard focus
         });
         await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
         await page.screenshot({
-            path: `artifacts/report-chat-design/v2/implementation-desktop-${dark ? 'dark' : 'light'}.png`,
+            path: `${rootArtifacts}/implementation-desktop-${dark ? 'dark' : 'light'}.png`,
             fullPage: true,
         });
     }
     await page.getByRole('button', { name: '完整阅读', exact: true }).click();
     const panel = page.getByRole('dialog', { name: '报告交付物', exact: true });
     await expect(page.locator('#report-title')).toBeFocused();
-    const first = panel.getByRole('button', { name: '返回对话', exact: true });
+    const first = panel.getByRole('combobox', { name: '成果版本', exact: true });
     await first.focus();
     await page.keyboard.press('Shift+Tab');
     expect(await panel.evaluate((element) => element.contains(document.activeElement))).toBe(true);
@@ -495,7 +539,29 @@ test('completed artifacts open in the same panel and merge replays safely to a s
     await expect(page.locator('#report-artifact')).toContainText(artifact.summary);
     await expect(input(page)).toHaveValue('保留这个问题草稿');
     await expect(chat(page)).toContainText('讨论上下文：原报告');
+    const execution = page.locator('#report-artifact');
+    await execution.getByRole('button', { name: '更多成果操作' }).click();
+    await expect(execution.getByRole('link', { name: '执行详情' })).toHaveAttribute(
+        'href',
+        `/runs/${artifact.runId}`,
+    );
+    await execution.getByRole('button', { name: '更多成果操作' }).press('Escape');
+    await page.route(`**/api/v1/reports/${artifact.id}/exports/markdown`, (route) =>
+        route.fulfill({
+            status: 422,
+            json: {
+                code: 'REPORT_EXPORT_TOO_LARGE',
+                message: '当前成果超过导出上限',
+                requestId: 'chat-design',
+            },
+        }),
+    );
+    await execution.getByRole('button', { name: '导出成果' }).click();
+    await execution.getByRole('button', { name: '导出 Markdown' }).click();
+    await expect(execution.getByRole('alert')).toHaveText('当前成果超过导出上限');
+    await execution.getByRole('button', { name: '导出成果' }).press('Escape');
     expect(page.url()).toContain(`/reports/${report.id}`);
+    await page.getByRole('button', { name: '更多成果操作', exact: true }).click();
     await page
         .locator('#report-artifact')
         .getByRole('button', { name: '合并到原报告', exact: true })
@@ -525,6 +591,50 @@ test('completed artifacts open in the same panel and merge replays safely to a s
     expect(state.unexpected).toEqual([]);
 });
 
+test('composer uses saved models per question and replays the original choice', async ({
+    page,
+}) => {
+    const { state } = await fixture(page, false);
+    await open(page);
+    const composer = page.locator('.question-form');
+    const models = composer.getByRole('button', { name: '本对话使用的模型' });
+    const effort = composer.getByRole('button', { name: '本对话的推理强度' });
+    await expect(models).toHaveText('configured-default');
+    const border = await composer.evaluate((el) => getComputedStyle(el).border);
+    await input(page).focus();
+    await expect(input(page)).toHaveCSS('resize', 'none');
+    expect(await composer.evaluate((el) => getComputedStyle(el).border)).toBe(border);
+    await input(page).fill('多行输入测试\n'.repeat(24));
+    expect(await input(page).evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+    await input(page).fill('使用所选模型解释报告');
+    await composer.getByRole('button', { name: '添加功能' }).click();
+    await expect(composer.getByRole('button', { name: '补查新资料', exact: true })).toBeEnabled();
+    await composer.getByRole('button', { name: '添加功能' }).press('Escape');
+    await models.press('Enter');
+    await models.press('Tab');
+    await expect(composer.getByRole('button', { name: /沿用配置/ })).toBeFocused();
+    await composer.getByRole('button', { name: /沿用配置/ }).press('Escape');
+    await expect(models).toBeFocused();
+    await models.click();
+    await expect(composer.getByRole('button', { name: /未填密钥/ })).toBeDisabled();
+    await page.screenshot({ path: `${rootArtifacts}/composer-models-light.png` });
+    await composer.getByRole('button', { name: /备选研究/ }).click();
+    await effort.click();
+    await expect(composer.getByText('当前配置未提供可选的推理强度。')).toBeVisible();
+    await composer.getByRole('button', { name: '沿用配置', exact: true }).click();
+    state.loseQuestion = true;
+    await input(page).press('Enter');
+    await expect(models).toBeDisabled();
+    await composer.getByRole('button', { name: '读取本次结果' }).click();
+    const posts = state.posts.filter(({ path }) => path.endsWith('/questions'));
+    expect(posts).toHaveLength(2);
+    expect(posts[0]?.body).toMatchObject({ agentProviderId: id(402) });
+    expect(posts[1]).toEqual(posts[0]);
+    expect(state.posts.every(({ path }) => !path.startsWith('/me/agent-providers'))).toBe(true);
+    await expect(models).toHaveText('configured-alternative');
+    expect(state.unexpected).toEqual([]);
+});
+
 for (const width of [320, 390])
     test(`mobile ${width}: fullscreen reading returns to conversation with draft at 200% text and no overflow`, async ({
         page,
@@ -539,15 +649,41 @@ for (const width of [320, 390])
         await expect(artifact).toBeVisible();
         await expect(artifact).toHaveCSS('position', 'fixed');
         await page.screenshot({
-            path: `artifacts/report-chat-design/v2/implementation-mobile-${width}.png`,
+            path: `${rootArtifacts}/implementation-mobile-${width}.png`,
             fullPage: true,
         });
         expect(
-            await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
-        ).toBe(true);
+            await page.evaluate(() => {
+                if (document.documentElement.scrollWidth <= window.innerWidth) return [];
+                return [...document.querySelectorAll('body *')]
+                    .filter((el) => {
+                        const box = el.getBoundingClientRect();
+                        return (
+                            box.width &&
+                            box.right > window.innerWidth + 1 &&
+                            getComputedStyle(el).visibility !== 'hidden'
+                        );
+                    })
+                    .slice(0, 16)
+                    .map((el) => [el.tagName, el.className, el.getBoundingClientRect().right]);
+            }),
+        ).toEqual([]);
         await artifact.getByRole('button', { name: '返回对话', exact: true }).click();
         await expect(input(page)).toHaveValue('尚未提交的草稿');
         expect(
-            await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
-        ).toBe(true);
+            await page.evaluate(() => {
+                if (document.documentElement.scrollWidth <= window.innerWidth) return [];
+                return [...document.querySelectorAll('body *')]
+                    .filter((el) => {
+                        const box = el.getBoundingClientRect();
+                        return (
+                            box.width &&
+                            box.right > window.innerWidth + 1 &&
+                            getComputedStyle(el).visibility !== 'hidden'
+                        );
+                    })
+                    .slice(0, 16)
+                    .map((el) => [el.tagName, el.className, el.getBoundingClientRect().right]);
+            }),
+        ).toEqual([]);
     });

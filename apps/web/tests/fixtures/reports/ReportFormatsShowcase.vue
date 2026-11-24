@@ -59,7 +59,7 @@
                 </div>
             </header>
             <main
-                class="showcase-report mx-auto px-5 py-10 sm:px-10"
+                class="showcase-report mx-auto px-[min(5vw,1.25rem)] py-10 sm:px-10"
                 :class="
                     format === 'comparison' || format === 'list'
                         ? 'max-w-[100rem]'

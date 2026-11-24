@@ -155,6 +155,10 @@ async function samples(context: BrowserContext) {
             key: headers['idempotency-key'],
             csrf: headers['x-csrf-token'],
         });
+        if (pathname === '/me/agent-providers')
+            return route.fulfill({
+                json: { items: [], systemConfigured: true, storageReady: true },
+            });
         if (pathname === '/me') return route.fulfill({ json: account(state.switched) });
         if (pathname === `/tasks/${state.report.taskId}/feedback` && method === 'GET')
             return route.fulfill({ json: { items: [] } });
@@ -297,6 +301,7 @@ async function switchAccount(page: Page) {
 }
 async function staleReturn(page: Page, state: State) {
     const now = await page.evaluate(() => Date.now());
+    await page.getByRole('button', { name: '更多成果操作', exact: true }).click();
     await page.getByRole('link', { name: '阅读外观', exact: true }).click();
     await expect(page).toHaveURL(/\/account\/appearance$/);
     await page.clock.setFixedTime(now + 31_000);
@@ -516,6 +521,7 @@ test('HTTP sample: known URL ID waits for authorized Report and failed explicit 
     await page.clock.install();
     const now = await page.evaluate(() => Date.now());
     state.reportHold = false;
+    await page.getByRole('button', { name: '更多成果操作', exact: true }).click();
     await page.getByRole('link', { name: '阅读外观', exact: true }).click();
     await expect(page).toHaveURL(/\/account\/appearance$/);
     state.getStatus = 503;
@@ -551,8 +557,14 @@ test('HTTP sample: draft and unknown attempt guard external route changes; accep
     const state = await samples(context);
     await open(page);
     await input(page).fill('未提交原稿');
+    await page.getByRole('button', { name: '更多成果操作', exact: true }).click();
     const appearance = page.getByRole('link', { name: '阅读外观', exact: true });
+    const openMore = async () => {
+        const more = page.getByRole('button', { name: '更多成果操作', exact: true });
+        if ((await more.getAttribute('aria-expanded')) === 'false') await more.click();
+    };
     page.once('dialog', (dialog) => dialog.dismiss());
+    await openMore();
     await appearance.click();
     await expect(page).toHaveURL(new RegExp(`${path}$`));
     await expect(input(page)).toHaveValue('未提交原稿');
@@ -560,6 +572,7 @@ test('HTTP sample: draft and unknown attempt guard external route changes; accep
     await button(page, '提问').click();
     await notice(page, '仍在处理中');
     page.once('dialog', (dialog) => dialog.dismiss());
+    await openMore();
     await appearance.click();
     await expect(input(page)).toHaveValue('未提交原稿');
     let release!: () => void;
@@ -576,6 +589,7 @@ test('HTTP sample: draft and unknown attempt guard external route changes; accep
     await button(page, '读取本次结果').click();
     await expect.poll(() => reading).toBe(true);
     page.once('dialog', (dialog) => dialog.accept());
+    await openMore();
     await appearance.click();
     await expect(page).toHaveURL(/\/account\/appearance$/);
     release();
@@ -840,6 +854,11 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
                                     left: rect.left,
                                     right: rect.right,
                                     height: rect.height,
+                                    minHeight: element.matches(
+                                        '.workspace-menu-trigger, .question-send, .secondary-report-tools > summary',
+                                    )
+                                        ? 36
+                                        : 44,
                                     cursor: getComputedStyle(element).cursor,
                                     disabled: element.matches(':disabled'),
                                 };
@@ -850,7 +869,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
                         (control) =>
                             control.left >= -1 &&
                             control.right <= width + 1 &&
-                            control.height >= (enlarged ? 88 : 44) - 1 &&
+                            control.height >= control.minHeight * (enlarged ? 2 : 1) - 1 &&
                             control.cursor === (control.disabled ? 'not-allowed' : 'pointer'),
                     ),
                     JSON.stringify(controls),

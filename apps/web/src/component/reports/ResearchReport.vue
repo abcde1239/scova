@@ -8,6 +8,7 @@
             :report="report"
             :show-sources="showSources"
             :show-changes="showChanges"
+            :workspace="!!$slots['section-navigation']"
             format="research_report"
             summary-title="报告概述"
         >
@@ -15,6 +16,7 @@
                 <report-format-banner format="research_report" :report="report" />
             </template>
             <template #after-summary>
+                <slot name="section-navigation" />
                 <nav
                     class="report-directory scova-interface layout-grid gap-2 p-4 rounded-3 border-theme [background:color-mix(in_srgb,_var(--scova-selected)_22%,_var(--scova-surface))] [@media(max-width:_40rem)]:p-3"
                     aria-label="报告目录"

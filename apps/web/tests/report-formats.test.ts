@@ -604,7 +604,7 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
         const document = await render('brief', parseContract(ReportSchema, report));
         expect(text(document, '.claim .model-answer-tag')).toBe('模型自回答');
         expect(document.querySelector('.claim .confidence')).toBeNull();
-        expect(text(document, '.report-delivery')).not.toContain('部分内容待补充');
+        expect(text(document, '.report-delivery')).not.toContain('待补充');
         expect(text(document, '.answer-gaps')).not.toContain('循环');
         for (const compact of [false, true]) {
             const output = await renderToString(
@@ -706,7 +706,7 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
             );
             expect(document.querySelector('.document-condition')?.closest('details')).toBeNull();
             expect(document.querySelectorAll('.report-delivery a')).toHaveLength(1);
-            expect(text(document, '.report-delivery')).toBe('部分交付 · 查看详情');
+            expect(text(document, '.report-delivery')).toBe('部分交付');
             expect(document.querySelector('.report-delivery a')?.getAttribute('href')).toBe(
                 '#coverage-title',
             );
@@ -931,7 +931,7 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
             expect(
                 document.querySelector('.answer-gaps')?.closest('details')?.hasAttribute('open'),
             ).toBe(false);
-            expect(text(document, '.report-delivery')).toContain('部分交付 · 查看详情');
+            expect(text(document, '.report-delivery')).toContain('部分交付');
             expect(document.querySelector('.report-delivery a')?.getAttribute('href')).toBe(
                 '#coverage-title',
             );
@@ -1234,7 +1234,7 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
                 })),
             };
             const document = await render(format, parseContract(ReportSchema, report));
-            expect(text(document, '.report-delivery')).toContain('部分内容待补充');
+            expect(text(document, '.report-delivery')).toContain('部分交付');
             expect(text(document, '.report-delivery')).toContain('1/2');
             expect(text(document, '.answers')).toContain('有材料，仍需核对条件');
             expect(text(document, '.answer')).toContain('仅限申请阶段');
@@ -1597,7 +1597,9 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
                 expect(document.querySelectorAll(selectors[format])).toHaveLength(1);
                 expect(document.querySelector('#report-format')).toBeNull();
                 expect(document.querySelector('[aria-label="已生成成果"]')).toBeNull();
-                expect(document.querySelector('.artifact-kind')?.textContent).toBe(
+                expect(
+                    document.querySelector('#conversation-artifact-select option')?.textContent,
+                ).toContain(
                     {
                         brief: '简报',
                         list: '主题清单',

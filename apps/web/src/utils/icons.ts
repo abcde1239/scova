@@ -1,5 +1,8 @@
 import {
     AddOutline,
+    ArrowUpOutline,
+    DownloadOutline,
+    EllipsisHorizontalOutline,
     HelpCircleOutline,
     ArchiveOutline,
     ArrowBackOutline,
@@ -55,6 +58,9 @@ export const icons = {
     account: PersonCircleOutline,
     settings: SettingsOutline,
     create: AddOutline,
+    send: ArrowUpOutline,
+    download: DownloadOutline,
+    more: EllipsisHorizontalOutline,
     edit: CreateOutline,
     run: PlayOutline,
     pause: PauseOutline,
