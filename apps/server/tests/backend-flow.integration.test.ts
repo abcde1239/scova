@@ -13,6 +13,7 @@ import { Redis } from 'ioredis';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vite-plus/test';
 import { parseContract, ReportSchema } from '@scova/models';
 import { nodeScriptCommand } from '../../../scripts/process-runtime.mjs';
+import { prepareTestCheckpointSchema } from '../../worker/tests/support/checkpoint-schema.ts';
 import { outboxDatabase } from '../../worker/tests/support/outbox-database.ts';
 import { requireRow } from '../src/utils/database.ts';
 
@@ -137,7 +138,10 @@ const taskConfig = () => ({
 
 /** 真实 API/worker 进程以固定供应商完成真实管线查阅与原子交付；不依赖远程供应商。 */
 describe('整体后端：真实 HTTP → PostgreSQL Outbox → BullMQ → Run consumer', () => {
-    beforeAll(() => fixture.setup(), 120_000);
+    beforeAll(async () => {
+        await fixture.setup();
+        await prepareTestCheckpointSchema(fixture.databaseUrl, fixture.checkpointSchema);
+    }, 120_000);
     afterAll(() => fixture.cleanup());
     beforeEach(async () => {
         // 各运行时组合只消费自己的新命令，失败的前轮不能遗留待投递行。
@@ -179,6 +183,7 @@ describe('整体后端：真实 HTTP → PostgreSQL Outbox → BullMQ → Run co
             const queue = new Queue(queueName, { connection: redis });
             queue.on('error', () => undefined);
             const port = await unusedPort();
+            const executionPort = await unusedPort();
             const origin = `http://127.0.0.1:${port}`;
             const env = {
                 DATABASE_URL: fixture.databaseUrl,
@@ -190,6 +195,9 @@ describe('整体后端：真实 HTTP → PostgreSQL Outbox → BullMQ → Run co
                 PORT: String(port),
                 AUTH_GLOBAL_LIMIT: '10000',
                 WORKER_QUEUE_NAME: queueName,
+                WORKER_EXECUTION_TOKEN: randomUUID(),
+                WORKER_EXECUTION_PORT: String(executionPort),
+                WORKER_EXECUTION_URL: `http://127.0.0.1:${executionPort}`,
                 WORKER_POLL_INTERVAL_MS: '20',
             };
             const api = launch('server', apiRuntime, env);
