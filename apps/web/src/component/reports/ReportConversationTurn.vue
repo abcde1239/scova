@@ -119,6 +119,7 @@
                 @active-change="updateActive(operation, $event)"
                 @artifact="emit('artifact', $event)"
                 @open-artifact="emit('openArtifact', $event)"
+                @open-original="emit('openOriginal')"
                 @merge="emit('merge', $event)"
             />
         </div>
@@ -145,6 +146,7 @@ const emit = defineEmits<{
     activeChange: [value: boolean];
     artifact: [artifact: Artifact];
     openArtifact: [artifact: Artifact];
+    openOriginal: [];
     merge: [reportId: string];
 }>();
 const operations = ['research', 'revise'] as const;
@@ -212,7 +214,8 @@ summary {
     @apply flex items-center justify-center w-5 h-5 rounded-full [background:var(--scova-selected)] text-primary text-xs flex-none;
 }
 .source-quotes {
-    @apply grid gap-3 px-3 pb-3 [@media(max-width:_40rem)]:px-1.5;
+    @apply grid gap-3 pb-3;
+    padding-inline: min(0.75rem, 12px);
 }
 .source-quotes blockquote {
     @apply whitespace-pre-wrap m-0 [border-left:0.125rem_solid_var(--scova-primary)] pl-3;

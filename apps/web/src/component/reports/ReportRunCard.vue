@@ -1,5 +1,5 @@
 <template>
-    <section class="run-card layout-grid gap-3 border-theme rounded-3 p-4" aria-label="本轮执行">
+    <section class="run-card layout-grid gap-3 rounded-3 bg-surface p-3" aria-label="本轮执行">
         <header class="flex flex-wrap items-center justify-between gap-2">
             <strong
                 >{{ title }} · {{ run ? executionStates[run.status][0] : '正在读取执行' }}</strong
@@ -27,7 +27,17 @@
             <p v-if="run.status === 'cancel_requested'" role="status">
                 正在停止，等待后台结束当前工作。
             </p>
-            <p v-else-if="run.status === 'failed'" role="status">{{ executionFailure(run) }}</p>
+            <div v-else-if="run.status === 'failed'" class="layout-grid gap-1" role="status">
+                <p>{{ executionFailure(run) }}</p>
+                <button
+                    v-if="report"
+                    type="button"
+                    class="original-artifact"
+                    @click="emit('openOriginal')"
+                >
+                    打开原报告<app-icon name="chevron" />
+                </button>
+            </div>
             <p v-else-if="run.status === 'canceled'">执行已停止。</p>
             <p v-else-if="active && !execution.log.value.currentStep" class="text-muted">
                 {{ executionStates[run.status][1] }}
@@ -37,12 +47,17 @@
                 <button
                     type="button"
                     class="completed-artifact"
+                    :aria-label="`打开成果 · ${completedReport.title}`"
                     @click="emit('openArtifact', artifact!)"
                 >
                     <app-icon name="report" /><span
                         ><strong>{{ completedReport.title }}</strong
-                        ><small>{{ origin }} · {{ formatsText }}</small></span
-                    ><span class="text-primary">打开成果</span>
+                        ><small>{{
+                            [origin, formatsText, reportDeliveryStatus(completedReport)]
+                                .filter(Boolean)
+                                .join(' · ')
+                        }}</small></span
+                    ><app-icon name="source" />
                 </button>
                 <button
                     v-if="operation !== 'merge'"
@@ -96,6 +111,7 @@ import { useExecution, executionStates, executionFailure } from '@/composable/us
 import { useRunActions } from '@/composable/useRunActions';
 import { useReport } from '@/composable/useReport';
 import { useActionNotification } from '@/composable/useActionNotification';
+import { reportDeliveryStatus } from '@/utils/report/summary';
 import { savedArtifactFormats } from '@/utils/report/artifacts';
 
 type Artifact = NonNullable<ReportConversation['artifacts']>[number];
@@ -109,6 +125,7 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{
     openArtifact: [artifact: Artifact];
+    openOriginal: [];
     artifact: [artifact: Artifact];
     activeChange: [active: boolean];
     protectedChange: [value: boolean];
@@ -254,7 +271,7 @@ onUnmounted(() => {
     @apply font-semibold;
 }
 .completed-artifact {
-    @apply font-inherit flex flex-wrap items-center gap-3 w-full min-w-0 min-h-11 border-theme rounded-3 bg-surface text-default text-start p-3 cursor-pointer keyboard-focus-wide;
+    @apply font-inherit flex flex-wrap items-center gap-3 w-full min-w-0 min-h-11 border-0 rounded-3 [background:var(--scova-selected)] text-default text-start p-3 cursor-pointer keyboard-focus-wide;
 }
 .completed-artifact > span:first-of-type {
     @apply grid gap-1 flex-1 min-w-0;
@@ -264,6 +281,24 @@ onUnmounted(() => {
 }
 p {
     @apply m-0;
+}
+.completed-artifact:hover {
+    background: color-mix(in srgb, var(--scova-selected) 85%, var(--scova-text));
+}
+.completed-artifact .app-icon {
+    transition: scale 140ms ease;
+}
+.completed-artifact:active .app-icon {
+    scale: 0.9;
+}
+@media (prefers-reduced-motion: reduce) {
+    .completed-artifact .app-icon {
+        transition: none;
+        scale: none;
+    }
+}
+button.original-artifact {
+    @apply inline-flex items-center gap-1 justify-self-start;
 }
 button:not(.completed-artifact) {
     @apply font-inherit text-primary bg-transparent border-theme rounded-2 min-h-11 px-3 cursor-pointer keyboard-focus-wide;

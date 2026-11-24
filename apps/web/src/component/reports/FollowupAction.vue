@@ -139,6 +139,7 @@
                 :operation="operation ?? 'research'"
                 :round="round"
                 @open-artifact="emit('openArtifact', $event)"
+                @open-original="emit('openOriginal')"
                 @merge="emit('merge', $event)"
                 @artifact="emit('artifact', $event)"
                 @active-change="emit('activeChange', $event)"
@@ -188,6 +189,7 @@ const emit = defineEmits<{
     activeChange: [value: boolean];
     artifact: [artifact: Artifact];
     openArtifact: [artifact: Artifact];
+    openOriginal: [];
     merge: [reportId: string];
 }>();
 const revision = computed(() => props.operation === 'revise');

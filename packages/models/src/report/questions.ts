@@ -26,10 +26,17 @@ const QuestionText = Type.String({
     pattern: '\\S',
     description: '围绕报告的纯文本问题，最多2000字符',
 });
+const conversationQuestionProperties = {
+    question: QuestionText,
+    afterQuestionId: Type.Optional(Type.Union([UuidSchema, Type.Null()])),
+};
 export const ReportQuestionInputSchema = Type.Object(
     {
-        question: QuestionText,
-        afterQuestionId: Type.Optional(Type.Union([UuidSchema, Type.Null()])),
+        ...conversationQuestionProperties,
+        agentProviderId: Type.Optional({
+            ...UuidSchema,
+            description: '仅本轮问答使用的账号模型配置标识',
+        }),
     },
     { additionalProperties: false, description: '仅查阅此报告授权引用，不启动搜索' },
 );
@@ -108,7 +115,7 @@ export const ReportQuestionDetailSchema = Type.Union([
     ReportRequestedQuestionSchema,
 ]);
 const followupProperties = {
-    ...ReportQuestionInputSchema.properties,
+    ...conversationQuestionProperties,
     confirm: Type.Literal(true),
     outputFormats: Type.Optional(OutputFormatsSchema),
 };

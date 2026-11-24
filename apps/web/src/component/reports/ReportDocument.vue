@@ -214,7 +214,8 @@ const method = computed(() => {
     counter-reset: finding;
 }
 .finding-list > li {
-    @apply relative py-4 pl-10 [border-bottom:0.0625rem_solid_var(--scova-border)];
+    @apply relative py-4 [border-bottom:0.0625rem_solid_var(--scova-border)];
+    padding-inline-start: min(2.5rem, 10vw);
     counter-increment: finding;
 }
 .finding-list > li:first-child {

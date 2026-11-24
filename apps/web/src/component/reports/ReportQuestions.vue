@@ -59,11 +59,13 @@
                 @active-change="setActive(turn.id, $event)"
                 @artifact="observeArtifact"
                 @open-artifact="emit('openArtifact', $event)"
+                @open-original="emit('openOriginal')"
                 @merge="emit('merge', $event)"
             />
-            <p v-if="state.pending.value" class="pending-answer" role="status">
-                正在根据报告资料回答…
-            </p>
+            <div v-if="state.pending.value" class="pending-answer">
+                <span role="status">正在根据报告资料回答…</span>
+                <button type="button" @click="state.cancelPending">停止等待</button>
+            </div>
             <template
                 v-if="
                     state.selectedId.value &&
@@ -83,25 +85,26 @@
                     >
                 </div></template
             >
+            <slot name="execution" />
+            <p v-if="!state.available.value" role="status">
+                报告当前无法读取。本地问题与未确认的请求仍保留，恢复后可继续。
+            </p>
+            <p v-if="state.address.value.error" role="alert">
+                {{ state.address.value.error
+                }}<button type="button" @click="startNew">提出新问题</button>
+            </p>
+            <report-composer-followup
+                ref="composer"
+                :report-id="reportId"
+                :report="report"
+                :after-question-id="state.turns.value.at(-1)?.id ?? null"
+                @opened="composerOpen = $event"
+                @closed="restoreComposerFocus"
+                @refresh="state.conversation.refetch({ cancelRefetch: false })"
+                @saved="onComposerSaved"
+            />
+            <slot name="secondary" />
         </div>
-        <slot name="execution" />
-        <p v-if="!state.available.value" role="status">
-            报告当前无法读取。本地问题与未确认的请求仍保留，恢复后可继续。
-        </p>
-        <p v-if="state.address.value.error" role="alert">
-            {{ state.address.value.error
-            }}<button type="button" @click="startNew">提出新问题</button>
-        </p>
-        <report-composer-followup
-            ref="composer"
-            :report-id="reportId"
-            :report="report"
-            :after-question-id="state.turns.value.at(-1)?.id ?? null"
-            @opened="composerOpen = $event"
-            @closed="restoreComposerFocus"
-            @refresh="state.conversation.refetch({ cancelRefetch: false })"
-            @saved="onComposerSaved"
-        />
         <form class="question-form" @submit.prevent="submit">
             <label class="sr-only" for="report-question">问题</label>
             <textarea
@@ -127,42 +130,147 @@
                 >
             </p>
             <div class="question-actions">
-                <span id="question-input-help" class="text-muted text-xs"
-                    >Enter 发送 · Shift + Enter 换行</span
+                <report-workspace-menu
+                    v-if="report?.mode === 'live' || state.draft.value"
+                    ref="composerTrigger"
+                    label="添加功能"
+                    icon="create"
+                    placement="top-start"
+                    :disabled="composerOpen || !!state.attempt.value || followupProtected"
                 >
-                <div class="flex flex-wrap items-center gap-2">
-                    <button
-                        v-if="state.attempt.value || state.draft.value"
-                        type="button"
-                        :disabled="composerOpen || state.pending.value"
-                        @click="startNew"
+                    <template #default="{ close }">
+                        <button
+                            v-if="report?.mode === 'live'"
+                            type="button"
+                            class="workspace-menu-item"
+                            :disabled="!state.canSubmit.value || followupProtected"
+                            @click="
+                                close();
+                                openComposer();
+                            "
+                        >
+                            <app-icon name="search" />补查新资料
+                        </button>
+                        <p v-if="!state.draft.value" class="picker-status">先输入要补查的问题。</p>
+                        <button
+                            v-if="state.draft.value"
+                            type="button"
+                            class="workspace-menu-item"
+                            @click="
+                                close();
+                                startNew();
+                            "
+                        >
+                            清空问题
+                        </button>
+                    </template>
+                </report-workspace-menu>
+                <div class="question-pickers">
+                    <report-workspace-menu
+                        label="本对话使用的模型"
+                        :text="
+                            selectedProvider?.model ?? (providerId ? '模型不可用' : defaultModel)
+                        "
+                        :disabled="settingsLocked"
                     >
-                        {{ state.attempt.value ? '结束本次请求' : '清空问题' }}</button
-                    ><button v-if="state.pending.value" type="button" @click="state.cancelPending">
-                        停止等待</button
-                    ><button
-                        v-if="report?.mode === 'live'"
-                        ref="composerTrigger"
-                        type="button"
-                        :disabled="!state.canSubmit.value || followupProtected"
-                        @click="openComposer"
+                        <template #default="{ close }">
+                            <p class="picker-status">本对话使用的模型</p>
+                            <button
+                                type="button"
+                                class="workspace-menu-item"
+                                :aria-pressed="!providerId"
+                                @click="
+                                    providerId = '';
+                                    close();
+                                "
+                            >
+                                <span
+                                    >沿用配置<small v-if="defaultModel !== '模型'">{{
+                                        defaultModel
+                                    }}</small></span
+                                >
+                                <app-icon v-if="!providerId" name="confirm" />
+                            </button>
+                            <p v-if="providers.isPending.value" class="picker-status" role="status">
+                                正在读取已保存的模型配置…
+                            </p>
+                            <button
+                                v-else-if="providers.isError.value"
+                                type="button"
+                                class="workspace-menu-item"
+                                @click="providers.refetch()"
+                            >
+                                重试读取模型配置
+                            </button>
+                            <template v-else>
+                                <button
+                                    v-for="provider in modelOptions"
+                                    :key="provider.id"
+                                    type="button"
+                                    class="workspace-menu-item"
+                                    :disabled="!provider.hasApiKey"
+                                    :aria-pressed="provider.id === providerId"
+                                    @click="
+                                        providerId = provider.id;
+                                        close();
+                                    "
+                                >
+                                    <span
+                                        >{{ provider.name
+                                        }}<small
+                                            >{{ provider.model
+                                            }}{{ provider.hasApiKey ? '' : ' · 缺少密钥' }}</small
+                                        ></span
+                                    >
+                                    <app-icon v-if="provider.id === providerId" name="confirm" />
+                                </button>
+                                <p v-if="!modelOptions.length" class="picker-status">
+                                    尚无已保存的模型配置。
+                                </p>
+                            </template>
+                        </template>
+                    </report-workspace-menu>
+                    <report-workspace-menu
+                        label="本对话的推理强度"
+                        text="推理强度"
+                        :disabled="settingsLocked"
                     >
-                        补查新资料</button
-                    ><action-button
-                        v-if="!state.attempt.value"
-                        attr-type="submit"
-                        :disabled="!state.canSubmit.value || followupProtected"
-                        :busy="state.pending.value"
-                        >提问</action-button
-                    ><action-button
-                        v-else
-                        :disabled="!state.canRecover.value || followupProtected"
-                        :busy="state.pending.value"
-                        @click="recover"
-                        >读取本次结果</action-button
-                    >
+                        <template #default="{ close }">
+                            <button
+                                type="button"
+                                class="workspace-menu-item"
+                                aria-pressed="true"
+                                @click="close"
+                            >
+                                沿用配置<app-icon name="confirm" />
+                            </button>
+                            <p class="picker-status">当前配置未提供可选的推理强度。</p>
+                        </template>
+                    </report-workspace-menu>
                 </div>
+                <button
+                    v-if="!state.attempt.value || state.pending.value"
+                    type="submit"
+                    class="question-send"
+                    aria-label="提问"
+                    title="发送问题"
+                    :disabled="!canSend"
+                >
+                    <app-icon name="send" />
+                </button>
+                <action-button
+                    v-else
+                    :disabled="!state.canRecover.value || followupProtected"
+                    @click="recover"
+                    >读取本次结果</action-button
+                >
             </div>
+            <div v-if="state.attempt.value && !state.pending.value" class="question-recovery">
+                <button type="button" :disabled="composerOpen" @click="startNew">
+                    结束本次请求
+                </button>
+            </div>
+            <span id="question-input-help" class="sr-only">Enter 发送 · Shift + Enter 换行</span>
         </form>
     </section>
 </template>
@@ -172,10 +280,13 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router';
 import type { Report, ReportConversation } from '@scova/models';
 import ActionButton from '@/component/common/ActionButton.vue';
+import AppIcon from '@/component/common/AppIcon.vue';
+import ReportWorkspaceMenu from '@/component/reports/ReportWorkspaceMenu.vue';
+import { listProvidersEndpoint } from '@/api/agent-providers';
 import ReportComposerFollowup from '@/component/reports/ReportComposerFollowup.vue';
 import ReportConversationTurn from '@/component/reports/ReportConversationTurn.vue';
 import { useReportQuestions } from '@/composable/useReportQuestions';
-import { useSessionLifecycle } from '@/composable/useSessionQuery';
+import { useSessionLifecycle, useSessionQuery } from '@/composable/useSessionQuery';
 import { useActionNotification } from '@/composable/useActionNotification';
 import { questionTextError } from '@/utils/report/questions';
 import { conversationSuggestions } from '@/utils/report/conversation';
@@ -189,6 +300,7 @@ const props = defineProps<{
 const emit = defineEmits<{
     artifactsChange: [artifacts: Artifact[]];
     openArtifact: [artifact: Artifact];
+    openOriginal: [];
     merge: [reportId: string];
     showMerge: [];
     mergeRunsChange: [runs: NonNullable<ReportConversation['mergeRuns']>];
@@ -209,7 +321,25 @@ const protectedTurns = ref<Record<string, boolean>>({});
 const runningTurns = ref<Record<string, boolean>>({});
 const observedArtifacts = ref<Artifact[]>([]);
 const composer = ref<InstanceType<typeof ReportComposerFollowup>>();
-const composerTrigger = ref<HTMLButtonElement>();
+const composerTrigger = ref<InstanceType<typeof ReportWorkspaceMenu>>();
+const providers = useSessionQuery(listProvidersEndpoint, {}, ['agent-providers']);
+const providerId = ref('');
+const modelOptions = computed(() => providers.data.value?.data.items ?? []);
+const selectedProvider = computed(() =>
+    modelOptions.value.find((item) => item.id === providerId.value),
+);
+const defaultModel = computed(
+    () => modelOptions.value.find((item) => item.active)?.model ?? '模型',
+);
+const settingsLocked = computed(
+    () => composerOpen.value || !!state.attempt.value || followupProtected.value,
+);
+const canSend = computed(
+    () =>
+        state.canSubmit.value &&
+        !followupProtected.value &&
+        (!providerId.value || !!selectedProvider.value?.hasApiKey),
+);
 const composerOpen = ref(false);
 const followupProtected = computed(
     () => composerOpen.value || props.blocked || Object.values(protectedTurns.value).some(Boolean),
@@ -283,7 +413,9 @@ async function prepareQuestion(question: string) {
     if (composerOpen.value || state.attempt.value || state.pending.value) return;
     state.draft.value = question;
     await nextTick();
-    panel.value?.querySelector<HTMLTextAreaElement>('textarea')?.focus({ preventScroll: true });
+    panel.value
+        ?.querySelector<HTMLTextAreaElement>('#report-question')
+        ?.focus({ preventScroll: true });
 }
 function jumpTurn(id: string) {
     const target = panel.value?.querySelector<HTMLElement>(`#${CSS.escape(`turn-${id}`)}`);
@@ -321,7 +453,9 @@ async function perform(action: () => Promise<string | undefined>) {
     await selectSaved(id);
     await nextTick();
     if (pinned && view) view.scrollTop = view.scrollHeight;
-    panel.value?.querySelector<HTMLTextAreaElement>('textarea')?.focus({ preventScroll: true });
+    panel.value
+        ?.querySelector<HTMLTextAreaElement>('#report-question')
+        ?.focus({ preventScroll: true });
 }
 function openComposer() {
     if (state.canSubmit.value && !followupProtected.value)
@@ -329,8 +463,8 @@ function openComposer() {
 }
 async function restoreComposerFocus() {
     await nextTick();
-    if (!composerTrigger.value?.disabled) composerTrigger.value?.focus();
-    else panel.value?.querySelector('textarea')?.focus();
+    if (composerTrigger.value && !settingsLocked.value) composerTrigger.value.focus();
+    else panel.value?.querySelector<HTMLTextAreaElement>('#report-question')?.focus();
 }
 function onComposerSaved(id: string) {
     void perform(async () => {
@@ -342,7 +476,7 @@ function onComposerSaved(id: string) {
     });
 }
 function submit() {
-    if (!followupProtected.value) return perform(state.submit);
+    if (canSend.value) return perform(() => state.submit(providerId.value || undefined));
 }
 function recover() {
     if (!followupProtected.value) return perform(state.recover);
@@ -367,7 +501,7 @@ async function startNew() {
     await selectSaved();
     state.newQuestion();
     await nextTick();
-    panel.value?.querySelector<HTMLTextAreaElement>('textarea')?.focus();
+    panel.value?.querySelector<HTMLTextAreaElement>('#report-question')?.focus();
 }
 onBeforeRouteLeave(confirmDiscard);
 onBeforeRouteUpdate((to) => to.fullPath === internalDestination || confirmDiscard());
@@ -386,19 +520,20 @@ onUnmounted(() => {
 
 <style scoped>
 .questions {
-    @apply grid gap-3 w-full min-w-0 break-anywhere;
+    @apply flex flex-col flex-1 gap-3 w-full min-w-0 min-h-0 break-anywhere;
 }
 .context-label {
     @apply m-0 text-xs text-muted leading-relaxed;
 }
 .conversation-history {
-    @apply grid gap-2 min-w-0 [align-content:start] max-h-[65dvh] overflow-y-auto [scrollbar-gutter:stable] pr-2 [overscroll-behavior:contain];
+    @apply grid flex-1 gap-2 min-w-0 min-h-0 [align-content:start] overflow-y-auto pr-1 [overscroll-behavior:contain];
+    scrollbar-width: thin;
 }
 .run-banner {
     @apply flex flex-wrap items-center justify-between gap-2 rounded-2 [background:var(--scova-selected)] px-3 text-sm;
 }
 .conversation-empty {
-    @apply grid gap-3 py-8;
+    @apply grid gap-2 py-5;
 }
 .conversation-empty h2 {
     @apply text-xl m-0;
@@ -407,24 +542,119 @@ onUnmounted(() => {
     @apply text-muted m-0;
 }
 .question-starters {
-    @apply grid gap-2;
+    @apply flex flex-wrap gap-1.5;
 }
 .question-starters button {
     @apply text-start;
 }
 .question-form {
-    @apply grid gap-2 bg-surface border-theme rounded-3 p-3;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.375rem;
+    min-width: 0;
+    flex: none;
+    padding: 0.625rem;
+    border: 1px solid color-mix(in srgb, var(--scova-border) 62%, var(--scova-surface));
+    border-radius: 1.125rem;
+    background: var(--scova-surface);
 }
 textarea {
-    @apply box-border w-full min-w-0 min-h-[3rem] focus:min-h-[5rem] border-0 bg-transparent text-default font-inherit leading-relaxed resize-none p-1 rounded-2 keyboard-focus-wide;
+    @apply box-border w-full min-w-0 border-0 bg-transparent text-default font-inherit leading-relaxed resize-none p-2 rounded-2;
+    field-sizing: content;
+    min-block-size: 3rem;
+    max-block-size: min(12rem, 32dvh);
+    overflow-y: auto;
+    outline: none;
+}
+textarea:focus-visible {
+    outline: 1px solid color-mix(in srgb, var(--scova-text) 28%, transparent);
+    outline-offset: -1px;
 }
 .question-actions {
-    @apply flex flex-wrap items-center justify-between gap-2;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem;
 }
-.questions button {
+.question-pickers {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.125rem;
+    flex: 1 1 6rem;
+    min-inline-size: 0;
+}
+.question-pickers :deep(.workspace-menu-trigger) {
+    max-inline-size: min(9rem, 100%);
+}
+.picker-status {
+    margin: 0;
+    padding: 0.375rem 0.625rem;
+    color: var(--scova-muted);
+    font-size: 0.75rem;
+}
+.workspace-menu-item small {
+    display: block;
+    color: var(--scova-muted);
+    font-size: 0.75rem;
+}
+.question-send {
+    display: inline-grid;
+    place-items: center;
+    flex: none;
+    inline-size: 2.375rem;
+    block-size: 2.375rem;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: var(--scova-text);
+    color: var(--scova-surface);
+    font-size: 1.125rem;
+    cursor: pointer;
+    transition:
+        opacity 140ms ease,
+        scale 140ms ease;
+}
+.question-send:disabled {
+    opacity: 0.28;
+    cursor: not-allowed;
+}
+.question-send:not(:disabled):hover {
+    opacity: 0.8;
+}
+.question-send:not(:disabled):active {
+    scale: 0.92;
+}
+.question-send:focus-visible {
+    outline: 1px solid var(--scova-text);
+    outline-offset: 2px;
+}
+.question-recovery {
+    justify-self: end;
+}
+.pending-answer {
+    @apply flex flex-wrap items-center justify-between gap-2 text-sm text-muted;
+}
+@media (pointer: coarse) {
+    .question-send {
+        inline-size: 2.75rem;
+        block-size: 2.75rem;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .question-send {
+        transition: none;
+        scale: none;
+    }
+}
+.questions
+    :is(.conversation-history, .run-banner, .question-recovery)
+    button:not(.scova-action-button) {
     @apply font-inherit min-h-11 max-w-full text-primary border-theme rounded-2 bg-transparent py-2 px-3 cursor-pointer break-anywhere keyboard-focus-wide disabled:cursor-not-allowed;
 }
-.questions button:hover {
+.questions
+    :is(.conversation-history, .run-banner, .question-recovery)
+    button:not(.scova-action-button):hover {
     @apply [background:var(--scova-selected)];
 }
 </style>

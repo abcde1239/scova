@@ -33,7 +33,11 @@
                         type="button"
                         class="report-artifact-card scova-interface"
                         aria-controls="report-artifact"
-                        :aria-expanded="artifactOpen && !readingOnly"
+                        :aria-expanded="
+                            artifactOpen &&
+                            !readingOnly &&
+                            (!selectedArtifactId || selectedArtifactId === report.id)
+                        "
                         @click="selectArtifact(report.id)"
                     >
                         <app-icon name="report" />
@@ -46,8 +50,7 @@
                                         .map((format) => formatLabels[format])
                                         .join('、')
                                 }}
-                                · 打开成果</small
-                            >
+                            </small>
                         </span>
                         <app-icon name="source" />
                     </button>
@@ -60,6 +63,7 @@
                         :active-merge="mergeActive"
                         @artifacts-change="updateArtifacts"
                         @open-artifact="openConversationArtifact"
+                        @open-original="report && selectArtifact(report.id)"
                         @merge="mergeAction?.open($event)"
                         @merge-runs-change="updateMergeRuns"
                         @show-merge="mergeAction?.showRuns()"
@@ -75,32 +79,38 @@
                                 :runs="mergeRuns"
                                 @artifact="rememberArtifact"
                                 @open-artifact="openConversationArtifact"
+                                @open-original="report && selectArtifact(report.id)"
                                 @protected-change="mergeProtected = $event"
                                 @active-change="mergeActive = $event"
                             />
                         </template>
+                        <template #secondary>
+                            <details v-if="report" class="secondary-report-tools scova-interface">
+                                <summary>报告管理与后续研究</summary>
+                                <feedback-effects
+                                    v-if="report"
+                                    :key="`effects-${accountId}-${report.id}`"
+                                    :report="report"
+                                />
+                                <tool-section
+                                    v-if="report"
+                                    label="调整后续研究"
+                                    icon="settings"
+                                    class="feedback-tool"
+                                >
+                                    <feedback-actions
+                                        v-if="report"
+                                        :key="`feedback-${accountId}-${report.id}`"
+                                        :report="report"
+                                    />
+                                </tool-section>
+                                <report-library-tools
+                                    :report="report"
+                                    :report-id="String(route.params.reportId)"
+                                />
+                            </details>
+                        </template>
                     </report-questions>
-                    <feedback-effects
-                        v-if="report"
-                        :key="`effects-${accountId}-${report.id}`"
-                        :report="report"
-                    />
-                    <tool-section
-                        v-if="report"
-                        label="调整后续研究"
-                        icon="settings"
-                        class="feedback-tool"
-                    >
-                        <feedback-actions
-                            v-if="report"
-                            :key="`feedback-${accountId}-${report.id}`"
-                            :report="report"
-                        />
-                    </tool-section>
-                    <report-library-tools
-                        :report="report"
-                        :report-id="String(route.params.reportId)"
-                    />
                 </section>
             </div>
             <transition name="artifact-pane">
@@ -125,11 +135,22 @@
                         <report-artifact-selection
                             :report="report"
                             :selected-artifact-id="selectedArtifactId"
-                            :selected-artifact="selectedArtifact"
                             :conversation-artifacts="conversationArtifacts"
                             @select="selectArtifact"
-                            @merge="mergeAction?.open($event)"
                         />
+                    </template>
+                    <template #actions="{ close }">
+                        <button
+                            v-if="report?.mode === 'live' && conversationArtifacts.length"
+                            type="button"
+                            class="workspace-menu-item"
+                            @click="
+                                close();
+                                mergeAction?.open(selectedArtifact?.reportId);
+                            "
+                        >
+                            合并到原报告
+                        </button>
                     </template>
                 </report-artifact-panel>
             </transition>
@@ -191,7 +212,7 @@ const {
 <style scoped>
 /* Scoped UnoCSS keeps the long control/state combinations readable. */
 .report-detail {
-    @apply layout-grid gap-3.5;
+    @apply grid gap-0 min-w-0;
 }
 .companion-heading p {
     @apply text-muted text-[0.875rem] leading-[1.6] m-0;
@@ -203,7 +224,7 @@ const {
     @apply grid gap-2;
 }
 .report-workspace {
-    @apply layout-stack relative grid-cols-[minmax(0,_1fr)] items-start;
+    @apply grid relative grid-cols-[minmax(0,_1fr)] items-start;
 }
 .report-conversation-column,
 .report-companion {
@@ -213,7 +234,9 @@ const {
     @apply grid gap-4 [align-content:start];
 }
 .report-companion {
-    @apply grid gap-0 [scroll-margin-block-start:1rem] p-2;
+    @apply flex flex-col gap-0 [scroll-margin-block-start:1rem] p-[clamp(0.75rem,_2vw,_1.5rem)] max-w-[45rem] w-full mx-auto;
+    padding-inline: min(24px, 2vw);
+    min-height: calc(100dvh - 7.25rem);
 }
 .report-companion:focus-visible {
     @apply [outline:0.125rem_solid_var(--scova-primary)] [outline-offset:0.25rem];
@@ -225,9 +248,14 @@ const {
 .tool-section :deep(.report-bookmarks) {
     @apply w-full [border:0] bg-transparent p-0;
 }
-.report-companion :deep(.questions),
-.report-companion :deep(.feedback-effects) {
-    @apply pt-2 pb-6;
+.report-companion :deep(.questions) {
+    @apply pt-1;
+}
+.secondary-report-tools summary {
+    @apply min-h-9 py-2 text-muted text-sm cursor-pointer;
+}
+.secondary-report-tools[open] {
+    @apply grid gap-2;
 }
 .report-companion :deep(.tool-section h2) {
     @apply text-[1rem];
@@ -235,17 +263,21 @@ const {
 .report-companion :deep(.tool-section h2 .n-icon) {
     @apply hidden;
 }
-@media (width < 72rem) {
+@media (width < 64rem) {
     .report-workspace :deep(.report-artifact-panel:not(.report-artifact-panel--reading)) {
         @apply hidden;
     }
     .report-workspace :deep(.report-artifact-panel--reading) {
         @apply fixed inset-0 z-[20] max-h-none h-[100dvh] rounded-none;
+        border: 0;
     }
 }
-@media (width >= 72rem) {
+@media (width >= 64rem) {
+    .report-companion {
+        height: calc(100dvh - 3.25rem);
+    }
     .report-workspace {
-        @apply grid-cols-[minmax(0,_0.9fr)_minmax(0,_1.1fr)] gap-6;
+        @apply grid-cols-[minmax(0,_0.76fr)_minmax(0,_1.24fr)] gap-0;
     }
     .report-workspace--reading,
     .report-workspace--closed {
@@ -254,12 +286,12 @@ const {
 }
 @media (max-width: 39.999rem) {
     .report-companion {
-        @apply p-0;
+        @apply px-3 py-4;
     }
 }
 .report-artifact-card {
-    @apply font-inherit flex items-center gap-3 w-full min-w-0 min-h-11 mb-6 border-theme rounded-3
-        bg-surface text-default text-start cursor-pointer p-4;
+    @apply font-inherit flex items-center gap-3 w-full min-w-0 min-h-11 mb-3 border-0 rounded-3
+        [background:var(--scova-selected)] text-default text-start cursor-pointer py-3 px-3.5;
 }
 .report-artifact-card > span:not(.app-icon) {
     @apply layout-grid flex-1 gap-1.5 break-anywhere;
@@ -271,22 +303,24 @@ const {
     @apply text-muted text-[0.875rem];
 }
 .report-artifact-card:hover {
-    @apply [background:var(--scova-selected)];
+    background: color-mix(in srgb, var(--scova-selected) 85%, var(--scova-text));
 }
-.report-artifact-card {
-    @apply [transition:background-color_180ms_ease,_box-shadow_180ms_ease,_transform_180ms_ease];
+.report-artifact-card,
+.report-artifact-card > .app-icon {
+    transition:
+        background-color 150ms ease,
+        scale 150ms ease;
 }
-.report-artifact-card:hover {
-    @apply [transform:translateY(-0.125rem)]
-        [box-shadow:0_0.375rem_1rem_color-mix(in_srgb,_var(--scova-text)_5%,_transparent)];
+.report-artifact-card:active > .app-icon {
+    scale: 0.9;
 }
 .artifact-pane-enter-active,
 .artifact-pane-leave-active {
     @apply [transition:opacity_220ms_ease,_transform_220ms_cubic-bezier(0.2,_0.7,_0.2,_1)];
 }
-@media (width >= 72rem) {
+@media (width >= 64rem) {
     .artifact-pane-leave-active {
-        @apply absolute [top:0] [right:0] w-[calc(55%_-_0.75rem)] [pointer-events:none];
+        @apply absolute [top:0] [right:0] w-[62%] [pointer-events:none];
     }
 }
 .artifact-pane-enter-from,
@@ -296,12 +330,12 @@ const {
 @media (prefers-reduced-motion: reduce) {
     .artifact-pane-enter-active,
     .artifact-pane-leave-active,
-    .report-artifact-card {
-        @apply [transition:none];
+    .report-artifact-card,
+    .report-artifact-card > .app-icon {
+        @apply [transition:none] [scale:none];
     }
     .artifact-pane-enter-from,
-    .artifact-pane-leave-to,
-    .report-artifact-card:hover {
+    .artifact-pane-leave-to {
         @apply [transform:none];
     }
 }

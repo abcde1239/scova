@@ -49,8 +49,26 @@ for (const format of formats) {
                 page.locator('.report-document .citations, .structured-links'),
             ).toHaveCount(0);
             expect(
-                await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
-            ).toBe(true);
+                await page.evaluate(() => {
+                    const { scrollWidth } = document.documentElement;
+                    return scrollWidth <= innerWidth
+                        ? []
+                        : [
+                              scrollWidth,
+                              ...[...document.querySelectorAll('body *')]
+                                  .filter(
+                                      (element) =>
+                                          element.getBoundingClientRect().right > innerWidth + 1,
+                                  )
+                                  .slice(0, 20)
+                                  .map((element) => [
+                                      element.tagName,
+                                      element.className,
+                                      element.getBoundingClientRect().right,
+                                  ]),
+                          ];
+                }),
+            ).toEqual([]);
             const documentOutput = format === 'brief' || format === 'research_report';
             if (documentOutput) {
                 await expect(

@@ -1,6 +1,16 @@
 <template>
     <div class="report-export">
+        <button
+            v-if="compact"
+            type="button"
+            class="workspace-menu-item"
+            :disabled="pending"
+            @click="download"
+        >
+            {{ pending ? '正在导出…' : `导出 ${format === 'json' ? 'JSON' : 'Markdown'}` }}
+        </button>
         <n-button
+            v-else
             class="report-export-action"
             :loading="pending"
             :disabled="pending"
@@ -19,7 +29,7 @@ import { reportExportEndpoint, reportJsonExportEndpoint } from '@/api/reports';
 import { toApiError } from '@/api/errors';
 import { useSessionLifecycle } from '@/composable/useSessionQuery';
 
-const props = defineProps<{ reportId: string; format: 'markdown' | 'json' }>();
+const props = defineProps<{ reportId: string; format: 'markdown' | 'json'; compact?: boolean }>();
 const lifecycle = useSessionLifecycle();
 const pending = ref(false);
 const message = ref('');

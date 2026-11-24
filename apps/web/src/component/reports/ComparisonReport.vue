@@ -3,9 +3,13 @@
         :report="report"
         :show-sources="showSources"
         :show-changes="showChanges"
+        :workspace="!!$slots['section-navigation']"
         format="comparison"
         class="report-comparison"
     >
+        <template v-if="$slots['section-navigation']" #after-summary
+            ><slot name="section-navigation"
+        /></template>
         <template #format-notice
             ><report-format-banner format="comparison" :report="report"
         /></template>

@@ -1,13 +1,15 @@
 <template>
-    <div class="artifact-selection scova-interface">
-        <label for="conversation-artifact-select">成果</label>
+    <div v-if="report" class="artifact-selection scova-interface">
+        <label for="conversation-artifact-select" class="sr-only">成果版本</label>
         <select
             id="conversation-artifact-select"
-            class="report-select"
+            class="artifact-select"
             :value="selectedArtifactId || report?.id"
             @change="emit('select', ($event.target as HTMLSelectElement).value)"
         >
-            <option v-if="report" :value="report.id">原报告 · {{ report.title }}</option>
+            <option v-if="report" :value="report.id">
+                原报告 · {{ outputFormatLabels[report.format] }}
+            </option>
             <option
                 v-for="artifact in conversationArtifacts"
                 :key="artifact.reportId"
@@ -25,43 +27,50 @@
                 {{ artifact.title }}
             </option>
         </select>
-        <button
-            v-if="report?.mode === 'live' && conversationArtifacts.length"
-            type="button"
-            class="open-current-artifact report-open-button"
-            @click="emit('merge', selectedArtifact?.reportId)"
-        >
-            合并到原报告
-        </button>
-        <p
-            v-if="selectedArtifactId && selectedArtifactId !== report?.id"
-            class="text-muted text-xs m-0"
-        >
-            {{
-                selectedArtifact?.round
-                    ? `来自第 ${selectedArtifact.round} 轮`
-                    : '来自本报告后续对话'
-            }}
-            · 讨论仍基于原报告
-        </p>
     </div>
 </template>
 <script setup lang="ts">
-import type { Report, ReportConversation } from '@scova/models';
+import { outputFormatLabels, type Report, type ReportConversation } from '@scova/models';
 type ConversationArtifact = NonNullable<ReportConversation['artifacts']>[number];
 defineProps<{
     report?: Report;
     selectedArtifactId: string;
-    selectedArtifact?: ConversationArtifact;
     conversationArtifacts: ConversationArtifact[];
 }>();
-const emit = defineEmits<{ select: [id: string]; merge: [id?: string] }>();
+const emit = defineEmits<{ select: [id: string] }>();
 </script>
 <style scoped>
 .artifact-selection {
-    @apply grid gap-2 min-w-0;
+    min-width: 0;
 }
-.artifact-selection label {
-    @apply text-sm text-muted;
+.artifact-selection .artifact-select:not([multiple]) {
+    display: block;
+    width: 100%;
+    max-width: 14rem;
+    min-height: 2.25rem;
+    min-block-size: 2.25rem;
+    padding: 0.375rem 1.75rem 0.375rem 0.5rem;
+    overflow: hidden;
+    border: 0;
+    border-radius: 0.5rem;
+    background: var(--scova-surface);
+    color: var(--scova-text);
+    font: inherit;
+    font-size: 0.875rem;
+    text-overflow: ellipsis;
+    cursor: pointer;
+}
+.artifact-selection .artifact-select:not(:disabled):hover {
+    background: var(--scova-selected);
+}
+.artifact-selection .artifact-select:not(:disabled):focus-visible {
+    outline: 1px solid currentColor;
+    outline-offset: -1px;
+    box-shadow: none;
+}
+@media (pointer: coarse) {
+    .artifact-select {
+        min-height: 2.75rem;
+    }
 }
 </style>

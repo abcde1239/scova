@@ -95,6 +95,7 @@
             :round="run.round"
             @artifact="emit('artifact', $event)"
             @open-artifact="emit('openArtifact', $event)"
+            @open-original="emit('openOriginal')"
             @protected-change="setProtected(run.runId, $event)"
             @active-change="setActive(run.runId, $event)"
         />
@@ -126,6 +127,7 @@ const props = defineProps<{
 const emit = defineEmits<{
     artifact: [artifact: Artifact];
     openArtifact: [artifact: Artifact];
+    openOriginal: [];
     protectedChange: [value: boolean];
     activeChange: [value: boolean];
 }>();

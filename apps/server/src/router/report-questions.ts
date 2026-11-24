@@ -79,7 +79,7 @@ export function createReportQuestionPlugin(services: ApiServices) {
                 tags: ['报告问答'],
                 summary: '围绕报告证据提问',
                 description:
-                    '结合原报告与有界历史对话，仅使用当前用户报告内授权引用，独立限流与计量；afterQuestionId核对最新轮次。必须携带会话、CSRF与Idempotency-Key，不会搜索或创建执行。',
+                    '结合原报告与有界历史对话，仅使用当前用户报告内授权引用，独立限流与计量；afterQuestionId核对最新轮次，agentProviderId可指定当前账号的模型配置且不更改默认设置。必须携带会话、CSRF与Idempotency-Key，不会搜索或创建执行。',
             },
         })
         .get('/reports/:reportId/questions/:questionId', handlers.get, {

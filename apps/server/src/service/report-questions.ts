@@ -108,6 +108,7 @@ export function createReportQuestionService(services: ApiServices) {
                 input.question,
                 key,
                 input.afterQuestionId,
+                input.agentProviderId,
             );
             if (claim.reused) return dto(claim.row);
             const usage: QuestionAnswer['usage'] = {
@@ -170,7 +171,10 @@ export function createReportQuestionService(services: ApiServices) {
                         const evidence = context.sources.map((s) => ({ id: s.id, quote: s.text }));
                         await write(repo.saveContext(claim.row, context));
                         if (!evidence.length) return insufficient('insufficient_evidence');
-                        const model = await services.reportQuestionModel(userId);
+                        const model = await services.reportQuestionModel(
+                            userId,
+                            input.agentProviderId,
+                        );
                         if (!model) return insufficient('model_unavailable');
                         const reservedInput = estimateModelInputTokens(modelInput);
                         if (reservedInput > policy.maxInputTokens)

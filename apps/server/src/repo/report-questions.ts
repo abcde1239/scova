@@ -212,6 +212,7 @@ export function createReportQuestionRepo(services: Pick<ApiServices, 'db' | 'clo
             question: string,
             key: string,
             afterQuestionId?: string | null,
+            agentProviderId?: string,
         ) {
             const scope = `report:${reportId}:question`;
             const keyHash = hash(key);
@@ -220,6 +221,7 @@ export function createReportQuestionRepo(services: Pick<ApiServices, 'db' | 'clo
                     reportId,
                     question,
                     ...(afterQuestionId !== undefined ? { afterQuestionId } : {}),
+                    ...(agentProviderId ? { agentProviderId } : {}),
                 }),
             );
             return services.db().transaction(async (tx) => {
@@ -242,7 +244,7 @@ export function createReportQuestionRepo(services: Pick<ApiServices, 'db' | 'clo
                         throw new ApiError(
                             409,
                             'IDEMPOTENCY_PAYLOAD_MISMATCH',
-                            '同一幂等键不能提交不同问题',
+                            '同一幂等键不能更改问题或模型配置',
                         );
                     const row = old.resourceId
                         ? await tx.query.reportQuestions
@@ -265,6 +267,24 @@ export function createReportQuestionRepo(services: Pick<ApiServices, 'db' | 'clo
                 }
                 const latest = await store.latest(userId, reportId);
                 requireConversationHead(latest, afterQuestionId);
+                if (agentProviderId) {
+                    const [provider] = await tx
+                        .select({ id: tables.agentProviders.id })
+                        .from(tables.agentProviders)
+                        .where(
+                            and(
+                                eq(tables.agentProviders.userId, userId),
+                                eq(tables.agentProviders.id, agentProviderId),
+                            ),
+                        )
+                        .limit(1);
+                    if (!provider)
+                        throw new ApiError(
+                            422,
+                            'QUESTION_MODEL_UNAVAILABLE',
+                            '所选模型配置不可用，请重新选择',
+                        );
+                }
                 const row = await store.insert(
                     userId,
                     reportId,

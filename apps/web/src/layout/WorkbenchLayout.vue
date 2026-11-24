@@ -1,5 +1,8 @@
 <template>
-    <div class="workbench min-h-[100dvh]">
+    <div
+        class="workbench min-h-[100dvh]"
+        :class="{ 'workbench--report': route.name === 'report-detail' }"
+    >
         <a
             class="skip-link fixed top-2 left-2 z-10 inline-flex items-center min-h-11 text-default no-underline bg-surface -translate-y-[200%] py-2 px-4 keyboard-focus-wide focus:translate-y-0"
             href="#main-content"
@@ -58,11 +61,15 @@
         <main
             id="main-content"
             class="workbench-main"
-            :class="{ 'workbench-main--form': route.meta.contentWidth === 'form' }"
+            :class="{
+                'workbench-main--form': route.meta.contentWidth === 'form',
+                'workbench-main--report': route.name === 'report-detail',
+            }"
             tabindex="-1"
             aria-labelledby="page-title"
         >
             <page-breadcrumbs
+                v-if="route.name !== 'report-detail'"
                 class="flex flex-wrap gap-2 [.page-heading_>_&]:(min-w-0 max-w-full break-anywhere)"
             />
             <div
@@ -195,12 +202,19 @@ const mobileItems = computed(() => [
 .workbench-main:has(> .breadcrumbs) {
     @apply pt-3;
 }
+.workbench-main--report {
+    @apply max-w-none p-0;
+    overflow-wrap: anywhere;
+}
 .workbench-main--form {
     @apply max-w-[calc(44rem_+_2_*_var(--workbench-gutter))];
 }
 @media (min-width: 54rem) {
     .workbench {
         @apply grid grid-cols-[min(15.5rem,_30vw)_minmax(0,_1fr)];
+    }
+    .workbench--report {
+        @apply grid-cols-[min(12.5rem,_25vw)_minmax(0,_1fr)];
     }
     .workbench-header {
         @apply sticky top-0 z-[5] self-start grid grid-cols-[minmax(0,_1fr)]

@@ -15,7 +15,7 @@ import {
     type ApiServices,
 } from '../src/app/services.ts';
 import type { ReportFollowupInput, TaskConfig } from '@scova/models';
-import { sealCredential } from '@scova/shared/credentials';
+import { sealCredential, sealProviderCredentials } from '@scova/shared/credentials';
 import { effectiveRunScopeHash } from '@scova/shared';
 import { createReportQuestionService } from '../src/service/report-questions.ts';
 import { comparisonScopeHash } from '../src/service/tasks.ts';
@@ -747,6 +747,69 @@ describe('报告证据问答与明确确认后续研究', () => {
                 .where(and(eq(tables.outbox.userId, a.userId)))
                 .then(([row]) => row!.count),
         ).toBe(0);
+    });
+    it('指定本人模型只作用于本轮，重放不重新解析配置，跨账号选择不认领请求', async () => {
+        vi.stubEnv('AGENT_CREDENTIAL_KEY', 'ab'.repeat(32));
+        const owner = await register();
+        const other = await register();
+        const f = await fixture(owner);
+        async function provider(userId: string, model: string, active = false) {
+            const id = randomUUID();
+            await db.insert(tables.agentProviders).values({
+                id,
+                userId,
+                name: model,
+                model,
+                active,
+                baseUrl: 'https://api.example.test/v1',
+                encryptedApiKey: sealProviderCredentials({ modelApiKey: 'test-key' }, userId, id),
+            });
+            return id;
+        }
+        const active = await provider(owner.userId, 'default-model', true);
+        const selected = await provider(owner.userId, 'selected-model');
+        const foreign = await provider(other.userId, 'foreign-model');
+        const defaults = createDefaultServices({ db: () => db });
+        const resolveQuestionModel = vi.fn(async (userId?: string, agentProviderId?: string) => {
+            expect(await defaults.reportQuestionModel(userId, agentProviderId)).not.toBeNull();
+            return modelFixture(answer(f.evidence.id, f.quote));
+        });
+        configure({ reportQuestionModel: resolveQuestionModel });
+        const key = randomUUID();
+        const submit = (agentProviderId?: string, idempotencyKey = key) =>
+            request(`/reports/${f.report.id}/questions`, {
+                method: 'POST',
+                headers: { ...headers(owner), 'idempotency-key': idempotencyKey },
+                body: JSON.stringify({
+                    question: '根据资料解释活动',
+                    ...(agentProviderId ? { agentProviderId } : {}),
+                }),
+            });
+        await expect(defaults.reportQuestionModel(owner.userId, foreign)).rejects.toMatchObject({
+            code: 'AGENT_CONFIGURATION_INVALID',
+        });
+        const rejected = await submit(foreign);
+        expect(rejected.status).toBe(422);
+        expect(await json(rejected)).toMatchObject({ code: 'QUESTION_MODEL_UNAVAILABLE' });
+        expect(resolveQuestionModel).not.toHaveBeenCalled();
+        const created = await submit(selected);
+        expect(created.status).toBe(201);
+        const answerId = (await json(created)).id;
+        expect(resolveQuestionModel).toHaveBeenCalledWith(owner.userId, selected);
+        expect((await submit(active)).status).toBe(409);
+        await db.delete(tables.agentProviders).where(eq(tables.agentProviders.id, selected));
+        const replay = await submit(selected);
+        expect(replay.status).toBe(201);
+        expect((await json(replay)).id).toBe(answerId);
+        expect(resolveQuestionModel).toHaveBeenCalledTimes(1);
+        expect((await submit(undefined, randomUUID())).status).toBe(201);
+        expect(resolveQuestionModel).toHaveBeenLastCalledWith(owner.userId, undefined);
+        const providers = await db
+            .select()
+            .from(tables.agentProviders)
+            .where(eq(tables.agentProviders.userId, owner.userId));
+        expect(providers.filter((row) => row.active).map((row) => row.id)).toEqual([active]);
+        expect(calls).toBe(2);
     });
     it('缺模型或现有证据无法回答时明确不足，无搜索或Run副作用', async () => {
         const a = await register(),

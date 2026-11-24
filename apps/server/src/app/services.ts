@@ -36,7 +36,10 @@ export interface ApiServices {
     rateLimit: AuthRateLimitConfig;
     taskDraftPolicy: TaskDraftPolicy;
     reportQuestionPolicy: TaskDraftPolicy;
-    reportQuestionModel(userId?: string): ModelProvider | null | Promise<ModelProvider | null>;
+    reportQuestionModel(
+        userId?: string,
+        agentProviderId?: string,
+    ): ModelProvider | null | Promise<ModelProvider | null>;
     taskDraftModel(userId?: string): ModelProvider | null | Promise<ModelProvider | null>;
     providerModels: typeof listProviderModels;
     providerBalance: typeof readProviderBalance;
@@ -122,9 +125,13 @@ export function createDefaultServices(overrides: ApiServiceOverrides = {}): ApiS
         }),
         reportQuestionModel:
             overrides.reportQuestionModel ??
-            (async (userId) => {
+            (async (userId, agentProviderId) => {
                 const own = userId
-                    ? await createAgentProviderService(services).model(userId)
+                    ? await createAgentProviderService(services).model(
+                          userId,
+                          'research',
+                          agentProviderId,
+                      )
                     : null;
                 if (own) return own;
                 if (questionModel === undefined) questionModel = createTaskDraftModel();

@@ -313,6 +313,9 @@ export function useReportQuestions(
                     params: { reportId: current.reportId },
                     body: {
                         question: current.question,
+                        ...(current.agentProviderId
+                            ? { agentProviderId: current.agentProviderId }
+                            : {}),
                         ...(current.afterQuestionId !== undefined
                             ? { afterQuestionId: current.afterQuestionId }
                             : {}),
@@ -343,6 +346,11 @@ export function useReportQuestions(
             const error = toApiError(cause);
             waitUntil(questionRetryAt(cause));
             terminal.value = error.code === 'IDEMPOTENCY_PAYLOAD_MISMATCH';
+            if (error.code === 'QUESTION_MODEL_UNAVAILABLE') {
+                attempt.value = undefined;
+                notice.value = error.message;
+                return;
+            }
             if (['CONVERSATION_BUSY', 'CONVERSATION_CHANGED'].includes(error.code ?? '')) {
                 attempt.value = undefined;
                 const conflictingQuestion = current.question;
@@ -363,13 +371,14 @@ export function useReportQuestions(
             if (action === generation) pending.value = false;
         }
     }
-    function submit() {
+    function submit(agentProviderId?: string) {
         if (!canSubmit.value) return Promise.resolve(undefined);
         const current = questionAttempt(
             toValue(reportId),
             draft.value,
             crypto.randomUUID(),
             turns.value.at(-1)?.id ?? null,
+            agentProviderId,
         );
         attempt.value = current;
         return send(current);

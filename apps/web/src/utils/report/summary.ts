@@ -1,4 +1,4 @@
-import type { Claim, Report } from '@scova/models';
+import { classifyReportDelivery, type Claim, type Report } from '@scova/models';
 
 export const claimLabels: Record<Claim['kind'], string> = {
     fact: '来源事实',
@@ -36,4 +36,24 @@ export function reportIntegrity(report: Report) {
         limitations: uniqueCoverageNotes([...report.limitations, ...report.coverage.gaps]),
         demo: report.mode === 'demo',
     };
+}
+
+export function savedReportDelivery(report: Report) {
+    const { delivery, reportValue, artifacts } = report.coverage;
+    return (
+        delivery ??
+        (reportValue ? classifyReportDelivery(reportValue, report.claims, artifacts) : undefined)
+    );
+}
+
+export function reportDeliveryStatus(report: Report, saved = savedReportDelivery(report)) {
+    if (saved?.status === 'sources_only') return '仅保存来源';
+    if (
+        saved?.status === 'partial' ||
+        (saved && !report.coverage.delivery && saved.answeredQuestions < saved.questionCount)
+    )
+        return '部分交付';
+    if (saved?.status === 'answered') return '核心问题已回答';
+    if (report.coverage.completeness === 'partial') return '部分交付';
+    return '';
 }
