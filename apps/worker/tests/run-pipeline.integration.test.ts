@@ -42,7 +42,9 @@ import { createOutboxQueue } from '../../server/src/repo/queue/outbox.ts';
 import { createOutboxRepository } from '../../server/src/repo/outbox.ts';
 import { OutboxService } from '../../server/src/service/outbox.ts';
 import { outboxDatabase } from './support/outbox-database.ts';
+import { prepareTestCheckpointSchema } from './support/checkpoint-schema.ts';
 import { emptyUsage, seedRun } from './support/run-database.ts';
+import { testWorkerExecution } from './support/worker-execution.ts';
 
 const fixture = outboxDatabase();
 const repository = createRunRepository(fixture.db);
@@ -953,7 +955,7 @@ describe('生产 Run 租约、消费与恢复（真实 PG/Redis，串行）', ()
 });
 
 type Runtime = 'bun' | 'node';
-function launch(runtime: Runtime, queueName: string) {
+function launch(runtime: Runtime, queueName: string, execution: { url: string; token: string }) {
     const bun =
         process.env.BUN_BIN ??
         join(homedir(), '.bun', 'bin', process.platform === 'win32' ? 'bun.exe' : 'bun');
@@ -965,9 +967,10 @@ function launch(runtime: Runtime, queueName: string) {
         cwd: fileURLToPath(new URL('../', import.meta.url)),
         env: {
             ...process.env,
-            DATABASE_URL: fixture.databaseUrl,
             REDIS_URL: fixture.redisUrl,
             WORKER_QUEUE_NAME: queueName,
+            WORKER_EXECUTION_URL: execution.url,
+            WORKER_EXECUTION_TOKEN: execution.token,
             WORKER_POLL_INTERVAL_MS: '20',
             WORKER_RUN_LEASE_SECONDS: '1',
             WORKER_RUN_CONCURRENCY: '1',
@@ -1054,15 +1057,21 @@ describe('真实进程崩溃与IPC停止', () => {
                     WORKER_FAILURE_DELAY_MS: '50',
                 }),
             );
+            await prepareTestCheckpointSchema(fixture.databaseUrl, fixture.checkpointSchema);
+            const execution = await testWorkerExecution(fixture.db, {
+                DATABASE_URL: fixture.databaseUrl,
+                AGENT_CHECKPOINT_SCHEMA: fixture.checkpointSchema,
+                WORKER_QUEUE_NAME: queueName,
+            });
             control.start();
-            const first = launch(runtime, queueName);
+            const first = launch(runtime, queueName, execution);
             let second: ReturnType<typeof launch> | undefined;
             try {
                 await waitMessage(first, 'executing');
                 const initial = await stored(seed.run.id);
                 await endProcess(first, false);
                 await expire(seed.run.id);
-                second = launch(runtime, queueName);
+                second = launch(runtime, queueName, execution);
                 await waitMessage(second, 'executing');
                 const recovered = await stored(seed.run.id);
                 expect(recovered.leaseEpoch).toBe(initial.leaseEpoch + 1);
@@ -1100,11 +1109,15 @@ describe('真实进程崩溃与IPC停止', () => {
                         .then((rows) => rows[0]!.count),
                 ).toBe(0);
             } finally {
-                if (!first.exit) await endProcess(first, false);
-                if (second && !second.exit) await endProcess(second, false);
-                await control.stop();
-                await queue.obliterate({ force: true });
-                await queue.close();
+                try {
+                    if (!first.exit) await endProcess(first, false);
+                    if (second && !second.exit) await endProcess(second, false);
+                    await control.stop();
+                    await queue.obliterate({ force: true });
+                } finally {
+                    await execution.stop();
+                    await queue.close();
+                }
             }
         },
     );
