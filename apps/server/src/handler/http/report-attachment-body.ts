@@ -1,13 +1,14 @@
-import { REPORT_ATTACHMENT_MAX_BYTES, type ReportAttachmentMediaType } from '@scova/models';
+import { REPORT_ATTACHMENT_MAX_BYTES } from '@scova/models';
 import { ApiError } from '@/utils/errors.ts';
 
-function tooLarge() {
-    return new ApiError(413, 'REPORT_ATTACHMENT_TOO_LARGE', '附件不得超过 256 KiB');
+function tooLarge(maxBytes: number) {
+    return new ApiError(413, 'REPORT_ATTACHMENT_TOO_LARGE', `附件不得超过 ${maxBytes / 1024} KiB`);
 }
 
 export async function readReportAttachment(
     request: Request,
-    expectedType: ReportAttachmentMediaType,
+    expectedType: string,
+    maxBytes = REPORT_ATTACHMENT_MAX_BYTES,
 ) {
     const type = request.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase();
     if (type !== expectedType)
@@ -17,8 +18,7 @@ export async function readReportAttachment(
             `此附件的 Content-Type 必须为 ${expectedType}`,
         );
     const length = request.headers.get('content-length');
-    if (length && (!/^\d+$/.test(length) || Number(length) > REPORT_ATTACHMENT_MAX_BYTES))
-        throw tooLarge();
+    if (length && (!/^\d+$/.test(length) || Number(length) > maxBytes)) throw tooLarge(maxBytes);
     const reader = request.body?.getReader();
     if (!reader) throw new ApiError(422, 'REPORT_ATTACHMENT_EMPTY', '请选择非空的附件');
     const chunks: Uint8Array[] = [];
@@ -35,9 +35,9 @@ export async function readReportAttachment(
             signal.throwIfAborted();
             if (done) break;
             size += value.byteLength;
-            if (size > REPORT_ATTACHMENT_MAX_BYTES) {
+            if (size > maxBytes) {
                 await reader.cancel().catch(() => {});
-                throw tooLarge();
+                throw tooLarge(maxBytes);
             }
             chunks.push(value);
         }

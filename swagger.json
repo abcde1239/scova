@@ -230167,7 +230167,7 @@
         },
         "/api/v1/threads/{threadId}/attachments": {
             "post": {
-                "description": "需要本人会话及 CSRF 校验。接收不超过 256 KiB 的 CSV、UTF-8 纯文本或 PDF 原始请求体。PDF 仅供下载。",
+                "description": "需要本人会话及 CSRF 校验。接收不超过 256 KiB 的 CSV、UTF-8 TXT、Markdown、JSON、TSV、PDF、PNG、JPEG 或 WebP 原始请求体。PDF 和图片提供原件下载。",
                 "operationId": "uploadProjectThreadAttachment",
                 "parameters": [
                     {
@@ -230181,20 +230181,44 @@
                         }
                     },
                     {
-                        "description": "原始 CSV、TXT 或 PDF 文件名",
+                        "description": "带受支持扩展名的原始会话附件文件名",
                         "in": "query",
                         "name": "filename",
                         "required": true,
                         "schema": {
                             "maxLength": 120,
-                            "minLength": 5,
+                            "minLength": 4,
                             "type": "string"
                         }
                     }
                 ],
                 "requestBody": {
                     "content": {
+                        "application/json": {
+                            "schema": {
+                                "format": "binary",
+                                "type": "string"
+                            }
+                        },
                         "application/pdf": {
+                            "schema": {
+                                "format": "binary",
+                                "type": "string"
+                            }
+                        },
+                        "image/jpeg": {
+                            "schema": {
+                                "format": "binary",
+                                "type": "string"
+                            }
+                        },
+                        "image/png": {
+                            "schema": {
+                                "format": "binary",
+                                "type": "string"
+                            }
+                        },
+                        "image/webp": {
                             "schema": {
                                 "format": "binary",
                                 "type": "string"
@@ -230206,7 +230230,19 @@
                                 "type": "string"
                             }
                         },
+                        "text/markdown": {
+                            "schema": {
+                                "format": "binary",
+                                "type": "string"
+                            }
+                        },
                         "text/plain": {
+                            "schema": {
+                                "format": "binary",
+                                "type": "string"
+                            }
+                        },
+                        "text/tab-separated-values": {
                             "schema": {
                                 "format": "binary",
                                 "type": "string"
@@ -230233,9 +230269,9 @@
                                             "type": "string"
                                         },
                                         "filename": {
-                                            "description": "原始 CSV、TXT 或 PDF 文件名",
+                                            "description": "带受支持扩展名的原始会话附件文件名",
                                             "maxLength": 120,
-                                            "minLength": 5,
+                                            "minLength": 4,
                                             "type": "string"
                                         },
                                         "format": {
@@ -230250,6 +230286,30 @@
                                                 },
                                                 {
                                                     "const": "pdf",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "md",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "json",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "tsv",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "png",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "jpeg",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "webp",
                                                     "type": "string"
                                                 }
                                             ],
@@ -230297,9 +230357,9 @@
                                             "type": "string"
                                         },
                                         "filename": {
-                                            "description": "原始 CSV、TXT 或 PDF 文件名",
+                                            "description": "带受支持扩展名的原始会话附件文件名",
                                             "maxLength": 120,
-                                            "minLength": 5,
+                                            "minLength": 4,
                                             "type": "string"
                                         },
                                         "format": {
@@ -230314,6 +230374,30 @@
                                                 },
                                                 {
                                                     "const": "pdf",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "md",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "json",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "tsv",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "png",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "jpeg",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "webp",
                                                     "type": "string"
                                                 }
                                             ],
@@ -230361,9 +230445,9 @@
                                             "type": "string"
                                         },
                                         "filename": {
-                                            "description": "原始 CSV、TXT 或 PDF 文件名",
+                                            "description": "带受支持扩展名的原始会话附件文件名",
                                             "maxLength": 120,
-                                            "minLength": 5,
+                                            "minLength": 4,
                                             "type": "string"
                                         },
                                         "format": {
@@ -230378,6 +230462,30 @@
                                                 },
                                                 {
                                                     "const": "pdf",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "md",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "json",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "tsv",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "png",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "jpeg",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "webp",
                                                     "type": "string"
                                                 }
                                             ],
@@ -231811,9 +231919,9 @@
                                             "type": "string"
                                         },
                                         "filename": {
-                                            "description": "原始 CSV、TXT 或 PDF 文件名",
+                                            "description": "带受支持扩展名的原始会话附件文件名",
                                             "maxLength": 120,
-                                            "minLength": 5,
+                                            "minLength": 4,
                                             "type": "string"
                                         },
                                         "format": {
@@ -231828,6 +231936,30 @@
                                                 },
                                                 {
                                                     "const": "pdf",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "md",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "json",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "tsv",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "png",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "jpeg",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "webp",
                                                     "type": "string"
                                                 }
                                             ],
@@ -231875,9 +232007,9 @@
                                             "type": "string"
                                         },
                                         "filename": {
-                                            "description": "原始 CSV、TXT 或 PDF 文件名",
+                                            "description": "带受支持扩展名的原始会话附件文件名",
                                             "maxLength": 120,
-                                            "minLength": 5,
+                                            "minLength": 4,
                                             "type": "string"
                                         },
                                         "format": {
@@ -231892,6 +232024,30 @@
                                                 },
                                                 {
                                                     "const": "pdf",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "md",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "json",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "tsv",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "png",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "jpeg",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "webp",
                                                     "type": "string"
                                                 }
                                             ],
@@ -231939,9 +232095,9 @@
                                             "type": "string"
                                         },
                                         "filename": {
-                                            "description": "原始 CSV、TXT 或 PDF 文件名",
+                                            "description": "带受支持扩展名的原始会话附件文件名",
                                             "maxLength": 120,
-                                            "minLength": 5,
+                                            "minLength": 4,
                                             "type": "string"
                                         },
                                         "format": {
@@ -231956,6 +232112,30 @@
                                                 },
                                                 {
                                                     "const": "pdf",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "md",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "json",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "tsv",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "png",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "jpeg",
+                                                    "type": "string"
+                                                },
+                                                {
+                                                    "const": "webp",
                                                     "type": "string"
                                                 }
                                             ],

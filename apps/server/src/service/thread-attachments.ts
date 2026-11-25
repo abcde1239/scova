@@ -1,11 +1,12 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { DatabaseExecutor, ProjectThreadAttachmentRow } from '@scova/db';
+import sharp from 'sharp';
 import {
     PROJECT_THREAD_ATTACHMENT_EXCERPT_CHARS,
-    REPORT_ATTACHMENT_MEDIA_TYPES,
-    reportAttachmentFormat,
+    PROJECT_THREAD_ATTACHMENT_MEDIA_TYPES,
+    projectThreadAttachmentFormat,
     type ProjectThreadAttachment,
-    type ReportAttachmentMediaType,
+    type ProjectThreadAttachmentMediaType,
 } from '@scova/models';
 import type { ApiServices } from '@/app/services';
 import { createProjectThreadStore } from '@/repo/project-threads.ts';
@@ -35,22 +36,18 @@ function requireStorage(services: ApiServices) {
 
 function filenameAndFormat(input: string) {
     const filename = input.normalize('NFC').trim();
-    const format = reportAttachmentFormat(filename);
+    const format = projectThreadAttachmentFormat(filename);
     if (
         !format ||
         filename.length > 120 ||
-        !/^[^./\\<>:"|?*][^/\\<>:"|?*]*\.(?:csv|txt|pdf)$/iu.test(filename) ||
+        !/^[^./\\<>:"|?*][^/\\<>:"|?*]*$/u.test(filename) ||
         /[\p{Cc}\p{Cf}\p{Cs}]/u.test(filename)
     )
-        throw new ApiError(
-            422,
-            'THREAD_ATTACHMENT_FILENAME',
-            '请选择有效的 CSV、TXT 或 PDF 文件名',
-        );
+        throw new ApiError(422, 'THREAD_ATTACHMENT_FILENAME', '请选择带受支持扩展名的有效文件名');
     return { filename, format };
 }
 
-function extractExcerpt(format: ProjectThreadAttachment['format'], content: Buffer) {
+async function extractExcerpt(format: ProjectThreadAttachment['format'], content: Buffer) {
     const invalid = () =>
         new ApiError(
             422,
@@ -61,9 +58,41 @@ function extractExcerpt(format: ProjectThreadAttachment['format'], content: Buff
         if (!validateReportPdf(content)) throw invalid();
         return null;
     }
+    if (format === 'png' || format === 'jpeg' || format === 'webp') {
+        try {
+            const maxPixels = 16_000_000;
+            const image = sharp(content, {
+                limitInputPixels: maxPixels,
+                failOn: 'warning',
+                pages: -1,
+            });
+            const {
+                format: actualFormat,
+                width,
+                height,
+                pages,
+                pageHeight,
+            } = await image.metadata();
+            const pixelCount = width * (pageHeight ?? height) * (pages ?? 1);
+            if (actualFormat === format && pixelCount <= maxPixels) {
+                await image.stats();
+                return null;
+            }
+        } catch {
+            throw invalid();
+        }
+        throw invalid();
+    }
     const parsed = format === 'csv' ? parseReportCsv(content) : parseReportText(content);
     if (parsed.status !== 'ready') throw invalid();
     const text = new TextDecoder('utf-8').decode(content).trim();
+    if (format === 'json') {
+        try {
+            JSON.parse(text);
+        } catch {
+            throw invalid();
+        }
+    }
     let remaining = PROJECT_THREAD_ATTACHMENT_EXCERPT_CHARS;
     for (const { index, segment } of excerptSegmenter.segment(text)) {
         remaining -= Array.from(segment).length;
@@ -108,7 +137,7 @@ export async function resolveThreadAttachmentContext(
     return uniqueIds.map((id) => {
         const row = byId.get(id);
         if (!row) throw threadMissing();
-        return { id, filename: row.filename, excerpt: row.excerpt };
+        return { id, filename: row.filename, excerpt: row.excerpt, byteLength: row.byteLength };
     });
 }
 
@@ -135,7 +164,7 @@ export function createThreadAttachmentService(
             userId: string,
             threadId: string,
             filenameInput: string,
-            readBody: (mediaType: ReportAttachmentMediaType) => Promise<Buffer>,
+            readBody: (mediaType: ProjectThreadAttachmentMediaType) => Promise<Buffer>,
             requestSignal: AbortSignal,
         ) {
             const db = services.db();
@@ -144,9 +173,9 @@ export function createThreadAttachmentService(
             requireWritableThread(thread);
             const { filename, format } = filenameAndFormat(filenameInput);
             const storage = requireStorage(services);
-            const mediaType = REPORT_ATTACHMENT_MEDIA_TYPES[format];
+            const mediaType = PROJECT_THREAD_ATTACHMENT_MEDIA_TYPES[format];
             const content = await readBody(mediaType);
-            const excerpt = extractExcerpt(format, content);
+            const excerpt = await extractExcerpt(format, content);
             const digest = createHash('sha256')
                 .update(filename)
                 .update('\0')

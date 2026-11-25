@@ -148,6 +148,13 @@
             "when": 1795540434231,
             "tag": "0020_project_thread_attachment_ownership",
             "breakpoints": true
+        },
+        {
+            "idx": 21,
+            "version": "7",
+            "when": 1795572460134,
+            "tag": "0021_project_thread_attachment_formats",
+            "breakpoints": true
         }
     ]
 }

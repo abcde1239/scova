@@ -84,6 +84,10 @@
         {
             "name": "0020_project_thread_attachment_ownership",
             "hash": "c17f268e0e6dcc9bcd79a6fb63e63e6f94f5d5a76bdd96fdf8ad13f1db853123"
+        },
+        {
+            "name": "0021_project_thread_attachment_formats",
+            "hash": "3a4379ec411f7cec6116dfa6bf20b1ca0b808be0ae1ccbd717859d05c8677d5d"
         }
     ],
     "signature": {
@@ -5886,7 +5890,7 @@
                 "table_name": "project_thread_attachments",
                 "name": "project_thread_attachments_format_check",
                 "type": "c",
-                "definition": "CHECK (format = ANY (ARRAY['csv'::text, 'txt'::text, 'pdf'::text]))",
+                "definition": "CHECK (format = ANY (ARRAY['csv'::text, 'txt'::text, 'pdf'::text, 'md'::text, 'json'::text, 'tsv'::text, 'png'::text, 'jpeg'::text, 'webp'::text]))",
                 "validated": true
             },
             {

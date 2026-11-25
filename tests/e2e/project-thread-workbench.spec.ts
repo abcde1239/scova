@@ -22,7 +22,7 @@ const taskId = id(95);
 const runId = id(96);
 const attachmentId = id(106);
 const attachmentText = '本周数据待核对。\n';
-const attachmentFile = '能源数据.txt';
+const attachmentFile = '能源数据.markdown';
 const timestamp = '2026-11-24T10:00:00.000Z';
 const projectPath = `/projects/${projectId}`;
 const threadPath = (threadId: string) => `${projectPath}/threads/${threadId}`;
@@ -238,7 +238,7 @@ async function mockWorkbench(
                 id: attachmentId,
                 threadId: secondThread,
                 filename: attachmentFile,
-                format: 'txt',
+                format: 'md',
                 byteLength: Buffer.byteLength(attachmentText),
                 textAvailable: true,
                 createdAt: timestamp,
@@ -246,7 +246,7 @@ async function mockWorkbench(
             if (!action[1] && request.method() === 'POST') {
                 expect(url.searchParams.get('filename')).toBe(attachmentFile);
                 expect(request.postData()).toBe(attachmentText);
-                expect(request.headers()['content-type']).toMatch(/^text\/plain/);
+                expect(request.headers()['content-type']).toMatch(/^text\/markdown/);
                 return route.fulfill({ status: 201, json: attachment });
             }
             if (threadId !== secondThread || action[1] !== attachmentId)
@@ -809,16 +809,18 @@ test('composer uploads a private attachment and timeline downloads the original 
     const fixture = await mockWorkbench(page);
     await page.goto(threadPath(secondThread));
     await page.getByText('附件', { exact: true }).click();
-    await page.getByLabel('添加附件', { exact: true }).setInputFiles({
+    const fileInput = page.getByLabel('添加附件', { exact: true });
+    await expect(fileInput).toHaveAttribute('accept', /\.markdown/);
+    await fileInput.setInputFiles({
         name: attachmentFile,
-        mimeType: 'text/plain',
+        mimeType: 'application/octet-stream',
         buffer: Buffer.from(attachmentText),
     });
-    await expect(page.getByRole('button', { name: '移除附件：能源数据.txt' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '移除附件：能源数据.markdown' })).toBeVisible();
     const composer = page.getByRole('textbox', { name: '给 Scova 发送消息' });
     await composer.fill('核对上传的数据');
     await composer.press('Enter');
-    const attachment = page.getByRole('button', { name: '下载附件：能源数据.txt' });
+    const attachment = page.getByRole('button', { name: '下载附件：能源数据.markdown' });
     await expect(attachment).toBeVisible();
     expect(fixture.submitted[0]).toMatchObject({
         message: '核对上传的数据',
