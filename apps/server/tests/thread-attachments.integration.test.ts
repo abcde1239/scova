@@ -5,6 +5,7 @@ import { eq, projectThreadAttachments, projectThreads, projects, sessions, users
 import { openSqliteState } from '@scova/db/sqlite-state';
 import type { ProjectThreadAttachment, ProjectThreadSnapshot } from '@scova/models';
 import type { ObjectStorage } from '@scova/object-storage';
+import sharp from 'sharp';
 import { serve } from 'srvx/node';
 import { afterAll, beforeAll, describe, expect, it } from 'vite-plus/test';
 import { createApiApp } from '@/app/index.ts';
@@ -22,6 +23,7 @@ const { db } = fixture;
 const origin = 'https://scova.test';
 const objects = new Map<string, Buffer>();
 let puts = 0;
+let downloads = 0;
 let failPut = false;
 let failDelete = false;
 let bucketEnabled = true;
@@ -34,8 +36,10 @@ const objectServer = createServer((request, response) => {
     const body = url.searchParams.has('test-signature')
         ? objects.get(url.pathname.slice(1))
         : undefined;
-    if (body) response.writeHead(200, { 'content-length': body.byteLength }).end(body);
-    else response.writeHead(404).end();
+    if (body) {
+        downloads++;
+        response.writeHead(200, { 'content-length': body.byteLength }).end(body);
+    } else response.writeHead(404).end();
 });
 const unused = (): never => {
     throw new Error('Unexpected storage operation');
@@ -153,7 +157,7 @@ function path(threadId: string, id?: string) {
 }
 function upload(
     account: Account,
-    content: string,
+    content: BodyInit,
     options: { filename?: string; mime?: string; csrf?: boolean; threadId?: string } = {},
 ) {
     const {
@@ -223,7 +227,12 @@ describe('thread attachment HTTP and cleanup', () => {
             first!.id,
         ]);
         expect(context).toEqual([
-            { id: first!.id, filename: '议题.txt', excerpt: '示例🙂'.repeat(400) },
+            {
+                id: first!.id,
+                filename: '议题.txt',
+                excerpt: '示例🙂'.repeat(400),
+                byteLength: Buffer.byteLength(content),
+            },
         ]);
     });
 
@@ -243,12 +252,84 @@ describe('thread attachment HTTP and cleanup', () => {
         expect(
             await resolveThreadAttachmentContext(db, owner.id, owner.threadId, [csv.id, pdf.id]),
         ).toEqual([
-            { id: csv.id, filename: 'sources.csv', excerpt: 'count,source\n1,test' },
-            { id: pdf.id, filename: '资料.pdf', excerpt: null },
+            {
+                id: csv.id,
+                filename: 'sources.csv',
+                excerpt: 'count,source\n1,test',
+                byteLength: csv.byteLength,
+            },
+            { id: pdf.id, filename: '资料.pdf', excerpt: null, byteLength: pdf.byteLength },
         ]);
         expect(await (await get(`${path(owner.threadId, pdf.id)}/download`, owner)).text()).toBe(
             pdfBytes,
         );
+    });
+
+    it.each([
+        ['a.md', 'text/markdown', 'md', '# Research notes'],
+        ['NOTES.MARKDOWN', 'text/markdown', 'md', '**Sources**'],
+        ['data.json', 'application/json', 'json', '{"count":3}'],
+        ['data.tsv', 'text/tab-separated-values', 'tsv', 'name\tcount\nscova\t3'],
+    ])(
+        'admits %s as text and preserves its original bytes',
+        async (filename, mime, format, text) => {
+            const owner = await seedThread();
+            const attachment = await json(await upload(owner, text, { filename, mime }));
+            expect(attachment).toMatchObject({ filename, format, textAvailable: true });
+            expect(
+                await resolveThreadAttachmentContext(db, owner.id, owner.threadId, [attachment.id]),
+            ).toEqual([
+                { id: attachment.id, filename, excerpt: text, byteLength: attachment.byteLength },
+            ]);
+            const download = await get(path(owner.threadId, attachment.id) + '/download', owner);
+            expect(download.status).toBe(200);
+            expect(await download.text()).toBe(text);
+        },
+    );
+
+    it.each([
+        ['image.png', 'image/png', 'png'],
+        ['image.jpg', 'image/jpeg', 'jpeg'],
+        ['image.jpeg', 'image/jpeg', 'jpeg'],
+        ['image.webp', 'image/webp', 'webp'],
+    ] as const)(
+        'admits %s as a private download without an excerpt',
+        async (filename, mime, format) => {
+            const owner = await seedThread();
+            const other = await seedThread();
+            const bytes = await sharp({
+                create: { width: 4, height: 4, channels: 3, background: '#d94399' },
+            })
+                .toFormat(format)
+                .toBuffer();
+            const attachment = await json(
+                await upload(owner, new Uint8Array(bytes), { filename, mime }),
+            );
+            expect(attachment).toMatchObject({ filename, format, textAvailable: false });
+            const downloadPath = path(owner.threadId, attachment.id) + '/download';
+            expect((await get(downloadPath, other)).status).toBe(404);
+            const download = await get(downloadPath, owner);
+            expect(download.status).toBe(200);
+            expect(Buffer.from(await download.arrayBuffer())).toEqual(bytes);
+        },
+    );
+
+    it('rejects invalid content and mismatched MIME without writing any objects', async () => {
+        const owner = await seedThread();
+        const before = puts;
+        for (const [filename, mime, body, status] of [
+            ['bad.json', 'application/json', '{"missing":}', 422],
+            ['bad.md', 'text/markdown', new Uint8Array([0xc3, 0x28]), 422],
+            ['bad.tsv', 'text/tab-separated-values', 'name\0count', 422],
+            ['bad.png', 'image/png', 'Pretending to be PNG', 422],
+            ['bad.webp', 'image/webp', 'Pretending to be WebP', 422],
+            ['bad.jpg', 'image/jpeg', 'Pretending to be JPEG', 422],
+            ['bad.jpeg', 'image/png', 'Wrong MIME', 415],
+            ['bad.svg', 'image/svg+xml', '<svg/>', 422],
+        ] as const) {
+            expect((await upload(owner, body, { filename, mime })).status, filename).toBe(status);
+        }
+        expect(puts).toBe(before);
     });
 
     it('uses only authorized excerpts in a turn and keeps its attachment reference in snapshots', async () => {
@@ -263,7 +344,7 @@ describe('thread attachment HTTP and cleanup', () => {
                 attempts.push(input);
                 return {
                     mode: 'live',
-                    data: { answer: 'Checked attachment' } as T,
+                    data: { answer: 'Checked attachment', reads: [] } as T,
                     usage: { inputTokens: 1, outputTokens: 1, estimated: false },
                 };
             },
@@ -286,15 +367,26 @@ describe('thread attachment HTTP and cleanup', () => {
         try {
             expect((await send(owner.siblingId)).status).toBe(404);
             expect(attempts).toHaveLength(0);
+            const before = downloads;
             const sent = await send(owner.threadId);
             const receipt = await sent.json();
             expect(sent.status, JSON.stringify(receipt)).toBe(200);
             expect(receipt).toMatchObject({ status: 'completed' });
             expect(attempts).toHaveLength(1);
+            expect(downloads).toBe(before);
             expect(attempts[0]!.untrustedSources).toEqual([
                 expect.objectContaining({
                     attachments: [{ filename: attachment.filename, excerpt: attachmentText }],
                 }),
+                {
+                    availableAttachmentReads: [
+                        {
+                            attachmentId: attachment.id,
+                            filename: attachment.filename,
+                            mayHaveMoreText: false,
+                        },
+                    ],
+                },
             ]);
             const snapshot = await get(`/api/v1/threads/${owner.threadId}`, owner);
             expect(snapshot.status).toBe(200);
@@ -310,6 +402,111 @@ describe('thread attachment HTTP and cleanup', () => {
             models.delete(owner.id);
         }
     });
+
+    it.each([
+        ['search', '搜索附件中的期限', 'EXPIRY (TERM)', 1, '第 6–9 行'],
+        ['read_lines', '请解释附件第八行', '', 8, '第 8–9 行'],
+    ])(
+        'looks up referenced text beyond its preview via %s',
+        async (operation, message, query, startLine, citation) => {
+            const owner = await seedThread();
+            const other = await seedThread();
+            const secret = 'expiry (term): 30 days';
+            const original = [
+                '导言'.repeat(610),
+                '',
+                'third',
+                'fourth',
+                'fifth',
+                'sixth',
+                'seventh',
+                secret,
+                'ninth',
+            ].join('\r\n');
+            const primary = await json(await upload(owner, original));
+            const unreferenced = await json(
+                await upload(owner, original, { filename: 'hidden.txt' }),
+            );
+            const foreign = await json(await upload(other, original, { filename: 'foreign.txt' }));
+            const attempts: StructuredInput[] = [];
+            models.set(owner.id, {
+                async generateStructured<T>(input: StructuredInput, context: CallContext = {}) {
+                    await context.beforeAttempt?.('model');
+                    attempts.push(input);
+                    const data =
+                        attempts.length === 1
+                            ? {
+                                  answer: '',
+                                  reads: [primary, unreferenced, foreign].map(({ id }) => ({
+                                      attachmentId: id,
+                                      operation,
+                                      startLine,
+                                      query,
+                                  })),
+                              }
+                            : { answer: '期限为 30 天。', citationIds: [1, 2, 3, 999] };
+                    return {
+                        mode: 'live',
+                        data: data as T,
+                        usage: { inputTokens: 1, outputTokens: 1, estimated: false },
+                    };
+                },
+            });
+            const turnId = randomUUID();
+            const before = downloads;
+            try {
+                const response = await fetch(
+                    new URL('/api/v1/threads/' + owner.threadId + '/turns', listener!.url),
+                    {
+                        method: 'POST',
+                        headers: {
+                            origin,
+                            cookie: owner.cookie,
+                            'content-type': 'application/json',
+                            'x-csrf-token': owner.csrf,
+                        },
+                        body: JSON.stringify({
+                            turnId,
+                            message,
+                            refs: [{ kind: 'attachment', id: primary.id }],
+                        }),
+                    },
+                );
+                const receipt = await response.json();
+                expect(response.status, JSON.stringify(receipt)).toBe(200);
+                expect(receipt).toMatchObject({ status: 'completed' });
+                expect(attempts).toHaveLength(2);
+                expect(downloads - before).toBe(1);
+                expect(JSON.stringify(attempts[0]!.untrustedSources)).not.toContain(secret);
+                const lookup = attempts[1]!.untrustedSources?.[1];
+                expect(lookup).toEqual({
+                    attachmentLookup: [
+                        expect.objectContaining({
+                            filename: '议题.txt',
+                            lines: expect.arrayContaining([
+                                { line: 8, text: secret, truncated: false },
+                            ]),
+                        }),
+                        { status: 'unavailable', filename: undefined },
+                        { status: 'unavailable', filename: undefined },
+                    ],
+                });
+                expect(JSON.stringify(lookup)).not.toContain('导言');
+                const snapshot = await get('/api/v1/threads/' + owner.threadId, owner);
+                expect(snapshot.status).toBe(200);
+                const timeline = (await snapshot.json()) as ProjectThreadSnapshot;
+                const answer = timeline.items.find(
+                    (item) => item.turnId === turnId && item.payload.role === 'assistant',
+                );
+                expect(answer?.payload.text).toBe(
+                    '期限为 30 天。\n\n附件引用：议题.txt ' + citation,
+                );
+                expect(JSON.stringify(timeline)).not.toContain(secret);
+            } finally {
+                models.delete(owner.id);
+            }
+        },
+    );
 
     it('rejects unowned references and validates session, CSRF, size, MIME and archive', async () => {
         const owner = await seedThread();

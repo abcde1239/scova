@@ -1,11 +1,11 @@
 import {
     PROJECT_THREAD_ATTACHMENT_MAX_BYTES,
-    REPORT_ATTACHMENT_MEDIA_TYPES,
+    PROJECT_THREAD_ATTACHMENT_MEDIA_TYPES,
     ProjectThreadAttachmentSchema,
-    ReportAttachmentFilenameSchema,
+    ProjectThreadAttachmentFilenameSchema,
     UuidSchema,
     parseContract,
-    reportAttachmentFormat,
+    projectThreadAttachmentFormat,
     type ProjectThreadAttachment,
 } from '@scova/models';
 import { defineApiEndpoint } from '@/api/endpoints';
@@ -30,12 +30,12 @@ const attachmentParams = {
 
 export function threadAttachmentFile(file: File) {
     const filename = file.name.normalize('NFC').trim();
-    const format = reportAttachmentFormat(filename);
+    const format = projectThreadAttachmentFormat(filename);
     if (!format || !file.size || file.size > PROJECT_THREAD_ATTACHMENT_MAX_BYTES)
-        throw new TypeError('请选择不超过 256 KiB 的非空 CSV、TXT 或 PDF 文件');
+        throw new TypeError('请选择受支持的非空文件，大小不得超过 256 KiB');
     return {
         query: { filename },
-        body: file.slice(0, file.size, REPORT_ATTACHMENT_MEDIA_TYPES[format]),
+        body: file.slice(0, file.size, PROJECT_THREAD_ATTACHMENT_MEDIA_TYPES[format]),
     };
 }
 
@@ -51,7 +51,7 @@ export const uploadThreadAttachmentEndpoint = defineApiEndpoint<{
         params: threadParams,
         query: {
             parse: (value: { filename: string }) => ({
-                filename: parseContract(ReportAttachmentFilenameSchema, value?.filename),
+                filename: parseContract(ProjectThreadAttachmentFilenameSchema, value?.filename),
             }),
         },
         body: {
@@ -60,9 +60,11 @@ export const uploadThreadAttachmentEndpoint = defineApiEndpoint<{
                     !(value instanceof Blob) ||
                     !value.size ||
                     value.size > PROJECT_THREAD_ATTACHMENT_MAX_BYTES ||
-                    !Object.values<string>(REPORT_ATTACHMENT_MEDIA_TYPES).includes(value.type)
+                    !Object.values<string>(PROJECT_THREAD_ATTACHMENT_MEDIA_TYPES).includes(
+                        value.type,
+                    )
                 )
-                    throw new TypeError('请选择不超过 256 KiB 的非空 CSV、TXT 或 PDF 文件');
+                    throw new TypeError('请选择受支持的非空文件，大小不得超过 256 KiB');
                 return value;
             },
         },

@@ -1,7 +1,8 @@
 import {
     ApiErrorSchema,
     ProjectThreadAttachmentSchema,
-    ReportAttachmentFilenameSchema,
+    PROJECT_THREAD_ATTACHMENT_MEDIA_TYPES,
+    ProjectThreadAttachmentFilenameSchema,
     UuidSchema,
 } from '@scova/models';
 import { Elysia, t } from 'elysia';
@@ -45,7 +46,7 @@ export function createThreadAttachmentPlugin(services: ApiServices) {
                 parse: 'none',
                 params: thread,
                 query: t.Object(
-                    { filename: ReportAttachmentFilenameSchema },
+                    { filename: ProjectThreadAttachmentFilenameSchema },
                     { additionalProperties: false },
                 ),
                 response: { 200: ProjectThreadAttachmentSchema, ...errors },
@@ -54,14 +55,15 @@ export function createThreadAttachmentPlugin(services: ApiServices) {
                     operationId: 'uploadProjectThreadAttachment',
                     summary: '上传私有会话附件',
                     description:
-                        '需要本人会话及 CSRF 校验。接收不超过 256 KiB 的 CSV、UTF-8 纯文本或 PDF 原始请求体。PDF 仅供下载。',
+                        '需要本人会话及 CSRF 校验。接收不超过 256 KiB 的 CSV、UTF-8 TXT、Markdown、JSON、TSV、PDF、PNG、JPEG 或 WebP 原始请求体。PDF 和图片提供原件下载。',
                     requestBody: {
                         required: true,
-                        content: {
-                            'text/csv': binary,
-                            'text/plain': binary,
-                            'application/pdf': binary,
-                        },
+                        content: Object.fromEntries(
+                            Object.values(PROJECT_THREAD_ATTACHMENT_MEDIA_TYPES).map((type) => [
+                                type,
+                                binary,
+                            ]),
+                        ),
                     },
                 },
             },

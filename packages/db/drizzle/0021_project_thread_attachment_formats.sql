@@ -1,0 +1,2 @@
+ALTER TABLE "project_thread_attachments" DROP CONSTRAINT "project_thread_attachments_format_check";--> statement-breakpoint
+ALTER TABLE "project_thread_attachments" ADD CONSTRAINT "project_thread_attachments_format_check" CHECK ("project_thread_attachments"."format" in ('csv', 'txt', 'pdf', 'md', 'json', 'tsv', 'png', 'jpeg', 'webp'));

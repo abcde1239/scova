@@ -5,7 +5,7 @@
             :id="inputId"
             name="thread-attachment"
             type="file"
-            accept=".csv,.txt,.pdf"
+            :accept="PROJECT_THREAD_ATTACHMENT_ACCEPT"
             class="max-w-full"
             :disabled="disabled || pending || remaining < 1"
             :aria-describedby="`${inputId}-hint ${inputId}-status`"
@@ -13,7 +13,8 @@
             @change="selectAttachment"
         />
         <span :id="`${inputId}-hint`" class="text-xs opacity-75">
-            CSV、TXT 或 PDF，最大 256 KiB。PDF 仅供下载。
+            支持 CSV、TXT、Markdown、JSON、TSV、PDF 和 PNG、JPEG、WebP。单份最多 256 KiB，PDF
+            和图片可下载原件。
         </span>
         <div :id="`${inputId}-status`" role="status">
             {{ error || (pending ? '正在上传附件…' : success) }}
@@ -22,7 +23,7 @@
 </template>
 
 <script setup lang="ts">
-import type { ProjectThreadAttachment } from '@scova/models';
+import { PROJECT_THREAD_ATTACHMENT_ACCEPT, type ProjectThreadAttachment } from '@scova/models';
 import { onScopeDispose, ref, useId, watch } from 'vue';
 import { toApiError } from '@/api/errors';
 import { threadAttachmentFile, uploadThreadAttachmentEndpoint } from '@/api/thread-attachments';

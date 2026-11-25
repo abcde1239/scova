@@ -22,6 +22,8 @@ vp run api:openapi:check
 
 `POST /api/v1/tasks/:id/pause`、`resume`、`archive` 使用会话、CSRF 和 `If-Match` 修订控制，返回任务详情和新 `ETag`。暂停保留当前 Run，恢复仅安排未来周期时点；归档阻止新手动、重试和周期执行，并对当前 Run 请求取消。已完成幂等命令仍可重放原结果。
 
+`POST /api/v1/threads/:threadId/attachments?filename=…` 用于上传私有项目会话附件，要求会话及 CSRF，并接收不超过 256 KiB 的原始请求体。支持 CSV、TXT、Markdown、JSON、TSV、PDF、PNG、JPEG、WebP，`Content-Type` 必须与文件扩展名匹配。附件元数据及原件下载按账号与会话授权。
+
 报告接口使用当前会话的账号权限：`GET /api/v1/reports` 支持任务筛选与游标分页，`GET /api/v1/reports/:id` 返回结构化结论、来源快照元数据和原文引用。`GET /api/v1/inbox` 分页读取收件箱，`PATCH /api/v1/inbox/:id` 以 `{ "read": true }` 标记已读，传 `false` 恢复未读；写请求仍需 CSRF。报告读取保留演示模式、覆盖缺口和引用定位，完整网页正文及内部工具、checkpoint 不进入响应。
 
 `coverage.delivery` 可选，包含 `answered`（核心问题均有引用答案）、`partial`（部分问题有答案）、`sources_only`（仅来源资料）及问题计数；详情校验分类与保存的结论映射一致。它独立于 `coverage.completeness`、Run 状态和比较基线，旧记录可以缺省。证据快照的可选 `sourceDates` 分别返回 `published`、`modified`，各含 `status`、`instant`、`value` 和 `precision`；`day`、`local` 精度的 `instant` 为 null，不伪造 UTC 时刻。日期来自本轮已保存的来源时间观测并重新校验，不采用模型猜测或更新时间替代发布时间。

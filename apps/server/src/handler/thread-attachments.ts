@@ -1,3 +1,4 @@
+import { PROJECT_THREAD_ATTACHMENT_MAX_BYTES } from '@scova/models';
 import type { ApiServices } from '@/app/services';
 import { readReportAttachment } from '@/handler/http/report-attachment-body.ts';
 import { requireCsrf, requireSession } from '@/handler/http/session.ts';
@@ -13,7 +14,8 @@ export function createThreadAttachmentHandlers(services: ApiServices) {
                 session.userId,
                 threadId,
                 filename,
-                (mediaType) => readReportAttachment(request, mediaType),
+                (mediaType) =>
+                    readReportAttachment(request, mediaType, PROJECT_THREAD_ATTACHMENT_MAX_BYTES),
                 request.signal,
             );
         },

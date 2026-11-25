@@ -1,11 +1,59 @@
 import { Type, type Static } from '@sinclair/typebox';
 import { InstantSchema, UuidSchema } from '../common/schema.ts';
-import {
-    REPORT_ATTACHMENT_MAX_BYTES,
-    ReportAttachmentFilenameSchema,
-} from '../report/attachments.ts';
+import { REPORT_ATTACHMENT_MEDIA_TYPES } from '../report/attachments.ts';
 
-export const PROJECT_THREAD_ATTACHMENT_MAX_BYTES = REPORT_ATTACHMENT_MAX_BYTES;
+export const PROJECT_THREAD_ATTACHMENT_MAX_BYTES = 256 * 1024;
+const formatSchema = Type.Union(
+    [
+        Type.Literal('csv'),
+        Type.Literal('txt'),
+        Type.Literal('pdf'),
+        Type.Literal('md'),
+        Type.Literal('json'),
+        Type.Literal('tsv'),
+        Type.Literal('png'),
+        Type.Literal('jpeg'),
+        Type.Literal('webp'),
+    ],
+    {
+        description: '附件文件格式',
+    },
+);
+type ProjectThreadAttachmentFormat = Static<typeof formatSchema>;
+export const PROJECT_THREAD_ATTACHMENT_MEDIA_TYPES = {
+    csv: REPORT_ATTACHMENT_MEDIA_TYPES.csv,
+    txt: REPORT_ATTACHMENT_MEDIA_TYPES.txt,
+    pdf: REPORT_ATTACHMENT_MEDIA_TYPES.pdf,
+    md: 'text/markdown',
+    json: 'application/json',
+    tsv: 'text/tab-separated-values',
+    png: 'image/png',
+    jpeg: 'image/jpeg',
+    webp: 'image/webp',
+} as const satisfies Record<ProjectThreadAttachmentFormat, string>;
+export type ProjectThreadAttachmentMediaType =
+    (typeof PROJECT_THREAD_ATTACHMENT_MEDIA_TYPES)[ProjectThreadAttachmentFormat];
+
+const formats = Object.keys(
+    PROJECT_THREAD_ATTACHMENT_MEDIA_TYPES,
+) as ProjectThreadAttachmentFormat[];
+const extensions = new Map<string, ProjectThreadAttachmentFormat>([
+    ...formats.map((format) => [`.${format}`, format] as const),
+    ['.markdown', 'md'],
+    ['.jpg', 'jpeg'],
+]);
+export const PROJECT_THREAD_ATTACHMENT_ACCEPT = [...extensions.keys()].join(',');
+
+export function projectThreadAttachmentFormat(filename: string) {
+    const dot = filename.lastIndexOf('.');
+    return dot > 0 ? extensions.get(filename.slice(dot).toLowerCase()) : undefined;
+}
+
+export const ProjectThreadAttachmentFilenameSchema = Type.String({
+    minLength: 4,
+    maxLength: 120,
+    description: '带受支持扩展名的原始会话附件文件名',
+});
 export const PROJECT_THREAD_ATTACHMENT_EXCERPT_CHARS = 1200;
 export const ProjectThreadAttachmentRefSchema = Type.Object(
     {
@@ -20,10 +68,8 @@ export const ProjectThreadAttachmentSchema = Type.Object(
     {
         id: { ...UuidSchema, description: '会话附件标识' },
         threadId: { ...UuidSchema, description: '附件所属会话标识' },
-        filename: ReportAttachmentFilenameSchema,
-        format: Type.Union([Type.Literal('csv'), Type.Literal('txt'), Type.Literal('pdf')], {
-            description: '附件文件格式',
-        }),
+        filename: ProjectThreadAttachmentFilenameSchema,
+        format: formatSchema,
         byteLength: Type.Integer({
             minimum: 1,
             maximum: PROJECT_THREAD_ATTACHMENT_MAX_BYTES,

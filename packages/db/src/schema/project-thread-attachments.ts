@@ -10,7 +10,7 @@ import {
     uniqueIndex,
     uuid,
 } from 'drizzle-orm/pg-core';
-import type { ReportAttachmentFormat } from '@scova/models';
+import type { ProjectThreadAttachment } from '@scova/models';
 import { projectThreads } from './project-conversations.ts';
 
 export const projectThreadAttachments = pgTable(
@@ -21,7 +21,7 @@ export const projectThreadAttachments = pgTable(
         userId: uuid('user_id'),
         threadId: uuid('thread_id'),
         filename: text('filename').notNull(),
-        format: text('format').$type<ReportAttachmentFormat>().notNull(),
+        format: text('format').$type<ProjectThreadAttachment['format']>().notNull(),
         byteLength: integer('byte_length').notNull(),
         digest: text('digest').notNull(),
         storageKey: text('storage_key').notNull(),
@@ -49,7 +49,7 @@ export const projectThreadAttachments = pgTable(
         ),
         check(
             'project_thread_attachments_format_check',
-            sql`${table.format} in ('csv', 'txt', 'pdf')`,
+            sql`${table.format} in ('csv', 'txt', 'pdf', 'md', 'json', 'tsv', 'png', 'jpeg', 'webp')`,
         ),
         check(
             'project_thread_attachments_excerpt_check',
