@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import {
     classifyReportDelivery,
+    REPORT_ATTACHMENT_INLINE_MAX_BYTES,
     serializeReportJson,
     type Report,
     type ReportJsonDocument,
@@ -1919,14 +1920,33 @@ for (const width of [1440, 390]) {
     });
 }
 
-test('报告附件 TXT 显示原文行，PDF 只提供原件下载', async ({ page }) => {
+test('报告附件 Markdown 显示原文行，PDF 和大附件只提供原件下载', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await samples(page);
     const reportId = id(1);
     const root = `/api/v1/reports/${reportId}/attachments`;
     const fixtures = {
-        '资料.txt': { id: id(92), content: '<b>文本原样保留</b>\n', mediaType: 'text/plain' },
-        '资料.pdf': { id: id(93), content: '%PDF-1.7\nfixture', mediaType: 'application/pdf' },
+        '资料.MARKDOWN': {
+            id: id(92),
+            content: '<b>文本原样保留</b>\n',
+            mediaType: 'text/markdown',
+            format: 'md',
+            preview: true,
+        },
+        '资料.pdf': {
+            id: id(93),
+            content: '%PDF-1.7\nfixture',
+            mediaType: 'application/pdf',
+            format: 'pdf',
+            preview: false,
+        },
+        '大附件.txt': {
+            id: id(94),
+            content: 'x'.repeat(REPORT_ATTACHMENT_INLINE_MAX_BYTES + 1),
+            mediaType: 'text/plain',
+            format: 'txt',
+            preview: false,
+        },
     };
     const saved = new Set<keyof typeof fixtures>();
     const resource = (filename: keyof typeof fixtures) => ({
@@ -1937,9 +1957,10 @@ test('报告附件 TXT 显示原文行，PDF 只提供原件下载', async ({ pa
         createdAt: report().publishedAt,
         downloadUrl: `${root}/${fixtures[filename].id}/download`,
         failureCode: null,
-        ...(filename.endsWith('.pdf')
-            ? { format: 'pdf', status: 'download_only', rowCount: null }
-            : { format: 'txt', status: 'ready', rowCount: 1 }),
+        format: fixtures[filename].format,
+        ...(fixtures[filename].preview
+            ? { status: 'ready', rowCount: 1 }
+            : { status: 'download_only', rowCount: null }),
     });
     await page.route(`**${root}**`, async (route) => {
         const request = route.request();
@@ -1952,30 +1973,34 @@ test('报告附件 TXT 显示原文行，PDF 只提供原件下载', async ({ pa
             saved.add(filename);
             return route.fulfill({ json: resource(filename) });
         }
-        if (url.pathname.endsWith(`/${fixtures['资料.txt'].id}/rows`))
+        if (url.pathname.endsWith(`/${fixtures['资料.MARKDOWN'].id}/rows`))
             return route.fulfill({
                 json: {
-                    attachmentId: fixtures['资料.txt'].id,
+                    attachmentId: fixtures['资料.MARKDOWN'].id,
                     rowCount: 1,
                     rows: [
                         {
                             rowNumber: 1,
                             startLine: 1,
                             endLine: 1,
-                            cells: [fixtures['资料.txt'].content.trimEnd()],
+                            cells: [fixtures['资料.MARKDOWN'].content.trimEnd()],
                         },
                     ],
                 },
             });
-        if (url.pathname.endsWith(`/${fixtures['资料.pdf'].id}/download`))
+        const downloading = Object.values(fixtures).find((file) =>
+            url.pathname.endsWith(`/${file.id}/download`),
+        );
+        if (downloading)
             return route.fulfill({
                 contentType: 'application/octet-stream',
-                body: fixtures['资料.pdf'].content,
+                body: downloading.content,
             });
         return route.fulfill({ json: { items: [...saved].map(resource) } });
     });
     await page.goto(reportPath);
     await page.getByText('私有参考附件', { exact: true }).click();
+    await expect(page.getByLabel('选择附件')).toHaveAttribute('accept', /(?:^|,)\.markdown(?:,|$)/);
     for (const [filename, fixture] of Object.entries(fixtures)) {
         await page.getByLabel('选择附件').setInputFiles({
             name: filename,
@@ -1987,14 +2012,18 @@ test('报告附件 TXT 显示原文行，PDF 只提供原件下载', async ({ pa
     }
     await page.getByRole('button', { name: '查看内容', exact: true }).click();
     await expect(page.getByText('<b>文本原样保留</b>', { exact: true })).toBeVisible();
-    const pdf = page.locator('li').filter({
-        has: page.getByText('PDF · 可下载原文件', { exact: true }),
-    });
-    await expect(pdf.getByRole('button', { name: '查看内容', exact: true })).toHaveCount(0);
-    const [download] = await Promise.all([
-        page.waitForEvent('download'),
-        pdf.getByRole('button', { name: '下载原文件' }).click(),
-    ]);
-    expect(download.suggestedFilename()).toBe('资料.pdf');
-    expect(await readFile((await download.path())!, 'utf8')).toBe(fixtures['资料.pdf'].content);
+    for (const filename of ['资料.pdf', '大附件.txt'] as const) {
+        const attachment = page
+            .locator('li')
+            .filter({ has: page.getByText(filename, { exact: true }) });
+        await expect(attachment.getByRole('button', { name: '查看内容', exact: true })).toHaveCount(
+            0,
+        );
+        const [download] = await Promise.all([
+            page.waitForEvent('download'),
+            attachment.getByRole('button', { name: '下载原文件' }).click(),
+        ]);
+        expect(download.suggestedFilename()).toBe(filename);
+        expect(await readFile((await download.path())!, 'utf8')).toBe(fixtures[filename].content);
+    }
 });

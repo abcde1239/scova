@@ -64,6 +64,10 @@
         {
             "name": "0015_futuristic_speed",
             "hash": "146dfa2c72b1a932889914a63e7a1405c9e28edb9439f9f38af5740d1d8d5c85"
+        },
+        {
+            "name": "0016_left_thunderbolt_ross",
+            "hash": "2b98a639010936630e28ffe1004c5187ef6123ae00dff3ece58d95a54659a9c8"
         }
     ],
     "signature": {
@@ -196,6 +200,13 @@
             },
             {
                 "name": "question_evidence",
+                "kind": "r",
+                "persistence": "p",
+                "row_security": false,
+                "force_row_security": false
+            },
+            {
+                "name": "report_attachment_objects",
                 "kind": "r",
                 "persistence": "p",
                 "row_security": false,
@@ -1872,6 +1883,39 @@
                 "collation": null
             },
             {
+                "table_name": "report_attachment_objects",
+                "name": "id",
+                "position": 1,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "report_attachment_objects",
+                "name": "user_id",
+                "position": 2,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "report_attachment_objects",
+                "name": "created_at",
+                "position": 3,
+                "type": "timestamp with time zone",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
                 "table_name": "report_exports",
                 "name": "id",
                 "position": 1,
@@ -2162,7 +2206,7 @@
                 "name": "content",
                 "position": 8,
                 "type": "bytea",
-                "not_null": true,
+                "not_null": false,
                 "default_value": null,
                 "identity": "",
                 "generated": "",
@@ -2195,6 +2239,28 @@
                 "name": "expires_at",
                 "position": 11,
                 "type": "timestamp with time zone",
+                "not_null": false,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "report_resources",
+                "name": "object_id",
+                "position": 12,
+                "type": "uuid",
+                "not_null": false,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "report_resources",
+                "name": "object_size",
+                "position": 13,
+                "type": "integer",
                 "not_null": false,
                 "default_value": null,
                 "identity": "",
@@ -5319,6 +5385,13 @@
                 "validated": true
             },
             {
+                "table_name": "report_attachment_objects",
+                "name": "report_attachment_objects_user_id_id_pk",
+                "type": "p",
+                "definition": "PRIMARY KEY (user_id, id)",
+                "validated": true
+            },
+            {
                 "table_name": "report_exports",
                 "name": "report_exports_format_valid",
                 "type": "c",
@@ -5397,6 +5470,13 @@
             },
             {
                 "table_name": "report_resources",
+                "name": "report_resources_owner_object_fkey",
+                "type": "f",
+                "definition": "FOREIGN KEY (user_id, object_id) REFERENCES report_attachment_objects(user_id, id)",
+                "validated": true
+            },
+            {
+                "table_name": "report_resources",
                 "name": "report_resources_owner_report_fkey",
                 "type": "f",
                 "definition": "FOREIGN KEY (user_id, report_id) REFERENCES reports(user_id, id) ON DELETE CASCADE",
@@ -5406,7 +5486,7 @@
                 "table_name": "report_resources",
                 "name": "report_resources_payload_valid",
                 "type": "c",
-                "definition": "CHECK (octet_length(content) >= 1 AND octet_length(content) <=\nCASE\n    WHEN purpose = 'source-host-chart'::text THEN 262144\n    ELSE 262144\nEND AND content_key ~ '^[a-f0-9]{64}$'::text AND version > 0)",
+                "definition": "CHECK (content_key ~ '^[a-f0-9]{64}$'::text AND version > 0 AND (object_id IS NULL AND object_size IS NULL AND content IS NOT NULL AND octet_length(content) >= 1 AND octet_length(content) <=\nCASE\n    WHEN purpose = 'source-host-chart'::text THEN 262144\n    ELSE 262144\nEND OR purpose = 'reference-csv'::text AND content IS NULL AND object_id IS NOT NULL AND object_size IS NOT NULL AND object_size >= 262145 AND object_size <= 10485760))",
                 "validated": true
             },
             {
@@ -6462,6 +6542,13 @@
                 "ready": true
             },
             {
+                "table_name": "report_attachment_objects",
+                "name": "report_attachment_objects_user_id_id_pk",
+                "definition": "CREATE UNIQUE INDEX report_attachment_objects_user_id_id_pk ON report_attachment_objects USING btree (user_id, id)",
+                "valid": true,
+                "ready": true
+            },
+            {
                 "table_name": "report_exports",
                 "name": "report_exports_expires_at_id_idx",
                 "definition": "CREATE INDEX report_exports_expires_at_id_idx ON report_exports USING btree (expires_at, id)",
@@ -6507,6 +6594,13 @@
                 "table_name": "report_resources",
                 "name": "report_resources_content_key",
                 "definition": "CREATE UNIQUE INDEX report_resources_content_key ON report_resources USING btree (user_id, report_id, purpose, report_version, version, content_key)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "report_resources",
+                "name": "report_resources_owner_object_idx",
+                "definition": "CREATE UNIQUE INDEX report_resources_owner_object_idx ON report_resources USING btree (user_id, object_id)",
                 "valid": true,
                 "ready": true
             },
@@ -7710,6 +7804,18 @@
                 "enabled": "O"
             },
             {
+                "table_name": "report_attachment_objects",
+                "constraint_name": "report_resources_owner_object_fkey",
+                "event": 9,
+                "enabled": "O"
+            },
+            {
+                "table_name": "report_attachment_objects",
+                "constraint_name": "report_resources_owner_object_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
                 "table_name": "report_exports",
                 "constraint_name": "report_exports_owner_report_fkey",
                 "event": 5,
@@ -7778,6 +7884,18 @@
             {
                 "table_name": "report_questions",
                 "constraint_name": "report_questions_user_id_revision_run_id_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "report_resources",
+                "constraint_name": "report_resources_owner_object_fkey",
+                "event": 5,
+                "enabled": "O"
+            },
+            {
+                "table_name": "report_resources",
+                "constraint_name": "report_resources_owner_object_fkey",
                 "event": 17,
                 "enabled": "O"
             },

@@ -1,6 +1,7 @@
 import {
     ApiErrorSchema,
     REPORT_ATTACHMENT_MAX_ROWS,
+    REPORT_ATTACHMENT_MEDIA_TYPES,
     ReportAttachmentDeletedSchema,
     ReportAttachmentFilenameSchema,
     ReportAttachmentListSchema,
@@ -52,20 +53,21 @@ export function createReportAttachmentPlugin(services: ApiServices) {
                     { filename: ReportAttachmentFilenameSchema },
                     { additionalProperties: false },
                 ),
-                response: { 200: ReportAttachmentSchema, ...errors },
+                response: { 200: ReportAttachmentSchema, ...errors, 503: ApiErrorSchema },
                 detail: {
                     operationId: 'uploadReportAttachment',
                     tags: ['报告'],
                     summary: '上传私有参考附件',
                     description:
-                        '仅本人可上传，要求会话及请求校验。接收不超过 256 KiB 的 CSV、UTF-8 纯文本或 PDF 原始请求体，PDF 仅供下载。',
+                        '仅本人可上传，要求会话及请求校验。接收不超过 10 MiB 的原始请求体，文件扩展名须与 Content-Type 匹配，文本使用 UTF-8。超过 256 KiB 时使用私有对象存储，仅供下载。',
                     requestBody: {
                         required: true,
-                        content: {
-                            'text/csv': { schema: { type: 'string', format: 'binary' } },
-                            'text/plain': { schema: { type: 'string', format: 'binary' } },
-                            'application/pdf': { schema: { type: 'string', format: 'binary' } },
-                        },
+                        content: Object.fromEntries(
+                            Object.values(REPORT_ATTACHMENT_MEDIA_TYPES).map((type) => [
+                                type,
+                                { schema: { type: 'string', format: 'binary' } },
+                            ]),
+                        ),
                     },
                 },
             },
@@ -112,7 +114,7 @@ export function createReportAttachmentPlugin(services: ApiServices) {
                 handlers.download(request, params.reportId, params.attachmentId),
             {
                 params: attachment,
-                response: { 200: t.Any(), ...errors },
+                response: { 200: t.Any(), ...errors, 503: ApiErrorSchema },
                 detail: {
                     operationId: 'downloadReportAttachment',
                     tags: ['报告'],

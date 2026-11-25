@@ -2,7 +2,7 @@ import { REPORT_ATTACHMENT_MAX_BYTES, type ReportAttachmentMediaType } from '@sc
 import { ApiError } from '@/utils/errors.ts';
 
 function tooLarge() {
-    return new ApiError(413, 'REPORT_ATTACHMENT_TOO_LARGE', '附件不得超过 256 KiB');
+    return new ApiError(413, 'REPORT_ATTACHMENT_TOO_LARGE', '附件不得超过 10 MiB');
 }
 
 export async function readReportAttachment(

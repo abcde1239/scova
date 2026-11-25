@@ -52,4 +52,4 @@ vp run api:openapi:check
 - 工作流启动使用 `Idempotency-Key`。正式运行传入 `versionId`，试跑已保存的画布需指定 `draftRevision` 和 `preview: true`。`/workflow-runs/:runId` 返回归属当前账号的节点状态、成果、通知以及研究子执行标识。研究子执行继续提供原有 SSE。
 - `/api/v1/workflow-templates` 返回内置和个人模板。模板的启动与复制接口使用固定模板版本，复制会建立独立草稿。内置模板间的文件、模型和通知配置通过本次运行参数传入。
 - `/api/v1/notifications` 同时返回研究通知和 `kind: workflow` 的站内通知。后者引用实际工作流运行，可附带交付节点标识。
-- 报告的 `charts/source-hosts` 生成可读的来源分组数据和私有 SVG 下载，下载有效期 24 小时。`attachments` 接收 UTF-8 CSV 原始字节，单件上限 256 KiB，支持按逻辑记录区间返回原文件行号。解析失败仍保留原件。所有资源按报告和账号授权，随报告删除回收。
+- 报告的 `charts/source-hosts` 生成可读的来源分组数据和私有 SVG 下载，下载有效期 24 小时。`attachments` 接收 CSV、TXT、Markdown、JSON、TSV、PDF、PNG、JPEG 或 WebP 原始字节，文本使用 UTF-8，单件上限 10 MiB。256 KiB 以内的附件保存在 PostgreSQL，其中文本支持按逻辑记录读取行号。超过 256 KiB 的附件存入私有 R2/S3，仅提供原件下载。未配置桶或存储暂不可用时返回 503。解析失败仍保留原件。所有资源按报告和账号授权，删除后由 Server 回收无引用对象。

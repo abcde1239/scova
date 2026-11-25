@@ -13,10 +13,16 @@ import { createSchedulerRepository } from '../repo/scheduler.ts';
 import { OutboxService } from '../service/outbox.ts';
 import { SchedulerService } from '../service/scheduler.ts';
 import { createWorkflowBatch } from '../service/workflow-batch.ts';
+import { createReportResourceRepo } from '../repo/report-resources.ts';
+import { cleanUnusedReportAttachments } from '../service/report-attachment-storage.ts';
+import type { ApiServices } from './services.ts';
 import { readRunControlConfig, type RunControlConfig } from './run-control-config.ts';
 
 /** Server 的后台控制面：定时落库、Outbox 发布、恢复回补；不执行 Agent。 */
-export function createRunControl(config: RunControlConfig = readRunControlConfig()) {
+export function createRunControl(
+    config: RunControlConfig = readRunControlConfig(),
+    attachmentServices?: Pick<ApiServices, 'objectStorage' | 'clock'>,
+) {
     const controller = new AbortController();
     const { signal } = controller;
     let database: DatabaseClient | undefined;
@@ -33,6 +39,18 @@ export function createRunControl(config: RunControlConfig = readRunControlConfig
             connectionString: config.databaseUrl,
             applicationName: 'scova-run-control',
         }));
+
+    const attachmentRepo = createReportResourceRepo(db);
+
+    async function attachmentCleanupBatch() {
+        if (attachmentServices)
+            await cleanUnusedReportAttachments(
+                attachmentServices,
+                attachmentRepo,
+                config.batchSize,
+                signal,
+            );
+    }
 
     async function dispatchBatch() {
         if (config.sqliteStatePath) {
@@ -131,6 +149,9 @@ export function createRunControl(config: RunControlConfig = readRunControlConfig
             if (signal.aborted) throw new Error('Server Run 控制面已停止');
             loops ??= [
                 poll(workflowBatch, config.pollIntervalMs, config.failureDelayMs, '工作流推进批次'),
+                ...(attachmentServices
+                    ? [poll(attachmentCleanupBatch, 60_000, 60_000, '附件对象清理批次')]
+                    : []),
                 poll(
                     dispatchBatch,
                     config.pollIntervalMs,

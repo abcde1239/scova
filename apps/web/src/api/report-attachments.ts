@@ -44,6 +44,7 @@ export const uploadReportAttachmentEndpoint = defineApiEndpoint<{
 }>({
     method: 'POST',
     path: '/reports/:reportId/attachments',
+    timeout: 90_000,
     inputValidators: {
         params: reportResourceParams,
         query: {
@@ -59,7 +60,7 @@ export const uploadReportAttachmentEndpoint = defineApiEndpoint<{
                     value.size > REPORT_ATTACHMENT_MAX_BYTES ||
                     !Object.values<string>(REPORT_ATTACHMENT_MEDIA_TYPES).includes(value.type)
                 )
-                    throw new TypeError('请选择不超过 256 KiB 的 CSV、TXT 或 PDF 文件');
+                    throw new TypeError('请选择受支持的非空文件，大小不得超过 10 MiB');
                 return value;
             },
         },
@@ -95,6 +96,7 @@ export const downloadReportAttachmentEndpoint = defineApiEndpoint<{
 }>({
     method: 'GET',
     path: '/reports/:reportId/attachments/:attachmentId/download',
+    timeout: 90_000,
     responseType: 'blob',
     inputValidators: { params: attachmentParams },
     validator: reportDownloadValidator('application/octet-stream', REPORT_ATTACHMENT_MAX_BYTES),

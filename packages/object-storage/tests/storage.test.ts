@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import {
     createObjectStorage,
     createStorageKey,
@@ -54,6 +54,21 @@ describe('通用文件与用途目录', () => {
         });
     });
 
+    it('returns a private object as a cancellable web stream', async () => {
+        const body = new Response('abc').body!;
+        const send = vi.spyOn(S3Client.prototype, 'send').mockResolvedValue({
+            Body: { transformToWebStream: () => body },
+            ContentLength: 3,
+        } as never);
+        const signal = new AbortController().signal;
+        const result = await storage().download('scova/reports/object', { signal });
+        const command = send.mock.calls[0]![0] as GetObjectCommand;
+        expect(command.input).toEqual({ Bucket: 'files', Key: 'scova/reports/object' });
+        expect(send).toHaveBeenCalledWith(expect.any(GetObjectCommand), { abortSignal: signal });
+        expect(result.size).toBe(3);
+        expect(await new Response(result.body).text()).toBe('abc');
+    });
+
     it('nested scopes keep returned full keys and forbid sibling access on every read operation', async () => {
         vi.spyOn(S3Client.prototype, 'send').mockResolvedValue({ ContentLength: 1 } as never);
         const root = storage();
@@ -76,6 +91,7 @@ describe('通用文件与用途目录', () => {
             'a.txt',
         ]) {
             await expect(task.head(key)).rejects.toMatchObject({ code: 'invalid_key' });
+            await expect(task.download(key)).rejects.toMatchObject({ code: 'invalid_key' });
             await expect(task.delete(key)).rejects.toMatchObject({ code: 'invalid_key' });
             await expect(task.presignDownload(key)).rejects.toMatchObject({ code: 'invalid_key' });
             expect(() => task.getPublicUrl(key)).toThrow(ObjectStorageError);

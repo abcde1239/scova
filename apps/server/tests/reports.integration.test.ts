@@ -1,11 +1,22 @@
+import sharp from 'sharp';
 import { migrateDatabase } from '@scova/db/migrate';
 import { createDatabaseClient, connectDatabase, closeDatabase, and, eq } from '@scova/db';
 import * as tables from '@scova/db';
-import { ReportJsonExportSchema, parseContract, serializeReportJson } from '@scova/models';
+import {
+    REPORT_ATTACHMENT_INLINE_MAX_BYTES,
+    REPORT_ATTACHMENT_MAX_BYTES,
+    ReportJsonExportSchema,
+    parseContract,
+    serializeReportJson,
+} from '@scova/models';
+import { openSqliteState, readSqliteStatePath } from '@scova/db/sqlite-state';
+import { createObjectStorage, type ObjectStorage } from '@scova/object-storage';
+import { createReportResourceRepo } from '../src/repo/report-resources.ts';
+import { cleanUnusedReportAttachments } from '../src/service/report-attachment-storage.ts';
 import { createHash, randomUUID } from 'node:crypto';
 
 import { Redis as RedisClient } from 'ioredis';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vite-plus/test';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 import { createApiApp } from '../src/app/index.ts';
 import { createDefaultServices } from '../src/app/services.ts';
 import { reportPdfFixture } from './fixtures/report-pdf.ts';
@@ -27,6 +38,9 @@ const redis = new RedisClient(redisUrl, {
     maxRetriesPerRequest: 1,
     enableOfflineQueue: false,
 });
+const sqlitePath = readSqliteStatePath();
+let coordination: ReturnType<typeof openSqliteState> | undefined;
+let bucket: ObjectStorage | null;
 const origin = 'https://scova.test';
 let schemaCreated = false;
 let app: ReturnType<typeof createApiApp>;
@@ -327,7 +341,7 @@ describe('报告证据与收件箱 API', () => {
         expect((await upload(other, csv)).status).toBe(404);
         expect((await upload(owner, csv, 'text/csv', '')).status).toBe(403);
         expect((await upload(owner, csv, 'text/plain')).status).toBe(415);
-        expect((await upload(owner, 'x'.repeat(256 * 1024 + 1))).status).toBe(413);
+        expect((await upload(owner, 'x'.repeat(REPORT_ATTACHMENT_MAX_BYTES + 1))).status).toBe(413);
         const response = await upload(owner, csv);
         expect(response.status).toBe(200);
         const item = await json(response);
@@ -392,6 +406,229 @@ describe('报告证据与收件箱 API', () => {
         ]);
     });
 
+    it('大附件只在私有桶写入一次并通过同源接口下载与回收', async () => {
+        const owner = await register();
+        const other = await register();
+        const { report, claim, inbox } = await fixture(owner);
+        const root = `/reports/${report.id}/attachments`;
+        const body = 'x'.repeat(REPORT_ATTACHMENT_INLINE_MAX_BYTES + 1);
+        const upload = (filename: string, auth = owner, bytes = body) =>
+            request(`${root}?filename=${encodeURIComponent(filename)}`, {
+                method: 'POST',
+                body: bytes,
+                headers: {
+                    ...headers(auth),
+                    'content-type': filename.endsWith('.md') ? 'text/markdown' : 'text/plain',
+                },
+            });
+        const disabled = await upload('large.md');
+        expect(disabled.status).toBe(503);
+        expect(await json(disabled)).toMatchObject({ code: 'REPORT_ATTACHMENT_STORAGE_DISABLED' });
+
+        const store = createObjectStorage({
+            provider: 's3',
+            region: 'us-east-1',
+            bucket: 'test-attachments',
+            credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
+        });
+        bucket = store;
+        const objects = new Map<string, Uint8Array>();
+        const put = vi.spyOn(store, 'upload').mockImplementation(async (input) => {
+            const key = input.key!;
+            objects.set(key, Uint8Array.from(input.body));
+            return { key, size: input.body.byteLength, url: null, contentType: input.contentType };
+        });
+        const get = vi.spyOn(store, 'download').mockImplementation(async (key) => {
+            const bytes = objects.get(key)!;
+            return { size: bytes.byteLength, body: new Response(Uint8Array.from(bytes)).body! };
+        });
+        const remove = vi.spyOn(store, 'delete').mockImplementation(async (key) => {
+            objects.delete(key);
+        });
+        try {
+            const inline = await upload(
+                'inline.txt',
+                owner,
+                'x'.repeat(REPORT_ATTACHMENT_INLINE_MAX_BYTES),
+            );
+            expect(inline.status).toBe(200);
+            expect(put).not.toHaveBeenCalled();
+            expect((await upload('large.md', other)).status).toBe(404);
+            const responses = await Promise.all([upload('large.md'), upload('large.md')]);
+            expect(responses.map(({ status }) => status)).toEqual([200, 200]);
+            const [item, duplicate] = await Promise.all(responses.map(json));
+            expect(item).toEqual(duplicate);
+            expect(item).toMatchObject({
+                format: 'md',
+                status: 'download_only',
+                byteLength: body.length,
+            });
+            expect(item).not.toHaveProperty('objectId');
+            expect(put).toHaveBeenCalledExactlyOnceWith(
+                expect.objectContaining({ contentType: 'text/markdown' }),
+            );
+            const [key] = objects.keys();
+            expect(key?.split('/').slice(0, 2)).toEqual(['report-attachments', owner.userId]);
+            const [row] = await db
+                .select()
+                .from(tables.reportResources)
+                .where(eq(tables.reportResources.id, item!.id));
+            expect(row).toMatchObject({ content: null, objectSize: body.length });
+            expect(row?.objectId).toBe(key?.split('/').at(-1));
+            const downloadUrl = item!.downloadUrl.replace(/^\/api\/v1/, '');
+            expect((await request(downloadUrl, { headers: headers(other) })).status).toBe(404);
+            expect(get).not.toHaveBeenCalled();
+            const download = await request(downloadUrl, { headers: headers(owner) });
+            expect(download.status).toBe(200);
+            expect(download.headers.get('content-length')).toBe(String(body.length));
+            expect(download.headers.get('content-disposition')).toContain('large.md');
+            expect(await download.text()).toBe(body);
+            expect(
+                (
+                    await request(`${root}/${item!.id}/rows?start=1&end=1`, {
+                        headers: headers(owner),
+                    })
+                ).status,
+            ).toBe(409);
+
+            let failedKey = '';
+            put.mockImplementationOnce(async (input) => {
+                failedKey = input.key!;
+                objects.set(failedKey, Uint8Array.from(input.body));
+                throw new Error('upload committed upstream, but acknowledgment was lost');
+            });
+            expect((await upload('failed.txt')).status).toBe(503);
+            const list = await json(await request(root, { headers: headers(owner) }));
+            expect(list.items.map(({ filename }: { filename: string }) => filename).sort()).toEqual(
+                ['inline.txt', 'large.md'],
+            );
+            const repo = createReportResourceRepo(() => db);
+            let sweepTime = now;
+            const sweep = () =>
+                cleanUnusedReportAttachments(
+                    { objectStorage: () => store, clock: () => sweepTime },
+                    repo,
+                    32,
+                    new AbortController().signal,
+                );
+            await sweep();
+            expect(remove).not.toHaveBeenCalled();
+            sweepTime = new Date(sweepTime.getTime() + 60 * 60 * 1000 + 1);
+            remove.mockRejectedValueOnce(new Error('storage transient failure'));
+            await expect(sweep()).rejects.toThrow('storage transient failure');
+            await sweep();
+            expect(objects.has(failedKey)).toBe(false);
+            expect([...objects.keys()]).toEqual([key]);
+            expect(
+                (
+                    await request(`${root}/${item!.id}`, {
+                        method: 'DELETE',
+                        headers: headers(owner),
+                    })
+                ).status,
+            ).toBe(200);
+            expect((await request(downloadUrl, { headers: headers(owner) })).status).toBe(404);
+            await sweep();
+            expect(objects.size).toBe(0);
+            expect(await db.select().from(tables.reportAttachmentObjects)).toHaveLength(0);
+
+            expect((await upload('cascade.txt')).status).toBe(200);
+            const remaining = await Promise.all(
+                Array.from({ length: 14 }, (_, index) =>
+                    upload(`quota-${index}.txt`, owner, 'a\n'),
+                ),
+            );
+            expect(remaining.every(({ status }) => status === 200)).toBe(true);
+            const quota = await upload('quota-large.txt');
+            expect(quota.status).toBe(409);
+            expect(await json(quota)).toMatchObject({ code: 'REPORT_ATTACHMENT_QUOTA' });
+            expect(objects.size).toBe(1);
+            await db.delete(tables.claimEvidence).where(eq(tables.claimEvidence.claimId, claim.id));
+            await db.delete(tables.claims).where(eq(tables.claims.id, claim.id));
+            await db.delete(tables.inboxItems).where(eq(tables.inboxItems.id, inbox.id));
+            await db.delete(tables.reports).where(eq(tables.reports.id, report.id));
+            await sweep();
+            expect(objects.size).toBe(0);
+        } finally {
+            store.destroy();
+        }
+    });
+
+    it('预览新增文本格式并原样下载新增图片格式', async () => {
+        const owner = await register();
+        const { report } = await fixture(owner);
+        const root = `/reports/${report.id}/attachments`;
+        const upload = (filename: string, type: string, body: string | Uint8Array<ArrayBuffer>) =>
+            request(`${root}?filename=${encodeURIComponent(filename)}`, {
+                method: 'POST',
+                body,
+                headers: { ...headers(owner), 'content-type': type },
+            });
+        const download = (id: string) =>
+            request(`${root}/${id}/download`, { headers: headers(owner) });
+        const rows = (id: string) =>
+            request(`${root}/${id}/rows?start=1&end=1`, { headers: headers(owner) });
+        const texts = [
+            ['a.MD', 'text/markdown', 'md', '# 标题'],
+            ['说明.markdown', 'text/markdown', 'md', '<b>原文</b>'],
+            ['资料.json', 'application/json', 'json', '{"标题":"参考"}'],
+            ['数据.tsv', 'text/tab-separated-values', 'tsv', '名字\t数值'],
+        ] as const;
+        for (const [filename, type, format, line] of texts) {
+            const body = `${line}\r\n`;
+            const response = await upload(filename, type, body);
+            expect(response.status).toBe(200);
+            const item = await json(response);
+            expect(item).toMatchObject({ filename, format, status: 'ready', rowCount: 1 });
+            expect(await json(await rows(item.id))).toMatchObject({
+                rows: [{ rowNumber: 1, startLine: 1, endLine: 1, cells: [line] }],
+            });
+            expect(await (await download(item.id)).text()).toBe(body);
+        }
+        const broken = await json(await upload('错误.json', 'application/json', '{"a":}'));
+        expect(broken).toMatchObject({
+            format: 'json',
+            status: 'failed',
+            failureCode: 'INVALID_JSON',
+        });
+        expect((await rows(broken.id)).status).toBe(409);
+        expect(await (await download(broken.id)).text()).toBe('{"a":}');
+
+        const image = sharp({ create: { width: 2, height: 2, channels: 3, background: '#f00' } });
+        const images = [
+            ['图.PNG', 'image/png', 'png'],
+            ['图.jpg', 'image/jpeg', 'jpeg'],
+            ['图.jpeg', 'image/jpeg', 'jpeg'],
+            ['图.webp', 'image/webp', 'webp'],
+        ] as const;
+        for (const [filename, type, format] of images) {
+            const body = Uint8Array.from(await image.clone().toFormat(format).toBuffer());
+            const response = await upload(filename, type, body);
+            expect(response.status).toBe(200);
+            const item = await json(response);
+            expect(item).toMatchObject({
+                filename,
+                format,
+                status: 'download_only',
+                rowCount: null,
+            });
+            expect((await rows(item.id)).status).toBe(409);
+            const original = await download(item.id);
+            expect(original.headers.get('content-type')).toBe('application/octet-stream');
+            expect(original.headers.get('x-content-type-options')).toBe('nosniff');
+            expect(new Uint8Array(await original.arrayBuffer())).toEqual(body);
+        }
+        const png = Uint8Array.from(await image.clone().png().toBuffer());
+        expect((await upload('图.png', 'image/jpeg', png)).status).toBe(415);
+        const mismatched = await upload('图.jpg', 'image/jpeg', png);
+        expect(mismatched.status).toBe(422);
+        expect(await json(mismatched)).toMatchObject({ code: 'REPORT_ATTACHMENT_INVALID_IMAGE' });
+        expect((await upload('图.svg', 'image/svg+xml', '<svg/>')).status).toBe(422);
+        expect((await json(await request(root, { headers: headers(owner) }))).items).toHaveLength(
+            9,
+        );
+    });
+
     it('私有 TXT 和 PDF 共用附件鉴权、限额和重试去重', async () => {
         const owner = await register();
         const other = await register();
@@ -432,7 +669,13 @@ describe('报告证据与收件箱 API', () => {
         expect((await upload('资料.pdf', 'application/pdf', '%PDF-1.7\n%%EOF')).status).toBe(422);
         expect((await upload('资料.pdf', 'application/pdf', pdf, other)).status).toBe(404);
         expect(
-            (await upload('资料.pdf', 'application/pdf', pdf.padEnd(256 * 1024 + 1))).status,
+            (
+                await upload(
+                    '资料.pdf',
+                    'application/pdf',
+                    pdf.padEnd(REPORT_ATTACHMENT_MAX_BYTES + 1),
+                )
+            ).status,
         ).toBe(413);
         const response = await upload('资料.pdf', 'application/pdf', pdf);
         expect(response.status).toBe(200);
@@ -675,10 +918,12 @@ describe('报告证据与收件箱 API', () => {
         schemaCreated = true;
         await migrateDatabase({ connectionString: scopedUrl.toString() });
         await connectDatabase(db);
-        await redis.connect();
+        if (sqlitePath) coordination = openSqliteState(sqlitePath);
+        else await redis.connect();
     }, 120000);
     beforeEach(() => {
         now = new Date('2026-10-26T00:00:00.000Z');
+        bucket = null;
         app = createApiApp(
             'node',
             createDefaultServices({
@@ -689,6 +934,8 @@ describe('报告证据与收件箱 API', () => {
                 clock: () => now,
                 db: () => db,
                 redis: () => redis,
+                ...(coordination ? { sqliteState: () => coordination! } : {}),
+                objectStorage: () => bucket,
                 rateLimit: {
                     windowSeconds: 60,
                     loginAttempts: 50,
@@ -700,6 +947,7 @@ describe('报告证据与收件箱 API', () => {
         );
     });
     afterAll(async () => {
+        coordination?.close();
         await closeDatabase(db);
         if (redis.status === 'ready') await redis.quit();
         else redis.disconnect();

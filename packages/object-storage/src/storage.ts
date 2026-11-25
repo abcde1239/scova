@@ -148,6 +148,22 @@ export function createObjectStorage(config: ObjectStorageConfig): ObjectStorage 
                     throw error;
                 }
             },
+            async download(key, options = {}) {
+                objectKey(key);
+                const result = await request(
+                    () =>
+                        client.send(new GetObjectCommand({ Bucket: bucket, Key: key }), {
+                            abortSignal: options.signal,
+                        }),
+                    options.signal,
+                );
+                if (!result.Body)
+                    throw new ObjectStorageError(
+                        'storage_request_failed',
+                        'Object response has no body.',
+                    );
+                return { body: result.Body.transformToWebStream(), size: result.ContentLength };
+            },
             async delete(key, options = {}) {
                 objectKey(key);
                 await request(

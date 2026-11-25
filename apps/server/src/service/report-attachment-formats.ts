@@ -1,3 +1,4 @@
+import sharp from 'sharp';
 import {
     REPORT_ATTACHMENT_MAX_CELL_CHARS,
     REPORT_ATTACHMENT_MAX_ROWS,
@@ -9,7 +10,10 @@ type TextResult =
     | { status: 'ready'; rows: ReportAttachmentRow[] }
     | { status: 'failed'; failureCode: ReportAttachmentFailure };
 
-export function parseReportText(content: Uint8Array): TextResult {
+export function parseReportText(
+    content: Uint8Array,
+    format: 'txt' | 'md' | 'json' | 'tsv' = 'txt',
+): TextResult {
     let text: string;
     try {
         text = new TextDecoder('utf-8', { fatal: true }).decode(content);
@@ -29,6 +33,14 @@ export function parseReportText(content: Uint8Array): TextResult {
     )
         return { status: 'failed', failureCode: 'TEXT_LIMIT_EXCEEDED' };
 
+    if (format === 'json') {
+        try {
+            JSON.parse(text);
+        } catch {
+            return { status: 'failed', failureCode: 'INVALID_JSON' };
+        }
+    }
+
     return {
         status: 'ready',
         rows: lines.map((line, index) => ({
@@ -38,6 +50,15 @@ export function parseReportText(content: Uint8Array): TextResult {
             cells: [line],
         })),
     };
+}
+
+export async function validateReportImage(content: Buffer, format: 'png' | 'jpeg' | 'webp') {
+    try {
+        const metadata = await sharp(content).metadata();
+        return metadata.format === format && !!metadata.width && !!metadata.height;
+    } catch {
+        return false;
+    }
 }
 
 export function validateReportPdf(content: Buffer): boolean {

@@ -113,6 +113,13 @@
             "when": 1795420332346,
             "tag": "0015_futuristic_speed",
             "breakpoints": true
+        },
+        {
+            "idx": 16,
+            "version": "7",
+            "when": 1795432960837,
+            "tag": "0016_left_thunderbolt_ross",
+            "breakpoints": true
         }
     ]
 }
