@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { expect, test, type Page } from '@playwright/test';
 import {
     isWorkflowCanvasGraph,
@@ -201,7 +202,7 @@ test('a new canvas saves explicit dependencies and runs a frozen version with id
     await page.goto('/workflows');
     await expect(page.getByText('暂无工作流', { exact: true })).toBeVisible();
     await page.getByLabel('新工作流名称').fill('研究工作流');
-    await page.getByRole('button', { name: '创建工作流' }).click();
+    await page.getByRole('button', { name: '创建工作流', exact: true }).click();
     await expect(page).toHaveURL(`/workflows/${workflowId}`);
     expect(isWorkflowCanvasGraph(state.detail.draft)).toBe(true);
     const canvas = page.getByRole('region', { name: '工作流画布编辑器' });
@@ -361,9 +362,9 @@ test('canvas persists two-dimensional layout and edited edges across reopening',
     await page.goto(`/workflows/${workflowId}`);
     const canvas = page.getByRole('region', { name: '工作流画布编辑器' });
     await canvas.getByRole('button', { name: '画布', exact: true }).click();
-    const handle = canvas.getByRole('button', { name: '移动整理 CSV，使用方向键' });
+    const handle = canvas.getByRole('button', { name: '移动整理表格，使用方向键' });
     const node = canvas.locator('.canvas-node').filter({
-        has: page.getByRole('button', { name: '移动整理 CSV，使用方向键' }),
+        has: page.getByRole('button', { name: '移动整理表格，使用方向键' }),
     });
     const edges = canvas.locator('.canvas-edge-line');
     const left = async () =>
@@ -489,7 +490,7 @@ test('canvas source pickers match the material each upstream node can produce', 
     const list = canvas.getByRole('region', { name: '工作流步骤' });
     const material = canvas.getByRole('combobox', { name: '数据来源' });
     for (const [name, choices] of [
-        ['下游整理', ['使用本次运行的 CSV', '开始', '上游表格', '上游 CSV 文件']],
+        ['下游整理', ['使用本次运行的 CSV 或 JSON', '开始', '上游表格', '上游 CSV 文件']],
         ['下游 CSV 交付', ['选择上游节点', '上游表格', '上游 CSV 文件']],
         ['下游 Markdown 交付', ['选择上游节点', '开始', '研究', '上游 Markdown 文件', '上游生成']],
         ['通知', ['不附加交付文件', '上游 CSV 文件', '上游 Markdown 文件']],
@@ -501,4 +502,120 @@ test('canvas source pickers match the material each upstream node can produce', 
     const generation = canvas.getByRole('group', { name: '生成来源' });
     await expect(generation.getByRole('checkbox', { name: '汇合' })).toHaveCount(0);
     await expect(generation.getByRole('checkbox', { name: '上游 Markdown 文件' })).toBeVisible();
+});
+
+test('a saved workflow draft can be downloaded and imported as a JSON draft', async ({ page }) => {
+    const state = await fixtures(page);
+    await page.goto(`/workflows/${workflowId}`);
+    const downloadEvent = page.waitForEvent('download');
+    await page.getByRole('button', { name: '导出已保存草稿 JSON' }).click();
+    const download = await downloadEvent;
+    const json = await readFile(await download.path());
+    expect(JSON.parse(json.toString())).toEqual({ title: '研究工作流', graph: legacyGraph });
+
+    await page.goto('/workflows');
+    const field = page.getByLabel('从 JSON 创建工作流');
+    await field.setInputFiles({
+        name: 'invalid.json',
+        mimeType: 'application/json',
+        buffer: Buffer.from('{}'),
+    });
+    await expect(page.getByRole('alert')).toContainText('需要包含有效的 title 和 graph');
+    await expect(field).toHaveAttribute('aria-invalid', 'true');
+    const imported = { ...JSON.parse(json.toString()), title: 'JSON 导入副本' };
+    await field.setInputFiles({
+        name: download.suggestedFilename(),
+        mimeType: 'application/json',
+        buffer: Buffer.from(JSON.stringify(imported)),
+    });
+    await expect(page).toHaveURL(`/workflows/${workflowId}`);
+    await expect(page.getByLabel('工作流名称', { exact: true })).toHaveValue(imported.title);
+    expect(state.detail.draft).toEqual(legacyGraph);
+});
+
+test('a JSON run file is validated before submission and its artifact can be downloaded', async ({
+    page,
+}) => {
+    const text = '{"name":"西区","count":3}';
+    const graph: WorkflowCanvasGraph = {
+        version: 2,
+        nodes: [
+            { id: 'start', type: 'start' },
+            {
+                id: 'delivery',
+                type: 'deliver',
+                config: { source: 'start', format: 'json', filename: 'west.json' },
+            },
+            { id: 'end', type: 'end' },
+        ],
+        edges: [
+            { from: { nodeId: 'start', port: 'out' }, to: { nodeId: 'delivery', port: 'in' } },
+            { from: { nodeId: 'delivery', port: 'out' }, to: { nodeId: 'end', port: 'in' } },
+        ],
+        layout: { positions: {}, groups: [] },
+    };
+    const state = await fixtures(page, graph);
+    await page.route(`**/api/v1/workflows/${workflowId}/runs`, (route) => {
+        if (route.request().method() !== 'POST') return route.fallback();
+        expect(route.request().postDataJSON()).toEqual({
+            draftRevision: 1,
+            preview: true,
+            input: { json: text },
+        });
+        state.run = {
+            id: runId,
+            workflowId,
+            versionId: null,
+            mode: 'demo',
+            preview: true,
+            status: 'succeeded',
+            createdAt: instant,
+            startedAt: instant,
+            finishedAt: instant,
+            failureCode: null,
+            nodes: graph.nodes.map((node) => ({
+                id: node.id,
+                type: node.type,
+                status: 'succeeded',
+                attempt: 1,
+                startedAt: instant,
+                finishedAt: instant,
+                taskId: null,
+                taskVersionId: null,
+                childRunId: null,
+                childStatus: null,
+                failureCode: null,
+                ...(node.id === 'delivery'
+                    ? {
+                          output: {
+                              artifact: { filename: 'west.json', format: 'json', content: text },
+                          },
+                      }
+                    : {}),
+            })),
+        };
+        return route.fulfill({ status: 202, json: { run: state.run, reused: false } });
+    });
+    await page.goto(`/workflows/${workflowId}`);
+    const input = page.getByLabel('选择 JSON 文件');
+    const start = page.getByRole('button', { name: '试跑已保存草稿' });
+    await input.setInputFiles({
+        name: 'west.json',
+        mimeType: 'application/json',
+        buffer: Buffer.from('{'),
+    });
+    await expect(page.getByRole('alert')).toContainText('JSON 格式无效');
+    await expect(start).toBeDisabled();
+    await input.setInputFiles({
+        name: 'west.json',
+        mimeType: 'application/json',
+        buffer: Buffer.from(text),
+    });
+    await expect(start).toBeEnabled();
+    await start.click();
+    const downloadEvent = page.waitForEvent('download');
+    await page.getByRole('button', { name: '下载 west.json' }).click();
+    const download = await downloadEvent;
+    expect(download.suggestedFilename()).toBe('west.json');
+    expect(await readFile(await download.path(), 'utf8')).toBe(text);
 });

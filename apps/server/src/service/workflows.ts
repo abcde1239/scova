@@ -35,6 +35,7 @@ import {
     workflowStages,
 } from '@/service/workflow-graph.ts';
 import { ApiError } from '@/utils/errors.ts';
+import { validateWorkflowFileInput } from './canvas-node-execution.ts';
 
 function requireId(id: string) {
     if (!new RegExp(UuidSchema.pattern!).test(id)) notFound();
@@ -260,6 +261,7 @@ export function createWorkflowService(services: Pick<ApiServices, 'db' | 'clock'
                     'WORKFLOW_RUN_SOURCE_INVALID',
                     '请选择发布版本，或指定要试跑的草稿修订',
                 );
+            validateWorkflowFileInput(canvasInput);
             const keyHash = createHash('sha256').update(key).digest('hex');
             return repository.transaction(async (store, tx) => {
                 const workflow = await requireWorkflow(store, userId, workflowId, true);

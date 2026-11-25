@@ -308,3 +308,69 @@ it('copies an immutable owned published snapshot and clears research bindings', 
     expect(published?.graphJson).toEqual(graph);
     expect(published?.bindingsJson[0]?.taskId).toBe(taskId);
 });
+
+it('runs a personal JSON template and rejects invalid JSON before creating its execution', async () => {
+    const owner = await account();
+    const graph: WorkflowCanvasGraph = {
+        version: 2,
+        nodes: [
+            { id: 'start', type: 'start' },
+            {
+                id: 'file',
+                type: 'deliver',
+                config: { source: 'start', format: 'json', filename: 'result.json' },
+            },
+            { id: 'end', type: 'end' },
+        ],
+        edges: [
+            { from: { nodeId: 'start', port: 'out' }, to: { nodeId: 'file', port: 'in' } },
+            { from: { nodeId: 'file', port: 'out' }, to: { nodeId: 'end', port: 'in' } },
+        ],
+        layout: { positions: {}, groups: [] },
+    };
+    const [source] = await db
+        .insert(workflows)
+        .values({ userId: owner.id, title: 'JSON 原文', draftJson: graph })
+        .returning();
+    const [version] = await db
+        .insert(workflowVersions)
+        .values({
+            userId: owner.id,
+            workflowId: source!.id,
+            version: 1,
+            draftRevision: 1,
+            title: source!.title,
+            graphJson: graph,
+            bindingsJson: [],
+        })
+        .returning();
+    const saved = await request(path, owner, 'POST', {
+        workflowId: source!.id,
+        versionId: version!.id,
+        title: '处理 JSON',
+        description: '保留原文',
+        delivery: 'JSON 文件',
+        fields: [{ key: 'json', label: 'JSON 文件', required: true }],
+    });
+    expect(saved.status).toBe(201);
+    const template = parseContract(WorkflowTemplateSchema, await saved.json());
+    const start = (json: string) =>
+        request(action(template, 'start'), owner, 'POST', { input: { json } }, randomUUID());
+    const invalid = await start('{');
+    expect(invalid.status).toBe(422);
+    expect(await invalid.json()).toMatchObject({ code: 'WORKFLOW_INVALID_JSON' });
+    expect((await list(owner)).find((item) => item.id === template.id)?.workflowId).toBeNull();
+
+    const content = '{"区域":"西区"}';
+    const response = await start(content);
+    expect(response.status).toBe(202);
+    const { run } = parseContract(WorkflowStartResponseSchema, await response.json());
+    await createWorkflowBatch(db, { batchSize: 50, intervalMs: 0 })(new AbortController().signal);
+    const [stored] = await db.select().from(workflowRuns).where(eq(workflowRuns.id, run.id));
+    expect(stored?.status).toBe('succeeded');
+    expect(stored?.nodesJson.find((node) => node.id === 'file')?.output?.artifact).toEqual({
+        filename: 'result.json',
+        format: 'json',
+        content,
+    });
+});

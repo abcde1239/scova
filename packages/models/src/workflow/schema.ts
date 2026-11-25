@@ -19,6 +19,12 @@ const title = Type.String({
     description: '工作流名称',
 });
 export const workflowNodeLimit = 16;
+export const workflowFileMaxBytes = 256 * 1024;
+const artifactFormat = Type.Union([
+    Type.Literal('csv'),
+    Type.Literal('markdown'),
+    Type.Literal('json'),
+]);
 
 const workflowNodeSchema = Type.Union([
     Type.Object({ id: nodeId, type: Type.Literal('start') }, strict),
@@ -103,7 +109,7 @@ export const WorkflowCanvasNodeSchema = Type.Union([
             config: Type.Object(
                 {
                     source: Type.Union([nodeId, Type.Literal('')]),
-                    format: Type.Union([Type.Literal('csv'), Type.Literal('markdown')]),
+                    format: artifactFormat,
                     filename: Type.String({ maxLength: 180 }),
                 },
                 strict,
@@ -156,7 +162,10 @@ export const WorkflowGraphSchema = Type.Union([
 ]);
 export const WorkflowCanvasInputSchema = Type.Object(
     {
-        csv: Type.Optional(Type.String({ maxLength: 262144 })),
+        csv: Type.Optional(Type.String({ maxLength: workflowFileMaxBytes })),
+        json: Type.Optional(
+            Type.String({ maxLength: workflowFileMaxBytes, description: 'UTF-8 JSON 原文' }),
+        ),
         text: Type.Optional(Type.String({ maxLength: 64000 })),
         threshold: Type.Optional(Type.Number()),
         inventoryColumn: Type.Optional(Type.String({ maxLength: 256 })),
@@ -169,6 +178,7 @@ export const WorkflowCanvasInputSchema = Type.Object(
 export const WorkflowCanvasOutputSchema = Type.Object(
     {
         text: Type.Optional(Type.String()),
+        json: Type.Optional(Type.String({ maxLength: workflowFileMaxBytes })),
         table: Type.Optional(
             Type.Object(
                 { columns: Type.Array(Type.String()), rows: Type.Array(Type.Array(Type.String())) },
@@ -180,7 +190,7 @@ export const WorkflowCanvasOutputSchema = Type.Object(
             Type.Object(
                 {
                     filename: Type.String(),
-                    format: Type.Union([Type.Literal('csv'), Type.Literal('markdown')]),
+                    format: artifactFormat,
                     content: Type.String(),
                 },
                 strict,

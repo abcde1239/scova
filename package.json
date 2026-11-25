@@ -18,6 +18,7 @@
         "local:init": "vpx scripts/local.ts init",
         "local:up": "vpx scripts/local.ts up",
         "local:down": "vpx scripts/local.ts down",
+        "local:sqlite": "node scripts/local-sqlite.mjs",
         "local:status": "vpx scripts/local.ts status",
         "db:migrate": "vpx --env-file-if-exists=.env.local scripts/run-bun.mjs --cwd apps/server src/operations.ts migrate",
         "db:migrate:node": "vpx --env-file-if-exists=.env.local apps/server/src/operations.ts migrate",

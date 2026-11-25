@@ -11,6 +11,7 @@ import {
     sql,
     tasks,
     type DatabaseExecutor,
+    timestampCursor,
     type SQLWrapper,
 } from '@scova/db';
 
@@ -19,10 +20,8 @@ export interface ProjectCursor {
     id: string;
 }
 
-const cursorTime = (column: SQLWrapper) =>
-    sql<string>`to_char(${column} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
 const before = (time: SQLWrapper, id: SQLWrapper, cursor: ProjectCursor | undefined) =>
-    cursor && sql`(${time}, ${id}) < (${cursor.time}::timestamptz, ${cursor.id}::uuid)`;
+    cursor && sql`(${time}, ${id}) < (${cursor.time}, ${cursor.id})`;
 const projectFields = { id: projects.id, name: projects.name, createdAt: projects.createdAt };
 
 export function createProjectStore(db: DatabaseExecutor) {
@@ -36,7 +35,7 @@ export function createProjectStore(db: DatabaseExecutor) {
         },
         list(userId: string, limit: number, cursor: ProjectCursor | undefined) {
             return db
-                .select({ ...projectFields, cursorTime: cursorTime(projects.createdAt) })
+                .select({ ...projectFields, cursorTime: timestampCursor(db, projects.createdAt) })
                 .from(projects)
                 .where(
                     and(
@@ -172,7 +171,7 @@ export function createProjectStore(db: DatabaseExecutor) {
                     title: tasks.title,
                     status: tasks.status,
                     nextRunAt: tasks.nextRunAt,
-                    cursorTime: cursorTime(tasks.createdAt),
+                    cursorTime: timestampCursor(db, tasks.createdAt),
                 })
                 .from(projectTasks)
                 .innerJoin(

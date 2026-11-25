@@ -1,12 +1,21 @@
 <template>
     <fieldset class="layout-grid gap-3 min-w-0 m-0 p-0 border-none" :disabled="busy">
         <legend class="font-semibold p-0">本次运行输入</legend>
-        <label v-if="hasCsv" class="layout-grid gap-1">
-            选择 CSV 文件（最大 256 KB）
-            <input type="file" accept=".csv,text/csv" @change="readCsv" />
+        <label v-if="acceptsDataFile" class="layout-grid gap-1">
+            {{ hasTableNode ? '选择 CSV 或 JSON 文件' : '选择 JSON 文件' }}（最大 256 KiB）
+            <input
+                type="file"
+                name="workflow-data"
+                :accept="
+                    hasTableNode ? '.csv,text/csv,.json,application/json' : '.json,application/json'
+                "
+                :aria-invalid="fileError ? true : undefined"
+                :aria-describedby="fileError ? errorId : undefined"
+                @change="readDataFile"
+            />
         </label>
         <p v-if="fileName" class="m-0 text-muted">已选择 {{ fileName }}</p>
-        <p v-if="fileError" class="m-0" role="alert">{{ fileError }}</p>
+        <p v-if="fileError" :id="errorId" class="m-0" role="alert">{{ fileError }}</p>
         <label class="layout-grid gap-1">
             补充文本
             <textarea
@@ -73,19 +82,30 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, useId } from 'vue';
 import { useQuery } from '@tanstack/vue-query';
 import type { WorkflowCanvasGraph, WorkflowCanvasInput } from '@scova/models';
 import { listProvidersEndpoint } from '@/api/agent-providers';
 import { useSessionLifecycle } from '@/composable/useSessionQuery';
+import { readWorkflowInputFile } from '@/utils/workflow/input-file';
 
 const props = defineProps<{ graph: WorkflowCanvasGraph; busy?: boolean }>();
-const emit = defineEmits<{ filePending: [value: boolean] }>();
+const emit = defineEmits<{ filePending: [value: boolean]; fileInvalid: [value: boolean] }>();
 const input = defineModel<WorkflowCanvasInput>({ required: true });
 const fileName = ref('');
 const fileError = ref('');
+const errorId = useId();
 const rawConfig = computed(() => JSON.stringify(props.graph.nodes));
-const hasCsv = computed(() => props.graph.nodes.some((node) => node.type === 'csv'));
+const hasTableNode = computed(() => props.graph.nodes.some((node) => node.type === 'csv'));
+const acceptsDataFile = computed(
+    () =>
+        hasTableNode.value ||
+        props.graph.nodes.some(
+            (node) =>
+                node.type === 'generate' ||
+                (node.type === 'deliver' && node.config.format === 'json'),
+        ),
+);
 const hasGenerator = computed(() => props.graph.nodes.some((node) => node.type === 'generate'));
 const hasNotification = computed(() => props.graph.nodes.some((node) => node.type === 'notify'));
 const showInventoryColumn = computed(() => rawConfig.value.includes('{{inventoryColumn}}'));
@@ -118,27 +138,28 @@ function setThreshold(event: Event) {
 function setNotify(event: Event) {
     input.value = { ...input.value, notify: (event.target as HTMLInputElement).checked };
 }
-async function readCsv(event: Event) {
+async function readDataFile(event: Event) {
     const field = event.target as HTMLInputElement;
     const file = field.files?.[0];
     fileName.value = '';
     fileError.value = '';
     const next = { ...input.value };
     delete next.csv;
+    delete next.json;
     input.value = next;
+    emit('fileInvalid', false);
     if (!file) return;
-    if (file.size > 262_144) {
-        fileError.value = 'CSV 超过 256 KB，请缩小文件后再选。';
-        field.value = '';
-        return;
-    }
     emit('filePending', true);
     try {
-        const csv = new TextDecoder('utf-8', { fatal: true }).decode(await file.arrayBuffer());
-        input.value = { ...input.value, csv };
+        const format = file.name.toLowerCase().endsWith('.json') ? 'json' : 'csv';
+        if (format === 'csv' && (!hasTableNode.value || !file.name.toLowerCase().endsWith('.csv')))
+            throw new Error(hasTableNode.value ? '请选择 CSV 或 JSON 文件' : '请选择 JSON 文件');
+        const text = await readWorkflowInputFile(file, format);
+        input.value = { ...input.value, [format]: text };
         fileName.value = file.name;
-    } catch {
-        fileError.value = '读取 CSV 失败，请使用 UTF-8 编码。';
+    } catch (error) {
+        emit('fileInvalid', true);
+        fileError.value = error instanceof Error ? error.message : '读取文件失败';
         field.value = '';
     } finally {
         emit('filePending', false);

@@ -3,6 +3,7 @@ import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import { installedCheckpointVersion } from '@/utils/checkpoint-version.ts';
 import { AgentPersistenceError } from '@scova/execution/agent';
 import type { RunLeaseToken } from '@scova/execution/runs';
+import { sqliteCheckpointStore } from './sqlite-checkpoints.ts';
 import pg from 'pg';
 import { checkpointRef } from '../../repo/execution/agent/validation.ts';
 import { withRunFence } from '../../repo/execution/runs.ts';
@@ -31,38 +32,27 @@ function saverInTransaction(tx: DatabaseTransaction, schema: string) {
     return new PostgresSaver(pool as unknown as pg.Pool, undefined, { schema });
 }
 
-export function createExecutionCheckpoints(databaseUrl: string, schema: string) {
-    if (!/^[a-z][a-z0-9_]{0,62}$/.test(schema)) throw new Error('AGENT_CHECKPOINT_SCHEMA 无效');
-    const connection = new URL(databaseUrl);
-    connection.searchParams.delete('schema');
-    const pool = new pg.Pool({
-        connectionString: connection.toString(),
-        max: 4,
-        connectionTimeoutMillis: 5000,
-        statement_timeout: 5000,
-        idleTimeoutMillis: 10_000,
-    });
-    pool.on('error', () => console.error('Server checkpoint connection lost'));
-    const saver = new PostgresSaver(pool, undefined, { schema });
+export function createExecutionCheckpoints(
+    db: () => DatabaseClient,
+    databaseUrl: string | undefined,
+    schema: string,
+) {
+    const storage = databaseUrl
+        ? createPostgresCheckpointStorage(databaseUrl, schema)
+        : {
+              saver: {
+                  getTuple: (config: Parameters<PostgresSaver['getTuple']>[0]) =>
+                      sqliteCheckpointStore(db()).getTuple(config),
+              },
+              inTransaction: sqliteCheckpointStore,
+              read: (tx: DatabaseTransaction) => sqliteCheckpointStore(tx),
+              async ready() {
+                  await db().execute(sql`SELECT 1 FROM scova_checkpoints LIMIT 0`);
+              },
+              async close() {},
+          };
     return {
-        saver,
-        async ready() {
-            const version = await pool
-                .query(`SELECT version FROM "${schema}".scova_schema_version WHERE id=1`)
-                .catch((error: unknown) => {
-                    if (
-                        error &&
-                        typeof error === 'object' &&
-                        'code' in error &&
-                        ['42P01', '3F000'].includes(String(error.code))
-                    )
-                        throw new Error('先执行 Server 图状态迁移');
-                    throw error;
-                });
-            if (version.rows[0]?.version !== installedCheckpointVersion(import.meta.url))
-                throw new Error('先执行 Server 图状态迁移');
-        },
-        close: () => saver.end(),
+        ...storage,
         bind(database: DatabaseClient, token: RunLeaseToken) {
             const thread = `run-${token.runId}-epoch-${token.leaseEpoch}`;
             function config(input: Parameters<PostgresSaver['getTuple']>[0], current = true) {
@@ -84,7 +74,7 @@ export function createExecutionCheckpoints(databaseUrl: string, schema: string) 
                         database,
                         token,
                         deadline ? 'checkpoint_read' : 'work',
-                        async (_tx, run) => {
+                        async (tx, run) => {
                             if (deadline || checked.configurable.thread_id !== thread) {
                                 if (!run.checkpointRef)
                                     throw new AgentPersistenceError('INVALID_CHECKPOINT');
@@ -99,7 +89,7 @@ export function createExecutionCheckpoints(databaseUrl: string, schema: string) 
                                 )
                                     throw new AgentPersistenceError('INVALID_CHECKPOINT');
                             }
-                            return saver.getTuple(checked);
+                            return storage.read(tx).getTuple(checked);
                         },
                     );
                 },
@@ -118,18 +108,11 @@ export function createExecutionCheckpoints(databaseUrl: string, schema: string) 
                         throw new AgentPersistenceError('INVALID_CHECKPOINT');
                     return withRunFence(database, token, 'work', async (tx) => {
                         // IDs are immutable. A repeated or late write cannot replace an approved checkpoint.
-                        const stored = await saver.getTuple({
+                        const saver = storage.inTransaction(tx);
+                        const stored = await storage.read(tx).getTuple({
                             configurable: { ...checked.configurable, checkpoint_id: checkpoint.id },
                         });
-                        return (
-                            stored?.config ??
-                            saverInTransaction(tx, schema).put(
-                                checked,
-                                checkpoint,
-                                metadata,
-                                versions,
-                            )
-                        );
+                        return stored?.config ?? saver.put(checked, checkpoint, metadata, versions);
                     });
                 },
                 putWrites(
@@ -153,7 +136,7 @@ export function createExecutionCheckpoints(databaseUrl: string, schema: string) 
                     )
                         throw new AgentPersistenceError('INVALID_CHECKPOINT');
                     return withRunFence(database, token, 'work', (tx) =>
-                        saverInTransaction(tx, schema).putWrites(checked, writes, taskId, taskPath),
+                        storage.inTransaction(tx).putWrites(checked, writes, taskId, taskPath),
                     );
                 },
                 promote(ref: unknown, operation: () => Promise<void>) {
@@ -161,9 +144,9 @@ export function createExecutionCheckpoints(databaseUrl: string, schema: string) 
                     if (checked.leaseEpoch !== token.leaseEpoch)
                         throw new AgentPersistenceError('INVALID_CHECKPOINT');
                     // The checkpoint cannot be replaced or deleted through this protocol.
-                    return withRunFence(database, token, 'work', async () => {
+                    return withRunFence(database, token, 'work', async (tx) => {
                         if (
-                            !(await saver.getTuple({
+                            !(await storage.read(tx).getTuple({
                                 configurable: {
                                     thread_id: checked.threadId,
                                     checkpoint_ns: '',
@@ -176,5 +159,42 @@ export function createExecutionCheckpoints(databaseUrl: string, schema: string) 
                 },
             };
         },
+    };
+}
+
+export function createPostgresCheckpointStorage(databaseUrl: string, schema: string) {
+    if (!/^[a-z][a-z0-9_]{0,62}$/.test(schema)) throw new Error('AGENT_CHECKPOINT_SCHEMA 无效');
+    const connection = new URL(databaseUrl);
+    connection.searchParams.delete('schema');
+    const pool = new pg.Pool({
+        connectionString: connection.toString(),
+        max: 4,
+        connectionTimeoutMillis: 5000,
+        statement_timeout: 5000,
+        idleTimeoutMillis: 10_000,
+    });
+    pool.on('error', () => console.error('Server checkpoint connection lost'));
+    const saver = new PostgresSaver(pool, undefined, { schema });
+    return {
+        saver,
+        read: () => saver,
+        inTransaction: (tx: DatabaseTransaction) => saverInTransaction(tx, schema),
+        async ready() {
+            const version = await pool
+                .query(`SELECT version FROM "${schema}".scova_schema_version WHERE id=1`)
+                .catch((error: unknown) => {
+                    if (
+                        error &&
+                        typeof error === 'object' &&
+                        'code' in error &&
+                        ['42P01', '3F000'].includes(String(error.code))
+                    )
+                        throw new Error('先执行 Server 图状态迁移');
+                    throw error;
+                });
+            if (version.rows[0]?.version !== installedCheckpointVersion(import.meta.url))
+                throw new Error('先执行 Server 图状态迁移');
+        },
+        close: () => saver.end(),
     };
 }

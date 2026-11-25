@@ -8,7 +8,7 @@ import { createExecutionClient } from '../../src/repo/execution.ts';
 import { createAgentSession } from '../../src/service/agent.ts';
 
 // Test-only process fault boundary. Production has no pause or checkpoint bypass hook.
-const [phase, runId, boundary = 'search'] = process.argv.slice(2);
+const [phase, runId, boundary = 'search', delivery] = process.argv.slice(2);
 if (
     !['crash', 'resume'].includes(phase ?? '') ||
     !['search', 'read'].includes(boundary) ||
@@ -102,6 +102,7 @@ try {
             config: claimed.config,
             budget: claimed.budget,
             usage: claimed.usage,
+            startedAt: run.startedAt!,
             deadlineAt: run.deadlineAt!,
             signal: new AbortController().signal,
             assertActive: () => runs.assertActive(token),
@@ -109,6 +110,10 @@ try {
         },
     });
     const candidate = await session.execute();
+    if (delivery === '--deliver') {
+        const result = await execution.persistence.deliver!(token, candidate);
+        process.send?.({ type: 'report', reportId: result.reportId });
+    }
     process.send?.({ type: 'candidate', candidate, pid: process.pid });
 } catch (error) {
     process.send?.({ type: 'error', message: error instanceof Error ? error.message : 'unknown' });

@@ -15,6 +15,16 @@ export default defineConfig(({ mode }) => {
             host: origin.hostname,
             port: Number(origin.port || (origin.protocol === 'https:' ? 443 : 80)),
             strictPort: true,
+            fs: {
+                deny: [
+                    '.env',
+                    '.env.*',
+                    '*.{crt,pem}',
+                    '**/.git/**',
+                    '**/*.sqlite',
+                    '**/*.sqlite-*',
+                ],
+            },
         },
         ...(mode === 'test'
             ? {

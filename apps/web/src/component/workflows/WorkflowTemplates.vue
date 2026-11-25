@@ -177,10 +177,14 @@
                         <label v-else class="layout-grid gap-1">
                             <span>{{ field.label }}{{ field.required ? '（必填）' : '' }}</span>
                             <input
-                                v-if="field.key === 'csv'"
+                                v-if="field.key === 'csv' || field.key === 'json'"
                                 :name="field.key"
                                 type="file"
-                                accept=".csv,text/csv"
+                                :accept="
+                                    field.key === 'json'
+                                        ? '.json,application/json'
+                                        : '.csv,text/csv'
+                                "
                                 :required="field.required"
                             />
                             <textarea
@@ -266,6 +270,7 @@
 </template>
 
 <script setup lang="ts">
+import { readWorkflowInputFile } from '@/utils/workflow/input-file';
 import { useQuery } from '@tanstack/vue-query';
 import { computed, nextTick, ref, useId, watch } from 'vue';
 import { RouterLink } from 'vue-router';
@@ -326,7 +331,7 @@ const notify = ref(false);
 const nodeLabels = {
     start: '开始',
     study: '研究',
-    csv: '整理 CSV',
+    csv: '整理表格',
     merge: '汇合',
     generate: '生成',
     deliver: '交付',
@@ -334,6 +339,7 @@ const nodeLabels = {
     end: '结束',
 };
 const fieldCatalog = [
+    { key: 'json', label: 'JSON 文件' },
     { key: 'csv', label: 'CSV 文件' },
     { key: 'text', label: '补充文本' },
     { key: 'inventoryColumn', label: '库存列名' },
@@ -415,15 +421,9 @@ async function readInput(
         fields.map(async ({ key }) => {
             const value = form.get(key);
             if (key === 'notify') return [key, form.has(key)] as const;
-            if (value instanceof File) {
-                if (!value.name) return;
-                if (value.size > 262_144) throw new Error('CSV 文件不能超过 256 KiB');
-                const bytes = await value.arrayBuffer();
-                try {
-                    return [key, new TextDecoder('utf-8', { fatal: true }).decode(bytes)] as const;
-                } catch {
-                    throw new Error('请使用 UTF-8 编码的 CSV 文件');
-                }
+            if (key === 'csv' || key === 'json') {
+                if (!(value instanceof File) || !value.name) return;
+                return [key, await readWorkflowInputFile(value, key)] as const;
             }
             if (typeof value !== 'string' || !value.trim()) return;
             return [key, key === 'threshold' ? Number(value) : value] as const;
@@ -510,6 +510,7 @@ function selectedFields(form: FormData): WorkflowTemplateField[] {
                 case 'notify':
                     return { key, ...definition, default: form.has('notify-default') };
                 case 'csv':
+                case 'json':
                     return { key, ...definition };
                 case 'text':
                     return { key, ...definition };

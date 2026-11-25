@@ -1,3 +1,4 @@
+import { rowLock } from '@scova/db';
 import { createReportQuestionStore } from '@/repo/report-questions.ts';
 import {
     queryRows,
@@ -38,7 +39,7 @@ export function createRunStore(database: DatabaseExecutor) {
             return queryRows<{ id: string }>(
                 database,
                 querySql`
-        SELECT id FROM tasks WHERE id = ${taskId}::uuid AND user_id = ${userId}::uuid FOR NO KEY UPDATE
+        SELECT id FROM tasks WHERE id = ${taskId} AND user_id = ${userId} ${rowLock(database, 'no key update')}
       `,
             );
         },
@@ -46,17 +47,17 @@ export function createRunStore(database: DatabaseExecutor) {
             return queryRows<{ id: string }>(
                 database,
                 querySql`
-        SELECT id FROM runs WHERE id = ${runId}::uuid AND user_id = ${userId}::uuid FOR UPDATE
+        SELECT id FROM runs WHERE id = ${runId} AND user_id = ${userId} ${rowLock(database, 'update')}
       `,
             );
         },
         async listRuns(userId: string, taskId: string, take: number, cursorId?: string) {
             const boundary = cursorId
-                ? querySql`AND (queued_at,id)<(SELECT queued_at,id FROM runs WHERE user_id=${userId}::uuid AND task_id=${taskId}::uuid AND id=${cursorId}::uuid)`
+                ? querySql`AND (queued_at,id)<(SELECT queued_at,id FROM runs WHERE user_id=${userId} AND task_id=${taskId} AND id=${cursorId})`
                 : querySql.empty();
             const ids = await queryRows<{ id: string }>(
                 database,
-                querySql`SELECT id FROM runs WHERE user_id=${userId}::uuid AND task_id=${taskId}::uuid ${boundary} ORDER BY queued_at DESC,id DESC LIMIT ${take}`,
+                querySql`SELECT id FROM runs WHERE user_id=${userId} AND task_id=${taskId} ${boundary} ORDER BY queued_at DESC,id DESC LIMIT ${take}`,
             );
             return database.query.runs.findMany({
                 where: and(

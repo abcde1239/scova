@@ -11,14 +11,30 @@
                     required
                     maxlength="160"
                     pattern=".*\S.*"
-                    :disabled="mutation.isPending.value"
+                    :disabled="creating"
                 />
-                <action-button type="primary" attr-type="submit" :busy="mutation.isPending.value">
+                <action-button type="primary" attr-type="submit" :busy="creating">
                     创建工作流
                 </action-button>
             </div>
             <p v-if="creationError" class="m-0" role="alert">{{ creationError }}</p>
         </form>
+
+        <div class="layout-grid gap-1">
+            <label for="workflow-import">从 JSON 创建工作流</label>
+            <input
+                id="workflow-import"
+                type="file"
+                accept=".json,application/json"
+                :disabled="creating"
+                :aria-invalid="importError ? true : undefined"
+                :aria-describedby="importError ? 'workflow-import-error' : undefined"
+                @change="importWorkflow"
+            />
+            <p v-if="importError" id="workflow-import-error" class="m-0" role="alert">
+                {{ importError }}
+            </p>
+        </div>
 
         <workflow-templates @copied="openWorkflow" @started="openRun" />
 
@@ -53,9 +69,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
+import { parseContract, WorkflowDraftInputSchema } from '@scova/models';
 import { RouterLink, useRouter } from 'vue-router';
-import { createWorkflowEndpoint, workflowsEndpoint } from '@/api/workflows';
+import { createWorkflowEndpoint, workflowsEndpoint, type WorkflowDraft } from '@/api/workflows';
 import { toApiError } from '@/api/errors';
 import { shouldReportQueryError } from '@/api/query';
 import ActionButton from '@/component/common/ActionButton.vue';
@@ -63,6 +80,7 @@ import WorkflowTemplates from '@/component/workflows/WorkflowTemplates.vue';
 import StatePanel from '@/component/common/StatePanel.vue';
 import { useSessionLifecycle, useSessionMutation } from '@/composable/useSessionQuery';
 import { useWorkflowPages } from '@/composable/useWorkflowPages';
+import { readWorkflowTextFile } from '@/utils/workflow/input-file';
 import { serialGraph, upgradeWorkflowGraph } from '@/utils/workflow/serial';
 
 const lifecycle = useSessionLifecycle();
@@ -79,38 +97,69 @@ function openRun(_workflowId: string, runId: string) {
 const listKey = ['workflows', 'list'];
 const title = ref('');
 const creationError = ref('');
+const importError = ref('');
+const readingImport = ref(false);
 const { query, items } = useWorkflowPages(lifecycle, listKey, (scope, query, signal) =>
     scope.request(workflowsEndpoint, { query }, { signal }),
 );
 const mutation = useSessionMutation(createWorkflowEndpoint, lifecycle);
+const creating = computed(() => readingImport.value || mutation.isPending.value);
 
 watch(
     () => lifecycle.session.epoch,
     () => {
         title.value = '';
         creationError.value = '';
+        importError.value = '';
+        readingImport.value = false;
         mutation.reset();
     },
 );
 
 async function create() {
-    if (mutation.isPending.value || !title.value.trim()) return;
+    if (creating.value || !title.value.trim()) return;
+    await saveNewWorkflow(
+        {
+            title: title.value.trim(),
+            graph: upgradeWorkflowGraph(
+                serialGraph({ id: 'start', type: 'start' }, [], { id: 'end', type: 'end' }),
+            ),
+        },
+        creationError,
+    );
+}
+
+async function importWorkflow(event: Event) {
+    const field = event.currentTarget as HTMLInputElement;
+    const file = field.files?.item(0);
+    field.value = '';
+    if (!file || creating.value) return;
     const scope = lifecycle.capture();
-    creationError.value = '';
+    readingImport.value = true;
+    importError.value = '';
     try {
-        const { data } = await mutation.mutateAsync({
-            input: {
-                body: {
-                    title: title.value.trim(),
-                    graph: upgradeWorkflowGraph(
-                        serialGraph({ id: 'start', type: 'start' }, [], {
-                            id: 'end',
-                            type: 'end',
-                        }),
-                    ),
-                },
-            },
-        });
+        const text = await readWorkflowTextFile(file, '工作流 JSON', 2 * 1024 * 1024);
+        if (!scope.isCurrent() || router.currentRoute.value.name !== 'workflows') return;
+        let draft: WorkflowDraft;
+        try {
+            draft = parseContract(WorkflowDraftInputSchema, JSON.parse(text));
+        } catch {
+            importError.value = '工作流 JSON 需要包含有效的 title 和 graph，请参考导出的草稿文件。';
+            return;
+        }
+        await saveNewWorkflow(draft, importError);
+    } catch (error) {
+        if (scope.isCurrent() && error instanceof Error) importError.value = error.message;
+    } finally {
+        if (scope.isCurrent()) readingImport.value = false;
+    }
+}
+
+async function saveNewWorkflow(body: WorkflowDraft, errorMessage: typeof creationError) {
+    const scope = lifecycle.capture();
+    errorMessage.value = '';
+    try {
+        const { data } = await mutation.mutateAsync({ input: { body } });
         if (!scope.isCurrent()) return;
         title.value = '';
         void lifecycle.queryClient.invalidateQueries({ queryKey: scope.queryKey(listKey) });
@@ -121,7 +170,7 @@ async function create() {
             });
     } catch (error) {
         if (scope.isCurrent() && shouldReportQueryError(error))
-            creationError.value = toApiError(error).message;
+            errorMessage.value = toApiError(error).message;
     }
 }
 </script>

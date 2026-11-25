@@ -1,8 +1,8 @@
 # 单机 Web 部署与维护
 
-当前提供 Vue 工作台、API、Worker、同源静态资源/反向代理、PostgreSQL 17 和 Redis 7 的 Docker Compose 部署。登录、任务、执行、简报及资料库等页面已接入，路由可刷新访问；功能与剩余范围见[工作台说明](web-workbench.md)。Web 镜像只包含构建后的静态资源与 Nginx 配置，浏览器不需要 Node/Bun。后端主运行时为 Bun 1.3.4，后端镜像内安装 Node 24.22.1、Vite+ 1.4.0 和 PostgreSQL 17 客户端。这是单机 Web 部署，不是桌面端或本地一体化应用。
+当前提供 Vue 工作台、API、Worker、同源静态资源/反向代理、PostgreSQL 17 和 Redis 7 的 Docker Compose 部署。登录、任务、执行、简报及资料库等页面已接入，路由可刷新访问；功能与剩余范围见[工作台说明](web-workbench.md)。Web 镜像只包含构建后的静态资源与 Nginx 配置，浏览器不需要 Node/Bun。后端主运行时为 Bun 1.3.4，后端镜像内安装 Node 24.22.1、Vite+ 1.4.0 和 PostgreSQL 17 客户端。个人电脑本地运行可选择[SQLite 本机版](local-development.md#sqlite-本机版)。
 
-单机部署可叠加 `compose.sqlite.yaml`，使用挂载到 Server 的 SQLite 文件处理队列与协调，业务数据库继续使用 PostgreSQL。此配置需要支持 `!override` 的 Docker Compose 2.24.4 或更新版本。可先用独立的 Compose 项目名试运行。切换已有实例前先停 API 和 Worker，并使用相同的 Compose 文件组合执行维护命令。
+默认部署使用 PostgreSQL + Redis。单机 Compose 可选择叠加 `compose.sqlite.yaml`，使用挂载到 Server 的 SQLite 文件处理队列与协调，业务数据库继续使用 PostgreSQL。此配置需要支持 `!override` 的 Docker Compose 2.24.4 或更新版本。可先用独立的 Compose 项目名试运行。切换已有实例前先停 API 和 Worker，并使用相同的 Compose 文件组合执行维护命令。
 
 ```sh
 docker compose -f compose.yaml -f compose.sqlite.yaml up -d --build --wait

@@ -1,4 +1,4 @@
-import { queryRows, sql, type DatabaseClient } from '@scova/db';
+import { databaseClock, queryRows, sql, type DatabaseClient } from '@scova/db';
 
 export interface RecoverableRun {
     id: string;
@@ -16,7 +16,7 @@ export async function listRecoverableRuns(
         sql`
 SELECT id, lease_epoch FROM runs
 WHERE status IN ('queued', 'running', 'recovering', 'cancel_requested')
-  AND (lease_expires_at IS NULL OR lease_expires_at <= clock_timestamp())
+  AND (lease_expires_at IS NULL OR lease_expires_at <= ${databaseClock(db)})
 ORDER BY queued_at, id LIMIT ${limit}
       `,
     );

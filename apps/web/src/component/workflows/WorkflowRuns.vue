@@ -41,6 +41,7 @@
                 :graph="activeCanvas"
                 :busy="starting.isPending.value || filePending"
                 @file-pending="filePending = $event"
+                @file-invalid="fileInvalid = $event"
             />
             <div
                 v-if="
@@ -60,7 +61,9 @@
                 <action-button
                     type="primary"
                     attr-type="submit"
-                    :disabled="filePending || (previewMode ? draftDirty : !selectedVersion)"
+                    :disabled="
+                        filePending || fileInvalid || (previewMode ? draftDirty : !selectedVersion)
+                    "
                     :busy="starting.isPending.value"
                     >{{ previewMode ? '试跑已保存草稿' : '启动运行' }}</action-button
                 >
@@ -188,6 +191,7 @@ const props = defineProps<{
 const draftCanvas = computed(() => (isWorkflowCanvasGraph(props.draft) ? props.draft : null));
 const canvasInput = ref<WorkflowCanvasInput>({});
 const filePending = ref(false);
+const fileInvalid = ref(false);
 const runMode = ref<'published' | 'draft'>(props.published ? 'published' : 'draft');
 const previewMode = computed(() =>
     Boolean(draftCanvas.value && (runMode.value === 'draft' || !props.published)),
@@ -297,6 +301,7 @@ const activeCanvas = computed(() => {
 });
 watch([runMode, versionId, () => props.draftRevision], () => {
     canvasInput.value = {};
+    fileInvalid.value = false;
 });
 
 function requestKey(preview: boolean) {
@@ -311,6 +316,7 @@ async function start(preview: boolean) {
     if (
         starting.isPending.value ||
         filePending.value ||
+        fileInvalid.value ||
         (preview ? !draftCanvas.value || props.draftDirty : !selectedVersion.value)
     )
         return;

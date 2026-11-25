@@ -22,7 +22,10 @@ import { invalid } from '../../utils/execution/delivery.ts';
 import { RunExecutionError, type RunLeaseToken } from '@scova/execution/runs';
 
 /** Trusted worker only. Reads one explicitly promoted checkpoint, never the latest raw state. */
-export function createDeliveryService(database: DatabaseClient, saver: PostgresSaver) {
+export function createDeliveryService(
+    database: DatabaseClient,
+    saver: Pick<PostgresSaver, 'getTuple'>,
+) {
     const repository = createDeliveryRepository(database);
     const settle = (token: RunLeaseToken, raw: DeliveryProof) => {
         const proof = structuredClone(raw);

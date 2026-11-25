@@ -6,7 +6,7 @@ Vue 工作台支持独立任务和项目内任务、定时执行、自定义工�
 
 ## 技术与目录
 
-Vite+ / TypeScript monorepo，Vue 3 前端，Elysia 后端，PostgreSQL + Drizzle，Redis + BullMQ。后端以 **Bun 为主运行时，Node.js 为兼容运行时**；Server、Worker 和数据库迁移默认使用 Bun。
+Vite+ / TypeScript monorepo，Vue 3 前端，Elysia 后端，Drizzle。默认部署使用 PostgreSQL 和 Redis + BullMQ。SQLite 是单机用户可选的轻量模式。后端以 **Bun 为主运行时，Node.js 为兼容运行时**；Server、Worker 和数据库迁移默认使用 Bun。
 
 | 目录                                                           | 用途                                                |
 | -------------------------------------------------------------- | --------------------------------------------------- |
@@ -23,7 +23,7 @@ Vite+ / TypeScript monorepo，Vue 3 前端，Elysia 后端，PostgreSQL + Drizzl
 
 账号支持[上传和移除头像](docs/public/guides/account-avatars.md)，需配置 Cloudflare R2 或 S3 存储。
 
-安装 [Vite+](https://viteplus.dev/guide/)、Node.js >= 22.18、Bun >= 1.3.4 和 Docker。依赖统一通过 Vite+ 安装。
+安装 [Vite+](https://viteplus.dev/guide/)、Node.js >= 22.18 和 Bun >= 1.3.4。默认开发环境使用 PostgreSQL 和 Redis，先启动 Docker 再运行：
 
 ```sh
 vp install
@@ -31,6 +31,8 @@ vp run local:up           # 启动 PostgreSQL、Redis；内置搜索用 local:up
 vp run db:migrate         # 初始化或核验业务数据库
 vp run dev                # 本机并行启动前端、Bun Server 和 Worker，监听源码变化
 ```
+
+个人电脑可选 [SQLite 本机版](docs/public/guides/local-development.md#sqlite-本机版)，安装依赖后运行 `vp run local:sqlite`，打开 http://127.0.0.1:5173。使用 Node.js 24 可加 `--node`，数据保存在 `.scova-local/`。
 
 `local:up` 自动从 `.env.local.example` 生成根目录 `.env.local` 和随机数据库密码、搜索密钥，保留已有文件，并为缺失的账号模型加密配置初始化主密钥。开发入口和迁移自动读取这份配置，前端通过 `VITE_API_BASE_URL` 直连 API。默认前端 `http://localhost:5173`、API `http://localhost:3000`；三个基础服务只绑定本机，使用独立持久卷。端口、模型和 Docker 数据位置说明见[本地开发环境](docs/public/guides/local-development.md)，个人模型在[Agent 配置](docs/public/guides/agent-configuration.md)管理。已有数据库先备份、停止应用；迁移工具校验完整历史与实际结构后无损接管，见[数据库说明](packages/db/README.md)。
 

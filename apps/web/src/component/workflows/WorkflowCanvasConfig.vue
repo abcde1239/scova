@@ -35,7 +35,7 @@
                         node.type === 'notify'
                             ? '不附加交付文件'
                             : node.type === 'csv'
-                              ? '使用本次运行的 CSV'
+                              ? '使用本次运行的 CSV 或 JSON'
                               : '选择上游节点'
                     }}
                 </option>
@@ -148,6 +148,7 @@
                 <select :value="node.config.format" @change="setFormat(valueOf($event))">
                     <option value="csv">CSV</option>
                     <option value="markdown">Markdown</option>
+                    <option value="json">JSON</option>
                 </select>
             </label>
             <label>
@@ -336,7 +337,10 @@ function toggleSource(id: string) {
 
 function setFormat(format: string) {
     const node = props.node;
-    if (node.type === 'deliver' && (format === 'csv' || format === 'markdown')) {
+    if (
+        node.type === 'deliver' &&
+        (format === 'csv' || format === 'markdown' || format === 'json')
+    ) {
         emit('update', { ...node, config: { ...node.config, format } });
     }
 }
