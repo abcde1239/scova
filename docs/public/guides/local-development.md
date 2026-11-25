@@ -15,6 +15,8 @@ vp run dev
 
 `local:up` 首次自动生成被 Git 和 Docker 构建上下文忽略的 `.env.local`，数据库密码与搜索密钥随机生成，不覆盖已有配置。也可先运行 `vp run local:init` 仅生成配置。`db:migrate` 由 Server 同时迁移业务库和 checkpoint schema；Worker 不再在启动时自动建表。`db:migrate`、Server 和 Worker 的开发命令自动读取根 `.env.local`，已注入进程的环境变量优先。Worker 启动脚本仅从环境文件加载执行、队列、搜索策略和 Reader 所需配置。已有开发环境升级时再运行 `vp run local:init` 生成缺失的 `WORKER_EXECUTION_TOKEN`，由同版本 Server 和 Worker 共用。内部执行接口默认监听 `127.0.0.1:3001`。正式 start 命令仍由部署环境提供配置。
 
+`vpr dev`（`vp run dev` 的简写）在并行启动应用前检查执行令牌和 PostgreSQL 业务迁移，通过后才启动开发进程。已有开发环境在提示待迁移时，先退出仍运行的 Server 和 Worker，再执行 `vp run db:migrate` 和 `vpr dev`。
+
 需要内置搜索时运行 `vp run local:up --search`。不启用 SearXNG 时，在应用的账号搜索设置里配置 Search API，并将需要联网检索的任务设为 Search API 或跟随账号默认；显式选择内置搜索的任务不会自动改用付费供应商。
 
 使用 `local:up` 启动基础依赖，不要在 Docker Desktop 的 Images 页分别点击 Run；单独运行镜像不会自动应用 Compose 的密码、端口和数据卷。手动调用 Compose 时须指定根环境文件：`docker compose --env-file .env.local -f compose.local.yaml -p scova-local up -d --wait`。启用搜索时在 `up` 前加 `--profile live-search`。Compose 默认不会自动读取 `.env.local`。
@@ -29,7 +31,9 @@ vp run dev
 | Worker 启动 | `vp run worker#start` | `vp run worker#start:node` |
 | 数据库迁移  | `vp run db:migrate`   | `vp run db:migrate:node`   |
 
-Server/Worker 的默认开发、start 和数据库迁移入口通过 `scripts/run-bun.mjs` 启动，优先使用 `BUN_BIN`，其次使用用户目录 `~/.bun/bin/bun`（Windows 为 `bun.exe`），最后查找 PATH。使用独立安装的 Bun，可避免 Vite+ 的同名 shim 尝试联网安装包管理器。Bun 安装在其他位置时，在启动命令前将 `BUN_BIN` 环境变量设为其可执行文件绝对路径，以便各入口一致选择运行时。迁移命令由 `vpx` 从根目录加载 `.env.local`，再让 Bun 在 Server 工作区运行维护入口并解析 `@/` 别名。
+Server/Worker 的默认开发、start 和数据库迁移入口通过 `scripts/run-bun.mjs` 启动，优先使用 `BUN_BIN`，其次使用用户目录 `~/.bun/bin/bun`（Windows 为 `bun.exe`），最后查找 PATH。使用独立安装的 Bun，可避免 Vite+ 的同名 shim 尝试联网安装包管理器。Bun 安装在其他位置时，在启动命令前将 `BUN_BIN` 环境变量设为其可执行文件绝对路径，以便各入口一致选择运行时。Windows 上如果 Bun 1.3.4 报找不到 `pg` 或 `srvx/node`，可升级 Bun 或将 `BUN_BIN` 指向已验证的 Bun 1.4.4。迁移命令由 `vpx` 从根目录加载 `.env.local`，再让 Bun 在 Server 工作区运行维护入口并解析 `@/` 别名。
+
+Bun 开发命令监听应用及 `packages/*/src` 的源码变化，重启时先通过 IPC 请求旧后端进程停止。应用进程从各自的工作区启动并解析 `@/` 别名。
 
 Vite+ 的 Node 工具进程与后端运行时分别管理。API 的 `/health` 返回实际运行时；验证双入口可运行 `vp run test:processes`，检查 HTTP、Swagger 和优雅退出。
 

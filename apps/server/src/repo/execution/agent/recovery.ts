@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import type { AgentPage } from '@scova/agent-core';
+import type { AgentPage, AgentPageRef } from '@scova/agent-core';
 import { requiredDatabaseValue } from '../../../utils/execution/database.ts';
 import {
     toolCalls as dbToolCalls,
@@ -11,32 +11,71 @@ import {
     inArray,
     lte,
     asc,
+    gt,
+    or,
+    type ToolCall,
+    type DatabaseTransaction,
+    type Run,
 } from '@scova/db';
 import { readFeedbackSnapshot } from '@scova/models';
 import { withRunFence } from '../runs.ts';
 import { loadBaseline } from '../comparison.ts';
 import { normalizeUrl } from '@scova/connectors';
-import { type AgentRepository, AgentPersistenceError } from '@scova/shared/execution/agent';
+import { AgentPersistenceError, type AgentCheckpointRef } from '@scova/execution/agent';
+import { executionPageBatchLimit, type ExecutionPageCursor } from '@scova/execution/protocol';
+import { collectPageBatch } from '../../../utils/execution/page-batch.ts';
 import { heldReservation, usage, completedOutput, checkpointRef } from './validation.ts';
 import type { AgentRepositoryScope } from './scope.ts';
 
-export function createRecoveryMethods({
-    db,
-    token,
-    fence,
-}: AgentRepositoryScope): Pick<
-    AgentRepository,
-    | 'comparison'
-    | 'markInterruptedUnknown'
-    | 'usage'
-    | 'readAuthorizedCheckpoint'
-    | 'promoteCheckpoint'
-    | 'searchPage'
-    | 'readPages'
-    | 'readCheckpointPages'
-> {
+// Read only a few receipts ahead so a large batch does not materialize all page bodies.
+const receiptChunkSize = 4;
+function checkpointKey(ref: AgentPageRef) {
+    if (!ref || !/^read-\d+$/.test(ref.id) || typeof ref.originalUrl !== 'string')
+        throw new AgentPersistenceError('INVALID_CHECKPOINT');
+    const hash = createHash('sha256').update(JSON.stringify(ref.originalUrl)).digest('hex');
+    return `${ref.id}:${hash}`;
+}
+
+function restoreCheckpointPage(ref: AgentPageRef, call: ToolCall | undefined): AgentPage {
+    if (!call) throw new AgentPersistenceError('INVALID_CHECKPOINT');
+    const output = completedOutput(call) as unknown as AgentPage;
+    const { text, ...metadata } = output;
+    const { id, questionIds, ...savedMetadata } = ref;
+    if (
+        typeof text !== 'string' ||
+        !isDeepStrictEqual(metadata, savedMetadata) ||
+        createHash('sha256').update(text).digest('hex') !== ref.contentHash
+    )
+        throw new AgentPersistenceError('INVALID_CHECKPOINT');
+    return { ...output, id, questionIds: structuredClone(questionIds) };
+}
+
+async function* checkpointPages(tx: DatabaseTransaction, run: Run, refs: AgentPageRef[]) {
+    if (!Array.isArray(refs) || refs.length > executionPageBatchLimit)
+        throw new AgentPersistenceError('INVALID_CHECKPOINT');
+    for (let start = 0; start < refs.length; start += receiptChunkSize) {
+        const chunk = refs.slice(start, start + receiptChunkSize);
+        const keys = chunk.map(checkpointKey);
+        const calls = await tx.query.toolCalls.findMany({
+            where: and(
+                eq(dbToolCalls.userId, run.userId),
+                eq(dbToolCalls.runId, run.id),
+                eq(dbToolCalls.tool, 'read'),
+                inArray(dbToolCalls.operationKey, keys),
+                eq(dbToolCalls.status, 'succeeded'),
+                lte(dbToolCalls.finishedAt, run.deadlineAt!),
+            ),
+        });
+        for (const [index, ref] of chunk.entries()) {
+            const call = calls.find((entry) => entry.operationKey === keys[index]);
+            yield { page: restoreCheckpointPage(ref, call), cursor: start + index + 1 };
+        }
+    }
+}
+
+export function createRecoveryMethods({ db, token, fence }: AgentRepositoryScope) {
     return {
-        comparison: (options = {}) =>
+        comparison: (options: { allowDeadline?: boolean } = {}) =>
             withRunFence(
                 db,
                 token,
@@ -79,7 +118,7 @@ export function createRecoveryMethods({
 
         usage: () => fence(async (_tx, run) => usage(run.usageJson)),
 
-        readAuthorizedCheckpoint: (options = {}) =>
+        readAuthorizedCheckpoint: (options: { allowDeadline?: boolean } = {}) =>
             withRunFence(
                 db,
                 token,
@@ -90,55 +129,30 @@ export function createRecoveryMethods({
                         : checkpointRef(run.checkpointRef, run.id, token.leaseEpoch),
             ),
 
-        readCheckpointPages: (refs, options = {}) =>
+        readCheckpointPages: (refs: AgentPageRef[], options: { allowDeadline?: boolean } = {}) =>
             withRunFence(
                 db,
                 token,
                 options.allowDeadline ? 'deadline_delivery' : 'work',
                 async (tx, run) => {
-                    if (!Array.isArray(refs) || refs.length > 20)
-                        throw new AgentPersistenceError('INVALID_CHECKPOINT');
-                    if (!refs.length) return [];
-                    const keys = refs.map((ref) => {
-                        if (
-                            !ref ||
-                            !/^read-\d+$/.test(ref.id) ||
-                            typeof ref.originalUrl !== 'string'
-                        )
-                            throw new AgentPersistenceError('INVALID_CHECKPOINT');
-                        const hash = createHash('sha256')
-                            .update(JSON.stringify(ref.originalUrl))
-                            .digest('hex');
-                        return `${ref.id}:${hash}`;
-                    });
-                    const calls = await tx.query.toolCalls.findMany({
-                        where: and(
-                            eq(dbToolCalls.userId, run.userId),
-                            eq(dbToolCalls.runId, run.id),
-                            eq(dbToolCalls.tool, 'read'),
-                            inArray(dbToolCalls.operationKey, keys),
-                            eq(dbToolCalls.status, 'succeeded'),
-                            lte(dbToolCalls.finishedAt, run.deadlineAt!),
-                        ),
-                    });
-                    return refs.map((ref, index) => {
-                        const call = calls.find((entry) => entry.operationKey === keys[index]);
-                        if (!call) throw new AgentPersistenceError('INVALID_CHECKPOINT');
-                        const output = completedOutput(call) as unknown as AgentPage;
-                        const { text, ...metadata } = output;
-                        const { id, questionIds, ...savedMetadata } = ref;
-                        if (
-                            typeof text !== 'string' ||
-                            !isDeepStrictEqual(metadata, savedMetadata) ||
-                            createHash('sha256').update(text).digest('hex') !== ref.contentHash
-                        )
-                            throw new AgentPersistenceError('INVALID_CHECKPOINT');
-                        return { ...output, id, questionIds: structuredClone(questionIds) };
-                    });
+                    const pages: AgentPage[] = [];
+                    for await (const { page } of checkpointPages(tx, run, refs)) pages.push(page);
+                    return pages;
                 },
             ),
 
-        async promoteCheckpoint(ref) {
+        readCheckpointPageBatch: (
+            refs: AgentPageRef[],
+            options: { allowDeadline?: boolean } = {},
+        ) =>
+            withRunFence(
+                db,
+                token,
+                options.allowDeadline ? 'deadline_delivery' : 'work',
+                (tx, run) => collectPageBatch(checkpointPages(tx, run, refs)),
+            ),
+
+        async promoteCheckpoint(ref: AgentCheckpointRef) {
             const checked = checkpointRef(ref, token.runId, token.leaseEpoch);
             if (checked.leaseEpoch !== token.leaseEpoch)
                 throw new AgentPersistenceError('INVALID_CHECKPOINT');
@@ -152,7 +166,7 @@ export function createRecoveryMethods({
             });
         },
 
-        searchPage: (url) =>
+        searchPage: (url: string) =>
             fence(async (tx, run) => {
                 const wanted = normalizeUrl(url);
                 const calls = await tx.query.toolCalls.findMany({
@@ -193,7 +207,54 @@ export function createRecoveryMethods({
                 return null;
             }),
 
-        readPages: (options = {}) =>
+        readPageBatch: (options: { allowDeadline?: boolean; cursor?: ExecutionPageCursor } = {}) =>
+            withRunFence(
+                db,
+                token,
+                options.allowDeadline ? 'deadline_delivery' : 'work',
+                (tx, run) =>
+                    collectPageBatch(
+                        (async function* () {
+                            let cursor = options.cursor;
+                            for (;;) {
+                                const calls = await tx.query.toolCalls.findMany({
+                                    where: and(
+                                        eq(dbToolCalls.userId, run.userId),
+                                        eq(dbToolCalls.runId, run.id),
+                                        eq(dbToolCalls.tool, 'read'),
+                                        eq(dbToolCalls.status, 'succeeded'),
+                                        lte(dbToolCalls.finishedAt, run.deadlineAt!),
+                                        cursor &&
+                                            or(
+                                                gt(dbToolCalls.operationKey, cursor.operationKey),
+                                                and(
+                                                    eq(
+                                                        dbToolCalls.operationKey,
+                                                        cursor.operationKey,
+                                                    ),
+                                                    gt(dbToolCalls.attemptNo, cursor.attemptNo),
+                                                ),
+                                            ),
+                                    ),
+                                    orderBy: [
+                                        asc(dbToolCalls.operationKey),
+                                        asc(dbToolCalls.attemptNo),
+                                    ],
+                                    limit: receiptChunkSize,
+                                });
+                                for (const call of calls) {
+                                    cursor = {
+                                        operationKey: call.operationKey,
+                                        attemptNo: call.attemptNo,
+                                    };
+                                    yield { page: completedOutput(call), cursor };
+                                }
+                                if (calls.length < receiptChunkSize) return;
+                            }
+                        })(),
+                    ),
+            ),
+        readPages: (options: { allowDeadline?: boolean; offset?: number } = {}) =>
             withRunFence(
                 db,
                 token,

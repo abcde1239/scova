@@ -69,43 +69,60 @@
                     <div class="demo-editor">
                         <ol class="demo-steps" role="list" :aria-label="t('auth.demo.stepOrder')">
                             <li class="demo-boundary">{{ t('auth.demo.start') }}</li>
-                            <li
-                                v-for="node in nodes"
-                                :key="node.label"
-                                class="demo-node"
-                                :class="{ 'demo-node--selected': node.selected }"
-                            >
-                                <span class="demo-node-text"
-                                    ><small>{{ t(node.label) }}</small
-                                    >{{ t(node.task) }}</span
+                            <li v-for="node in nodes" :key="node.label" class="demo-node">
+                                <button
+                                    type="button"
+                                    class="demo-node-button keyboard-focus-inset"
+                                    aria-controls="auth-demo-inspector"
+                                    :aria-pressed="selectedNode === node"
+                                    @click="selectedNode = node"
                                 >
-                                <app-icon class="demo-handle" name="menu" />
+                                    <span class="demo-node-text">
+                                        <small>{{ t(node.label) }}</small
+                                        >{{ t(node.task) }}
+                                    </span>
+                                    <app-icon class="demo-node-arrow" name="chevron" />
+                                </button>
                             </li>
                             <li class="demo-boundary">{{ t('auth.demo.finish') }}</li>
                         </ol>
-                        <div class="demo-inspector">
+                        <section
+                            id="auth-demo-inspector"
+                            class="demo-inspector"
+                            aria-labelledby="auth-demo-inspector-title"
+                        >
                             <div class="demo-inspector-header">
-                                <h4>{{ t('auth.demo.inspector') }}</h4>
-                                <span class="demo-badge">{{ t('auth.demo.studyOne') }}</span>
+                                <h4 id="auth-demo-inspector-title">
+                                    {{ t('auth.demo.inspector') }}
+                                </h4>
+                                <span class="demo-badge">{{ t(selectedNode.label) }}</span>
                             </div>
-                            <dl>
-                                <dt>{{ t('auth.demo.task') }}</dt>
-                                <dd>{{ t('auth.demo.compareVersions') }}</dd>
-                                <dt>{{ t('auth.demo.output') }}</dt>
-                                <dd>{{ t('auth.demo.brief') }}</dd>
-                            </dl>
-                        </div>
+                            <div class="demo-inspector-details">
+                                <dl
+                                    v-for="node in nodes"
+                                    :key="node.label"
+                                    :aria-hidden="selectedNode !== node"
+                                >
+                                    <dt>{{ t('auth.demo.task') }}</dt>
+                                    <dd>{{ t(node.task) }}</dd>
+                                    <dt>{{ t('auth.demo.output') }}</dt>
+                                    <dd>{{ t('auth.demo.brief') }}</dd>
+                                </dl>
+                            </div>
+                        </section>
                     </div>
                 </div>
             </article>
             <a class="demo-back keyboard-focus" href="#auth-start" @click.prevent="$emit('back')">
-                <app-icon name="back" />{{ t('auth.demo.backToIntro') }}
+                <span class="demo-back-icon"><app-icon name="expand" /></span>
+                {{ t('auth.demo.backToIntro') }}
             </a>
         </div>
     </section>
 </template>
 
 <script setup lang="ts">
+import { shallowRef } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AppIcon from '@/component/common/AppIcon.vue';
 
@@ -114,16 +131,15 @@ defineEmits<{ back: [] }>();
 
 const scopeKeys = ['auth.demo.scopeRange', 'auth.demo.scopeSources', 'auth.demo.scopeOutput'];
 const nodes = [
-    { label: 'auth.demo.studyOne', task: 'auth.demo.compareVersions', selected: true },
-    { label: 'auth.demo.studyTwo', task: 'auth.demo.verifyChanges', selected: false },
+    { label: 'auth.demo.studyOne', task: 'auth.demo.compareVersions' },
+    { label: 'auth.demo.studyTwo', task: 'auth.demo.verifyChanges' },
 ] as const;
+const selectedNode = shallowRef<(typeof nodes)[number]>(nodes[0]);
 </script>
 
 <style scoped>
 .product-demo {
-    @apply [border-top:0.0625rem_solid_var(--auth-line)]
-        [background:color-mix(in_srgb,_var(--scova-primary)_4%,_var(--scova-canvas))]
-        px-[clamp(2rem,_4vw,_4rem)] py-10;
+    @apply px-[clamp(2rem,_4vw,_4rem)] py-10;
 }
 .demo-content {
     @apply grid min-w-0 max-w-[36rem] gap-12;
@@ -140,6 +156,20 @@ const nodes = [
 }
 .demo-section {
     @apply grid min-w-0 gap-5;
+}
+/* Wide showcase: copy beside each preview window. */
+@container auth-showcase (min-width: 50rem) {
+    .demo-content {
+        @apply max-w-[46rem];
+    }
+}
+@container auth-showcase (min-width: 76rem) {
+    .demo-content {
+        @apply max-w-[80rem];
+    }
+    .demo-section {
+        @apply [grid-template-columns:minmax(14rem,_0.7fr)_minmax(0,_1.3fr)] items-center gap-12;
+    }
 }
 .demo-copy {
     @apply grid gap-2 min-w-0;
@@ -252,7 +282,11 @@ const nodes = [
     @apply rounded-full border-subtle bg-surface px-3 py-0.5 text-xs text-muted;
 }
 .demo-node {
-    @apply flex items-center gap-2 w-full min-w-0 px-3 py-2 rounded-2.5 border-subtle bg-surface;
+    @apply w-full min-w-0;
+}
+.demo-node-button {
+    @apply flex items-center gap-2 w-full min-h-11 px-3 py-2 rounded-2.5 border-subtle bg-surface
+        text-default text-left font-inherit cursor-pointer;
 }
 .demo-node-text {
     @apply flex-1 min-w-0 break-anywhere;
@@ -260,12 +294,15 @@ const nodes = [
 .demo-node small {
     @apply block text-xs text-muted;
 }
-.demo-handle {
-    @apply shrink-0 text-muted opacity-60;
+.demo-node-arrow {
+    @apply shrink-0 text-muted;
 }
-.demo-node--selected {
+.demo-node-button[aria-pressed='true'] {
     @apply [border-color:var(--scova-primary)]
         [box-shadow:0_0_0_0.1875rem_color-mix(in_srgb,_var(--scova-primary)_18%,_transparent)];
+}
+.demo-node-button:is(:hover, :focus-visible, [aria-pressed='true']) .demo-node-arrow {
+    @apply text-primary;
 }
 .demo-inspector {
     @apply grid content-start gap-3 min-w-0 p-3 rounded-3 [background:var(--scova-canvas)];
@@ -273,8 +310,15 @@ const nodes = [
 .demo-inspector-header {
     @apply flex flex-wrap items-center justify-between gap-2;
 }
+.demo-inspector-details {
+    display: grid;
+}
 .demo-inspector dl {
-    @apply grid gap-1.5 m-0;
+    @apply grid content-start gap-1.5 m-0;
+    grid-area: 1 / 1;
+}
+.demo-inspector dl[aria-hidden='true'] {
+    visibility: hidden;
 }
 .demo-inspector dt {
     @apply text-xs text-muted;
@@ -284,26 +328,147 @@ const nodes = [
 }
 
 .demo-back {
-    @apply inline-flex items-center gap-2 min-h-11 justify-self-start rounded-2
-        text-primary text-sm font-medium underline underline-offset-4;
+    @apply inline-flex items-center gap-3 min-h-11 justify-self-start rounded-2
+        text-muted text-[0.8125rem] font-medium no-underline hover:text-default;
+}
+.demo-back-icon {
+    @apply inline-grid place-items-center w-8 h-8 shrink-0 rounded-full border-subtle rotate-180;
+}
+.demo-back:is(:hover, :focus-visible) .demo-back-icon {
+    @apply [border-color:var(--scova-primary)] text-primary;
 }
 @media (prefers-reduced-motion: no-preference) {
-    @supports (animation-timeline: view()) {
-        .demo-window {
-            animation: demo-enter linear both;
-            animation-timeline: view();
-            animation-range: entry 0% entry 80%;
+    .demo-inspector dl[aria-hidden='false'] {
+        animation: demo-inspect 220ms ease-out both;
+    }
+    .demo-node-arrow {
+        transition: translate 180ms ease-out;
+    }
+    .demo-node-button[aria-pressed='true'] .demo-node-arrow {
+        translate: 0.1875rem;
+    }
+    .demo-back-icon :deep(.app-icon) {
+        transition: translate 160ms ease-out;
+    }
+    .demo-back:focus-visible .demo-back-icon :deep(.app-icon) {
+        translate: 0 0.1875rem;
+    }
+    @media (hover: hover) {
+        .demo-back:hover .demo-back-icon :deep(.app-icon) {
+            translate: 0 0.1875rem;
         }
+    }
+    @media (hover: hover) and (pointer: fine) {
+        .demo-window {
+            transition: translate 240ms ease-out;
+        }
+        .demo-section:hover .demo-window {
+            translate: 0 -0.25rem;
+        }
+        .demo-conversation :is(.demo-prompt, .demo-reply, .demo-draft) {
+            transition: transform 240ms ease-out;
+        }
+        .demo-conversation:hover .demo-prompt {
+            transform: translateX(-0.25rem);
+        }
+        .demo-conversation:hover .demo-reply {
+            transform: translateX(0.125rem);
+            transition-delay: 45ms;
+        }
+        .demo-conversation:hover .demo-draft {
+            transform: translateY(-0.25rem);
+            transition-delay: 90ms;
+        }
+    }
+    @supports ((animation-timeline: view()) and (animation-range: entry)) {
+        .demo-window {
+            animation:
+                demo-enter linear both,
+                demo-exit linear both;
+            animation-timeline: view(), view();
+            animation-range:
+                entry 0% entry 80%,
+                exit 0% exit 100%;
+        }
+        /* Each piece reveals as it enters, so the window fills in step by step. */
+        .demo-heading,
+        .demo-copy,
+        .demo-prompt,
+        .demo-reply,
+        .demo-chips li,
+        .demo-actions,
+        .demo-composer,
+        .demo-node,
+        .demo-boundary,
+        .demo-inspector dd {
+            animation: demo-reveal linear both;
+            animation-timeline: view();
+            animation-range: entry 0% entry 100%;
+        }
+        .demo-node:focus-within {
+            animation: none;
+        }
+        .demo-copy {
+            --demo-from: -2rem 0;
+        }
+        .demo-prompt {
+            --demo-from: 2rem 0;
+        }
+        .demo-reply,
+        .demo-node {
+            --demo-from: -1.5rem 0;
+        }
+        .demo-inspector dd {
+            --demo-from: 1rem 0;
+        }
+        .demo-chips li:nth-child(2) {
+            animation-range: entry 30% cover 15%;
+        }
+        .demo-chips li:nth-child(3) {
+            animation-range: entry 60% cover 25%;
+        }
+        .demo-steps {
+            view-timeline: --demo-steps block;
+        }
+        .demo-steps::before {
+            @apply origin-top;
+            animation: demo-draw linear both;
+            animation-timeline: --demo-steps;
+            animation-range: entry 0% entry 100%;
+        }
+    }
+}
+@keyframes demo-inspect {
+    from {
+        opacity: 0.55;
+        transform: translateX(0.375rem);
     }
 }
 @keyframes demo-enter {
     from {
-        opacity: 0.8;
-        transform: translateY(0.75rem);
+        opacity: 0.6;
+        transform: translateY(2rem) scale(0.98);
     }
     to {
         opacity: 1;
         transform: none;
+    }
+}
+@keyframes demo-exit {
+    to {
+        opacity: 0.5;
+        transform: translateY(-1rem) scale(0.97);
+    }
+}
+@keyframes demo-reveal {
+    from {
+        opacity: 0;
+        translate: var(--demo-from, 0 1rem);
+    }
+}
+@keyframes demo-draw {
+    from {
+        transform: scaleY(0);
     }
 }
 </style>

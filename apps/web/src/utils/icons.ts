@@ -34,6 +34,7 @@ import {
     PersonAddOutline,
     SunnyOutline,
     GlobeOutline,
+    LanguageOutline,
     AlertCircleOutline,
 } from '@vicons/ionicons5';
 
@@ -74,6 +75,7 @@ export const icons = {
     confirm: CheckmarkOutline,
     chevron: ChevronForwardOutline,
     timezone: GlobeOutline,
+    language: LanguageOutline,
     warning: AlertCircleOutline,
 } as const;
 

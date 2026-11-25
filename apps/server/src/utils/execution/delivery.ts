@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { ToolCall } from '@scova/db';
-import { RunExecutionError } from '@scova/shared/execution/runs';
+import { RunExecutionError } from '@scova/execution/runs';
 
 export const hash = (text: string) => createHash('sha256').update(text, 'utf8').digest('hex');
 export const invalid = (): never => {

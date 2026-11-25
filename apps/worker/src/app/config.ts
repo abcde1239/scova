@@ -1,5 +1,5 @@
-import { executionTokenPattern } from '@scova/shared/execution/protocol';
-import { readRunQueueName } from '@scova/shared/outbox-job';
+import { executionTokenPattern } from '@scova/execution/protocol';
+import { readRunQueueName } from '@scova/execution/queue';
 
 export interface WorkerConfig {
     executionUrl: string;

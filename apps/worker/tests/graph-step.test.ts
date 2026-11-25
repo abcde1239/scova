@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test';
 import { createGraphStepReporter } from '../src/service/agent/graph-step.ts';
-import type { RunProgressEvent } from '@scova/shared/execution/runs';
+import type { RunProgressEvent } from '@scova/execution/runs';
 
 describe('graph step attempt identity', () => {
     it('keeps a checkpoint transition identity across recovery and gives attempts distinct IDs', async () => {

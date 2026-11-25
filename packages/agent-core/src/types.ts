@@ -37,6 +37,7 @@ export interface ResearchPolicy {
     pagePolicy?: 1;
     collectionPolicy?: 1;
     baselinePolicy?: 1;
+    comparisonReusePolicy?: 1;
     loopQualityPolicy?: 1;
     answerCompletionPolicy?: 1;
     gapKindPolicy?: 1;
@@ -71,6 +72,8 @@ export interface AgentContext {
     conversation?: ReportConversationContext;
     answerSupplementEnabled?: boolean;
     adaptiveSearchDisabled?: boolean;
+    /** Freeze verified same-source fact reuse for newly started research. */
+    comparisonReuse?: boolean;
     runId: string;
     userId: string;
     taskVersionId: string;
@@ -114,6 +117,8 @@ export interface ComparisonManifest {
         contentHash: string;
         extractorVersion: string;
         publicationKey?: string;
+        /** Full primary comparison input and validated facts, or an authenticated reuse of them. */
+        completeComparisonInput?: 1;
         facts: ComparisonFact[];
     }[];
 }

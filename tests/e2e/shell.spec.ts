@@ -108,7 +108,10 @@ test('桌面侧栏的任务和新建任务独立可达，底部弹层留在视�
     const create = navigation.getByRole('link', { name: '新建任务', exact: true });
     const brand = banner.getByRole('link', { name: 'Scova，任务首页' });
     expect((await banner.boundingBox())!.width).toBeLessThanOrEqual((await main.boundingBox())!.x);
-    await brand.focus();
+    const toggle = banner.getByRole('button', { name: '收起侧边栏' });
+    await toggle.focus();
+    await page.keyboard.press('Tab');
+    await expect(brand).toBeFocused();
     await page.keyboard.press('Tab');
     await expect(create).toBeFocused();
     await page.keyboard.press('Enter');
@@ -135,6 +138,73 @@ test('桌面侧栏的任务和新建任务独立可达，底部弹层留在视�
     expect((await accountPanel.boundingBox())!.y).toBeLessThan((await account.boundingBox())!.y);
     await page.keyboard.press('Escape');
     await expect(account).toBeFocused();
+});
+
+test('桌面侧栏可键盘收起并记住偏好，窄屏仍使用抽屉', async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto('/account');
+    const banner = page.getByRole('banner');
+    const main = page.getByRole('main');
+    const navigation = banner.getByRole('navigation', { name: '主导航', exact: true });
+    const collapse = banner.getByRole('button', { name: '收起侧边栏', exact: true });
+    const expand = banner.getByRole('button', { name: '展开侧边栏', exact: true });
+    await expect(collapse).toHaveAttribute('aria-expanded', 'true');
+    const expandedSidebar = (await banner.boundingBox())!;
+    const expandedMain = (await main.boundingBox())!;
+    await page.screenshot({ path: testInfo.outputPath('sidebar-expanded.png') });
+
+    await collapse.focus();
+    await page.keyboard.press('Space');
+    await expect(expand).toHaveAttribute('aria-expanded', 'false');
+    await expect(expand).toBeFocused();
+    expect((await banner.boundingBox())!.width).toBeLessThan(expandedSidebar.width);
+    expect((await main.boundingBox())!.x).toBeLessThan(expandedMain.x);
+    const create = navigation.getByRole('link', { name: '新建任务', exact: true });
+    await page.keyboard.press('Tab');
+    await expect(create).toBeFocused();
+    const projects = navigation.getByRole('link', { name: '项目', exact: true });
+    await expect(projects).toHaveAttribute('title', '项目');
+    await projects.click();
+    await expect(page).toHaveURL(/\/projects$/);
+    await expect(expand).toBeVisible();
+
+    await page.reload();
+    await expect(expand).toHaveAttribute('aria-expanded', 'false');
+    await expect(projects).toHaveAttribute('aria-current', 'page');
+    await page.goto('/account');
+    await expect(expand).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath('sidebar-collapsed.png') });
+
+    await page.setViewportSize({ width: 880, height: 600 });
+    await expect(navigation).toBeVisible();
+    const language = banner.getByRole('combobox', { name: '界面语言' });
+    await language.click();
+    const options = page.getByRole('listbox');
+    await expect(options).toBeInViewport({ ratio: 1 });
+    await page.keyboard.press('Escape');
+    await expect(language).toBeFocused();
+    const notifications = banner.getByRole('button', { name: '通知', exact: true });
+    await notifications.focus();
+    await expect(page.getByRole('dialog', { name: '通知预览' })).toBeInViewport({ ratio: 1 });
+    await page.keyboard.press('Escape');
+    const account = banner.getByRole('button', { name: '账号菜单', exact: true });
+    await account.press('Enter');
+    await expect(banner.getByRole('navigation', { name: '账号操作' })).toBeInViewport({ ratio: 1 });
+    await page.keyboard.press('Escape');
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(expand).toBeHidden();
+    await expect(language).toBeVisible();
+    const mobileNavigation = await openPrimaryNavigation(page);
+    await expect(mobileNavigation.getByRole('link', { name: '项目', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: '关闭侧边栏', exact: true }).click();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expect(expand).toBeVisible();
+    await expand.click();
+    await expect(collapse).toHaveAttribute('aria-expanded', 'true');
+    await page.reload();
+    await expect(collapse).toHaveAttribute('aria-expanded', 'true');
 });
 
 test('导航可用且 390 视口没有整页横溢出，跳到主内容可键盘操作', async ({ page }, testInfo) => {

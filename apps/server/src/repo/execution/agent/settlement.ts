@@ -2,12 +2,12 @@ import { requiredDatabaseValue } from '../../../utils/execution/database.ts';
 import { toolCalls as dbToolCalls, eq, runs as dbRuns, type JsonValue } from '@scova/db';
 import { BudgetSchema, parseContract, toolIssueLevel } from '@scova/models';
 import { appendEvent } from '../runs.ts';
-import { toolFailures } from '@scova/shared/execution/tool-failure';
+import { toolFailures } from '@scova/execution/tool-failure';
 import {
     type AgentRepository,
     AgentPersistenceError,
     type AgentTool,
-} from '@scova/shared/execution/agent';
+} from '@scova/execution/agent';
 import { heldReservation, usage, TOOL_SUMMARIES, jsonValue, reconcileUsage } from './validation.ts';
 import type { AgentRepositoryScope } from './scope.ts';
 

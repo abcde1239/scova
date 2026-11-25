@@ -1,8 +1,8 @@
 import { sql, type DatabaseClient, type DatabaseTransaction } from '@scova/db';
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
-import { installedCheckpointVersion } from '@scova/shared/checkpoint-version';
-import { AgentPersistenceError } from '@scova/shared/execution/agent';
-import type { RunLeaseToken } from '@scova/shared/execution/runs';
+import { installedCheckpointVersion } from '@/utils/checkpoint-version.ts';
+import { AgentPersistenceError } from '@scova/execution/agent';
+import type { RunLeaseToken } from '@scova/execution/runs';
 import pg from 'pg';
 import { checkpointRef } from '../../repo/execution/agent/validation.ts';
 import { withRunFence } from '../../repo/execution/runs.ts';

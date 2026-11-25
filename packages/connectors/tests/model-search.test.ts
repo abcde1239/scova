@@ -63,7 +63,7 @@ function fixture(protocol: ModelSearchProtocol, body: unknown = payload(protocol
     };
 }
 describe('authorized model web search', () => {
-    it('only explicit authorization replaces deployment search, with no paid fallback', async () => {
+    it('keeps standalone model search separate from bundle search selection', async () => {
         const { transport, search } = fixture('openai_responses');
         const http = createSafeHttpClient({
             resolve: async () => [{ address: '93.184.216.34', family: 4 }],
@@ -78,20 +78,16 @@ describe('authorized model web search', () => {
         const disabled = createConnectorBundle(config);
         expect(disabled.search.tokenReservation).toBeUndefined();
         expect(transport).not.toHaveBeenCalled();
-        const allowed = createConnectorBundle({
+        const staleConfig = {
             ...config,
             modelSearch: 'openai_responses',
-        });
-        expect(allowed.search.tokenReservation).toEqual(search.tokenReservation);
-        expect((await allowed.search.search('q')).provider).toBe('openai_responses');
+        };
+        const bundle = createConnectorBundle(staleConfig);
+        expect(bundle.searchProvider).toBe('searxng');
+        expect(bundle.search.tokenReservation).toBeUndefined();
+        expect(transport).not.toHaveBeenCalled();
+        expect((await search.search('q')).provider).toBe('openai_responses');
         expect(transport).toHaveBeenCalledTimes(1);
-        expect(() =>
-            createConnectorBundle({
-                ...config,
-                modelSearch: 'openai_responses',
-                modelProtocol: 'gemini',
-            }),
-        ).toThrow();
     });
     it.each(['openai_responses', 'anthropic_web_search'] as const)(
         '%s rejects redirects without forwarding credentials',

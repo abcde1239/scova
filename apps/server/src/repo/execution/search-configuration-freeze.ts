@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { runs, toolCalls, eq, type DatabaseClient, type searchConfigurations } from '@scova/db';
 import { withRunFence } from './runs.ts';
-import { RunExecutionError, type RunLeaseToken } from '@scova/shared/execution/runs';
+import { RunExecutionError, type RunLeaseToken } from '@scova/execution/runs';
 
 /** Only a hash reaches the Run. Credentials stay encrypted in their account record. */
 export function customConfigurationHash(

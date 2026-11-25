@@ -1,12 +1,10 @@
-import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vite-plus/test';
 import {
     dueSchedule,
-    effectiveRunScopeHash,
     nextScheduledAt,
     resolveScheduledDate,
     type SchedulePlan,
-} from '../src/index.ts';
+} from '@scova/shared';
 const plan = (
     timezone = 'America/New_York',
     localTime = '02:30',
@@ -73,6 +71,25 @@ describe('calendar schedule slots', () => {
 });
 
 describe('latest-slot recovery and missed counts', () => {
+    it.each([undefined, 1])(
+        'includes a due slot at equality and excludes it from the next run (weekday %s)',
+        (weekday) => {
+            const schedule = plan('UTC', '12:00', weekday);
+            const due = new Date('2026-11-23T12:00:00Z');
+            const before = new Date('2026-11-23T11:59:59.999Z');
+            const next = new Date(
+                weekday === undefined ? '2026-11-24T12:00:00Z' : '2026-11-30T12:00:00Z',
+            );
+            expect(nextScheduledAt(schedule, before)).toEqual(due);
+            expect(dueSchedule(schedule, due, before)).toBeNull();
+            expect(nextScheduledAt(schedule, due)).toEqual(next);
+            expect(dueSchedule(schedule, due, due)).toEqual({
+                scheduledAt: due,
+                missedCount: 0,
+                nextRunAt: next,
+            });
+        },
+    );
     it('only catches up the most recent due slot, counting earlier days across a gap', () => {
         const result = dueSchedule(
             plan(),
@@ -147,12 +164,4 @@ describe('latest-slot recovery and missed counts', () => {
             ),
         ).toThrow(/上限/);
     });
-});
-
-it('keeps the existing versioned effective Run scope algorithm identical for both producers', () => {
-    const expected = createHash('sha256')
-        .update(JSON.stringify(['run-scope-v2', 'version-hash', 'live', 'scova-comparison-v1']))
-        .digest('hex');
-    expect(effectiveRunScopeHash('version-hash', 'live')).toBe(expected);
-    expect(effectiveRunScopeHash('version-hash', 'demo')).not.toBe(expected);
 });

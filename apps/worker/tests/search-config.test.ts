@@ -4,7 +4,7 @@ import {
     effectiveSearchConfig,
     accountSearchConfig,
 } from '../../server/src/service/execution/search-config.ts';
-import { sealCredential } from '@scova/shared/credentials';
+import { sealCredential } from '../../server/src/utils/credentials.ts';
 
 const api = {
     protocol: 'tavily' as const,
@@ -50,12 +50,11 @@ describe('account-owned search configuration', () => {
                 'owner',
                 'searxng',
             ),
-        ).toMatchObject({ searchProvider: 'searxng', modelSearch: 'disabled' });
+        ).toMatchObject({ searchProvider: 'searxng' });
     });
     it('defaults to built-in search without reading deployment search credentials', () => {
         expect(effectiveSearchConfig(deployment, null)).toMatchObject({
             searchProvider: 'searxng',
-            modelSearch: 'disabled',
         });
         expect(effectiveSearchConfig({}, null)).toMatchObject({ searchProvider: 'searxng' });
         expect(() => effectiveSearchConfig(deployment, null, 'api')).toThrow(
@@ -83,7 +82,6 @@ describe('account-owned search configuration', () => {
         expect(effectiveSearchConfig(deployment, { defaultMode: 'api', searchApi: api })).toEqual({
             searchProvider: 'api',
             searchApi: api,
-            modelSearch: 'disabled',
         });
     });
     it('normalizes stored Reader policy to API reading without changing credentials', () => {
@@ -108,7 +106,6 @@ describe('account-owned search configuration', () => {
         ).toEqual({
             searchProvider: 'searxng',
             searxngBaseUrl: 'http://searxng:8080',
-            modelSearch: 'disabled',
         });
     });
     it('lets a task or run explicitly override either account preference', () => {
@@ -120,7 +117,7 @@ describe('account-owned search configuration', () => {
         });
         expect(
             effectiveSearchConfig(deployment, { defaultMode: 'api', searchApi: api }, 'searxng'),
-        ).toMatchObject({ searchProvider: 'searxng', modelSearch: 'disabled' });
+        ).toMatchObject({ searchProvider: 'searxng' });
     });
     it('creates API search and reading tools for any execution model', () => {
         const search = effectiveSearchConfig(deployment, { defaultMode: 'api', searchApi: api });

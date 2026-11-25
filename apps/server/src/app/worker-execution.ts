@@ -1,7 +1,7 @@
-import { serve } from 'srvx/node';
+import { serve } from 'srvx';
 import type { DatabaseClient } from '@scova/db';
 import { readSqliteStatePath } from '@scova/db/sqlite-state';
-import { executionTokenPattern } from '@scova/shared/execution/protocol';
+import { executionTokenPattern } from '@scova/execution/protocol';
 import { createExecutionService } from '../service/execution/protocol.ts';
 import { createExecutionHandler } from '../handler/worker-execution.ts';
 
@@ -27,17 +27,34 @@ export function startWorkerExecution(
         sqlitePath: readSqliteStatePath(env),
         env,
     });
+    const handle = createExecutionHandler(secret, service);
+    let draining = false;
     const listener = serve({
         port,
         hostname: env.WORKER_EXECUTION_HOST ?? '127.0.0.1',
         silent: true,
         gracefulShutdown: false,
-        fetch: createExecutionHandler(secret, service),
+        // The handler enforces per-operation limits and returns the protocol JSON error.
+        // Allow the longest Worker delivery request (30s) to finish.
+        bun: { maxRequestBodySize: Number.MAX_SAFE_INTEGER, idleTimeout: 60 },
+        fetch(request) {
+            // Bun can reuse an existing keep-alive socket after its listener stops accepting TCP.
+            if (draining)
+                return Response.json(
+                    { code: 'EXECUTION_UNAVAILABLE' },
+                    {
+                        status: 503,
+                        headers: { connection: 'close', 'cache-control': 'no-store' },
+                    },
+                );
+            return handle(request);
+        },
     });
     // Stop accepting new work, then drain accepted requests before closing the saver pools.
     return {
         listener,
         async stop() {
+            draining = true;
             try {
                 await listener.close();
             } finally {

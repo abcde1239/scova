@@ -1,9 +1,10 @@
 import { isDeepStrictEqual } from 'node:util';
-import { normalizeUrl } from '@scova/connectors';
+import { FIRECRAWL_EXTRACTION_VERSION, normalizeUrl } from '@scova/connectors';
 import { COMPARISON_BATCH_SIZE } from '@scova/models';
 import type { StructuredInput } from '@scova/connectors';
 export { COMPARISON_BATCH_SIZE, comparisonOutputLimits } from '@scova/models';
-import { manifestFromModel, validateComparisonManifest } from './compare.ts';
+import { baselineReady, manifestFromModel, validateComparisonManifest } from './compare.ts';
+import { baselineEligibility } from '../../research/baseline.ts';
 import {
     AgentError,
     type AgentChange,
@@ -21,6 +22,57 @@ export function comparisonBatches(pages: AgentPage[]) {
         pages.slice(i * COMPARISON_BATCH_SIZE, (i + 1) * COMPARISON_BATCH_SIZE),
     );
 }
+function hasFullPage(page: AgentPage) {
+    return (
+        page.kind === 'read_page' &&
+        page.mode === 'live' &&
+        page.truncated === false &&
+        page.collection?.complete !== false &&
+        !page.extractionVersion.startsWith('search-api/') &&
+        page.extractionVersion !== FIRECRAWL_EXTRACTION_VERSION
+    );
+}
+
+/** Preserve batch indexes and operation keys across execution, recovery and delivery. */
+export function comparisonPlan(context: AgentContext, pages: AgentPage[], reusePolicy?: 1) {
+    const reused = new Map<string, ComparisonFact[]>();
+    const baseline = context.baseline;
+    if (
+        reusePolicy === 1 &&
+        baseline?.coverage &&
+        baselineEligibility(baseline.coverage).eligible &&
+        baselineReady(context) &&
+        !baseline.manifest?.collectionPolicy
+    ) {
+        const previous = new Map(baseline.manifest!.pages.map((page) => [page.url, page]));
+        for (const page of pages) {
+            if (!hasFullPage(page)) continue;
+            const prior = previous.get(normalizeUrl(page.url));
+            if (
+                prior?.completeComparisonInput === 1 &&
+                prior.contentHash === page.contentHash &&
+                prior.extractorVersion === page.extractionVersion &&
+                prior.facts.every(
+                    (fact) =>
+                        baseline.evidence.some(
+                            (e) => e.pageId === prior.pageId && e.quote === fact.quote,
+                        ) &&
+                        page.text.includes(fact.quote) &&
+                        (!fact.relation || page.text.includes(fact.relation.quote)),
+                )
+            )
+                reused.set(page.id, prior.facts);
+        }
+    }
+    return {
+        reused,
+        batches: comparisonBatches(pages).map((batch) => ({
+            pages: batch,
+            extract: batch.filter((page) => !reused.has(page.id)),
+        })),
+    };
+}
+
 export function comparisonOperation(index: number, repair = false) {
     return index === 0
         ? repair
@@ -106,6 +158,7 @@ function partition(value: unknown, context: AgentContext, pages: AgentPage[]) {
     const facts = new Map<string, ComparisonFact[]>();
     const pending: Pending[] = [];
     const incomplete = new Set<string>();
+    const complete = new Set<string>();
     for (const page of pages) {
         const entries =
             record(value) && Array.isArray(value.pages)
@@ -144,8 +197,9 @@ function partition(value: unknown, context: AgentContext, pages: AgentPage[]) {
             } else incomplete.add(page.id);
         }
         facts.set(page.id, accepted);
+        if (accepted.length === entries[0].facts.length) complete.add(page.id);
     }
-    return { facts, pending, incomplete };
+    return { facts, pending, incomplete, complete };
 }
 
 export function comparisonRepairPages(
@@ -180,10 +234,13 @@ export function comparisonFromExtractions(
     context: AgentContext,
     pages: AgentPage[],
     extractions: ComparisonExtraction[],
+    reusePolicy?: 1,
 ) {
-    const batches = comparisonBatches(pages);
+    const { reused, batches } = comparisonPlan(context, pages, reusePolicy);
     const allowed = new Set(
-        batches.flatMap((_, i) => [comparisonOperation(i), comparisonOperation(i, true)]),
+        batches.flatMap(({ extract }, i) =>
+            extract.length ? [comparisonOperation(i), comparisonOperation(i, true)] : [],
+        ),
     );
     if (
         extractions.length > batches.length * 2 ||
@@ -196,7 +253,7 @@ export function comparisonFromExtractions(
         )
     )
         throw new AgentError('INVALID_STATE', '比较分批记录不合法');
-    if (!extractions.length)
+    if (!extractions.length && !reused.size)
         return {
             manifest: null,
             gaps: ['事实比较未取得模型结果，报告保留为待核实'],
@@ -212,14 +269,14 @@ export function comparisonFromExtractions(
     const uncertain: AgentChange[] = [];
     const coverageGaps = new Set<string>();
     let incomplete = 0;
-    for (const [i, batch] of batches.entries()) {
+    for (const [i, { pages: batch, extract }] of batches.entries()) {
         const primary = extractions.find((e) => e.operationKey === comparisonOperation(i));
         const repair = extractions.find((e) => e.operationKey === comparisonOperation(i, true));
-        const original = partition(primary?.response.data, context, batch);
-        const requested = comparisonRepairPages(context, batch, primary?.response);
+        const original = partition(primary?.response.data, context, extract);
+        const requested = comparisonRepairPages(context, extract, primary?.response);
         const fixed = partition(repair?.response.data, context, requested);
         for (const [receipt, expected] of [
-            [primary, batch],
+            [primary, extract],
             [repair, requested],
         ] as const) {
             if (!receipt) continue;
@@ -241,7 +298,15 @@ export function comparisonFromExtractions(
             }
         }
         for (const page of batch) {
-            const accepted = [...(original.facts.get(page.id) ?? [])];
+            const prior = reused.get(page.id);
+            const accepted = [...(prior ?? original.facts.get(page.id) ?? [])];
+            const completeInput =
+                prior ||
+                (reusePolicy === 1 &&
+                    accepted.length > 0 &&
+                    hasFullPage(page) &&
+                    original.complete.has(page.id) &&
+                    primary?.sourceCoverage?.pages.some((p) => p.pageId === page.id && !p.clipped));
             for (const fact of fixed.facts.get(page.id) ?? [])
                 if (!accepted.some((f) => factKey(f) === factKey(fact))) accepted.push(fact);
             if (accepted.length > 12) {
@@ -254,6 +319,7 @@ export function comparisonFromExtractions(
                 url: normalizeUrl(page.url),
                 contentHash: page.contentHash,
                 extractorVersion: page.extractionVersion,
+                ...(completeInput ? { completeComparisonInput: 1 as const } : {}),
                 facts: accepted.map((f, n) => ({ ...f, id: `fact-${pageIndex}-${n}` })),
             });
             if (original.incomplete.has(page.id) && (!repair || fixed.incomplete.has(page.id)))

@@ -1,4 +1,4 @@
-import type { ExecutionCandidate } from '@scova/shared/execution/protocol';
+import type { ExecutionCandidate } from '@scova/execution/protocol';
 import { deliveryPages } from './delivery-pages.ts';
 import type { Run, ToolCall } from '@scova/db';
 import { isDeepStrictEqual } from 'node:util';
@@ -18,7 +18,7 @@ import {
 } from '@scova/agent-core';
 import { classifyReportDelivery, CoverageSchema, parseContract } from '@scova/models';
 import { type ReadPage, type SearchResponse } from '@scova/connectors';
-import { RunExecutionError } from '@scova/shared/execution/runs';
+import { RunExecutionError } from '@scova/execution/runs';
 import { hash, invalid, output } from '../../utils/execution/delivery.ts';
 
 export interface DeliveryProof {
@@ -114,6 +114,7 @@ export function authenticateCandidate(
             loopQualityPolicy?: number;
             collectionPolicy?: number;
             baselinePolicy?: number;
+            comparisonReusePolicy?: number;
             pagePolicy?: number;
             dateScreening?: unknown[];
             pages?: AgentPage[];
@@ -134,6 +135,7 @@ export function authenticateCandidate(
                 'loopQualityPolicy',
                 'collectionPolicy',
                 'baselinePolicy',
+                'comparisonReusePolicy',
                 'pagePolicy',
             ] as const)
                 if (policy?.[name] !== research[name]) invalid();

@@ -26,6 +26,7 @@ export interface ResearchState {
     /** The graph stores pages without text and hydrates them before running any domain node. */
     pagePolicy?: 1;
     collectionPolicy?: 1;
+    comparisonReusePolicy?: 1;
     baselinePolicy?: 1;
     outputFormats?: ReportArtifact['format'][];
     dateScreening?: NonNullable<Coverage['dateScreening']>['entries'];

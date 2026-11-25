@@ -1,7 +1,7 @@
 import { compareCollection, collectionManifest } from './collection.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { object } from '../../utils/guards.ts';
-import { normalizeUrl } from '@scova/connectors';
+import { FIRECRAWL_EXTRACTION_VERSION, normalizeUrl } from '@scova/connectors';
 import {
     AgentError,
     type AgentContext,
@@ -81,6 +81,10 @@ export function isComparisonManifest(value: unknown): value is ComparisonManifes
             !text(page.contentHash, 64) ||
             !/^[a-f0-9]{64}$/.test(page.contentHash) ||
             !text(page.extractorVersion, 200) ||
+            (page.completeComparisonInput !== undefined &&
+                (page.completeComparisonInput !== 1 ||
+                    value.mode !== 'live' ||
+                    value.collectionPolicy !== undefined)) ||
             !Array.isArray(page.facts) ||
             page.facts.length > 12 ||
             ids.has(page.pageId)
@@ -265,6 +269,7 @@ export function compareResearch(
                 current.truncated ||
                 current.collection?.complete === false ||
                 current.extractionVersion.startsWith('search-api/') ||
+                current.extractionVersion === FIRECRAWL_EXTRACTION_VERSION ||
                 (expectedBaseline && !ready) ||
                 (old && old.extractorVersion !== page.extractorVersion)
             ) {

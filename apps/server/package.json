@@ -4,7 +4,7 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "dev": "vpx ../../scripts/run-bun.mjs --env-file=../../.env.local --watch src/main.ts",
+        "dev": "vpx ../../scripts/run-bun.mjs --dev --env-file=../../.env.local src/main.ts",
         "dev:node": "vpx --env-file-if-exists=../../.env.local --watch src/node.ts",
         "start": "vpx ../../scripts/run-bun.mjs run src/main.ts",
         "start:node": "vpx src/node.ts",
@@ -20,6 +20,7 @@
         "@scova/agent-core": "workspace:*",
         "@scova/connectors": "workspace:*",
         "@scova/db": "workspace:*",
+        "@scova/execution": "workspace:*",
         "@scova/models": "workspace:*",
         "@scova/object-storage": "workspace:*",
         "@scova/shared": "workspace:*",

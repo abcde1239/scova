@@ -73,6 +73,11 @@
             "id": "packages-shared"
         },
         {
+            "root": "packages/execution",
+            "id": "packages-execution",
+            "tests": { "requireConfiguredTask": true }
+        },
+        {
             "root": "packages/object-storage",
             "id": "packages-object-storage",
             "tests": { "requireConfiguredTask": true }
@@ -182,6 +187,7 @@
                 "apps-server",
                 "apps-worker",
                 "packages-shared",
+                "packages-execution",
                 "packages-models",
                 "packages-db",
                 "packages-agent-core",

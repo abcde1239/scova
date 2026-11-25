@@ -3,7 +3,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import type { PlaywrightCrawler } from '@crawlee/playwright';
 import type { BrowserContext } from 'playwright';
 import { normalizeUrl, type SafeHttpClient } from '../../http/index.ts';
-import { extractPageIsolated } from '../extraction/process.ts';
+import type { extractPageIsolated } from '../extraction/process.ts';
 import { isExtractionCapacityError } from '../extraction/capacity.ts';
 import { pageIsLoading } from '../extraction/readiness.ts';
 import { pageHasPendingData } from '../extraction/data-readiness.ts';
@@ -19,7 +19,12 @@ import { BROWSER_EXTRACTION_VERSION } from './version.ts';
 import { createResourceRouter } from './resources.ts';
 import { requestMainDocument } from './request.ts';
 
-export function createPageRenderer(http: SafeHttpClient, maxText: number, waitMs: number) {
+export function createPageRenderer(
+    http: SafeHttpClient,
+    maxText: number,
+    waitMs: number,
+    extract: typeof extractPageIsolated,
+) {
     async function render(
         originalUrl: string,
         url: string,
@@ -101,14 +106,10 @@ export function createPageRenderer(http: SafeHttpClient, maxText: number, waitMs
             // just to collect that evidence; the subprocess bounds synchronous DOM work.
             try {
                 const html = await diagnostics.stage('extract', () =>
-                    extractPageIsolated(
-                        originalUrl,
-                        main,
-                        maxText,
-                        BROWSER_EXTRACTION_VERSION,
-                        true,
-                        { signal, timeoutMs: 5000 },
-                    ),
+                    extract(originalUrl, main, maxText, BROWSER_EXTRACTION_VERSION, true, {
+                        signal,
+                        timeoutMs: 5000,
+                    }),
                 );
                 if (html.text.length >= 120 && html.collection?.complete === false)
                     staticPartial = html;
@@ -275,7 +276,7 @@ export function createPageRenderer(http: SafeHttpClient, maxText: number, waitMs
                         const markup = (await page.evaluate(pageSnapshot, true)).markup!;
                         if (Buffer.byteLength(markup, 'utf8') > PAGE_BYTES)
                             throw new ConnectorError('response_too_large', '渲染后的网页超过限制');
-                        const extracted = await extractPageIsolated(
+                        const extracted = await extract(
                             originalUrl,
                             {
                                 ...main,

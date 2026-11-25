@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { chooseOption } from './support/select.ts';
 
 test('login language switch translates validation without discarding form input', async ({
     page,
@@ -8,13 +9,13 @@ test('login language switch translates validation without discarding form input'
     await page.getByLabel('邮箱', { exact: true }).fill('test@example.org');
     await page.getByRole('button', { name: '登录', exact: true }).click();
     await expect(page.getByText('请输入密码', { exact: true })).toBeVisible();
-    await page.getByRole('combobox', { name: '界面语言' }).selectOption('en');
+    await chooseOption(page, '界面语言', 'English');
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');
     await expect(page).toHaveTitle('Sign in · Scova');
     await expect(page.getByLabel('Email', { exact: true })).toHaveValue('test@example.org');
     await expect(page.getByText('Enter your password', { exact: true })).toBeVisible();
     await page.reload();
-    await expect(page.getByRole('combobox', { name: 'Interface language' })).toHaveValue('en');
+    await expect(page.getByRole('combobox', { name: 'Interface language' })).toHaveText('English');
     await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
     await page.getByRole('link', { name: 'Create an account' }).click();
     await expect(page.getByRole('heading', { name: 'Sign up' })).toBeVisible();

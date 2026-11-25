@@ -1,6 +1,6 @@
 import { Queue } from 'bullmq';
 import type { Redis } from 'ioredis';
-import { outboxJobId, type OutboxMessage } from '@scova/shared/outbox-job';
+import { outboxJobId, type OutboxMessage } from '@scova/execution/queue';
 
 export interface OutboxPublisher {
     publish(item: OutboxMessage): Promise<void>;

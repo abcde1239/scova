@@ -4,7 +4,7 @@ import { createConnectorBundle } from '@scova/connectors';
 import { createAgentSession } from '../src/service/agent/session.ts';
 import type { AgentRepository } from '../../server/src/repo/execution/agent.ts';
 import type { RunExecutionContext } from '../src/service/runs.ts';
-import { RunFenceError } from '@scova/shared/execution/runs';
+import { RunFenceError } from '@scova/execution/runs';
 const projection = vi.hoisted(() => vi.fn((_context, state) => ({ claims: state.claims })));
 vi.mock('@scova/agent-core', async (original) => ({
     ...(await original<typeof import('@scova/agent-core')>()),

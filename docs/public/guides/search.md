@@ -1,6 +1,6 @@
 # 搜索服务配置
 
-Scova 的搜索与正文提取由账号独立配置，与解析、任务执行模型分开保存。账号可选择 Search API、自定义 JSON 搜索服务或自部署 SearXNG：DeepSeek/Tavily 提供搜索与网页读取，自定义搜索和 SearXNG 配合本地 Reader 读取来源正文。服务器不提供默认搜索 Agent 或搜索 API 密钥。
+Scova 的搜索与正文提取由账号独立配置，与解析、任务执行模型分开保存。账号可选择 Search API、自定义 JSON 搜索服务或自部署 SearXNG：DeepSeek/Tavily 提供搜索与网页读取。自定义搜索使用本地 Reader，SearXNG 默认使用本地 Reader，也可由部署者启用 Firecrawl Cloud 读取正文。服务器不提供默认搜索 Agent 或搜索 API 密钥。
 
 ## 独立搜索 API
 
@@ -38,6 +38,14 @@ DeepSeek/Tavily 远程读取最多45秒，本地 Reader与普通搜索最多15�
 协议参考：[DeepSeek Search](https://api-docs.deepseek.com/api/search)、[DeepSeek Fetch](https://api-docs.deepseek.com/api/fetch)、[Tavily Search](https://docs.tavily.com/documentation/api-reference/endpoint/search)、[Tavily Extract](https://docs.tavily.com/documentation/api-reference/endpoint/extract)。Perplexity 的 [Fetch URL 工具](https://docs.perplexity.ai/docs/agent-api/tools/fetch-url-content)属于另行计费的生成式 Agent API，当前不作为独立 Search API 读取使用。
 
 需要内置搜索的本地开发使用 `vp run local:up --search` 将 PostgreSQL、Redis、SearXNG 一起启动，搜索地址为 `http://127.0.0.1:18080`，配置统一在根 `.env.local`，见[本地开发环境](local-development.md)。下面的 `search:up` 是仅启动搜索的独立方案，使用自己的配置、端口和 Compose 项目。
+
+## SearXNG 配合 Firecrawl 读取正文
+
+设置 Worker 的 `READER_FIRECRAWL_API_KEY` 启用 Firecrawl Cloud。使用 `vp run dev` 时在根 `.env.local` 或 `apps/worker/.env` 配置并重启 Worker。生产 Compose 将变量配置在 `.env`，更新镜像后用 `docker compose up -d --no-deps worker` 重建 Worker。留空使用本地 Reader。
+
+SearXNG 继续返回候选链接，Worker 将选中的公网 URL 提交给 Firecrawl `POST /v2/scrape`，读取主内容 Markdown。该设置作用于此 Worker 上的所有 SearXNG Run。Firecrawl 按供应商规则计费，目标 URL 会发送给云端。单页最多 15 秒，共用 Run 剩余时间及现有读取预算。禁用供应商正文缓存复用和写入，失败按来源读取失败处理，一个读取请求不自动重放或切回本地工具。
+
+正文进入同一工具账本和引用校验。Firecrawl 结果附有独立提取版本，整页覆盖标为未经验证，供应商元数据不用于认证原站发布时间。切换 Reader 可能影响报告的时间窗口验收和历史对比。Worker 校验提交与返回地址的公网范围，供应商内部请求与重定向由 Firecrawl 执行。
 
 ## 自定义 HTTP JSON 搜索
 

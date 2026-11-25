@@ -40,7 +40,7 @@ import {
     RunFenceError,
     type RunEventInput,
     type RunLeaseToken,
-} from '@scova/shared/execution/runs';
+} from '@scova/execution/runs';
 
 export type RunFencePurpose =
     | 'work'

@@ -1,5 +1,6 @@
-// Private, single-use Node/vpx host. stdout is reserved for one result only.
+// Private Node/vpx host. Each line is an independent extraction.
 import { createInterface } from 'node:readline';
+import { privateJsonLine } from '../runtime/json.ts';
 import { extractPage } from './extract.ts';
 import { ConnectorError } from '../../types.ts';
 
@@ -14,10 +15,10 @@ for await (const line of lines) {
             input.extractionVersion,
             input.normalizedEncoding,
         );
-        process.stdout.write(JSON.stringify({ ok: true, page }));
+        process.stdout.write(privateJsonLine({ ok: true, page }));
     } catch (error) {
         process.stdout.write(
-            JSON.stringify({
+            privateJsonLine({
                 ok: false,
                 error: {
                     code: error instanceof ConnectorError ? error.code : 'extraction_failed',
@@ -28,7 +29,6 @@ for await (const line of lines) {
             }),
         );
     }
-    break;
 }
 lines.close();
 process.stdin.destroy();

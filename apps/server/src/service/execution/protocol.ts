@@ -1,17 +1,17 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { DatabaseClient } from '@scova/db';
 import { openSqliteRunQueue, openSqliteState } from '@scova/db/sqlite-state';
-import { readRunQueueName } from '@scova/shared/outbox-job';
+import { readRunQueueName } from '@scova/execution/queue';
 import { type AgentPageRef } from '@scova/agent-core';
-import type { ExecutionCandidate } from '@scova/shared/execution/protocol';
-import { type AgentRepository } from '@scova/shared/execution/agent';
+import { executionPageBatchLimit, type ExecutionCandidate } from '@scova/execution/protocol';
+import { type AgentRepository } from '@scova/execution/agent';
 import {
     RUN_FAILURE_MESSAGES,
     type RunLeaseToken,
     type RunProgressEvent,
-} from '@scova/shared/execution/runs';
+} from '@scova/execution/runs';
 import { SEARXNG_ENGINES } from '@scova/connectors';
-import type { SearchStateRepository } from '@scova/shared/execution/search';
+import type { SearchStateRepository } from '@scova/execution/search';
 import { createRunRepository, withRunFence } from '../../repo/execution/runs.ts';
 import { createAgentRepository } from '../../repo/execution/agent.ts';
 import { createSqliteSearchStateRepository } from '../../repo/execution/sqlite-search.ts';
@@ -261,6 +261,27 @@ export function createExecutionService(options: {
                     if (!Array.isArray(second) || second.length !== 1) invalid();
                     return ledger.readCheckpointPages(second as AgentPageRef[], {
                         allowDeadline: flag(third),
+                    });
+                }
+                case 'readCheckpointPageBatch': {
+                    if (
+                        !Array.isArray(second) ||
+                        !second.length ||
+                        second.length > executionPageBatchLimit
+                    )
+                        invalid();
+                    return ledger.readCheckpointPageBatch(second as AgentPageRef[], {
+                        allowDeadline: flag(third),
+                    });
+                }
+                case 'readPageBatch': {
+                    const cursor = third === undefined ? undefined : object(third);
+                    return ledger.readPageBatch({
+                        ...allowDeadline(),
+                        cursor: cursor && {
+                            operationKey: string(cursor.operationKey),
+                            attemptNo: boundedInteger(cursor.attemptNo, 2_147_483_647),
+                        },
                     });
                 }
                 case 'readAuthorizedCheckpoint':

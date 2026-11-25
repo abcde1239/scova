@@ -6,5 +6,5 @@ export {
     type AgentReservation,
     type AgentRepository,
     AgentPersistenceError,
-} from '@scova/shared/execution/agent';
+} from '@scova/execution/agent';
 export { createAgentRepository } from './agent/repository.ts';

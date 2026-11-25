@@ -11,7 +11,7 @@ import {
     sealCredential,
     openCredential,
     openProviderCredentials,
-} from '@scova/shared/credentials';
+} from '@/utils/credentials.ts';
 import {
     validatePublicUrl,
     validateCustomSearchTemplate,

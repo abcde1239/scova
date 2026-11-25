@@ -113,6 +113,7 @@ export function planNode(rt: AgentRuntime) {
                     ...(state.pagePolicy ? { pagePolicy: 1 } : {}),
                     ...(state.collectionPolicy ? { collectionPolicy: 1 } : {}),
                     ...(state.baselinePolicy ? { baselinePolicy: 1 } : {}),
+                    ...(state.comparisonReusePolicy ? { comparisonReusePolicy: 1 } : {}),
                     ...(state.loopQualityPolicy ? { loopQualityPolicy: 1 } : {}),
                     ...(state.answerCompletionPolicy ? { answerCompletionPolicy: 1 } : {}),
                     ...(state.gapKindPolicy ? { gapKindPolicy: 1 } : {}),

@@ -126,6 +126,7 @@ describe('raw search API compatibility', () => {
         expect(transport.mock.calls[0][0].pathname).toBe('/v1/tools/fetch');
     });
     it('explicit API mode cannot be replaced by legacy model search configuration', async () => {
+        const legacySettings = { modelSearch: 'openai_responses' };
         const { options, transport, http } = fixture('deepseek', {
             title: 'Page',
             content: 'Remote body',
@@ -136,7 +137,7 @@ describe('raw search API compatibility', () => {
             model: 'model',
             modelApiKey: 'model-key',
             modelProtocol: 'gemini',
-            modelSearch: 'openai_responses',
+            ...legacySettings,
             http,
         });
         expect(bundle.reader).toBe(bundle.search);

@@ -15,8 +15,8 @@ import {
     type ApiServices,
 } from '../src/app/services.ts';
 import type { ReportFollowupInput, TaskConfig } from '@scova/models';
-import { sealCredential } from '@scova/shared/credentials';
-import { effectiveRunScopeHash } from '@scova/shared';
+import { sealCredential } from '@/utils/credentials.ts';
+import { effectiveRunScopeHash } from '@/utils/research-scope.ts';
 import { createReportQuestionService } from '../src/service/report-questions.ts';
 import { comparisonScopeHash } from '../src/service/tasks.ts';
 import { nodeScriptCommand } from '../../../scripts/process-runtime.mjs';

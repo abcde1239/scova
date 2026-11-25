@@ -10,7 +10,7 @@ import {
 } from '@scova/db';
 import * as tables from '@scova/db';
 import { randomUUID } from 'node:crypto';
-import { effectiveRunScopeHash } from '@scova/shared';
+import { effectiveRunScopeHash } from '@/utils/research-scope.ts';
 
 import { Redis as RedisClient } from 'ioredis';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vite-plus/test';

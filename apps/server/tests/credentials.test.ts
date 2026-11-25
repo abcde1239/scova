@@ -5,7 +5,7 @@ import {
     openCredential,
     sealProviderCredentials,
     openProviderCredentials,
-} from '../src/credentials.ts';
+} from '@/utils/credentials.ts';
 const key = '12'.repeat(32);
 describe('account API key encryption', () => {
     it('reads legacy model keys and keeps search credentials encrypted and account bound', () => {

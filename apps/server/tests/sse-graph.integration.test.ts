@@ -24,7 +24,7 @@ import { csrfForSession, tokenHash } from '../src/utils/security.ts';
 import { outboxDatabase } from '../../worker/tests/support/outbox-database.ts';
 import { seedRun } from '../../worker/tests/support/run-database.ts';
 import { appendEvent } from '../src/repo/execution/runs.ts';
-import type { RunEventInput } from '@scova/shared/execution/runs';
+import type { RunEventInput } from '@scova/execution/runs';
 
 const fixture = outboxDatabase();
 const db = fixture.db;

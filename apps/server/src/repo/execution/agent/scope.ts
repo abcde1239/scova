@@ -7,8 +7,8 @@ import {
     type DatabaseTransaction,
 } from '@scova/db';
 import { withRunFence } from '../runs.ts';
-import type { RunLeaseToken } from '@scova/shared/execution/runs';
-import { AgentPersistenceError } from '@scova/shared/execution/agent';
+import type { RunLeaseToken } from '@scova/execution/runs';
+import { AgentPersistenceError } from '@scova/execution/agent';
 import { heldReservation } from './validation.ts';
 
 export function createAgentRepositoryScope(db: DatabaseClient, token: RunLeaseToken) {

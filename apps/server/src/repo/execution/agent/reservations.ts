@@ -10,7 +10,7 @@ import {
 } from '@scova/db';
 import { BudgetSchema, parseContract } from '@scova/models';
 import { appendEvent } from '../runs.ts';
-import { type AgentRepository, AgentPersistenceError } from '@scova/shared/execution/agent';
+import { type AgentRepository, AgentPersistenceError } from '@scova/execution/agent';
 import {
     heldReservation,
     reservation,

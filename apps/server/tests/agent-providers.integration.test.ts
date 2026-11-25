@@ -15,7 +15,7 @@ import {
     openCredential,
     openProviderCredentials,
     sealProviderCredentials,
-} from '@scova/shared/credentials';
+} from '@/utils/credentials.ts';
 import type { AgentProvider } from '@scova/models';
 import type { readProviderBalance } from '@scova/connectors';
 import { createDefaultServices } from '../src/app/services';

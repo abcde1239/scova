@@ -1,6 +1,6 @@
 import { type DatabaseClient, runs as dbRuns, eq, and, reports as dbReports } from '@scova/db';
 import type { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
-import type { ExecutionCandidate } from '@scova/shared/execution/protocol';
+import type { ExecutionCandidate } from '@scova/execution/protocol';
 import type { AgentCandidate } from '@scova/agent-core';
 
 import {
@@ -19,7 +19,7 @@ import {
 } from './delivery-proof.ts';
 import { checkpointRef } from '../../repo/execution/agent/validation.ts';
 import { invalid } from '../../utils/execution/delivery.ts';
-import { RunExecutionError, type RunLeaseToken } from '@scova/shared/execution/runs';
+import { RunExecutionError, type RunLeaseToken } from '@scova/execution/runs';
 
 /** Trusted worker only. Reads one explicitly promoted checkpoint, never the latest raw state. */
 export function createDeliveryService(database: DatabaseClient, saver: PostgresSaver) {

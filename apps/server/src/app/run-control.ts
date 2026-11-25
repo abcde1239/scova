@@ -1,7 +1,7 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { closeDatabase, createDatabaseClient, type DatabaseClient } from '@scova/db';
 import { openSqliteRunQueue } from '@scova/db/sqlite-state';
-import { outboxJobId, type OutboxMessage } from '@scova/shared/outbox-job';
+import { outboxJobId, type OutboxMessage } from '@scova/execution/queue';
 import { createOutboxHandler } from '../handler/outbox.ts';
 import { createSchedulerHandler } from '../handler/scheduler.ts';
 import { createOutboxQueue } from '../repo/queue/outbox.ts';

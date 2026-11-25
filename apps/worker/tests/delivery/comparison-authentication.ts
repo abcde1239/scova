@@ -24,6 +24,45 @@ import { delivery, fixture, saver, assertEmpty, research } from './fixture.ts';
 import { checkpointWithBodies } from './checkpoint.ts';
 
 export function registerComparisonAuthentication() {
+    it('reuses authenticated facts without a model receipt and saves current citations', async () => {
+        const first = await liveResearch();
+        expect(first.candidate.manifest?.pages[0]?.completeComparisonInput).toBe(1);
+        const initial = await delivery.deliver(first.claimed.token, first.candidate);
+        expect(
+            await fixture.db.query.reports.findFirst({ where: eq(dbReports.id, initial.reportId) }),
+        ).toMatchObject({ comparisonJson: first.candidate.manifest });
+
+        const second = await liveResearch({ previous: first });
+        expect(second.claimed.run.baselineRunId).toBe(first.run.id);
+        expect(second.candidate.changes?.[0]).toMatchObject({
+            kind: 'duplicate',
+            newCitations: [{ pageId: second.candidate.pages[0]!.id }],
+        });
+        expect(
+            await fixture.db.query.toolCalls.findMany({
+                where: and(
+                    eq(dbToolCalls.runId, second.run.id),
+                    sql`${dbToolCalls.operationKey} LIKE 'compare-facts%'`,
+                ),
+            }),
+        ).toHaveLength(0);
+        const forged = structuredClone(second.candidate);
+        forged.manifest!.pages[0]!.facts[0]!.importance = 'non_material';
+        await expect(delivery.deliver(second.claimed.token, forged)).rejects.toMatchObject({
+            code: 'INVALID_DELIVERY_EVIDENCE',
+        });
+        await assertEmpty(second.run.id);
+        const result = await delivery.deliver(second.claimed.token, second.candidate);
+        expect(
+            await fixture.db.query.reports.findFirst({ where: eq(dbReports.id, result.reportId) }),
+        ).toMatchObject({ comparisonJson: second.candidate.manifest });
+        expect(
+            await fixture.db.query.evidence.findFirst({
+                where: eq(dbEvidence.runId, second.run.id),
+            }),
+        ).toMatchObject({ quote: first.candidate.manifest!.pages[0]!.facts[0]!.quote });
+    });
+
     it('篡改已提升manifest重要性或候选oldEvidenceIds无法绕过成功模型账本/冻结证据授权', async () => {
         const first = await liveResearch();
         await delivery.deliver(first.claimed.token, first.candidate);
@@ -132,6 +171,7 @@ export function registerComparisonAuthentication() {
             const checkpoint = structuredClone(tuple.checkpoint);
             const state = checkpoint.channel_values.research as {
                 comparisonExtractions: ComparisonExtraction[];
+                manifest: NonNullable<AgentCandidate['manifest']>;
             };
             expect(state.comparisonExtractions[0]!.sourceCoverage).toMatchObject({
                 version: 1,
@@ -151,6 +191,7 @@ export function registerComparisonAuthentication() {
             ).toEqual(receipt.sourceCoverage);
             if (tampering === 'clipped') receipt.sourceCoverage!.pages[0]!.clipped = true;
             else delete receipt.sourceCoverage;
+            delete state.manifest.pages[0]!.completeComparisonInput;
             checkpoint.id = crypto.randomUUID();
             const saved = await saver.put(
                 config,
