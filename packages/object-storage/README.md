@@ -1,6 +1,6 @@
 # @scova/object-storage
 
-服务端通用存储桶模块，使用官方 AWS SDK 接入 Cloudflare R2、AWS S3 和 S3 兼容服务。支持任意文件字节、上传、元信息、删除、公共链接与临时上传/下载签名，以及按用途隔离目录和文件策略。
+服务端通用存储桶模块，使用官方 AWS SDK 接入 Cloudflare R2、AWS S3 和 S3 兼容服务。支持任意文件字节、上传、流式下载、元信息、删除、公共链接与临时上传/下载签名，以及按用途隔离目录和文件策略。
 
 ## 使用
 
@@ -88,7 +88,7 @@ bucket.destroy();
 
 R2 自动设置账号端点、`region: auto` 和 path style，支持 `jurisdiction: 'eu' | 'fedramp'`。S3 使用 `{ provider: 's3', region, bucket, credentials, endpoint?, forcePathStyle? }`。端点和公开域名只接受无凭据、query、fragment 的 HTTPS URL。临时凭据可传 `sessionToken`，轮换后重建实例。SDK 最多三次尝试，连接超时 5 秒、单次请求超时 30 秒，上传、元信息和删除可传总时间限制 `signal`。
 
-API 优先读取整组 `STORAGE_*`，未设置 `STORAGE_PROVIDER` 时兼容整组 `IMAGE_STORAGE_*`，不混用两组字段。配置示例见[账号头像](../../docs/public/guides/account-avatars.md)。API 的 `services.objectStorage()` 延迟创建并复用一个 bucket，`services.avatarStorage()` 借用其图片视图；后续任务和报告服务可通过前者取得目录作用域。
+API 优先读取整组 `STORAGE_*`，未设置 `STORAGE_PROVIDER` 时兼容整组 `IMAGE_STORAGE_*`，不混用两组字段。配置示例见[账号头像](../../docs/public/guides/account-avatars.md)。API 的 `services.objectStorage()` 延迟创建并复用一个 bucket，`services.avatarStorage()` 借用其图片视图；大报告附件使用同一桶的 `report-attachments/`，由 API 鉴权后流式下载。`download(key, { signal })` 返回 Web Stream 和上游对象的字节长度。
 
 ## 验证
 

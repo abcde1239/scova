@@ -29,6 +29,7 @@ vi.mock('../src/repo/queue/outbox.ts', () => ({
     createOutboxQueue: () => ({ queue: {}, close: mocks.closeQueue }),
 }));
 vi.mock('../src/repo/outbox.ts', () => ({ createOutboxRepository: () => ({}) }));
+vi.mock('../src/repo/report-resources.ts', () => ({ createReportResourceRepo: () => ({}) }));
 vi.mock('../src/repo/scheduler.ts', () => ({ createSchedulerRepository: () => ({}) }));
 vi.mock('../src/repo/recoverable-runs.ts', () => ({ listRecoverableRuns: mocks.findRecoverable }));
 vi.mock('../src/repo/queue/recoverable-runs.ts', () => ({

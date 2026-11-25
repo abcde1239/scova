@@ -70,10 +70,16 @@ export interface PresignedUpload {
     expiresIn: number;
 }
 
+export interface ObjectDownload {
+    body: ReadableStream<Uint8Array>;
+    size: number | undefined;
+}
+
 export interface ObjectStorageScope {
     /** Child directory, relative to this scope. Policies can only be tightened. */
     scope(directory: string, policy?: StoragePolicy): ObjectStorageScope;
     upload(input: UploadFileInput): Promise<StoredObject>;
+    download(key: string, options?: RequestOptions): Promise<ObjectDownload>;
     /** Returns null only when the object is absent; permission/network errors throw. */
     head(key: string, options?: RequestOptions): Promise<ObjectMetadata | null>;
     /** S3 deletion is idempotent; missing objects also succeed. */

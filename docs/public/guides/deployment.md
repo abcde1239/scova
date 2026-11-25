@@ -12,6 +12,12 @@ docker compose -f compose.yaml -f compose.sqlite.yaml up -d --build --wait
 
 SQLite 协调状态保存在 `sqlite-state` 卷。业务备份仍通过 PostgreSQL 维护命令完成。如果需要保留协调状态，在 API、Worker 和维护进程停止后对整个 SQLite 卷做一致快照。API 和 Server 维护命令使用同一主机上的可写磁盘。分布式部署沿用默认的 Redis 协调配置。
 
+## 报告附件对象存储
+
+单文件超过 256 KiB 时，API 使用 `STORAGE_PROVIDER=r2` 或 `STORAGE_PROVIDER=s3` 指定的私有桶存储原件，最高 10 MiB，并在 PostgreSQL 保存元数据。设置同组 `STORAGE_BUCKET`、`STORAGE_ACCESS_KEY_ID`、`STORAGE_SECRET_ACCESS_KEY`，R2 另设 `STORAGE_R2_ACCOUNT_ID`，S3 另设 `STORAGE_REGION`。凭据需能读写及删除 `report-attachments/` 下的对象。下载经同源 API 鉴权，无需开放公共读权限或配置浏览器 CORS。
+
+Server 后台周期性清理无报告附件引用的对象，包括上传中断后留下的对象。部署备份需同时保留 PostgreSQL 和对应的桶对象。调整桶或前缀前应复制仍被业务库引用的对象，并保留原有对象路径。
+
 ## 启动
 
 需要 Docker Engine/Desktop Linux 容器与 Compose v2。为此项目使用独立数据库，不与其他应用共用数据库或 Redis 队列名称。

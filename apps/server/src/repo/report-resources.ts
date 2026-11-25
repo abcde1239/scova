@@ -1,8 +1,12 @@
 import {
     and,
+    asc,
     count,
     desc,
     eq,
+    lt,
+    notExists,
+    reportAttachmentObjects,
     reportResources,
     reports,
     sql,
@@ -19,7 +23,7 @@ const attachmentFields = {
     id: reportResources.id,
     reportId: reportResources.reportId,
     metadata: reportResources.metadata,
-    byteLength: sql<number>`octet_length(${reportResources.content})`,
+    byteLength: sql<number>`coalesce(${reportResources.objectSize}, octet_length(${reportResources.content}))`,
     createdAt: reportResources.createdAt,
 };
 
@@ -60,6 +64,14 @@ export function createReportResourceRepo(database: () => DatabaseClient) {
                 ? save(tx)
                 : undefined;
         });
+    }
+
+    function reservationScope(userId: string, id: string) {
+        return and(eq(reportAttachmentObjects.userId, userId), eq(reportAttachmentObjects.id, id));
+    }
+
+    function objectScope(userId: string, id: string) {
+        return and(eq(reportResources.userId, userId), eq(reportResources.objectId, id));
     }
 
     function attachmentScope(userId: string, reportId: string) {
@@ -106,7 +118,10 @@ export function createReportResourceRepo(database: () => DatabaseClient) {
                 return inserted;
             });
         },
-        saveAttachment(input: NewResource) {
+        async reserveAttachmentObject(userId: string, id: string, createdAt: Date) {
+            await database().insert(reportAttachmentObjects).values({ userId, id, createdAt });
+        },
+        saveAttachment(input: NewResource, upload?: () => Promise<void>) {
             return withReport(input, async (tx) => {
                 const [existing] = await tx
                     .select(attachmentFields)
@@ -131,6 +146,17 @@ export function createReportResourceRepo(database: () => DatabaseClient) {
                     reportUsage!.total >= maxAttachmentsPerReport
                 )
                     return { kind: 'quota' } as const;
+                if (input.objectId && upload) {
+                    // Serialize upload with abandoned-object cleanup. The reservation itself
+                    // was committed before the network request and survives transaction failure.
+                    const [reserved] = await tx
+                        .select({ id: reportAttachmentObjects.id })
+                        .from(reportAttachmentObjects)
+                        .where(reservationScope(input.userId, input.objectId))
+                        .for('update');
+                    if (!reserved) throw new Error('附件对象预留已失效');
+                    await upload();
+                }
                 const [row] = await tx
                     .insert(reportResources)
                     .values(input)
@@ -144,6 +170,53 @@ export function createReportResourceRepo(database: () => DatabaseClient) {
                 .from(reportResources)
                 .where(attachmentScope(userId, reportId))
                 .orderBy(desc(reportResources.createdAt), desc(reportResources.id));
+        },
+        findUnusedAttachmentObjects(cutoff: Date, limit: number) {
+            const db = database();
+            return db
+                .select({ userId: reportAttachmentObjects.userId, id: reportAttachmentObjects.id })
+                .from(reportAttachmentObjects)
+                .where(
+                    and(
+                        lt(reportAttachmentObjects.createdAt, cutoff),
+                        notExists(
+                            db
+                                .select({ id: reportResources.id })
+                                .from(reportResources)
+                                .where(
+                                    and(
+                                        eq(reportResources.userId, reportAttachmentObjects.userId),
+                                        eq(reportResources.objectId, reportAttachmentObjects.id),
+                                    ),
+                                ),
+                        ),
+                    ),
+                )
+                .orderBy(asc(reportAttachmentObjects.createdAt), asc(reportAttachmentObjects.id))
+                .limit(limit);
+        },
+        async removeUnusedAttachmentObject(
+            userId: string,
+            id: string,
+            remove: () => Promise<void>,
+        ) {
+            await database().transaction(async (tx) => {
+                const [reserved] = await tx
+                    .select({ id: reportAttachmentObjects.id })
+                    .from(reportAttachmentObjects)
+                    .where(reservationScope(userId, id))
+                    .for('update', { skipLocked: true });
+                if (!reserved) return;
+                // Take a fresh snapshot after the row lock, which may have just been released
+                // by an upload that committed a reference.
+                const [reference] = await tx
+                    .select({ id: reportResources.id })
+                    .from(reportResources)
+                    .where(objectScope(userId, id));
+                if (reference) return;
+                await remove();
+                await tx.delete(reportAttachmentObjects).where(reservationScope(userId, id));
+            });
         },
         async removeAttachment(userId: string, reportId: string, id: string) {
             const [removed] = await database()

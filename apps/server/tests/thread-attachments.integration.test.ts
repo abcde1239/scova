@@ -47,6 +47,7 @@ const unused = (): never => {
 const storage: ObjectStorage = {
     scope: unused,
     head: unused,
+    download: unused,
     getPublicUrl: unused,
     destroy() {},
     async presignUpload({ key, contentType, size }) {

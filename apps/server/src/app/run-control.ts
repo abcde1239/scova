@@ -18,6 +18,8 @@ import { createSchedulerRepository } from '../repo/scheduler.ts';
 import { OutboxService } from '../service/outbox.ts';
 import { SchedulerService } from '../service/scheduler.ts';
 import { createWorkflowBatch } from '../service/workflow-batch.ts';
+import { createReportResourceRepo } from '../repo/report-resources.ts';
+import { cleanUnusedReportAttachments } from '../service/report-attachment-storage.ts';
 import { readRunControlConfig, type RunControlConfig } from './run-control-config.ts';
 
 /** Server 的后台控制面：定时落库、Outbox 发布、恢复回补；不执行 Agent。 */
@@ -42,6 +44,12 @@ export function createRunControl(
             connectionString: config.databaseUrl,
             applicationName: 'scova-run-control',
         }));
+
+    const attachmentRepo = createReportResourceRepo(db);
+
+    async function attachmentCleanupBatch() {
+        if (api) await cleanUnusedReportAttachments(api, attachmentRepo, config.batchSize, signal);
+    }
 
     async function dispatchBatch() {
         if (config.sqliteStatePath) {
@@ -171,6 +179,7 @@ export function createRunControl(
                     '会话终态回流批次',
                 ),
                 poll(workflowBatch, config.pollIntervalMs, config.failureDelayMs, '工作流推进批次'),
+                ...(api ? [poll(attachmentCleanupBatch, 60_000, 60_000, '附件对象清理批次')] : []),
                 poll(
                     dispatchBatch,
                     config.pollIntervalMs,
