@@ -198,8 +198,9 @@ test('桌面侧栏可键盘收起并记住偏好，窄屏仍使用抽屉', async
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(expand).toBeHidden();
     await expect(language).toBeVisible();
-    const mobileNavigation = await openPrimaryNavigation(page);
-    await expect(mobileNavigation.getByRole('link', { name: '项目', exact: true })).toBeVisible();
+    await openPrimaryNavigation(page);
+    const mobileProjects = page.getByRole('region', { name: '项目导航', exact: true });
+    await expect(mobileProjects.getByRole('link', { name: '项目', exact: true })).toBeVisible();
     await page.getByRole('button', { name: '关闭侧边栏', exact: true }).click();
     await page.setViewportSize({ width: 1440, height: 900 });
     await expect(expand).toBeVisible();
