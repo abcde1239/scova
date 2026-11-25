@@ -6,6 +6,7 @@ import {
     foreignKey,
     integer,
     jsonb,
+    primaryKey,
     pgTable,
     text,
     timestamp,
@@ -13,6 +14,7 @@ import {
     uuid,
 } from 'drizzle-orm/pg-core';
 import {
+    REPORT_ATTACHMENT_INLINE_MAX_BYTES,
     REPORT_ATTACHMENT_MAX_BYTES,
     REPORT_CHART_MAX_BYTES,
     type ReportAttachmentParseState,
@@ -21,6 +23,18 @@ import {
 import { reports } from './reports.ts';
 
 const bytea = customType<{ data: Buffer }>({ dataType: () => 'bytea' });
+
+// Keep the reservation after an attachment is deleted until bucket cleanup succeeds.
+export const reportAttachmentObjects = pgTable(
+    'report_attachment_objects',
+    {
+        id: uuid('id').notNull(),
+        // Retain the owner key for cleanup after account removal.
+        userId: uuid('user_id').notNull(),
+        createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull(),
+    },
+    (table) => [primaryKey({ columns: [table.userId, table.id] })],
+);
 
 // The owning report is also the persistent reference. Insertion and unlink-on-delete are atomic.
 export const reportResources = pgTable(
@@ -33,7 +47,9 @@ export const reportResources = pgTable(
         purpose: text('purpose', { enum: ['source-host-chart', 'reference-csv'] }).notNull(),
         version: integer('version').notNull(),
         contentKey: text('content_key').notNull(),
-        content: bytea('content').notNull(),
+        content: bytea('content'),
+        objectId: uuid('object_id'),
+        objectSize: integer('object_size'),
         metadata: jsonb('metadata')
             .$type<
                 | { rows: ReportSourceHostRow[] }
@@ -57,6 +73,12 @@ export const reportResources = pgTable(
             table.version,
             table.contentKey,
         ),
+        foreignKey({
+            name: 'report_resources_owner_object_fkey',
+            columns: [table.userId, table.objectId],
+            foreignColumns: [reportAttachmentObjects.userId, reportAttachmentObjects.id],
+        }),
+        uniqueIndex('report_resources_owner_object_idx').on(table.userId, table.objectId),
         check(
             'report_resources_purpose_valid',
             sql`purpose IN ('source-host-chart', 'reference-csv')`,
@@ -64,7 +86,10 @@ export const reportResources = pgTable(
         check(
             'report_resources_payload_valid',
             sql.raw(
-                `octet_length(content) BETWEEN 1 AND CASE WHEN purpose = 'source-host-chart' THEN ${REPORT_CHART_MAX_BYTES} ELSE ${REPORT_ATTACHMENT_MAX_BYTES} END AND content_key ~ '^[a-f0-9]{64}$' AND version > 0`,
+                `content_key ~ '^[a-f0-9]{64}$' AND version > 0 AND (
+                    (object_id IS NULL AND object_size IS NULL AND content IS NOT NULL AND octet_length(content) BETWEEN 1 AND CASE WHEN purpose = 'source-host-chart' THEN ${REPORT_CHART_MAX_BYTES} ELSE ${REPORT_ATTACHMENT_INLINE_MAX_BYTES} END)
+                    OR (purpose = 'reference-csv' AND content IS NULL AND object_id IS NOT NULL AND object_size IS NOT NULL AND object_size BETWEEN ${REPORT_ATTACHMENT_INLINE_MAX_BYTES + 1} AND ${REPORT_ATTACHMENT_MAX_BYTES})
+                )`,
             ),
         ),
         check(

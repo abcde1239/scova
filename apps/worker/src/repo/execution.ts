@@ -1,21 +1,24 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { BaseCheckpointSaver } from '@langchain/langgraph';
 import { createFetchTransport } from 'requestlane/fetch';
-import { AgentPersistenceError, type AgentRepository } from '@scova/shared/execution/agent';
+import { AgentPersistenceError, type AgentRepository } from '@scova/execution/agent';
 import {
     executionPath,
+    executionPageBatchLimit,
+    type ExecutionPageBatch,
+    type ExecutionPageCursor,
     type ExecutionCredentials,
     type ExecutionDelivery,
     type ExecutionOperation,
     type ExecutionQueueJob,
-} from '@scova/shared/execution/protocol';
+} from '@scova/execution/protocol';
 import {
     RunExecutionError,
     RunFenceError,
     type RunLeaseToken,
     type RunRepository,
-} from '@scova/shared/execution/runs';
-import type { SearchStateRepository } from '@scova/shared/execution/search';
+} from '@scova/execution/runs';
+import type { SearchStateRepository } from '@scova/execution/search';
 import {
     decodeExecutionValue,
     encodeExecutionValue,
@@ -24,7 +27,7 @@ import {
     executionRequestLimit,
     legacyCheckpointBodyLimit,
     readExecutionBody,
-} from '@scova/shared/execution/wire';
+} from '@scova/execution/wire';
 
 export interface AgentPersistence {
     ready(): Promise<unknown>;
@@ -176,17 +179,28 @@ export function createExecutionClient(baseUrl: string, secret: string) {
             markInterruptedUnknown: () => call('markInterruptedUnknown', token),
             usage: () => call('usage', token),
             async readCheckpointPages(refs, options) {
-                if (refs.length > 20) throw new AgentPersistenceError('INVALID_CHECKPOINT');
+                if (refs.length > executionPageBatchLimit)
+                    throw new AgentPersistenceError('INVALID_CHECKPOINT');
                 const pages: Awaited<ReturnType<AgentRepository['readCheckpointPages']>> = [];
-                for (const ref of refs) {
-                    pages.push(
-                        ...(await call<typeof pages>(
-                            'readCheckpointPages',
-                            token,
-                            [ref],
-                            options?.allowDeadline,
-                        )),
+                while (pages.length < refs.length) {
+                    const batch = await call<ExecutionPageBatch<(typeof pages)[number], number>>(
+                        'readCheckpointPageBatch',
+                        token,
+                        refs.slice(pages.length),
+                        options?.allowDeadline,
                     );
+                    pages.push(...batch.pages);
+                    if (batch.next === null) {
+                        if (pages.length !== refs.length)
+                            throw new AgentPersistenceError('INVALID_CHECKPOINT');
+                        break;
+                    }
+                    if (
+                        !batch.pages.length ||
+                        batch.next !== batch.pages.length ||
+                        pages.length >= refs.length
+                    )
+                        throw new AgentPersistenceError('INVALID_CHECKPOINT');
                 }
                 return pages;
             },
@@ -195,17 +209,15 @@ export function createExecutionClient(baseUrl: string, secret: string) {
             promoteCheckpoint: (ref) => call('promoteCheckpoint', token, ref),
             async readPages(options) {
                 const pages: Awaited<ReturnType<AgentRepository['readPages']>> = [];
-                for (let offset = 0; ; offset++) {
-                    const page = await call<typeof pages>(
-                        'readPages',
-                        token,
-                        options?.allowDeadline,
-                        offset,
-                    );
-                    if (!page.length) break;
-                    pages.push(...page);
+                let cursor: ExecutionPageCursor | undefined;
+                for (;;) {
+                    const batch = await call<
+                        ExecutionPageBatch<(typeof pages)[number], ExecutionPageCursor>
+                    >('readPageBatch', token, options?.allowDeadline, cursor);
+                    pages.push(...batch.pages);
+                    if (batch.next === null) return pages;
+                    cursor = batch.next;
                 }
-                return pages;
             },
             searchPage: (url) => call('searchPage', token, url),
         }),

@@ -1,5 +1,5 @@
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
-import { installedCheckpointVersion } from '@scova/shared/checkpoint-version';
+import { installedCheckpointVersion } from '@/utils/checkpoint-version.ts';
 import type pg from 'pg';
 import { schemaName } from '../utils/operations.ts';
 

@@ -1,5 +1,6 @@
 import type { AgentChange, AgentContext, AgentPage, ComparisonManifest } from '../../types.ts';
 import { collectionDateEntry } from '../../research/collection.ts';
+import { FIRECRAWL_EXTRACTION_VERSION } from '@scova/connectors';
 
 export function collectionManifest(
     context: AgentContext,
@@ -56,7 +57,8 @@ export function compareCollection(
             const limited =
                 current?.truncated ||
                 current?.collection?.complete === false ||
-                current?.extractionVersion.startsWith('search-api/');
+                current?.extractionVersion.startsWith('search-api/') ||
+                current?.extractionVersion === FIRECRAWL_EXTRACTION_VERSION;
             const uncertain =
                 limited ||
                 fact.relevance !== 'relevant' ||

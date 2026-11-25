@@ -17,7 +17,8 @@ import {
 
 import { captureFeedbackSnapshot } from '@scova/db/feedback';
 import { TaskConfigSchema, RunEventSchema, parseContract } from '@scova/models';
-import { dueSchedule, effectiveRunScopeHash, researchComparisonScopeHash } from '@scova/shared';
+import { dueSchedule } from '@scova/shared';
+import { effectiveRunScopeHash, researchComparisonScopeHash } from '@/utils/research-scope.ts';
 import { SchedulerTaskError } from '../utils/scheduler.ts';
 
 export interface ScheduledTaskResult {

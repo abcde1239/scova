@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vite-plus/test';
+import { FIRECRAWL_EXTRACTION_VERSION } from '@scova/connectors';
 import { collectionDateEntry } from '../src/research/collection.ts';
 import { baselineEligibility } from '../src/research/baseline.ts';
 import { partitionClaims } from '../src/research/claims.ts';
@@ -173,6 +174,7 @@ describe('frozen collection and baseline policy', () => {
             { truncated: true },
             { collection: { complete: false } },
             { extractionVersion: 'search-api/reader/v1' },
+            { extractionVersion: FIRECRAWL_EXTRACTION_VERSION },
         ]) {
             const current = {
                 id: 'new',

@@ -3,7 +3,7 @@ import sharp from 'sharp';
 import { AVATAR_MAX_BYTES } from '@scova/models';
 import { normalizeAvatar } from '../src/service/avatar';
 import { readAvatarBody } from '../src/handler/http/avatar-body';
-import { createAvatarStorage } from '../src/app/avatar-storage';
+import { createBucketStorage } from '../src/app/object-storage';
 
 describe('头像输入边界', () => {
     it('逐块限制实际字节数，不信任缺省Content-Length', async () => {
@@ -34,12 +34,12 @@ describe('头像输入边界', () => {
         await expect(normalizeAvatar(huge, 'image/png')).rejects.toMatchObject({ status: 422 });
     });
     it('未配置图床默认关闭；无效配置只暴露变量名', () => {
-        expect(createAvatarStorage({})).toBeNull();
-        expect(() => createAvatarStorage({ IMAGE_STORAGE_PROVIDER: 'r2' })).toThrow(
+        expect(createBucketStorage({})).toBeNull();
+        expect(() => createBucketStorage({ IMAGE_STORAGE_PROVIDER: 'r2' })).toThrow(
             'IMAGE_STORAGE_BUCKET',
         );
         expect(() =>
-            createAvatarStorage({
+            createBucketStorage({
                 IMAGE_STORAGE_PROVIDER: 'other',
                 IMAGE_STORAGE_BUCKET: 'images',
                 IMAGE_STORAGE_ACCESS_KEY_ID: 'fake',

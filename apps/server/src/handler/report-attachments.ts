@@ -10,8 +10,12 @@ export function createReportAttachmentHandlers(services: ApiServices) {
         async upload(request: Request, reportId: string, filename: string) {
             const session = await requireSession(request, services);
             requireCsrf(request, session, services);
-            return attachments.upload(session.userId, reportId, filename, (mediaType) =>
-                readReportAttachment(request, mediaType),
+            return attachments.upload(
+                session.userId,
+                reportId,
+                filename,
+                (mediaType) => readReportAttachment(request, mediaType),
+                request.signal,
             );
         },
         async list(request: Request, reportId: string) {
@@ -30,12 +34,18 @@ export function createReportAttachmentHandlers(services: ApiServices) {
         },
         async download(request: Request, reportId: string, attachmentId: string) {
             const session = await requireSession(request, services);
-            const { content, filename } = await attachments.download(
+            const { content, filename, byteLength } = await attachments.download(
                 session.userId,
                 reportId,
                 attachmentId,
+                request.signal,
             );
-            return reportResourceDownload(content, 'application/octet-stream', filename);
+            return reportResourceDownload(
+                content,
+                'application/octet-stream',
+                filename,
+                byteLength,
+            );
         },
         async remove(request: Request, reportId: string, attachmentId: string) {
             const session = await requireSession(request, services);

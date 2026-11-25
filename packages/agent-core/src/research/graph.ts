@@ -50,61 +50,57 @@ export async function runResearchAgent(
     )
         throw new AgentError('INVALID_STATE', '恢复必须指定已合法提升的 checkpoint');
     const collection = context.config.researchMode === 'collection';
+    const live = context.mode === 'live';
+    const research = live && context.conversation?.operation !== 'revise';
+    const fieldResearch =
+        research &&
+        context.fieldDriven &&
+        context.coverageDriven &&
+        !context.adaptiveSearchDisabled;
+    const evidence = fieldResearch && context.evidenceReasoning;
+    const researchLoop = evidence && context.gapDriven;
     const initial: ResearchState = {
         ...(deps.loadPages ? { pagePolicy: 1 as const } : {}),
-        ...(context.mode === 'live' && context.conversation?.operation !== 'revise'
+        ...(research
             ? {
                   baselinePolicy: 1 as const,
                   ...(collection ? { collectionPolicy: 1 as const } : {}),
+                  ...(!collection &&
+                  !context.conversation &&
+                  context.comparisonScopeHash &&
+                  context.comparisonReuse
+                      ? { comparisonReusePolicy: 1 as const }
+                      : {}),
                   outputFormats: selectedOutputFormats(context.config),
               }
             : {}),
-        ...(context.mode === 'live'
+        ...(evidence ? { evidencePolicy: 1 as const } : {}),
+        ...(researchLoop
             ? {
-                  ...(context.evidenceReasoning &&
-                  context.fieldDriven &&
-                  context.coverageDriven &&
-                  !context.adaptiveSearchDisabled &&
-                  context.conversation?.operation !== 'revise'
+                  researchLoopPolicy: 1 as const,
+                  ...(context.conflictResolution ? { conflictReviewPolicy: 1 as const } : {}),
+                  ...(context.answerCompletion ? { answerCompletionPolicy: 1 as const } : {}),
+                  ...(context.gapKinds ? { gapKindPolicy: 1 as const } : {}),
+                  ...(context.gapLoop
                       ? {
-                            evidencePolicy: 1 as const,
-                            ...(context.gapDriven
-                                ? {
-                                      researchLoopPolicy: 1 as const,
-                                      ...(context.conflictResolution
-                                          ? { conflictReviewPolicy: 1 as const }
-                                          : {}),
-                                      ...(context.answerCompletion
-                                          ? { answerCompletionPolicy: 1 as const }
-                                          : {}),
-                                      ...(context.gapKinds ? { gapKindPolicy: 1 as const } : {}),
-                                      ...(context.gapLoop
-                                          ? {
-                                                gapLoopPolicy: 1 as const,
-                                                loopQualityPolicy: 1 as const,
-                                                searchDirectionPolicy: 3 as const,
-                                            }
-                                          : {}),
-                                      ...(!collection &&
-                                      context.knowledgeFirst &&
-                                      context.modelAnswerFallback
-                                          ? { knowledgeFirstPolicy: 1 as const }
-                                          : {}),
-                                  }
-                                : {}),
+                            gapLoopPolicy: 1 as const,
+                            loopQualityPolicy: 1 as const,
+                            searchDirectionPolicy: 3 as const,
                         }
                       : {}),
-                  ...(!collection &&
-                  context.modelAnswerFallback &&
-                  context.fieldDriven &&
-                  context.coverageDriven &&
-                  !context.adaptiveSearchDisabled &&
-                  context.conversation?.operation !== 'revise'
-                      ? {
-                            modelAnswerPolicy: 1 as const,
-                            modelAnswerFormats: selectedOutputFormats(context.config),
-                        }
+                  ...(!collection && context.knowledgeFirst && context.modelAnswerFallback
+                      ? { knowledgeFirstPolicy: 1 as const }
                       : {}),
+              }
+            : {}),
+        ...(fieldResearch && !collection && context.modelAnswerFallback
+            ? {
+                  modelAnswerPolicy: 1 as const,
+                  modelAnswerFormats: selectedOutputFormats(context.config),
+              }
+            : {}),
+        ...(live
+            ? {
                   ...(context.coverageDriven
                       ? { coveragePolicy: context.fieldDriven ? (3 as const) : (2 as const) }
                       : {}),

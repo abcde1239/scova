@@ -12,8 +12,7 @@ import {
     users,
     type DatabaseTransaction,
 } from '@scova/db';
-import type { Budget, ProjectAutonomyInput } from '@scova/models';
-import { TASK_BUDGET_LIMITS } from '@/app/task-policy.ts';
+import { DEFAULT_TASK_BUDGET_LIMITS, type Budget, type ProjectAutonomyInput } from '@scova/models';
 
 const scope = 'project-agent:auto-run-budget';
 type Admission = { userId: string; budget: Budget; now: Date; dailyLimit: number };
@@ -23,7 +22,7 @@ export async function projectRunAllowance(
     { userId, budget, now, dailyLimit }: Admission,
 ): Promise<ProjectAutonomyInput['budget']> {
     if (
-        Object.entries(TASK_BUDGET_LIMITS).some(
+        Object.entries(DEFAULT_TASK_BUDGET_LIMITS).some(
             ([key, limit]) => budget[key as keyof Budget]! > limit,
         )
     )

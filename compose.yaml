@@ -139,6 +139,7 @@ services:
             READER_DNS_RESOLVER: ${READER_DNS_RESOLVER:-auto}
             WORKER_HEARTBEAT_PATH: /tmp/scova-worker-ready
             WORKER_RUN_CONCURRENCY: ${WORKER_RUN_CONCURRENCY:-2}
+            READER_FIRECRAWL_API_KEY: ${READER_FIRECRAWL_API_KEY:-}
             READER_RENDER_WAIT_MS: ${READER_RENDER_WAIT_MS:-1000}
             # Chromium sandbox requires additional host support; this image uses the restricted container.
             READER_CHROMIUM_SANDBOX: ${READER_CHROMIUM_SANDBOX:-false}

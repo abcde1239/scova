@@ -2,7 +2,8 @@ import { REPORT_ATTACHMENT_MAX_BYTES } from '@scova/models';
 import { ApiError } from '@/utils/errors.ts';
 
 function tooLarge(maxBytes: number) {
-    return new ApiError(413, 'REPORT_ATTACHMENT_TOO_LARGE', `附件不得超过 ${maxBytes / 1024} KiB`);
+    const limit = maxBytes >= 1024 ** 2 ? `${maxBytes / 1024 ** 2} MiB` : `${maxBytes / 1024} KiB`;
+    return new ApiError(413, 'REPORT_ATTACHMENT_TOO_LARGE', `附件不得超过 ${limit}`);
 }
 
 export async function readReportAttachment(

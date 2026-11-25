@@ -60,7 +60,7 @@ export function createWorkerApp(options: WorkerAppOptions = {}) {
                     heartbeat = watchReadiness(heartbeatPath);
                     void heartbeat.catch(() => controller.abort());
                 }
-                logger.info('Scova worker ready; Run consumer running');
+                logger.info('Scova worker started; Run consumer running');
             } catch (error) {
                 controller.abort();
                 try {

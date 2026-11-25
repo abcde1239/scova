@@ -37,6 +37,13 @@ export function verifyIdentity(state: ResearchState, context: AgentContext): voi
                 state.modelAnswerPolicy ||
                 state.knowledgeFirstPolicy)) ||
         (state.baselinePolicy !== undefined && state.baselinePolicy !== 1) ||
+        (state.comparisonReusePolicy !== undefined &&
+            (state.comparisonReusePolicy !== 1 ||
+                state.baselinePolicy !== 1 ||
+                context.mode !== 'live' ||
+                !context.comparisonScopeHash ||
+                context.config.researchMode === 'collection' ||
+                !!context.conversation)) ||
         (state.outputFormats !== undefined &&
             !isDeepStrictEqual(state.outputFormats, selectedOutputFormats(context.config)))
     )
@@ -46,6 +53,7 @@ export function verifyIdentity(state: ResearchState, context: AgentContext): voi
         (policy.pagePolicy !== state.pagePolicy ||
             policy.collectionPolicy !== state.collectionPolicy ||
             policy.baselinePolicy !== state.baselinePolicy ||
+            policy.comparisonReusePolicy !== state.comparisonReusePolicy ||
             policy.answerCompletionPolicy !== state.answerCompletionPolicy ||
             policy.gapKindPolicy !== state.gapKindPolicy ||
             policy.knowledgeFirstPolicy !== state.knowledgeFirstPolicy ||

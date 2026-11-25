@@ -64,6 +64,7 @@ export function createReportChartService(services: ApiServices) {
             const resource = await load(userId, reportId, chartId);
             if (!resource.expiresAt || resource.expiresAt <= services.clock())
                 throw new ApiError(410, 'REPORT_CHART_EXPIRED', '图表下载已过期，请重新生成');
+            if (!resource.content) throw new Error('图表资源缺少内联内容');
             return resource.content;
         },
     };

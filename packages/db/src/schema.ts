@@ -54,7 +54,7 @@ export {
 export { baselines, type Baseline, runs, type Run } from './schema/runs.ts';
 export { runGraphSnapshots } from './schema/run-graph.ts';
 export { reportExports } from './schema/report-exports.ts';
-export { reportResources } from './schema/report-resources.ts';
+export { reportAttachmentObjects, reportResources } from './schema/report-resources.ts';
 export * from './schema/workflows.ts';
 export * from './schema/workflow-templates.ts';
 export {

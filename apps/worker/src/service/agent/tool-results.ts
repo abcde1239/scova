@@ -6,7 +6,7 @@ import {
     type ReadPage,
 } from '@scova/connectors';
 import type { Usage } from '@scova/models';
-import { AgentPersistenceError } from '@scova/shared/execution/agent';
+import { AgentPersistenceError } from '@scova/execution/agent';
 
 export const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 export const emptyUsage = (): Usage => ({

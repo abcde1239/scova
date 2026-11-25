@@ -1,5 +1,5 @@
 import type { SqliteState } from '@scova/db/sqlite-state';
-import { searchCooldown, type SearchStateRepository } from '@scova/shared/execution/search';
+import { searchCooldown, type SearchStateRepository } from '@scova/execution/search';
 
 type Engine = { owner?: string; leaseUntil: number; nextAt: number; cooldownUntil: number };
 const engineLifetime = 7_200_000;

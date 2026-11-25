@@ -17,12 +17,14 @@
                 :aria-expanded="show"
                 aria-haspopup="dialog"
                 :aria-label="t('pages.notifications')"
+                :title="compact ? t('pages.notifications') : undefined"
                 @focus="show = true"
                 @blur="leaveFocus"
                 @click="show = true"
                 @keydown.esc.stop="show = false"
             >
-                <app-icon name="notifications" />{{ t('pages.notifications') }}
+                <app-icon name="notifications" />
+                <span v-if="!compact">{{ t('pages.notifications') }}</span>
             </button>
         </template>
         <div
@@ -44,9 +46,10 @@ import { useRoute } from 'vue-router';
 import { NPopover, type PopoverProps } from 'naive-ui';
 import AppIcon from '@/component/common/AppIcon.vue';
 import NotificationPreview from '@/component/notifications/NotificationPreview.vue';
-withDefaults(defineProps<{ selected: boolean; placement?: PopoverProps['placement'] }>(), {
-    placement: 'bottom-end',
-});
+withDefaults(
+    defineProps<{ selected: boolean; placement?: PopoverProps['placement']; compact?: boolean }>(),
+    { placement: 'bottom-end' },
+);
 const route = useRoute();
 const show = ref(false);
 const trigger = ref<HTMLButtonElement>();

@@ -7,17 +7,17 @@ import {
     type TaskConfig,
     type Usage,
 } from '@scova/models';
-import type { RunRepository } from '@scova/shared/execution/runs';
+import type { RunRepository } from '@scova/execution/runs';
 import {
     RunExecutionError,
     RunFenceError,
     type RunProgressEvent,
     type RunLeaseToken,
-} from '@scova/shared/execution/runs';
+} from '@scova/execution/runs';
 import { waitForPoll } from '@/utils/wait.ts';
 import { within } from '@/utils/timeout.ts';
-import { isRetryableExecutionFailure } from '@scova/shared/execution/tool-failure';
-import { AgentPersistenceError } from '@scova/shared/execution/agent';
+import { isRetryableExecutionFailure } from '@scova/execution/tool-failure';
+import { AgentPersistenceError } from '@scova/execution/agent';
 import { ConnectorError } from '@scova/connectors';
 
 function failureCode(error: unknown): string {

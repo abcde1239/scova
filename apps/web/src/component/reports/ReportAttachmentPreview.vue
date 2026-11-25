@@ -12,7 +12,7 @@
         <ol
             v-else
             class="layout-grid gap-2 m-0 p-0 list-none"
-            :aria-label="attachment.format === 'txt' ? '纯文本内容' : 'CSV 提取内容'"
+            :aria-label="isCsv ? 'CSV 提取内容' : '纯文本内容'"
         >
             <li
                 v-for="row in rows.data.value?.data.rows"
@@ -26,7 +26,7 @@
                             : `第 ${row.startLine}–${row.endLine} 行`
                     }}
                 </p>
-                <p v-if="attachment.format === 'txt'" class="m-0 whitespace-pre-wrap">
+                <p v-if="!isCsv" class="m-0 whitespace-pre-wrap">
                     {{ row.cells[0] || '（空）' }}
                 </p>
                 <ol v-else class="m-0 pl-6">
@@ -63,6 +63,7 @@ const props = defineProps<{
     reportId: string;
     attachment: Extract<ReportAttachment, { status: 'ready' }>;
 }>();
+const isCsv = computed(() => !props.attachment.format || props.attachment.format === 'csv');
 const pageSize = 10;
 const start = ref(1);
 const end = computed(() => Math.min(props.attachment.rowCount, start.value + pageSize - 1));

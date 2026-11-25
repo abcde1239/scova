@@ -1,5 +1,5 @@
 import {
-    REPORT_ATTACHMENT_MAX_BYTES,
+    REPORT_ATTACHMENT_INLINE_MAX_BYTES,
     type WorkflowCanvasInput,
     type WorkflowCanvasNode,
     type WorkflowCanvasOutput,
@@ -17,7 +17,7 @@ export type WorkflowGenerator = (args: {
     providerId: string | undefined;
 }) => Promise<string>;
 
-const maxBytes = REPORT_ATTACHMENT_MAX_BYTES;
+const maxBytes = REPORT_ATTACHMENT_INLINE_MAX_BYTES;
 const maxNotificationFieldBytes = 8000 * 4;
 // Filenames become download labels, so reject path separators and header control characters.
 // oxlint-disable-next-line no-control-regex

@@ -4,7 +4,9 @@
         <form class="layout-grid gap-2" method="post" @submit.prevent="upload">
             <label for="report-attachment-file">选择附件</label>
             <p id="report-attachment-help" class="m-0 text-muted">
-                支持 UTF-8 CSV、TXT 和仅供下载的 PDF，每个文件最大 {{ maxFileKiB }} KiB。
+                支持 CSV、TXT、Markdown、JSON、TSV、PDF、PNG、JPEG 和 WebP。文本需为
+                UTF-8，单文件最多 {{ maxFileMiB }} MiB。超过 {{ inlineLimitKiB }} KiB
+                需配置对象存储，仅供下载。
             </p>
             <div class="flex items-center flex-wrap gap-2">
                 <input
@@ -12,7 +14,7 @@
                     id="report-attachment-file"
                     name="file"
                     type="file"
-                    accept=".csv,.txt,.pdf"
+                    :accept="REPORT_ATTACHMENT_ACCEPT"
                     aria-describedby="report-attachment-help"
                     class="min-w-0 max-w-full min-h-11 keyboard-focus-wide"
                     required
@@ -48,7 +50,7 @@
                             ? `可查看 ${item.rowCount} 行`
                             : item.status === 'failed'
                               ? failureLabels[item.failureCode]
-                              : 'PDF · 可下载原文件'
+                              : `${item.format === 'pdf' ? 'PDF · ' : ''}可下载原文件`
                     }}
                 </p>
                 <div class="flex flex-wrap items-center gap-3">
@@ -96,6 +98,8 @@
 <script setup lang="ts">
 import { computed, ref, shallowRef, watch } from 'vue';
 import {
+    REPORT_ATTACHMENT_ACCEPT,
+    REPORT_ATTACHMENT_INLINE_MAX_BYTES,
     REPORT_ATTACHMENT_MAX_BYTES,
     REPORT_ATTACHMENT_MEDIA_TYPES,
     reportAttachmentFormat,
@@ -142,11 +146,13 @@ const query = useSessionQuery(
 const items = computed(() => query.data.value?.data.items ?? []);
 const uploadMutation = useSessionMutation(uploadReportAttachmentEndpoint, lifecycle);
 const deleteMutation = useSessionMutation(deleteReportAttachmentEndpoint, lifecycle);
-const maxFileKiB = REPORT_ATTACHMENT_MAX_BYTES / 1024;
+const inlineLimitKiB = REPORT_ATTACHMENT_INLINE_MAX_BYTES / 1024;
+const maxFileMiB = REPORT_ATTACHMENT_MAX_BYTES / (1024 * 1024);
 const failureLabels: Record<ReportAttachmentFailure, string> = {
     INVALID_UTF8: '无法解析：文件不是有效的 UTF-8 文本。',
     INVALID_CSV: '无法解析：CSV 格式无效。',
     CSV_LIMIT_EXCEEDED: '无法解析：行、列或单元格超出限制。',
+    INVALID_JSON: '无法解析：JSON 语法无效。',
     INVALID_TEXT: '无法解析：纯文本无内容或含不支持的控制字符。',
     TEXT_LIMIT_EXCEEDED: '无法解析：纯文本的行数或单行长度超出限制。',
 };
@@ -173,7 +179,7 @@ async function upload() {
     if (!source || uploadMutation.isPending.value) return;
     const format = reportAttachmentFormat(source.name);
     if (!format || !source.size || source.size > REPORT_ATTACHMENT_MAX_BYTES) {
-        notice.error(`请选择非空且不超过 ${maxFileKiB} KiB 的 CSV、TXT 或 PDF 文件`);
+        notice.error(`请选择受支持的非空文件，大小不得超过 ${maxFileMiB} MiB`);
         return;
     }
     const scope = lifecycle.capture();
@@ -190,7 +196,8 @@ async function upload() {
         resetFile();
         if (data.status === 'failed')
             notice.warning('已保留原文件', failureLabels[data.failureCode]);
-        else notice.success(data.status === 'ready' ? '已上传并解析附件' : '已上传 PDF 附件');
+        else
+            notice.success(data.status === 'ready' ? '已上传并解析附件' : '已上传附件，可下载原件');
         await query.refetch();
     } catch (error) {
         if (scope.isCurrent() && props.reportId === reportId)

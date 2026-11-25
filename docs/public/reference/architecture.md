@@ -31,19 +31,20 @@ API 和 Worker 是分别运行的后端进程，默认基础服务为 PostgreSQL
 
 ## 2. 工作区与职责
 
-| 目标目录                | 职责                                                                                    | 依赖方向                                                 |
-| ----------------------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| apps/web                | Vue 3、Router、Pinia、TanStack Vue Query、UnoCSS、naive-ui；页面与 SSE 订阅             | models                                                   |
-| apps/server             | 认证、资源授权、任务版本、执行命令、报告/资料管理、事件读取、调度与队列投递、数据库维护 | models、db、BullMQ                                       |
-| apps/worker             | BullMQ 消费、Agent 执行、执行租约和交付事务                                             | models、db、agent-core、connectors                       |
-| packages/models         | 可运行时校验的请求/响应、事件版本、枚举与错误码；不暴露 ORM 实体                        | 不依赖应用                                               |
-| packages/shared         | Server/Worker 共用的纯调度计算与执行范围指纹                                            | 不依赖应用                                               |
-| packages/db             | Drizzle 表与关系、迁移与服务端客户端；反馈持久化子入口                                  | 不依赖应用；反馈投影使用 models                          |
-| packages/agent-core     | LangGraph 状态图、有限研究策略、候选和原文引用校验                                      | models、connectors 类型、LangGraph；不使用 Elysia/BullMQ |
-| packages/connectors     | SearXNG、搜索 API、模型协议、HTTP 抓取与 Readability                                    | 向 agent-core 提供工具接口                               |
-| packages/object-storage | R2 / S3 通用文件、目录作用域、大小与 MIME 策略、签名 URL 和图片签名校验                 | 官方 AWS S3 SDK；不依赖应用                              |
+| 目标目录                | 职责                                                                                    | 依赖方向                                                        |
+| ----------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| apps/web                | Vue 3、Router、Pinia、TanStack Vue Query、UnoCSS、naive-ui；页面与 SSE 订阅             | models                                                          |
+| apps/server             | 认证、资源授权、任务版本、执行命令、报告/资料管理、事件读取、调度与队列投递、数据库维护 | models、db、BullMQ                                              |
+| apps/worker             | Run 消费、Agent 执行，通过 Server 内部接口申请租约与提交成果                            | models、execution、agent-core、connectors；生产代码不访问数据库 |
+| packages/models         | 可运行时校验的请求/响应、事件版本、枚举与错误码；不暴露 ORM 实体                        | 不依赖应用                                                      |
+| packages/shared         | 通用时区与日历调度计算                                                                  | 不依赖应用或 Scova 业务包                                       |
+| packages/execution      | Server/Worker 内部执行、租约和工具账本契约、传输编码及队列约定                          | agent-core 类型、connectors、models；不连接外部服务             |
+| packages/db             | Drizzle 表与关系、迁移与服务端客户端；反馈持久化子入口                                  | 不依赖应用；反馈投影使用 models                                 |
+| packages/agent-core     | LangGraph 状态图、有限研究策略、候选和原文引用校验                                      | models、connectors 类型、LangGraph；不使用 Elysia/BullMQ        |
+| packages/connectors     | SearXNG、搜索 API、模型协议、HTTP 抓取与 Readability                                    | 向 agent-core 提供工具接口                                      |
+| packages/object-storage | R2 / S3 通用文件、目录作用域、大小与 MIME 策略、签名 URL 和图片签名校验                 | 官方 AWS S3 SDK；不依赖应用                                     |
 
-Server 在独立于 HTTP 请求的后台循环运行周期调度、Outbox 投递和可恢复 Run 回补；Worker 不管理任务计划、不发布队列作业，也不提供账号管理入口；Agent 没有通用 SQL、文件系统或任意脚本工具。`packages/db/src/schema.ts` 与 `packages/db/drizzle` 维护业务结构和迁移；Server 通过 `@scova/db` 持有数据库访问与迁移，公开接口使用 `@scova/models`，内部执行协议与租约类型定义在 `@scova/shared`。迁移、备份、恢复、留存清理和账号数据清理均为 Server 离线 CLI，不挂到公开 HTTP 路由。Worker 通过独立监听的 `POST /internal/worker/v1` 访问 Server 执行接口。Server 验证服务令牌，再按 Run、账号、lease owner 和 epoch 校验操作；检查点写入与租约校验共用事务。该端口不经 Web 代理转发。
+Server 在独立于 HTTP 请求的后台循环运行周期调度、Outbox 投递和可恢复 Run 回补；Worker 不管理任务计划、不发布队列作业，也不提供账号管理入口；Agent 没有通用 SQL、文件系统或任意脚本工具。`packages/db/src/schema.ts` 与 `packages/db/drizzle` 维护业务结构和迁移；Server 通过 `@scova/db` 持有数据库访问与迁移，公开接口使用 `@scova/models`，内部执行协议与租约类型定义在 `@scova/execution`。研究范围指纹、账号凭据加密与 checkpoint 版本读取由 Server 的 `utils` 维护。迁移、备份、恢复、留存清理和账号数据清理均为 Server 离线 CLI，不挂到公开 HTTP 路由。Worker 通过独立监听的 `POST /internal/worker/v1` 访问 Server 执行接口。Server 验证服务令牌，再按 Run、账号、lease owner 和 epoch 校验操作；检查点写入与租约校验共用事务。该端口不经 Web 代理转发。
 
 报告连续对话以 Report 为锚点，`report_questions` 保存有序轮次和服务端授权构建的上下文。普通问答独立限流、计量并核对引用；生成新版或联网补研需显式确认，Run 冻结报告、讨论、成果形式与预算，重试沿用快照。修订工具只读取保存证据，禁止联网搜索和重新抓取。连接器按各供应商协议保留原生 user/assistant 角色；历史回答只能作讨论，不能成为事实证据。该会话记忆与单次 Run 的 LangGraph checkpoint 恢复分别维护。
 
@@ -61,9 +62,9 @@ Run 另有独立租约与递增 epoch。统一 `withRunFence` 门在 Run 行锁�
 
 所有 app/package 均以 `src` 保存源码，并配置 `@/* → ./src/*`。应用内使用别名，跨包引用包名；直接导出源码的共享包内部保留相对引用，避免消费方 TypeScript/Bun 对同名别名的解析冲突。Vite/Vitest 使用原生 tsconfig paths 解析，Node.js 启动入口由 `vpx` 处理。
 
-后端以 Bun 为主运行时，Node.js 为兼容运行时。Server/Worker 的默认开发与启动脚本、数据库迁移和容器入口均使用 Bun；Node.js 通过显式 `:node` 命令选择。Bun/Node.js 的 API 共用 Elysia 官方 Node Web 适配器与 `srvx/node` HTTP 服务，通过 `node:http` 的 write/drain 传播 SSE socket 背压。这里的 Node 适配器属于 HTTP 实现，不表示进程运行于 Node.js；当前没有另设 `Bun.serve` 原生 HTTP 路径。
+后端以 Bun 为主运行时，Node.js 为兼容运行时。Server/Worker 的默认开发与启动脚本、数据库迁移和容器入口均使用 Bun；Node.js 通过显式 `:node` 命令选择。Bun/Node.js 的公网 API 共用 Elysia 官方 Node Web 适配器与 `srvx/node` HTTP 服务，通过 `node:http` 的 write/drain 传播 SSE socket 背压。Worker 内部 JSON 端口按运行时选择 `srvx` 适配器：Bun 使用 `Bun.serve`，Node 使用 `node:http`。
 
-Vite+ 的 Node 工具进程负责依赖、构建和验证。Bun Worker 的网页 Reader 通过私有协议委托 Node/vpx 子进程运行 Crawlee/Playwright，Worker 仍负责执行、预算与可信 HTTP 回调。运行时核查应分别确认主进程、HTTP 适配和 Reader 子进程，不能仅凭 `node:*` 导入判断运行时。
+Vite+ 的 Node 工具进程负责依赖、构建和验证。Bun Worker 的网页 Reader 通过私有协议委托 Node/vpx 子进程运行 Crawlee/Playwright，Worker 仍负责执行、预算与可信 HTTP 回调。每个浏览器 Reader 串行复用一个按需启动的 Node 正文提取进程，空闲 10 秒、提取超时或关闭 Reader 时回收；每份 HTML 独立创建并关闭 DOM。运行时核查应分别确认主进程、HTTP 适配和 Reader 子进程，不能仅凭 `node:*` 导入判断运行时。
 
 依赖由 Vite+ 1.4.0 支持的 `pnpm-workspace.yaml` 管理；使用 `workspace:*` 声明包关系。`vp run <script>` 执行包脚本，`vp check` / `vp test` 使用内置工具；Bun 运行 API/worker，不能用另一份 Bun lockfile 分裂依赖来源。
 
@@ -120,7 +121,7 @@ Server 默认每 30 秒扫描到期任务，以 `FOR NO KEY UPDATE SKIP LOCKED` 
 
 频率为手动/每日/每周，持久化当地时间、IANA timezone 和 UTC `nextRunAt`。共享 Temporal 日历计算将不存在的当地时刻顺延到首个有效时刻，重复时刻只选择较早一次；下一次从原始当地时分重建。停机后最多补最近一次时点，更早记录为 `missedCount`；活动执行时记 `skipped_overlap`。修改计划或时区在锁内重算 nextRunAt 并增加 scheduleRevision，普通标题等编辑保留原到期时点。暂停清空下一时点，恢复只安排未来时点，归档请求取消已有活动执行。
 
-单机可选 SQLite WAL 作为队列与协调存储。Outbox 仍由 Server 发布和确认，Worker 通过内部接口领取、续租和确认 SQLite 作业，再向 Server 领取业务 Run 租约。SQLite 文件只由 Server 和 Server 维护命令访问。恢复扫描使用 PostgreSQL 的 Run 状态和租约 epoch，晚到的消费确认受 SQLite 领取令牌保护。业务记录、报告和 Agent 检查点继续使用 PostgreSQL。
+单机可选 SQLite WAL 作为队列与协调存储。Outbox 仍由 Server 发布和确认，Worker 通过内部接口领取、续租和确认 SQLite 作业，再向 Server 领取业务 Run 租约。SQLite 文件只由 Server 和 Server 维护命令访问。每个 Worker 共用一个空闲领取循环，领取到新作业后填充可用执行槽。成功领取（含空队列）和续租会刷新 SQLite 消费者的就绪状态，连接失败时撤下就绪心跳，通信恢复后自动重建。恢复扫描使用 PostgreSQL 的 Run 状态和租约 epoch，晚到的消费确认受 SQLite 领取令牌保护。业务记录、报告和 Agent 检查点继续使用 PostgreSQL。
 
 ### 交付与后续对比
 
@@ -150,7 +151,7 @@ stateDiagram-v2
 
 活动状态包含 queued/running/recovering/cancel_requested。租约默认 30 秒、10 秒续约，所有业务写入必须在事务中验证 `leaseOwner + leaseEpoch + leaseExpiresAt`；每次接管递增 epoch，阻止旧 worker 继续提交。业务写入包括工具预留、证据、事件和报告，不能仅在最终交付时检查。
 
-LangGraph checkpointer 使用 PostgreSQL，每个租约 epoch 使用独立 thread。checkpoint 写完后，在受 fencing 保护的事务中提升 Run 的 `checkpointRef`；只有已提升的 checkpoint 可用于恢复。新 epoch 从这个明确引用恢复已提交图状态，不读取旧线程的“最新”指针；旧 worker 的迟到 checkpoint 无法污染新运行。恢复后节点按工具调用幂等键跳过已完成操作。
+LangGraph checkpointer 使用 PostgreSQL，每个租约 epoch 使用独立 thread。checkpoint 写完后，在受 fencing 保护的事务中提升 Run 的 `checkpointRef`；只有已提升的 checkpoint 可用于恢复。新 epoch 从这个明确引用恢复已提交图状态，不读取旧线程的“最新”指针；旧 worker 的迟到 checkpoint 无法污染新运行。恢复后节点按工具调用幂等键跳过已完成操作。恢复页面正文时，Server 逐批校验租约和账本凭据，按完整传输编码将每批响应限制在 8 MiB；截止时间回退读取用有序账本游标定位下一批。
 
 当前生产适配采用独立 epoch thread、根图空 namespace 和明确 checkpoint ID。新 epoch 复制已提升的 channel values，丢弃旧线程可能迟到的 pending writes；未完成节点重放时先复用已提交 ToolCall，即使额度已耗尽也不阻止成功结果复用。工具成功但 checkpoint 未提升的 Node/Bun 强杀恢复由真实 PostgreSQL 集成测试覆盖。候选、账本和 checkpoint 不作为公共 API 参数或报告交付替代品。
 
@@ -180,13 +181,13 @@ Reader 默认最多保留 1,000,000 个正文字符，仍遵守页面字节、�
 
 Search API 的搜索结果可携带正文，完整响应保存在不可变工具账本；图检查点通过共享投影仅省略 `results[].page`。交付校验接受完整历史响应或这一精确投影，查询、结果顺序、URL、摘要和覆盖信息仍逐项匹配账本。正文证据须另经成功 read 记录验证。
 
-| 接口                             | 首个实现                                                     | 约束                                                                                                                                               |
-| -------------------------------- | ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| SearchProvider.search            | 默认 SearXNG；账号独立搜索 API                               | 结构化候选与覆盖缺口，候选不等于证据；Worker 不启用模型原生搜索或服务器搜索密钥兜底                                                                |
-| PageReader.read                  | Search API Fetch/Extract；SearXNG 使用 Crawlee + Readability | API 读取最多 45 秒，默认单次且不回退本地；本地 Reader 最多 15 秒，单资源 2 MiB/总资源 8 MiB/32 请求、只读公网 GET；更短调用期限和 Run 剩余时间优先 |
-| ModelProvider.generateStructured | 部署者配置的兼容模型服务                                     | 通过适配层映射 structured output、usage、AbortSignal 与错误                                                                                        |
-| EvidenceRepository               | worker 注入的受限领域接口                                    | 仅当前用户、当前 Run；不暴露数据库客户端                                                                                                           |
-| CheckpointAdapter                | LangGraph PostgreSQL saver + epoch 引用提升                  | 实验验证恢复协议，运行迁移与连接池限制                                                                                                             |
+| 接口                             | 首个实现                                                                               | 约束                                                                                                                                                |
+| -------------------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SearchProvider.search            | 默认 SearXNG；账号独立搜索 API                                                         | 结构化候选与覆盖缺口，候选不等于证据；Worker 不启用模型原生搜索或服务器搜索密钥兜底                                                                 |
+| PageReader.read                  | Search API Fetch/Extract；SearXNG 默认使用 Crawlee + Readability，可选 Firecrawl Cloud | Search API 读取最多 45 秒；Firecrawl 与本地 Reader 最多 15 秒；本地单资源 2 MiB/总资源 8 MiB/32 请求、只读公网 GET。更短调用期限和 Run 剩余时间优先 |
+| ModelProvider.generateStructured | 部署者配置的兼容模型服务                                                               | 通过适配层映射 structured output、usage、AbortSignal 与错误                                                                                         |
+| EvidenceRepository               | worker 注入的受限领域接口                                                              | 仅当前用户、当前 Run；不暴露数据库客户端                                                                                                            |
+| CheckpointAdapter                | LangGraph PostgreSQL saver + epoch 引用提升                                            | 实验验证恢复协议，运行迁移与连接池限制                                                                                                              |
 
 新任务默认每次 10 次搜索、20 次网页读取、10 分钟，累计输入 1,000,000 token、输出 128,000 token。部署允许时长最多 1,800 秒、累计输入 2,000,000／输出 512,000 token；新执行单次综合输入最多128,000，首次输出最多16,000、修复最多24,000 token。规划首次输出最多 4,000；比较以输出总额的六分之一、最多 24,000 token 为分批基数，首次与修复按实际页数分配；小预算按比例缩减。比较输入按累计输入预算的 30%、最多 192,000 token 分批，新覆盖策略的综合为固定契约预留输入空间并按本批问题选择正文，输出按成功回执的实际用量及剩余批次分配；旧检查点综合按60%、单次最多256,000 token分配；模型输出及修复仍共用累计上限。每次模型调用先预留估算输入和最大输出 token，最终按 usage 结算；供应商不返回 usage 时使用保守预留并标为估算。提示词/结构化修复调用同样计费和计入限制。恢复/重试不得绕过限制，预算修改只影响新版本。时间预算到达后停止所有外部调用，从明确提升的检查点重建并认证已有成果，保留已完成的模型回答及合法日期筛选说明，标记 partial；没有可交付内容则 failed，不再启动模型综合，用户取消则不交付。综合失败的 partial 使用明确的未归纳说明与原文引用，不以截断正文冒充简报。
 

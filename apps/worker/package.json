@@ -17,8 +17,8 @@
         "@langchain/langgraph": "catalog:",
         "@scova/agent-core": "workspace:*",
         "@scova/connectors": "workspace:*",
+        "@scova/execution": "workspace:*",
         "@scova/models": "workspace:*",
-        "@scova/shared": "workspace:*",
         "bullmq": "catalog:",
         "ioredis": "catalog:",
         "requestlane": "catalog:"
@@ -26,6 +26,7 @@
     "devDependencies": {
         "@langchain/langgraph-checkpoint-postgres": "catalog:",
         "@scova/db": "workspace:*",
+        "@scova/shared": "workspace:*",
         "@types/node": "catalog:",
         "@types/pg": "catalog:",
         "pg": "catalog:",

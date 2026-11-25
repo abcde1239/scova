@@ -3,6 +3,7 @@
         class="workbench min-h-[100dvh]"
         :class="{
             'workbench--thread': threadPage,
+            'workbench--collapsed': sidebar.collapsed,
             'workbench--report': route.name === 'report-detail',
         }"
         :style="{ '--project-sidebar-width': `${workspace.width('sidebar')}px` }"
@@ -16,64 +17,108 @@
             <mobile-navigation :items="mobileItems">
                 <template #projects><project-sidebar v-if="!workspace.desktop.value" /></template>
             </mobile-navigation>
-            <router-link class="brand" to="/" :aria-label="t('shell.workspaceHome')">
-                <img src="/favicon.ico?v=ebde566c" alt="" class="w-6 h-6 object-contain" />
-                <span lang="en">Scova</span>
-            </router-link>
+            <div class="sidebar-heading">
+                <button
+                    class="sidebar-toggle"
+                    type="button"
+                    :aria-expanded="!sidebar.collapsed"
+                    aria-controls="workbench-project-list"
+                    :aria-label="sidebarToggleLabel"
+                    :title="sidebarToggleLabel"
+                    @click="sidebar.toggle"
+                >
+                    <app-icon name="chevron" />
+                </button>
+                <router-link class="brand" to="/" :aria-label="t('shell.workspaceHome')">
+                    <img src="/favicon.ico?v=ebde566c" alt="" class="w-6 h-6 object-contain" />
+                    <span lang="en">Scova</span>
+                </router-link>
+            </div>
             <nav
                 id="workbench-project-sidebar"
                 class="primary-navigation"
                 :aria-label="t('shell.primaryNav')"
             >
-                <project-sidebar v-if="workspace.desktop.value" />
-                <span class="px-2 pt-2 text-sm font-semibold" lang="zh-CN">管理</span>
+                <div
+                    id="workbench-project-list"
+                    v-show="workspace.desktop.value && !sidebar.collapsed"
+                >
+                    <project-sidebar v-if="workspace.desktop.value" />
+                    <span class="px-2 pt-2 text-sm font-semibold" lang="zh-CN">管理</span>
+                </div>
                 <router-link
                     class="sidebar-link create-task"
                     :to="newTask.path"
+                    :title="sidebar.collapsed ? newTask.label : undefined"
                     :aria-current="route.path === newTask.path ? 'page' : undefined"
                 >
-                    <app-icon :name="newTask.icon" />{{ newTask.label }}
+                    <app-icon :name="newTask.icon" />
+                    <span class="sidebar-label">{{ newTask.label }}</span>
+                </router-link>
+                <router-link
+                    v-if="sidebar.collapsed"
+                    class="sidebar-link"
+                    :to="{ name: 'projects' }"
+                    :title="t('pages.projects')"
+                    :class="{ selected: route.meta.section === 'projects' }"
+                    :aria-current="route.name === 'projects' ? 'page' : undefined"
+                >
+                    <app-icon name="projects" />
+                    <span class="sidebar-label">{{ t('pages.projects') }}</span>
                 </router-link>
                 <router-link
                     v-for="item in primary"
                     :key="String(item.name)"
                     class="sidebar-link"
                     :to="item.path"
+                    :title="sidebar.collapsed ? routeTitle(item, t) : undefined"
                     :class="{ selected: isSelected(item) }"
                     :aria-current="route.path === item.path ? 'page' : undefined"
                 >
-                    <app-icon :name="navigationIcon(item.meta.section)" />{{ routeTitle(item, t) }}
+                    <app-icon :name="navigationIcon(item.meta.section)" />
+                    <span class="sidebar-label">{{ routeTitle(item, t) }}</span>
                 </router-link>
-                <router-link class="sidebar-link" :to="{ name: 'report-history' }"
-                    ><app-icon name="report" />{{ t('pages.reportHistory') }}</router-link
+                <router-link
+                    class="sidebar-link"
+                    :to="{ name: 'report-history' }"
+                    :title="sidebar.collapsed ? t('pages.reportHistory') : undefined"
                 >
+                    <app-icon name="report" />
+                    <span class="sidebar-label">{{ t('pages.reportHistory') }}</span>
+                </router-link>
             </nav>
-            <div class="sidebar-footer">
+            <div id="workbench-sidebar-footer" class="sidebar-footer">
                 <nav class="tool-navigation" :aria-label="t('shell.toolsNav')">
                     <template v-for="item in tools" :key="String(item.name)">
                         <notification-menu
                             v-if="item.meta.section === 'notifications'"
                             :selected="isSelected(item)"
                             placement="right-end"
+                            :compact="sidebar.collapsed"
                         />
                         <router-link
                             v-else
                             class="sidebar-link"
                             :to="item.path"
+                            :title="sidebar.collapsed ? routeTitle(item, t) : undefined"
                             :class="{ selected: isSelected(item) }"
                             :aria-current="route.path === item.path ? 'page' : undefined"
                         >
-                            <app-icon :name="navigationIcon(item.meta.section)" />{{
-                                routeTitle(item, t)
-                            }}
+                            <app-icon :name="navigationIcon(item.meta.section)" />
+                            <span class="sidebar-label">{{ routeTitle(item, t) }}</span>
                         </router-link>
                     </template>
                 </nav>
                 <interface-language-select class="interface-language" />
-                <account-menu />
+                <interface-language-select
+                    v-if="sidebar.collapsed"
+                    class="sidebar-language"
+                    icon-only
+                />
+                <account-menu :compact="sidebar.collapsed" />
             </div>
             <workspace-separator
-                v-if="threadPage && workspace.desktop.value"
+                v-if="threadPage && workspace.desktop.value && !sidebar.collapsed"
                 pane="sidebar"
                 label="项目导航宽度"
                 controls="workbench-project-sidebar"
@@ -156,11 +201,16 @@ import {
     projectWorkspaceLayoutKey,
     useProjectWorkspaceLayout,
 } from '@/composable/useProjectWorkspaceLayout';
+import { useSidebarStore } from '@/store/sidebar';
 
 const props = defineProps<{ title: string; navigation: RouteRecordNormalized[] }>();
 defineSlots<{ default(): unknown; context(): unknown; tools(): unknown; reading(): unknown }>();
 const route = useRoute();
 const { t } = useI18n({ useScope: 'global' });
+const sidebar = useSidebarStore();
+const sidebarToggleLabel = computed(() =>
+    t(sidebar.collapsed ? 'shell.expandSidebar' : 'shell.collapseSidebar'),
+);
 
 provide(breadcrumbContext, shallowRef<BreadcrumbContext>());
 const workspace = useProjectWorkspaceLayout();
@@ -222,6 +272,11 @@ const mobileItems = computed(() => [
     @apply inline-flex items-center gap-2 min-h-11 text-[1.125rem] font-semibold text-default
         no-underline whitespace-nowrap rounded-2 keyboard-focus-wide;
 }
+.sidebar-heading {
+    @apply contents;
+}
+.sidebar-toggle,
+.sidebar-language,
 .primary-navigation,
 .tool-navigation {
     @apply hidden;
@@ -268,15 +323,19 @@ const mobileItems = computed(() => [
     min-block-size: 0;
 }
 @media (min-width: 54rem) {
-    .workbench--thread {
-        grid-template-rows: minmax(0, 1fr);
-        grid-template-columns: var(--project-sidebar-width) minmax(24rem, 1fr);
-    }
     .workbench {
-        @apply grid grid-cols-[min(15.5rem,_30vw)_minmax(0,_1fr)];
+        --workbench-sidebar-width: min(15.5rem, 30vw);
+
+        @apply grid;
+        grid-template-columns: var(--workbench-sidebar-width) minmax(0, 1fr);
+    }
+    .workbench--thread {
+        --workbench-sidebar-width: var(--project-sidebar-width);
+
+        grid-template-rows: minmax(0, 1fr);
     }
     .workbench--report {
-        @apply grid-cols-[min(12.5rem,_25vw)_minmax(0,_1fr)];
+        --workbench-sidebar-width: min(12.5rem, 25vw);
     }
     .workbench-header {
         @apply sticky top-0 z-[5] self-start grid grid-cols-[minmax(0,_1fr)]
@@ -285,8 +344,21 @@ const mobileItems = computed(() => [
             [border-inline-end:1px_solid_color-mix(in_srgb,_var(--scova-border)_28%,_transparent)]
             [background:color-mix(in_srgb,_var(--scova-canvas)_70%,_var(--scova-selected))];
     }
+    .sidebar-heading {
+        @apply flex items-center gap-1;
+    }
+    .sidebar-toggle {
+        @apply inline-grid place-items-center shrink-0 w-11 h-11 rounded-2 text-muted text-[1rem]
+            bg-transparent border-0 cursor-pointer keyboard-focus-inset motion-safe:transition-colors;
+    }
+    .sidebar-toggle:hover {
+        @apply [background:var(--scova-selected)] text-default;
+    }
+    .sidebar-toggle[aria-expanded='true'] :deep(svg) {
+        @apply rotate-180;
+    }
     .brand {
-        @apply px-2;
+        @apply px-1;
     }
     .primary-navigation {
         /* Keep the popovers in the footer outside the scrolling region. */
@@ -323,6 +395,32 @@ const mobileItems = computed(() => [
     }
     .interface-language {
         @apply w-full ml-0 text-[0.875rem];
+    }
+    .workbench--collapsed {
+        --workbench-sidebar-width: 4rem;
+    }
+    .workbench--collapsed .workbench-header {
+        @apply px-2;
+    }
+    .workbench--collapsed .sidebar-heading {
+        @apply justify-center;
+    }
+    .workbench--collapsed .brand,
+    .workbench--collapsed .interface-language {
+        @apply hidden;
+    }
+    .workbench--collapsed .sidebar-language {
+        @apply grid;
+    }
+    .workbench--collapsed .sidebar-language :deep(.select-trigger) {
+        @apply w-full min-h-11;
+    }
+    .workbench--collapsed .sidebar-link,
+    .workbench--collapsed .tool-navigation :deep(.notification-trigger) {
+        @apply justify-center gap-0 px-0;
+    }
+    .workbench--collapsed .sidebar-label {
+        @apply sr-only;
     }
 }
 </style>

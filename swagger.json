@@ -116111,7 +116111,7 @@
                                                         "properties": {
                                                             "byteLength": {
                                                                 "description": "原始文件字节数",
-                                                                "maximum": 262144,
+                                                                "maximum": 10485760,
                                                                 "minimum": 1,
                                                                 "type": "integer"
                                                             },
@@ -116130,9 +116130,9 @@
                                                                 "type": "null"
                                                             },
                                                             "filename": {
-                                                                "description": "原始 CSV、TXT 或 PDF 文件名",
+                                                                "description": "带受支持扩展名的原始文件名",
                                                                 "maxLength": 120,
-                                                                "minLength": 5,
+                                                                "minLength": 4,
                                                                 "type": "string"
                                                             },
                                                             "format": {
@@ -116143,6 +116143,18 @@
                                                                     },
                                                                     {
                                                                         "const": "txt",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "md",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "json",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "tsv",
                                                                         "type": "string"
                                                                     }
                                                                 ],
@@ -116188,7 +116200,7 @@
                                                         "properties": {
                                                             "byteLength": {
                                                                 "description": "原始文件字节数",
-                                                                "maximum": 262144,
+                                                                "maximum": 10485760,
                                                                 "minimum": 1,
                                                                 "type": "integer"
                                                             },
@@ -116221,6 +116233,10 @@
                                                                         "type": "string"
                                                                     },
                                                                     {
+                                                                        "const": "INVALID_JSON",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
                                                                         "const": "TEXT_LIMIT_EXCEEDED",
                                                                         "type": "string"
                                                                     }
@@ -116228,9 +116244,9 @@
                                                                 "description": "解析失败原因"
                                                             },
                                                             "filename": {
-                                                                "description": "原始 CSV、TXT 或 PDF 文件名",
+                                                                "description": "带受支持扩展名的原始文件名",
                                                                 "maxLength": 120,
-                                                                "minLength": 5,
+                                                                "minLength": 4,
                                                                 "type": "string"
                                                             },
                                                             "format": {
@@ -116241,6 +116257,18 @@
                                                                     },
                                                                     {
                                                                         "const": "txt",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "md",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "json",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "tsv",
                                                                         "type": "string"
                                                                     }
                                                                 ],
@@ -116284,7 +116312,7 @@
                                                         "properties": {
                                                             "byteLength": {
                                                                 "description": "原始文件字节数",
-                                                                "maximum": 262144,
+                                                                "maximum": 10485760,
                                                                 "minimum": 1,
                                                                 "type": "integer"
                                                             },
@@ -116303,15 +116331,51 @@
                                                                 "type": "null"
                                                             },
                                                             "filename": {
-                                                                "description": "原始 CSV、TXT 或 PDF 文件名",
+                                                                "description": "带受支持扩展名的原始文件名",
                                                                 "maxLength": 120,
-                                                                "minLength": 5,
+                                                                "minLength": 4,
                                                                 "type": "string"
                                                             },
                                                             "format": {
-                                                                "const": "pdf",
-                                                                "description": "PDF 文件",
-                                                                "type": "string"
+                                                                "anyOf": [
+                                                                    {
+                                                                        "const": "csv",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "txt",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "md",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "json",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "tsv",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "pdf",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "png",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "jpeg",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "webp",
+                                                                        "type": "string"
+                                                                    }
+                                                                ],
+                                                                "description": "可下载原件的文件格式"
                                                             },
                                                             "id": {
                                                                 "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
@@ -116368,7 +116432,7 @@
                                                         "properties": {
                                                             "byteLength": {
                                                                 "description": "原始文件字节数",
-                                                                "maximum": 262144,
+                                                                "maximum": 10485760,
                                                                 "minimum": 1,
                                                                 "type": "integer"
                                                             },
@@ -116387,9 +116451,9 @@
                                                                 "type": "null"
                                                             },
                                                             "filename": {
-                                                                "description": "原始 CSV、TXT 或 PDF 文件名",
+                                                                "description": "带受支持扩展名的原始文件名",
                                                                 "maxLength": 120,
-                                                                "minLength": 5,
+                                                                "minLength": 4,
                                                                 "type": "string"
                                                             },
                                                             "format": {
@@ -116400,6 +116464,18 @@
                                                                     },
                                                                     {
                                                                         "const": "txt",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "md",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "json",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "tsv",
                                                                         "type": "string"
                                                                     }
                                                                 ],
@@ -116445,7 +116521,7 @@
                                                         "properties": {
                                                             "byteLength": {
                                                                 "description": "原始文件字节数",
-                                                                "maximum": 262144,
+                                                                "maximum": 10485760,
                                                                 "minimum": 1,
                                                                 "type": "integer"
                                                             },
@@ -116478,6 +116554,10 @@
                                                                         "type": "string"
                                                                     },
                                                                     {
+                                                                        "const": "INVALID_JSON",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
                                                                         "const": "TEXT_LIMIT_EXCEEDED",
                                                                         "type": "string"
                                                                     }
@@ -116485,9 +116565,9 @@
                                                                 "description": "解析失败原因"
                                                             },
                                                             "filename": {
-                                                                "description": "原始 CSV、TXT 或 PDF 文件名",
+                                                                "description": "带受支持扩展名的原始文件名",
                                                                 "maxLength": 120,
-                                                                "minLength": 5,
+                                                                "minLength": 4,
                                                                 "type": "string"
                                                             },
                                                             "format": {
@@ -116498,6 +116578,18 @@
                                                                     },
                                                                     {
                                                                         "const": "txt",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "md",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "json",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "tsv",
                                                                         "type": "string"
                                                                     }
                                                                 ],
@@ -116541,7 +116633,7 @@
                                                         "properties": {
                                                             "byteLength": {
                                                                 "description": "原始文件字节数",
-                                                                "maximum": 262144,
+                                                                "maximum": 10485760,
                                                                 "minimum": 1,
                                                                 "type": "integer"
                                                             },
@@ -116560,15 +116652,51 @@
                                                                 "type": "null"
                                                             },
                                                             "filename": {
-                                                                "description": "原始 CSV、TXT 或 PDF 文件名",
+                                                                "description": "带受支持扩展名的原始文件名",
                                                                 "maxLength": 120,
-                                                                "minLength": 5,
+                                                                "minLength": 4,
                                                                 "type": "string"
                                                             },
                                                             "format": {
-                                                                "const": "pdf",
-                                                                "description": "PDF 文件",
-                                                                "type": "string"
+                                                                "anyOf": [
+                                                                    {
+                                                                        "const": "csv",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "txt",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "md",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "json",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "tsv",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "pdf",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "png",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "jpeg",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "webp",
+                                                                        "type": "string"
+                                                                    }
+                                                                ],
+                                                                "description": "可下载原件的文件格式"
                                                             },
                                                             "id": {
                                                                 "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
@@ -116625,7 +116753,7 @@
                                                         "properties": {
                                                             "byteLength": {
                                                                 "description": "原始文件字节数",
-                                                                "maximum": 262144,
+                                                                "maximum": 10485760,
                                                                 "minimum": 1,
                                                                 "type": "integer"
                                                             },
@@ -116644,9 +116772,9 @@
                                                                 "type": "null"
                                                             },
                                                             "filename": {
-                                                                "description": "原始 CSV、TXT 或 PDF 文件名",
+                                                                "description": "带受支持扩展名的原始文件名",
                                                                 "maxLength": 120,
-                                                                "minLength": 5,
+                                                                "minLength": 4,
                                                                 "type": "string"
                                                             },
                                                             "format": {
@@ -116657,6 +116785,18 @@
                                                                     },
                                                                     {
                                                                         "const": "txt",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "md",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "json",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "tsv",
                                                                         "type": "string"
                                                                     }
                                                                 ],
@@ -116702,7 +116842,7 @@
                                                         "properties": {
                                                             "byteLength": {
                                                                 "description": "原始文件字节数",
-                                                                "maximum": 262144,
+                                                                "maximum": 10485760,
                                                                 "minimum": 1,
                                                                 "type": "integer"
                                                             },
@@ -116735,6 +116875,10 @@
                                                                         "type": "string"
                                                                     },
                                                                     {
+                                                                        "const": "INVALID_JSON",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
                                                                         "const": "TEXT_LIMIT_EXCEEDED",
                                                                         "type": "string"
                                                                     }
@@ -116742,9 +116886,9 @@
                                                                 "description": "解析失败原因"
                                                             },
                                                             "filename": {
-                                                                "description": "原始 CSV、TXT 或 PDF 文件名",
+                                                                "description": "带受支持扩展名的原始文件名",
                                                                 "maxLength": 120,
-                                                                "minLength": 5,
+                                                                "minLength": 4,
                                                                 "type": "string"
                                                             },
                                                             "format": {
@@ -116755,6 +116899,18 @@
                                                                     },
                                                                     {
                                                                         "const": "txt",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "md",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "json",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "tsv",
                                                                         "type": "string"
                                                                     }
                                                                 ],
@@ -116798,7 +116954,7 @@
                                                         "properties": {
                                                             "byteLength": {
                                                                 "description": "原始文件字节数",
-                                                                "maximum": 262144,
+                                                                "maximum": 10485760,
                                                                 "minimum": 1,
                                                                 "type": "integer"
                                                             },
@@ -116817,15 +116973,51 @@
                                                                 "type": "null"
                                                             },
                                                             "filename": {
-                                                                "description": "原始 CSV、TXT 或 PDF 文件名",
+                                                                "description": "带受支持扩展名的原始文件名",
                                                                 "maxLength": 120,
-                                                                "minLength": 5,
+                                                                "minLength": 4,
                                                                 "type": "string"
                                                             },
                                                             "format": {
-                                                                "const": "pdf",
-                                                                "description": "PDF 文件",
-                                                                "type": "string"
+                                                                "anyOf": [
+                                                                    {
+                                                                        "const": "csv",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "txt",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "md",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "json",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "tsv",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "pdf",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "png",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "jpeg",
+                                                                        "type": "string"
+                                                                    },
+                                                                    {
+                                                                        "const": "webp",
+                                                                        "type": "string"
+                                                                    }
+                                                                ],
+                                                                "description": "可下载原件的文件格式"
                                                             },
                                                             "id": {
                                                                 "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
@@ -118077,7 +118269,7 @@
                 "tags": ["报告"]
             },
             "post": {
-                "description": "仅本人可上传，要求会话及请求校验。接收不超过 256 KiB 的 CSV、UTF-8 纯文本或 PDF 原始请求体，PDF 仅供下载。",
+                "description": "仅本人可上传，要求会话及请求校验。接收不超过 10 MiB 的原始请求体，文件扩展名须与 Content-Type 匹配，文本使用 UTF-8。超过 256 KiB 时使用私有对象存储，仅供下载。",
                 "operationId": "uploadReportAttachment",
                 "parameters": [
                     {
@@ -118091,20 +118283,44 @@
                         }
                     },
                     {
-                        "description": "原始 CSV、TXT 或 PDF 文件名",
+                        "description": "带受支持扩展名的原始文件名",
                         "in": "query",
                         "name": "filename",
                         "required": true,
                         "schema": {
                             "maxLength": 120,
-                            "minLength": 5,
+                            "minLength": 4,
                             "type": "string"
                         }
                     }
                 ],
                 "requestBody": {
                     "content": {
+                        "application/json": {
+                            "schema": {
+                                "format": "binary",
+                                "type": "string"
+                            }
+                        },
                         "application/pdf": {
+                            "schema": {
+                                "format": "binary",
+                                "type": "string"
+                            }
+                        },
+                        "image/jpeg": {
+                            "schema": {
+                                "format": "binary",
+                                "type": "string"
+                            }
+                        },
+                        "image/png": {
+                            "schema": {
+                                "format": "binary",
+                                "type": "string"
+                            }
+                        },
+                        "image/webp": {
                             "schema": {
                                 "format": "binary",
                                 "type": "string"
@@ -118116,7 +118332,19 @@
                                 "type": "string"
                             }
                         },
+                        "text/markdown": {
+                            "schema": {
+                                "format": "binary",
+                                "type": "string"
+                            }
+                        },
                         "text/plain": {
+                            "schema": {
+                                "format": "binary",
+                                "type": "string"
+                            }
+                        },
+                        "text/tab-separated-values": {
                             "schema": {
                                 "format": "binary",
                                 "type": "string"
@@ -118133,7 +118361,7 @@
                                 "properties": {
                                     "byteLength": {
                                         "description": "原始文件字节数",
-                                        "maximum": 262144,
+                                        "maximum": 10485760,
                                         "minimum": 1,
                                         "type": "integer"
                                     },
@@ -118152,9 +118380,9 @@
                                         "type": "null"
                                     },
                                     "filename": {
-                                        "description": "原始 CSV、TXT 或 PDF 文件名",
+                                        "description": "带受支持扩展名的原始文件名",
                                         "maxLength": 120,
-                                        "minLength": 5,
+                                        "minLength": 4,
                                         "type": "string"
                                     },
                                     "format": {
@@ -118165,6 +118393,18 @@
                                             },
                                             {
                                                 "const": "txt",
+                                                "type": "string"
+                                            },
+                                            {
+                                                "const": "md",
+                                                "type": "string"
+                                            },
+                                            {
+                                                "const": "json",
+                                                "type": "string"
+                                            },
+                                            {
+                                                "const": "tsv",
                                                 "type": "string"
                                             }
                                         ],
@@ -118210,7 +118450,7 @@
                                 "properties": {
                                     "byteLength": {
                                         "description": "原始文件字节数",
-                                        "maximum": 262144,
+                                        "maximum": 10485760,
                                         "minimum": 1,
                                         "type": "integer"
                                     },
@@ -118243,6 +118483,10 @@
                                                 "type": "string"
                                             },
                                             {
+                                                "const": "INVALID_JSON",
+                                                "type": "string"
+                                            },
+                                            {
                                                 "const": "TEXT_LIMIT_EXCEEDED",
                                                 "type": "string"
                                             }
@@ -118250,9 +118494,9 @@
                                         "description": "解析失败原因"
                                     },
                                     "filename": {
-                                        "description": "原始 CSV、TXT 或 PDF 文件名",
+                                        "description": "带受支持扩展名的原始文件名",
                                         "maxLength": 120,
-                                        "minLength": 5,
+                                        "minLength": 4,
                                         "type": "string"
                                     },
                                     "format": {
@@ -118263,6 +118507,18 @@
                                             },
                                             {
                                                 "const": "txt",
+                                                "type": "string"
+                                            },
+                                            {
+                                                "const": "md",
+                                                "type": "string"
+                                            },
+                                            {
+                                                "const": "json",
+                                                "type": "string"
+                                            },
+                                            {
+                                                "const": "tsv",
                                                 "type": "string"
                                             }
                                         ],
@@ -118306,7 +118562,7 @@
                                 "properties": {
                                     "byteLength": {
                                         "description": "原始文件字节数",
-                                        "maximum": 262144,
+                                        "maximum": 10485760,
                                         "minimum": 1,
                                         "type": "integer"
                                     },
@@ -118325,15 +118581,51 @@
                                         "type": "null"
                                     },
                                     "filename": {
-                                        "description": "原始 CSV、TXT 或 PDF 文件名",
+                                        "description": "带受支持扩展名的原始文件名",
                                         "maxLength": 120,
-                                        "minLength": 5,
+                                        "minLength": 4,
                                         "type": "string"
                                     },
                                     "format": {
-                                        "const": "pdf",
-                                        "description": "PDF 文件",
-                                        "type": "string"
+                                        "anyOf": [
+                                            {
+                                                "const": "csv",
+                                                "type": "string"
+                                            },
+                                            {
+                                                "const": "txt",
+                                                "type": "string"
+                                            },
+                                            {
+                                                "const": "md",
+                                                "type": "string"
+                                            },
+                                            {
+                                                "const": "json",
+                                                "type": "string"
+                                            },
+                                            {
+                                                "const": "tsv",
+                                                "type": "string"
+                                            },
+                                            {
+                                                "const": "pdf",
+                                                "type": "string"
+                                            },
+                                            {
+                                                "const": "png",
+                                                "type": "string"
+                                            },
+                                            {
+                                                "const": "jpeg",
+                                                "type": "string"
+                                            },
+                                            {
+                                                "const": "webp",
+                                                "type": "string"
+                                            }
+                                        ],
+                                        "description": "可下载原件的文件格式"
                                     },
                                     "id": {
                                         "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
@@ -118379,7 +118671,7 @@
                                             "properties": {
                                                 "byteLength": {
                                                     "description": "原始文件字节数",
-                                                    "maximum": 262144,
+                                                    "maximum": 10485760,
                                                     "minimum": 1,
                                                     "type": "integer"
                                                 },
@@ -118398,9 +118690,9 @@
                                                     "type": "null"
                                                 },
                                                 "filename": {
-                                                    "description": "原始 CSV、TXT 或 PDF 文件名",
+                                                    "description": "带受支持扩展名的原始文件名",
                                                     "maxLength": 120,
-                                                    "minLength": 5,
+                                                    "minLength": 4,
                                                     "type": "string"
                                                 },
                                                 "format": {
@@ -118411,6 +118703,18 @@
                                                         },
                                                         {
                                                             "const": "txt",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "md",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "json",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "tsv",
                                                             "type": "string"
                                                         }
                                                     ],
@@ -118456,7 +118760,7 @@
                                             "properties": {
                                                 "byteLength": {
                                                     "description": "原始文件字节数",
-                                                    "maximum": 262144,
+                                                    "maximum": 10485760,
                                                     "minimum": 1,
                                                     "type": "integer"
                                                 },
@@ -118489,6 +118793,10 @@
                                                             "type": "string"
                                                         },
                                                         {
+                                                            "const": "INVALID_JSON",
+                                                            "type": "string"
+                                                        },
+                                                        {
                                                             "const": "TEXT_LIMIT_EXCEEDED",
                                                             "type": "string"
                                                         }
@@ -118496,9 +118804,9 @@
                                                     "description": "解析失败原因"
                                                 },
                                                 "filename": {
-                                                    "description": "原始 CSV、TXT 或 PDF 文件名",
+                                                    "description": "带受支持扩展名的原始文件名",
                                                     "maxLength": 120,
-                                                    "minLength": 5,
+                                                    "minLength": 4,
                                                     "type": "string"
                                                 },
                                                 "format": {
@@ -118509,6 +118817,18 @@
                                                         },
                                                         {
                                                             "const": "txt",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "md",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "json",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "tsv",
                                                             "type": "string"
                                                         }
                                                     ],
@@ -118552,7 +118872,7 @@
                                             "properties": {
                                                 "byteLength": {
                                                     "description": "原始文件字节数",
-                                                    "maximum": 262144,
+                                                    "maximum": 10485760,
                                                     "minimum": 1,
                                                     "type": "integer"
                                                 },
@@ -118571,15 +118891,51 @@
                                                     "type": "null"
                                                 },
                                                 "filename": {
-                                                    "description": "原始 CSV、TXT 或 PDF 文件名",
+                                                    "description": "带受支持扩展名的原始文件名",
                                                     "maxLength": 120,
-                                                    "minLength": 5,
+                                                    "minLength": 4,
                                                     "type": "string"
                                                 },
                                                 "format": {
-                                                    "const": "pdf",
-                                                    "description": "PDF 文件",
-                                                    "type": "string"
+                                                    "anyOf": [
+                                                        {
+                                                            "const": "csv",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "txt",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "md",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "json",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "tsv",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "pdf",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "png",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "jpeg",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "webp",
+                                                            "type": "string"
+                                                        }
+                                                    ],
+                                                    "description": "可下载原件的文件格式"
                                                 },
                                                 "id": {
                                                     "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
@@ -118626,7 +118982,7 @@
                                             "properties": {
                                                 "byteLength": {
                                                     "description": "原始文件字节数",
-                                                    "maximum": 262144,
+                                                    "maximum": 10485760,
                                                     "minimum": 1,
                                                     "type": "integer"
                                                 },
@@ -118645,9 +119001,9 @@
                                                     "type": "null"
                                                 },
                                                 "filename": {
-                                                    "description": "原始 CSV、TXT 或 PDF 文件名",
+                                                    "description": "带受支持扩展名的原始文件名",
                                                     "maxLength": 120,
-                                                    "minLength": 5,
+                                                    "minLength": 4,
                                                     "type": "string"
                                                 },
                                                 "format": {
@@ -118658,6 +119014,18 @@
                                                         },
                                                         {
                                                             "const": "txt",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "md",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "json",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "tsv",
                                                             "type": "string"
                                                         }
                                                     ],
@@ -118703,7 +119071,7 @@
                                             "properties": {
                                                 "byteLength": {
                                                     "description": "原始文件字节数",
-                                                    "maximum": 262144,
+                                                    "maximum": 10485760,
                                                     "minimum": 1,
                                                     "type": "integer"
                                                 },
@@ -118736,6 +119104,10 @@
                                                             "type": "string"
                                                         },
                                                         {
+                                                            "const": "INVALID_JSON",
+                                                            "type": "string"
+                                                        },
+                                                        {
                                                             "const": "TEXT_LIMIT_EXCEEDED",
                                                             "type": "string"
                                                         }
@@ -118743,9 +119115,9 @@
                                                     "description": "解析失败原因"
                                                 },
                                                 "filename": {
-                                                    "description": "原始 CSV、TXT 或 PDF 文件名",
+                                                    "description": "带受支持扩展名的原始文件名",
                                                     "maxLength": 120,
-                                                    "minLength": 5,
+                                                    "minLength": 4,
                                                     "type": "string"
                                                 },
                                                 "format": {
@@ -118756,6 +119128,18 @@
                                                         },
                                                         {
                                                             "const": "txt",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "md",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "json",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "tsv",
                                                             "type": "string"
                                                         }
                                                     ],
@@ -118799,7 +119183,7 @@
                                             "properties": {
                                                 "byteLength": {
                                                     "description": "原始文件字节数",
-                                                    "maximum": 262144,
+                                                    "maximum": 10485760,
                                                     "minimum": 1,
                                                     "type": "integer"
                                                 },
@@ -118818,15 +119202,51 @@
                                                     "type": "null"
                                                 },
                                                 "filename": {
-                                                    "description": "原始 CSV、TXT 或 PDF 文件名",
+                                                    "description": "带受支持扩展名的原始文件名",
                                                     "maxLength": 120,
-                                                    "minLength": 5,
+                                                    "minLength": 4,
                                                     "type": "string"
                                                 },
                                                 "format": {
-                                                    "const": "pdf",
-                                                    "description": "PDF 文件",
-                                                    "type": "string"
+                                                    "anyOf": [
+                                                        {
+                                                            "const": "csv",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "txt",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "md",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "json",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "tsv",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "pdf",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "png",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "jpeg",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "webp",
+                                                            "type": "string"
+                                                        }
+                                                    ],
+                                                    "description": "可下载原件的文件格式"
                                                 },
                                                 "id": {
                                                     "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
@@ -118873,7 +119293,7 @@
                                             "properties": {
                                                 "byteLength": {
                                                     "description": "原始文件字节数",
-                                                    "maximum": 262144,
+                                                    "maximum": 10485760,
                                                     "minimum": 1,
                                                     "type": "integer"
                                                 },
@@ -118892,9 +119312,9 @@
                                                     "type": "null"
                                                 },
                                                 "filename": {
-                                                    "description": "原始 CSV、TXT 或 PDF 文件名",
+                                                    "description": "带受支持扩展名的原始文件名",
                                                     "maxLength": 120,
-                                                    "minLength": 5,
+                                                    "minLength": 4,
                                                     "type": "string"
                                                 },
                                                 "format": {
@@ -118905,6 +119325,18 @@
                                                         },
                                                         {
                                                             "const": "txt",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "md",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "json",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "tsv",
                                                             "type": "string"
                                                         }
                                                     ],
@@ -118950,7 +119382,7 @@
                                             "properties": {
                                                 "byteLength": {
                                                     "description": "原始文件字节数",
-                                                    "maximum": 262144,
+                                                    "maximum": 10485760,
                                                     "minimum": 1,
                                                     "type": "integer"
                                                 },
@@ -118983,6 +119415,10 @@
                                                             "type": "string"
                                                         },
                                                         {
+                                                            "const": "INVALID_JSON",
+                                                            "type": "string"
+                                                        },
+                                                        {
                                                             "const": "TEXT_LIMIT_EXCEEDED",
                                                             "type": "string"
                                                         }
@@ -118990,9 +119426,9 @@
                                                     "description": "解析失败原因"
                                                 },
                                                 "filename": {
-                                                    "description": "原始 CSV、TXT 或 PDF 文件名",
+                                                    "description": "带受支持扩展名的原始文件名",
                                                     "maxLength": 120,
-                                                    "minLength": 5,
+                                                    "minLength": 4,
                                                     "type": "string"
                                                 },
                                                 "format": {
@@ -119003,6 +119439,18 @@
                                                         },
                                                         {
                                                             "const": "txt",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "md",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "json",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "tsv",
                                                             "type": "string"
                                                         }
                                                     ],
@@ -119046,7 +119494,7 @@
                                             "properties": {
                                                 "byteLength": {
                                                     "description": "原始文件字节数",
-                                                    "maximum": 262144,
+                                                    "maximum": 10485760,
                                                     "minimum": 1,
                                                     "type": "integer"
                                                 },
@@ -119065,15 +119513,51 @@
                                                     "type": "null"
                                                 },
                                                 "filename": {
-                                                    "description": "原始 CSV、TXT 或 PDF 文件名",
+                                                    "description": "带受支持扩展名的原始文件名",
                                                     "maxLength": 120,
-                                                    "minLength": 5,
+                                                    "minLength": 4,
                                                     "type": "string"
                                                 },
                                                 "format": {
-                                                    "const": "pdf",
-                                                    "description": "PDF 文件",
-                                                    "type": "string"
+                                                    "anyOf": [
+                                                        {
+                                                            "const": "csv",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "txt",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "md",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "json",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "tsv",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "pdf",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "png",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "jpeg",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "const": "webp",
+                                                            "type": "string"
+                                                        }
+                                                    ],
+                                                    "description": "可下载原件的文件格式"
                                                 },
                                                 "id": {
                                                     "description": "资源 UUID，不用于指定其他用户或访问数据库内部状态",
@@ -120165,6 +120649,156 @@
                         "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
                     },
                     "422": {
+                        "$id": "#/components/schemas/ApiError",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "fieldErrors": {
+                                            "description": "输入校验失败时的字段错误列表",
+                                            "items": {
+                                                "additionalProperties": false,
+                                                "description": "可定位的字段校验错误",
+                                                "properties": {
+                                                    "message": {
+                                                        "description": "至少包含一个非空白字符的文本",
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": ["path", "message"],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "message": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "requestId": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": ["code", "message", "requestId"],
+                                    "type": "object"
+                                }
+                            },
+                            "multipart/form-data": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "fieldErrors": {
+                                            "description": "输入校验失败时的字段错误列表",
+                                            "items": {
+                                                "additionalProperties": false,
+                                                "description": "可定位的字段校验错误",
+                                                "properties": {
+                                                    "message": {
+                                                        "description": "至少包含一个非空白字符的文本",
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": ["path", "message"],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "message": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "requestId": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": ["code", "message", "requestId"],
+                                    "type": "object"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "fieldErrors": {
+                                            "description": "输入校验失败时的字段错误列表",
+                                            "items": {
+                                                "additionalProperties": false,
+                                                "description": "可定位的字段校验错误",
+                                                "properties": {
+                                                    "message": {
+                                                        "description": "至少包含一个非空白字符的文本",
+                                                        "minLength": 1,
+                                                        "pattern": "\\S",
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "description": "JSON Pointer 字段路径，例如 /config/timezone；根输入为 /",
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": ["path", "message"],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "message": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        },
+                                        "requestId": {
+                                            "description": "至少包含一个非空白字符的文本",
+                                            "minLength": 1,
+                                            "pattern": "\\S",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": ["code", "message", "requestId"],
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "错误体；HTTP 状态必须反映错误，不使用固定 200 的包装协议"
+                    },
+                    "503": {
                         "$id": "#/components/schemas/ApiError",
                         "content": {
                             "application/json": {

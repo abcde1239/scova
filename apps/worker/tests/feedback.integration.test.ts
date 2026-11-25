@@ -26,7 +26,10 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import pg from 'pg';
 import { beforeAll, afterAll, describe, it, expect } from 'vite-plus/test';
-import { effectiveRunScopeHash, researchComparisonScopeHash } from '@scova/shared';
+import {
+    effectiveRunScopeHash,
+    researchComparisonScopeHash,
+} from '../../server/src/utils/research-scope.ts';
 import { readFeedbackSnapshot, type Feedback, type FeedbackEffect } from '@scova/models';
 import type { ConnectorBundle, ReadPage, StructuredInput, CallContext } from '@scova/connectors';
 

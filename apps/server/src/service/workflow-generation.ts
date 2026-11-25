@@ -5,7 +5,7 @@ import {
     type StructuredInput,
 } from '@scova/connectors';
 import type { DatabaseClient } from '@scova/db';
-import { openProviderCredentials } from '@scova/shared/credentials';
+import { openProviderCredentials } from '@/utils/credentials.ts';
 import { activeAgentProvider } from '@/repo/execution/agent-providers';
 import { ApiError } from '@/utils/errors';
 import type { WorkflowGenerator } from './canvas-node-execution.ts';

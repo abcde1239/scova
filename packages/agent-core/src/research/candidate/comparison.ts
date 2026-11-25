@@ -47,6 +47,7 @@ export function extractedComparison(context: AgentContext, state: ResearchState)
         context,
         state.pages.slice(0, baseCount),
         state.comparisonExtractions,
+        state.comparisonReusePolicy,
     );
     if (result.manifest && state.pages.length > baseCount) {
         result.manifest.pages.push(

@@ -1,6 +1,6 @@
 import { openSqliteRunQueue } from '@scova/db/sqlite-state';
 import { Queue } from 'bullmq';
-import { outboxJobId, type OutboxMessage } from '@scova/shared/outbox-job';
+import { outboxJobId, type OutboxMessage } from '@scova/execution/queue';
 import { createRedisConnection } from '../redis.ts';
 
 function* accountJobIds(

@@ -1040,6 +1040,7 @@ describe('Drizzle SQL 迁移与旧库无损接管', () => {
                     'project_thread_run_origins',
                     'project_threads',
                     'projects',
+                    'report_attachment_objects',
                     'report_exports',
                     'report_resources',
                     'run_graph_snapshots',

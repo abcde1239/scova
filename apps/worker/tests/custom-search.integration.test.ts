@@ -74,10 +74,6 @@ it('confirmed account API identity must match before the first provider call or 
         })
         .returning();
     const frozen = reportSearchConfigurationHash(record!);
-    await fixture.db
-        .update(dbRuns)
-        .set({ searchConfigurationHash: frozen })
-        .where(eq(dbRuns.id, seed.run.id));
     let providerCalls = 0;
     const provider = async (): Promise<never> => {
         providerCalls++;
@@ -120,6 +116,15 @@ it('confirmed account API identity must match before the first provider call or 
             searchSelection: { searchMode: 'api' as const, searchConfigRevision: 3 },
         },
     };
+    // The worker credential boundary validates the persisted request, including on recovery.
+    await fixture.db
+        .update(dbRuns)
+        .set({
+            searchConfigurationHash: frozen,
+            conversationContextJson: context.conversation,
+            followupConfigJson: context.config,
+        })
+        .where(eq(dbRuns.id, seed.run.id));
     try {
         await prepareTestCheckpointSchema(fixture.databaseUrl, fixture.checkpointSchema);
         await runtime.connect();

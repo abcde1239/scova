@@ -342,7 +342,7 @@ export function createProjectTurnService(services: ApiServices) {
         );
         if (outputBudget < 1) throw new Error('attachment answer budget exhausted');
         const fragments = await readThreadAttachmentEvidence(
-            threadAttachments.download,
+            (...args) => threadAttachments.download(...args),
             { userId, threadId, attachments: candidates, signal },
             planned.data.reads,
         );

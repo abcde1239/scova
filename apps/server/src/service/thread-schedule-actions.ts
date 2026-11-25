@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseTransaction, ProjectThreadItemRow } from '@scova/db';
 import {
+    DEFAULT_TASK_BUDGET_LIMITS,
     TaskConfigSchema,
     parseContract,
     type Budget,
@@ -12,7 +13,6 @@ import {
     type ProjectScheduleProposal,
 } from '@scova/models';
 import type { ApiServices } from '@/app/services';
-import { TASK_BUDGET_LIMITS } from '@/app/task-policy.ts';
 import { appendProjectThreadItems, createProjectThreadStore } from '@/repo/project-threads.ts';
 import { createProjectStore } from '@/repo/projects.ts';
 import { createRunStore } from '@/repo/runs.ts';
@@ -293,7 +293,7 @@ export function createThreadScheduleActionService(services: ApiServices) {
                         ));
                     const actionId = randomUUID();
                     const candidate = { id: actionId, turnId: options.turnId ?? null };
-                    const exceedsDeployment = Object.entries(TASK_BUDGET_LIMITS).some(
+                    const exceedsDeployment = Object.entries(DEFAULT_TASK_BUDGET_LIMITS).some(
                         ([dimension, maximum]) =>
                             config.budget[dimension as keyof Budget]! > maximum,
                     );

@@ -1,5 +1,5 @@
 import { readSqliteStatePath } from '@scova/db/sqlite-state';
-import { readRunQueueName } from '@scova/shared/outbox-job';
+import { readRunQueueName } from '@scova/execution/queue';
 import pg from 'pg';
 import { databaseSettings, schemaName } from '@/utils/operations.ts';
 

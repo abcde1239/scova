@@ -1,7 +1,7 @@
 import { verifyDatabase } from '@scova/db/migrate';
 import type pg from 'pg';
-import type { OutboxMessage } from '@scova/shared/outbox-job';
-import { installedCheckpointVersion } from '@scova/shared/checkpoint-version';
+import type { OutboxMessage } from '@scova/execution/queue';
+import { installedCheckpointVersion } from '@/utils/checkpoint-version.ts';
 import type { OperationConfig } from '@/app/operations.ts';
 
 /** Offline maintenance shares one transaction with business rows and all saver epochs. */
