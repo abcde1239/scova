@@ -43,7 +43,7 @@
                     id="workbench-project-list"
                     v-show="workspace.desktop.value && !sidebar.collapsed"
                 >
-                    <project-sidebar v-if="workspace.desktop.value && !sidebar.collapsed" />
+                    <project-sidebar v-if="workspace.desktop.value" />
                     <span class="px-2 pt-2 text-sm font-semibold" lang="zh-CN">管理</span>
                 </div>
                 <router-link
@@ -54,6 +54,17 @@
                 >
                     <app-icon :name="newTask.icon" />
                     <span class="sidebar-label">{{ newTask.label }}</span>
+                </router-link>
+                <router-link
+                    v-if="sidebar.collapsed"
+                    class="sidebar-link"
+                    :to="{ name: 'projects' }"
+                    :title="t('pages.projects')"
+                    :class="{ selected: route.meta.section === 'projects' }"
+                    :aria-current="route.name === 'projects' ? 'page' : undefined"
+                >
+                    <app-icon name="projects" />
+                    <span class="sidebar-label">{{ t('pages.projects') }}</span>
                 </router-link>
                 <router-link
                     v-for="item in primary"
