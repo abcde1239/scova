@@ -13,4 +13,10 @@ export default [
         component: () => import('@/view/WorkflowDetailView.vue'),
         meta: { titleKey: 'workflow', section: 'workflows' },
     },
+    {
+        name: 'workflow-run-detail',
+        path: '/workflow-runs/:runId',
+        component: () => import('@/view/WorkflowRunDetailView.vue'),
+        meta: { titleKey: 'workflow', section: 'workflows' },
+    },
 ] satisfies RouteRecordRaw[];

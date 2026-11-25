@@ -608,7 +608,9 @@ for (const status of [403, 404, 409]) {
             status === 403 ? '无权' : status === 404 ? '不存在' : '证据校验未通过',
         );
         await expect(page.locator('article')).toHaveCount(0);
-        const retry = page.getByRole('button', { name: '重试', exact: true });
+        const retry = page
+            .getByRole('region', { name: '报告交付物' })
+            .getByRole('button', { name: '重试', exact: true });
         if (status === 409) {
             failed = false;
             await retry.focus();
@@ -644,7 +646,10 @@ test('本地 HTTP 样本：无效 UUID、非法引用及非简报布局边界', 
     other.coverage.gaps = [];
     other.coverage.exhausted = [];
     await page.route(`**/api/v1/reports/${id(1)}`, (route) => route.fulfill({ json: other }));
-    await page.getByRole('button', { name: '重试', exact: true }).click();
+    await page
+        .getByRole('region', { name: '报告交付物' })
+        .getByRole('button', { name: '重试', exact: true })
+        .click();
     await expect(article(page)).toBeVisible();
     await expect(
         page.getByText('当前按基础简报展示结构化结论与引用；尚不提供原报告格式的专属布局。'),
@@ -712,7 +717,10 @@ test('本地 HTTP 样本：断网可键盘重试，已展开报告退出换号�
     await readOnMobile(page);
     await expect(page.getByRole('status')).toContainText('报告暂时无法读取');
     offline = false;
-    await page.getByRole('button', { name: '重试', exact: true }).press('Enter');
+    await page
+        .getByRole('region', { name: '报告交付物' })
+        .getByRole('button', { name: '重试', exact: true })
+        .press('Enter');
     await expect(article(page)).toBeVisible();
     await page.locator('.evidence-source-group > summary').first().click();
     await expect(page.locator('blockquote').first()).toBeVisible();
@@ -1011,6 +1019,8 @@ async function formatSamples(page: Page, initial = formatReport()) {
         const path = new URL(request.url()).pathname;
         state.calls.push({ method: request.method(), path });
         if (request.method() === 'GET') {
+            if (path === '/api/v1/projects')
+                return route.fulfill({ json: { items: [], nextCursor: null } });
             if (path === '/api/v1/me/agent-providers')
                 return route.fulfill({
                     json: { items: [], systemConfigured: true, storageReady: true },

@@ -1,10 +1,11 @@
 import { relations } from 'drizzle-orm';
-import { inboxItems, notifications, feedback } from '../notifications.ts';
+import { inboxItems, notifications, workflowNotifications, feedback } from '../notifications.ts';
 import { users } from '../identity.ts';
 import { reports, claims } from '../reports.ts';
 import { runs } from '../runs.ts';
 import { tasks } from '../tasks.ts';
 import { sources } from '../sources.ts';
+import { workflowRuns } from '../workflows.ts';
 
 export const inboxItemsRelations = relations(inboxItems, ({ one }) => ({
     owner: one(users, {
@@ -34,6 +35,13 @@ export const notificationsRelations = relations(notifications, ({ one }) => ({
         relationName: 'Notification_report',
         fields: [notifications.userId, notifications.runId, notifications.reportId],
         references: [reports.userId, reports.runId, reports.id],
+    }),
+}));
+
+export const workflowNotificationsRelations = relations(workflowNotifications, ({ one }) => ({
+    run: one(workflowRuns, {
+        fields: [workflowNotifications.userId, workflowNotifications.workflowRunId],
+        references: [workflowRuns.userId, workflowRuns.id],
     }),
 }));
 

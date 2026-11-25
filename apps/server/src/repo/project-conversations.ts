@@ -3,6 +3,8 @@ import {
     desc,
     eq,
     inArray,
+    notExists,
+    sql,
     lt,
     gte,
     isNull,
@@ -19,9 +21,18 @@ export function createProjectConversationStore(
     db: DatabaseExecutor,
     userId: string,
     projectId: string,
+    threadId?: string,
 ) {
-    const ownTurn = and(eq(turns.userId, userId), eq(turns.projectId, projectId));
-    const ownDraft = and(eq(drafts.userId, userId), eq(drafts.projectId, projectId));
+    const ownTurn = and(
+        eq(turns.userId, userId),
+        eq(turns.projectId, projectId),
+        threadId ? eq(turns.threadId, threadId) : undefined,
+    );
+    const ownDraft = and(
+        eq(drafts.userId, userId),
+        eq(drafts.projectId, projectId),
+        threadId ? eq(drafts.threadId, threadId) : undefined,
+    );
     const visibleReport = and(
         eq(reports.userId, userId),
         inArray(
@@ -42,7 +53,7 @@ export function createProjectConversationStore(
                         ownTurn,
                         eq(turns.id, id),
                         eq(turns.status, 'running'),
-                        gte(turns.expiresAt, now),
+                        gte(turns.executionDeadlineAt, now),
                     ),
                 )
                 .then((rows) => rows.length > 0);
@@ -58,35 +69,69 @@ export function createProjectConversationStore(
             return db
                 .select()
                 .from(turns)
-                .where(ownTurn)
+                .where(and(ownTurn, sql`${turns.input}->>'kind' <> 'auto'`))
                 .orderBy(desc(turns.createdAt), desc(turns.id))
                 .limit(limit);
         },
+        isAutomaticDraft(id: string) {
+            return db
+                .select({ id: turns.id })
+                .from(turns)
+                .where(and(ownTurn, eq(turns.draftId, id), sql`${turns.input}->>'kind' = 'auto'`))
+                .limit(1)
+                .then((rows) => rows.length > 0);
+        },
         listDrafts(ids: string[]) {
+            const auto = db
+                .select({ id: turns.id })
+                .from(turns)
+                .where(
+                    and(
+                        ownTurn,
+                        eq(turns.draftId, drafts.id),
+                        sql`${turns.input}->>'kind' = 'auto'`,
+                    ),
+                );
             const pending = isNull(drafts.confirmedStart);
             return db
                 .select()
                 .from(drafts)
-                .where(and(ownDraft, ids.length ? or(pending, inArray(drafts.id, ids)) : pending))
+                .where(
+                    and(
+                        ownDraft,
+                        notExists(auto),
+                        ids.length ? or(pending, inArray(drafts.id, ids)) : pending,
+                    ),
+                )
                 .orderBy(drafts.id);
         },
         expire(now: Date) {
             return db
                 .update(turns)
                 .set({ status: 'failed', answer: '本轮已超时，可重新发送。' })
-                .where(and(ownTurn, eq(turns.status, 'running'), lt(turns.expiresAt, now)));
+                .where(
+                    and(ownTurn, eq(turns.status, 'running'), lt(turns.executionDeadlineAt, now)),
+                )
+                .returning();
         },
-        claim(id: string, input: typeof turns.$inferInsert.input, now: Date, expiresAt: Date) {
+        claim(
+            id: string,
+            input: typeof turns.$inferInsert.input,
+            now: Date,
+            executionDeadlineAt: Date,
+            selectedThreadId: string,
+        ) {
             return db
                 .insert(turns)
                 .values({
                     id,
                     userId,
                     projectId,
+                    threadId: selectedThreadId,
                     input,
                     status: 'running',
                     createdAt: now,
-                    expiresAt,
+                    executionDeadlineAt,
                 })
                 .onConflictDoNothing()
                 .returning()
@@ -120,9 +165,10 @@ export function createProjectConversationStore(
                 .then(([row]) => row);
         },
         newDraft(config: typeof drafts.$inferInsert.config) {
+            if (!threadId) throw new Error('草案必须归属会话');
             return db
                 .insert(drafts)
-                .values({ userId, projectId, config })
+                .values({ userId, projectId, threadId, config })
                 .returning()
                 .then(firstRow);
         },

@@ -15,8 +15,8 @@ export function startServer(
         options.runControl ??
         (!options.services &&
             Boolean(process.env.DATABASE_URL && (readSqliteStatePath() || process.env.REDIS_URL)));
-    const runControl = controlEnabled ? createRunControl() : undefined;
     const services = options.services ?? createDefaultServices();
+    const runControl = controlEnabled ? createRunControl(undefined, services) : undefined;
     const app = createApiApp(runtime, services).compile();
     const workerExecution = startWorkerExecution(() => services.db());
     const port = Number(process.env.PORT ?? 3000);

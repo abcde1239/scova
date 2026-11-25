@@ -25,7 +25,7 @@ test.beforeAll(async ({ browser }) => {
 test('Scova 品牌与面包屑保留真实层级，快捷入口可键盘导航', async ({ page }) => {
     await page.goto('/account/appearance');
     await expect(
-        page.getByRole('banner').getByRole('link', { name: 'Scova，任务首页' }),
+        page.getByRole('banner').getByRole('link', { name: 'Scova，工作台首页' }),
     ).toHaveText('Scova');
     const breadcrumbs = page.getByRole('navigation', { name: '面包屑导航' });
     await expect(breadcrumbs.locator('[aria-current="page"]')).toHaveText('外观');
@@ -106,11 +106,13 @@ test('桌面侧栏的任务和新建任务独立可达，底部弹层留在视�
     await expect(navigation).toBeVisible();
     const tasks = navigation.getByRole('link', { name: '任务', exact: true });
     const create = navigation.getByRole('link', { name: '新建任务', exact: true });
-    const brand = banner.getByRole('link', { name: 'Scova，任务首页' });
+    const brand = banner.getByRole('link', { name: 'Scova，工作台首页' });
     expect((await banner.boundingBox())!.width).toBeLessThanOrEqual((await main.boundingBox())!.x);
     await brand.focus();
     await page.keyboard.press('Tab');
-    await expect(create).toBeFocused();
+    await expect(navigation.getByRole('link', { name: '选择项目以新建会话' })).toBeFocused();
+    await expect(brand).toHaveAttribute('href', '/');
+    await create.focus();
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(/\/tasks\/new$/);
     await expect(main).toBeFocused();

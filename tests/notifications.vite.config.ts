@@ -3,5 +3,11 @@ import { fileURLToPath } from 'node:url';
 export default defineConfig({
     resolve: { tsconfigPaths: true },
     root: fileURLToPath(new URL('../', import.meta.url)),
-    test: { include: ['apps/server/tests/notifications.integration.test.ts'], testTimeout: 30_000 },
+    test: {
+        include: [
+            'apps/server/tests/notifications.integration.test.ts',
+            'apps/server/tests/workflow-notifications.integration.test.ts',
+        ],
+        testTimeout: 30_000,
+    },
 });

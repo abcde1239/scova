@@ -58,7 +58,18 @@ function failureReason(error: unknown): Reason {
 export function createTaskDraftService(services: ApiServices) {
     const repository = createTaskDraftRepo(services);
     type Session = Pick<AuthenticatedSession, 'userId' | 'user'>;
-    type Context = { previous?: TaskConfig; project?: string };
+    type Context = {
+        previous?: TaskConfig;
+        project?: string;
+        projectGuidance?: { goal: string; requirements: string; preferredSources: string[] };
+        references?: {
+            history: { role: 'user' | 'assistant'; text: string }[];
+            reports: { title: string; summary: string }[];
+            sources: { title: string; excerpt: string | null }[];
+            paragraphs: string[];
+            attachments: { filename: string; excerpt: string | null }[];
+        };
+    };
     function generate(
         session: Session,
         body: unknown,
@@ -200,6 +211,12 @@ export function createTaskDraftService(services: ApiServices) {
                                 inputText: input.inputText,
                                 defaults: fallback,
                                 ...(context?.project ? { projectName: context.project } : {}),
+                                ...(context?.projectGuidance
+                                    ? { projectGuidance: context.projectGuidance }
+                                    : {}),
+                                ...(context?.references
+                                    ? { projectReferences: context.references }
+                                    : {}),
                                 clarifications: input.clarifications ?? [],
                                 ...(questionInput
                                     ? {

@@ -54,7 +54,7 @@ test('本地注册样本：字段/重复邮箱/限流、原生提交和一次在
         page.locator('.scova-notifications .n-notification').last().getByRole('alert'),
     ).toContainText('频繁');
     await page.getByRole('button', { name: '注册', exact: true }).click();
-    await expect(page).toHaveURL(/\/tasks$/);
+    await expect(page).toHaveURL(/^https?:\/\/[^/]+\/$/);
     expect(attempts).toBe(3);
     const storage = await page.evaluate(() =>
         JSON.stringify([Object.values(localStorage), Object.values(sessionStorage)]),

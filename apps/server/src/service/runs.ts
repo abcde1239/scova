@@ -1,4 +1,8 @@
-import { reportSearchConfigurationHash, type Run as StoredRun } from '@scova/db';
+import {
+    reportSearchConfigurationHash,
+    type DatabaseTransaction,
+    type Run as StoredRun,
+} from '@scova/db';
 import { openCredential } from '@scova/shared/credentials';
 import { createHash } from 'node:crypto';
 import { effectiveRunScopeHash } from '@scova/shared';
@@ -22,7 +26,7 @@ import {
 } from '@scova/models';
 import type { ApiServices } from '@/app/services';
 import { ApiError } from '@/utils/errors.ts';
-import { createRunRepo, type RunStore } from '@/repo/runs.ts';
+import { createRunRepo, createRunStore, type RunStore } from '@/repo/runs.ts';
 import { requireConversationHead } from '@/repo/report-questions.ts';
 import { conversationContext } from '@/utils/report-conversation.ts';
 import { comparisonScopeHash } from '@/service/tasks.ts';
@@ -584,9 +588,9 @@ export function createRunService(services: ApiServices) {
             );
             return { run: toRun(result.run), reused: result.reused };
         },
-        async cancel(userId: string, runId: string) {
+        async cancel(userId: string, runId: string, transaction?: DatabaseTransaction) {
             if (!UUID.test(runId)) throw new ApiError(404, 'NOT_FOUND', '资源不存在');
-            const result = await repo.transaction(async (store) => {
+            const cancel = async (store: RunStore) => {
                 await store.lockRun(runId, userId);
                 const run = await store.findRun(runId, userId);
                 if (!run) throw new ApiError(404, 'NOT_FOUND', '资源不存在');
@@ -604,7 +608,10 @@ export function createRunService(services: ApiServices) {
                     payload: { runId: run.id },
                 });
                 return { run: updated, reused: false };
-            });
+            };
+            const result = await (transaction
+                ? cancel(createRunStore(transaction))
+                : repo.transaction(cancel));
             return { run: toRun(result.run), reused: result.reused };
         },
         async retry(

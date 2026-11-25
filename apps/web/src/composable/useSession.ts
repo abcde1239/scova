@@ -91,8 +91,7 @@ export function isPublicPage(route: { name?: string | symbol | null; path: strin
 
 /** 只接受已登记的站内目标；服务恢复可返回认证页，登录成功仍排除认证页。 */
 export function sessionReturnTarget(router: Router, value: unknown, allowAuth = false): string {
-    if (typeof value !== 'string' || !value.startsWith('/') || /[\\\s]/.test(value))
-        return '/tasks';
+    if (typeof value !== 'string' || !value.startsWith('/') || /[\\\s]/.test(value)) return '/';
     try {
         const decoded = decodeURIComponent(value);
         if (
@@ -100,17 +99,17 @@ export function sessionReturnTarget(router: Router, value: unknown, allowAuth = 
             decoded.includes('\\') ||
             Array.from(decoded).some((character) => character.charCodeAt(0) <= 32)
         )
-            return '/tasks';
+            return '/';
         const url = new URL(value, 'https://scova.invalid');
-        if (url.origin !== 'https://scova.invalid') return '/tasks';
+        if (url.origin !== 'https://scova.invalid') return '/';
         const target = router.resolve(value);
         return target.matched.length &&
             (!isPublicPage(target) ||
                 (allowAuth && ['login', 'register'].includes(String(target.name))))
             ? target.fullPath
-            : '/tasks';
+            : '/';
     } catch {
-        return '/tasks';
+        return '/';
     }
 }
 

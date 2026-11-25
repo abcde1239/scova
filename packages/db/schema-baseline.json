@@ -60,6 +60,30 @@
         {
             "name": "0014_project_conversations",
             "hash": "bbbd599c35fc4a46a74d0eecab024e9b5e42534b828ddb11a593cb5dc67f2203"
+        },
+        {
+            "name": "0015_futuristic_speed",
+            "hash": "146dfa2c72b1a932889914a63e7a1405c9e28edb9439f9f38af5740d1d8d5c85"
+        },
+        {
+            "name": "0016_project_threads",
+            "hash": "3d7abf98dd5fd6a1f68fb4ed8a777e0185ccccf7efd1366599e2beb3f77873f2"
+        },
+        {
+            "name": "0017_project_thread_execution",
+            "hash": "e07f4a82eff1cc9580312e09175edcf4f51490d55ace43cd69c4b3eccbc2bbc2"
+        },
+        {
+            "name": "0018_project_settings",
+            "hash": "f4a2db9faadbf4f8639e5cfd751f9e9b131799ccd7b21e38574ee633c959a5cc"
+        },
+        {
+            "name": "0019_thread_attachments",
+            "hash": "fc8ba53b22aafc804faad57036377bf0e58bdf0e498f81c7d41237f82477c236"
+        },
+        {
+            "name": "0020_project_thread_attachment_ownership",
+            "hash": "c17f268e0e6dcc9bcd79a6fb63e63e6f94f5d5a76bdd96fdf8ad13f1db853123"
         }
     ],
     "signature": {
@@ -177,7 +201,42 @@
                 "force_row_security": false
             },
             {
+                "name": "project_settings",
+                "kind": "r",
+                "persistence": "p",
+                "row_security": false,
+                "force_row_security": false
+            },
+            {
                 "name": "project_tasks",
+                "kind": "r",
+                "persistence": "p",
+                "row_security": false,
+                "force_row_security": false
+            },
+            {
+                "name": "project_thread_attachments",
+                "kind": "r",
+                "persistence": "p",
+                "row_security": false,
+                "force_row_security": false
+            },
+            {
+                "name": "project_thread_items",
+                "kind": "r",
+                "persistence": "p",
+                "row_security": false,
+                "force_row_security": false
+            },
+            {
+                "name": "project_thread_run_origins",
+                "kind": "r",
+                "persistence": "p",
+                "row_security": false,
+                "force_row_security": false
+            },
+            {
+                "name": "project_threads",
                 "kind": "r",
                 "persistence": "p",
                 "row_security": false,
@@ -317,7 +376,28 @@
                 "force_row_security": false
             },
             {
+                "name": "workflow_notifications",
+                "kind": "r",
+                "persistence": "p",
+                "row_security": false,
+                "force_row_security": false
+            },
+            {
                 "name": "workflow_runs",
+                "kind": "r",
+                "persistence": "p",
+                "row_security": false,
+                "force_row_security": false
+            },
+            {
+                "name": "workflow_template_executions",
+                "kind": "r",
+                "persistence": "p",
+                "row_security": false,
+                "force_row_security": false
+            },
+            {
+                "name": "workflow_templates",
                 "kind": "r",
                 "persistence": "p",
                 "row_security": false,
@@ -1631,7 +1711,29 @@
                 "name": "expires_at",
                 "position": 9,
                 "type": "timestamp with time zone",
+                "not_null": false,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_conversation_turns",
+                "name": "thread_id",
+                "position": 10,
+                "type": "uuid",
                 "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_conversation_turns",
+                "name": "execution_deadline_at",
+                "position": 11,
+                "type": "timestamp with time zone",
+                "not_null": false,
                 "default_value": null,
                 "identity": "",
                 "generated": "",
@@ -1726,6 +1828,94 @@
                 "collation": null
             },
             {
+                "table_name": "project_research_drafts",
+                "name": "thread_id",
+                "position": 9,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_settings",
+                "name": "user_id",
+                "position": 1,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_settings",
+                "name": "project_id",
+                "position": 2,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_settings",
+                "name": "goal",
+                "position": 3,
+                "type": "text",
+                "not_null": true,
+                "default_value": "''::text",
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "project_settings",
+                "name": "requirements",
+                "position": 4,
+                "type": "text",
+                "not_null": true,
+                "default_value": "''::text",
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "project_settings",
+                "name": "preferred_sources",
+                "position": 5,
+                "type": "jsonb",
+                "not_null": true,
+                "default_value": "'[]'::jsonb",
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_settings",
+                "name": "default_autonomy",
+                "position": 6,
+                "type": "text",
+                "not_null": true,
+                "default_value": "'budgeted'::text",
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "project_settings",
+                "name": "updated_at",
+                "position": 7,
+                "type": "timestamp(6) with time zone",
+                "not_null": true,
+                "default_value": "now()",
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
                 "table_name": "project_tasks",
                 "name": "user_id",
                 "position": 1,
@@ -1754,6 +1944,391 @@
                 "type": "uuid",
                 "not_null": true,
                 "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_thread_attachments",
+                "name": "id",
+                "position": 1,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_thread_attachments",
+                "name": "thread_id",
+                "position": 2,
+                "type": "uuid",
+                "not_null": false,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_thread_attachments",
+                "name": "filename",
+                "position": 3,
+                "type": "text",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "project_thread_attachments",
+                "name": "format",
+                "position": 4,
+                "type": "text",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "project_thread_attachments",
+                "name": "byte_length",
+                "position": 5,
+                "type": "integer",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_thread_attachments",
+                "name": "digest",
+                "position": 6,
+                "type": "text",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "project_thread_attachments",
+                "name": "storage_key",
+                "position": 7,
+                "type": "text",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "project_thread_attachments",
+                "name": "excerpt",
+                "position": 8,
+                "type": "text",
+                "not_null": false,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "project_thread_attachments",
+                "name": "ready_at",
+                "position": 9,
+                "type": "timestamp with time zone",
+                "not_null": false,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_thread_attachments",
+                "name": "updated_at",
+                "position": 10,
+                "type": "timestamp with time zone",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_thread_attachments",
+                "name": "user_id",
+                "position": 11,
+                "type": "uuid",
+                "not_null": false,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_thread_items",
+                "name": "id",
+                "position": 1,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_thread_items",
+                "name": "user_id",
+                "position": 2,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_thread_items",
+                "name": "thread_id",
+                "position": 3,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_thread_items",
+                "name": "turn_id",
+                "position": 4,
+                "type": "uuid",
+                "not_null": false,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_thread_items",
+                "name": "seq",
+                "position": 5,
+                "type": "integer",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_thread_items",
+                "name": "kind",
+                "position": 6,
+                "type": "text",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "project_thread_items",
+                "name": "payload",
+                "position": 7,
+                "type": "jsonb",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_thread_items",
+                "name": "refs",
+                "position": 8,
+                "type": "jsonb",
+                "not_null": true,
+                "default_value": "'[]'::jsonb",
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_thread_items",
+                "name": "status",
+                "position": 9,
+                "type": "text",
+                "not_null": false,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "project_thread_items",
+                "name": "created_at",
+                "position": 10,
+                "type": "timestamp with time zone",
+                "not_null": true,
+                "default_value": "now()",
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_thread_run_origins",
+                "name": "user_id",
+                "position": 1,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_thread_run_origins",
+                "name": "run_id",
+                "position": 2,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_thread_run_origins",
+                "name": "project_id",
+                "position": 3,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_thread_run_origins",
+                "name": "thread_id",
+                "position": 4,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_thread_run_origins",
+                "name": "draft_id",
+                "position": 5,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_thread_run_origins",
+                "name": "draft_revision",
+                "position": 6,
+                "type": "integer",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_threads",
+                "name": "id",
+                "position": 1,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_threads",
+                "name": "user_id",
+                "position": 2,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_threads",
+                "name": "project_id",
+                "position": 3,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_threads",
+                "name": "title",
+                "position": 4,
+                "type": "text",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "project_threads",
+                "name": "is_default",
+                "position": 5,
+                "type": "boolean",
+                "not_null": true,
+                "default_value": "false",
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_threads",
+                "name": "archived_at",
+                "position": 6,
+                "type": "timestamp with time zone",
+                "not_null": false,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_threads",
+                "name": "last_activity_at",
+                "position": 7,
+                "type": "timestamp with time zone",
+                "not_null": true,
+                "default_value": "now()",
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "project_threads",
+                "name": "created_at",
+                "position": 8,
+                "type": "timestamp with time zone",
+                "not_null": true,
+                "default_value": "now()",
                 "identity": "",
                 "generated": "",
                 "collation": null
@@ -3827,6 +4402,116 @@
                 "collation": null
             },
             {
+                "table_name": "workflow_notifications",
+                "name": "id",
+                "position": 1,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_notifications",
+                "name": "user_id",
+                "position": 2,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_notifications",
+                "name": "workflow_run_id",
+                "position": 3,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_notifications",
+                "name": "node_id",
+                "position": 4,
+                "type": "text",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "workflow_notifications",
+                "name": "artifact_node_id",
+                "position": 5,
+                "type": "text",
+                "not_null": false,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "workflow_notifications",
+                "name": "channel",
+                "position": 6,
+                "type": "text",
+                "not_null": true,
+                "default_value": "'in_app'::text",
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "workflow_notifications",
+                "name": "title",
+                "position": 7,
+                "type": "text",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "workflow_notifications",
+                "name": "body",
+                "position": 8,
+                "type": "text",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "workflow_notifications",
+                "name": "read_at",
+                "position": 9,
+                "type": "timestamp(6) with time zone",
+                "not_null": false,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_notifications",
+                "name": "created_at",
+                "position": 10,
+                "type": "timestamp(6) with time zone",
+                "not_null": true,
+                "default_value": "now()",
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
                 "table_name": "workflow_runs",
                 "name": "id",
                 "position": 1,
@@ -3864,7 +4549,7 @@
                 "name": "version_id",
                 "position": 4,
                 "type": "uuid",
-                "not_null": true,
+                "not_null": false,
                 "default_value": null,
                 "identity": "",
                 "generated": "",
@@ -3968,6 +4653,193 @@
                 "identity": "",
                 "generated": "",
                 "collation": "default"
+            },
+            {
+                "table_name": "workflow_runs",
+                "name": "input_json",
+                "position": 14,
+                "type": "jsonb",
+                "not_null": false,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_runs",
+                "name": "preview",
+                "position": 15,
+                "type": "boolean",
+                "not_null": true,
+                "default_value": "false",
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_runs",
+                "name": "draft_preview_json",
+                "position": 16,
+                "type": "jsonb",
+                "not_null": false,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_template_executions",
+                "name": "user_id",
+                "position": 1,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_template_executions",
+                "name": "template_id",
+                "position": 2,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_template_executions",
+                "name": "template_version",
+                "position": 3,
+                "type": "integer",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_template_executions",
+                "name": "workflow_id",
+                "position": 4,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_template_executions",
+                "name": "version_id",
+                "position": 5,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_templates",
+                "name": "id",
+                "position": 1,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_templates",
+                "name": "user_id",
+                "position": 2,
+                "type": "uuid",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_templates",
+                "name": "version",
+                "position": 3,
+                "type": "integer",
+                "not_null": true,
+                "default_value": "1",
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_templates",
+                "name": "title",
+                "position": 4,
+                "type": "text",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "workflow_templates",
+                "name": "description",
+                "position": 5,
+                "type": "text",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "workflow_templates",
+                "name": "delivery",
+                "position": 6,
+                "type": "text",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": "default"
+            },
+            {
+                "table_name": "workflow_templates",
+                "name": "graph_json",
+                "position": 7,
+                "type": "jsonb",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_templates",
+                "name": "fields_json",
+                "position": 8,
+                "type": "jsonb",
+                "not_null": true,
+                "default_value": null,
+                "identity": "",
+                "generated": "",
+                "collation": null
+            },
+            {
+                "table_name": "workflow_templates",
+                "name": "created_at",
+                "position": 9,
+                "type": "timestamp(6) with time zone",
+                "not_null": true,
+                "default_value": "now()",
+                "identity": "",
+                "generated": "",
+                "collation": null
             },
             {
                 "table_name": "workflow_versions",
@@ -4900,6 +5772,13 @@
             },
             {
                 "table_name": "project_conversation_turns",
+                "name": "project_conversation_turns_owner_thread_fkey",
+                "type": "f",
+                "definition": "FOREIGN KEY (user_id, project_id, thread_id) REFERENCES project_threads(user_id, project_id, id) ON DELETE CASCADE",
+                "validated": true
+            },
+            {
+                "table_name": "project_conversation_turns",
                 "name": "project_conversation_turns_pkey",
                 "type": "p",
                 "definition": "PRIMARY KEY (id)",
@@ -4914,6 +5793,13 @@
             },
             {
                 "table_name": "project_research_drafts",
+                "name": "project_research_drafts_owner_thread_fkey",
+                "type": "f",
+                "definition": "FOREIGN KEY (user_id, project_id, thread_id) REFERENCES project_threads(user_id, project_id, id) ON DELETE CASCADE",
+                "validated": true
+            },
+            {
+                "table_name": "project_research_drafts",
                 "name": "project_research_drafts_pkey",
                 "type": "p",
                 "definition": "PRIMARY KEY (id)",
@@ -4924,6 +5810,48 @@
                 "name": "project_research_drafts_project_fkey",
                 "type": "f",
                 "definition": "FOREIGN KEY (user_id, project_id) REFERENCES projects(user_id, id) ON DELETE CASCADE",
+                "validated": true
+            },
+            {
+                "table_name": "project_settings",
+                "name": "project_settings_autonomy_valid",
+                "type": "c",
+                "definition": "CHECK (default_autonomy = ANY (ARRAY['ask'::text, 'budgeted'::text, 'autonomous'::text]))",
+                "validated": true
+            },
+            {
+                "table_name": "project_settings",
+                "name": "project_settings_goal_length",
+                "type": "c",
+                "definition": "CHECK (char_length(goal) <= 600)",
+                "validated": true
+            },
+            {
+                "table_name": "project_settings",
+                "name": "project_settings_pkey",
+                "type": "p",
+                "definition": "PRIMARY KEY (user_id, project_id)",
+                "validated": true
+            },
+            {
+                "table_name": "project_settings",
+                "name": "project_settings_project_fkey",
+                "type": "f",
+                "definition": "FOREIGN KEY (user_id, project_id) REFERENCES projects(user_id, id) ON DELETE CASCADE",
+                "validated": true
+            },
+            {
+                "table_name": "project_settings",
+                "name": "project_settings_requirements_length",
+                "type": "c",
+                "definition": "CHECK (char_length(requirements) <= 1200)",
+                "validated": true
+            },
+            {
+                "table_name": "project_settings",
+                "name": "project_settings_source_count",
+                "type": "c",
+                "definition": "CHECK (\nCASE\n    WHEN jsonb_typeof(preferred_sources) = 'array'::text THEN jsonb_array_length(preferred_sources) <= 8\n    ELSE false\nEND)",
                 "validated": true
             },
             {
@@ -4945,6 +5873,111 @@
                 "name": "project_tasks_task_fkey",
                 "type": "f",
                 "definition": "FOREIGN KEY (user_id, task_id) REFERENCES tasks(user_id, id) ON DELETE CASCADE",
+                "validated": true
+            },
+            {
+                "table_name": "project_thread_attachments",
+                "name": "project_thread_attachments_excerpt_check",
+                "type": "c",
+                "definition": "CHECK (char_length(excerpt) <= 1200)",
+                "validated": true
+            },
+            {
+                "table_name": "project_thread_attachments",
+                "name": "project_thread_attachments_format_check",
+                "type": "c",
+                "definition": "CHECK (format = ANY (ARRAY['csv'::text, 'txt'::text, 'pdf'::text]))",
+                "validated": true
+            },
+            {
+                "table_name": "project_thread_attachments",
+                "name": "project_thread_attachments_owner_thread_check",
+                "type": "c",
+                "definition": "CHECK ((user_id IS NULL) = (thread_id IS NULL))",
+                "validated": true
+            },
+            {
+                "table_name": "project_thread_attachments",
+                "name": "project_thread_attachments_owner_thread_fkey",
+                "type": "f",
+                "definition": "FOREIGN KEY (user_id, thread_id) REFERENCES project_threads(user_id, id) ON DELETE SET NULL",
+                "validated": true
+            },
+            {
+                "table_name": "project_thread_attachments",
+                "name": "project_thread_attachments_pkey",
+                "type": "p",
+                "definition": "PRIMARY KEY (id)",
+                "validated": true
+            },
+            {
+                "table_name": "project_thread_attachments",
+                "name": "project_thread_attachments_size_check",
+                "type": "c",
+                "definition": "CHECK (byte_length >= 1 AND byte_length <= 262144)",
+                "validated": true
+            },
+            {
+                "table_name": "project_thread_items",
+                "name": "project_thread_items_owner_thread_fkey",
+                "type": "f",
+                "definition": "FOREIGN KEY (user_id, thread_id) REFERENCES project_threads(user_id, id) ON DELETE CASCADE",
+                "validated": true
+            },
+            {
+                "table_name": "project_thread_items",
+                "name": "project_thread_items_owner_turn_fkey",
+                "type": "f",
+                "definition": "FOREIGN KEY (user_id, thread_id, turn_id) REFERENCES project_conversation_turns(user_id, thread_id, id) ON DELETE SET NULL (turn_id)",
+                "validated": true
+            },
+            {
+                "table_name": "project_thread_items",
+                "name": "project_thread_items_pkey",
+                "type": "p",
+                "definition": "PRIMARY KEY (id)",
+                "validated": true
+            },
+            {
+                "table_name": "project_thread_items",
+                "name": "project_thread_items_seq_positive",
+                "type": "c",
+                "definition": "CHECK (seq > 0)",
+                "validated": true
+            },
+            {
+                "table_name": "project_thread_run_origins",
+                "name": "project_thread_run_origins_owner_run_fkey",
+                "type": "f",
+                "definition": "FOREIGN KEY (user_id, run_id) REFERENCES runs(user_id, id) ON DELETE CASCADE",
+                "validated": true
+            },
+            {
+                "table_name": "project_thread_run_origins",
+                "name": "project_thread_run_origins_owner_thread_fkey",
+                "type": "f",
+                "definition": "FOREIGN KEY (user_id, project_id, thread_id) REFERENCES project_threads(user_id, project_id, id) ON DELETE CASCADE",
+                "validated": true
+            },
+            {
+                "table_name": "project_thread_run_origins",
+                "name": "project_thread_run_origins_user_id_run_id_pk",
+                "type": "p",
+                "definition": "PRIMARY KEY (user_id, run_id)",
+                "validated": true
+            },
+            {
+                "table_name": "project_threads",
+                "name": "project_threads_owner_project_fkey",
+                "type": "f",
+                "definition": "FOREIGN KEY (user_id, project_id) REFERENCES projects(user_id, id) ON DELETE CASCADE",
+                "validated": true
+            },
+            {
+                "table_name": "project_threads",
+                "name": "project_threads_pkey",
+                "type": "p",
+                "definition": "PRIMARY KEY (id)",
                 "validated": true
             },
             {
@@ -5564,6 +6597,27 @@
                 "validated": true
             },
             {
+                "table_name": "workflow_notifications",
+                "name": "workflow_notifications_channel_valid",
+                "type": "c",
+                "definition": "CHECK (channel = 'in_app'::text)",
+                "validated": true
+            },
+            {
+                "table_name": "workflow_notifications",
+                "name": "workflow_notifications_owner_run_fkey",
+                "type": "f",
+                "definition": "FOREIGN KEY (user_id, workflow_run_id) REFERENCES workflow_runs(user_id, id) ON DELETE CASCADE",
+                "validated": true
+            },
+            {
+                "table_name": "workflow_notifications",
+                "name": "workflow_notifications_pkey",
+                "type": "p",
+                "definition": "PRIMARY KEY (id)",
+                "validated": true
+            },
+            {
                 "table_name": "workflow_runs",
                 "name": "workflow_runs_checkpoint_valid",
                 "type": "c",
@@ -5579,9 +6633,65 @@
             },
             {
                 "table_name": "workflow_runs",
+                "name": "workflow_runs_source_valid",
+                "type": "c",
+                "definition": "CHECK (version_id IS NOT NULL AND draft_preview_json IS NULL OR version_id IS NULL AND preview AND draft_preview_json IS NOT NULL)",
+                "validated": true
+            },
+            {
+                "table_name": "workflow_runs",
                 "name": "workflow_runs_version_fkey",
                 "type": "f",
                 "definition": "FOREIGN KEY (user_id, workflow_id, version_id) REFERENCES workflow_versions(user_id, workflow_id, id) ON DELETE CASCADE",
+                "validated": true
+            },
+            {
+                "table_name": "workflow_runs",
+                "name": "workflow_runs_workflow_fkey",
+                "type": "f",
+                "definition": "FOREIGN KEY (user_id, workflow_id) REFERENCES workflows(user_id, id) ON DELETE CASCADE",
+                "validated": true
+            },
+            {
+                "table_name": "workflow_template_executions",
+                "name": "workflow_template_executions_user_id_template_id_template_versi",
+                "type": "p",
+                "definition": "PRIMARY KEY (user_id, template_id, template_version)",
+                "validated": true
+            },
+            {
+                "table_name": "workflow_template_executions",
+                "name": "workflow_template_executions_version_fkey",
+                "type": "f",
+                "definition": "FOREIGN KEY (user_id, workflow_id, version_id) REFERENCES workflow_versions(user_id, workflow_id, id) ON DELETE CASCADE",
+                "validated": true
+            },
+            {
+                "table_name": "workflow_template_executions",
+                "name": "workflow_template_executions_version_valid",
+                "type": "c",
+                "definition": "CHECK (template_version >= 1)",
+                "validated": true
+            },
+            {
+                "table_name": "workflow_templates",
+                "name": "workflow_templates_pkey",
+                "type": "p",
+                "definition": "PRIMARY KEY (id)",
+                "validated": true
+            },
+            {
+                "table_name": "workflow_templates",
+                "name": "workflow_templates_user_id_users_id_fk",
+                "type": "f",
+                "definition": "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE",
+                "validated": true
+            },
+            {
+                "table_name": "workflow_templates",
+                "name": "workflow_templates_version_valid",
+                "type": "c",
+                "definition": "CHECK (version >= 1)",
                 "validated": true
             },
             {
@@ -5973,6 +7083,13 @@
             },
             {
                 "table_name": "project_conversation_turns",
+                "name": "project_conversation_turns_owner_thread_id_key",
+                "definition": "CREATE UNIQUE INDEX project_conversation_turns_owner_thread_id_key ON project_conversation_turns USING btree (user_id, thread_id, id)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "project_conversation_turns",
                 "name": "project_conversation_turns_pkey",
                 "definition": "CREATE UNIQUE INDEX project_conversation_turns_pkey ON project_conversation_turns USING btree (id)",
                 "valid": true,
@@ -5987,8 +7104,15 @@
             },
             {
                 "table_name": "project_conversation_turns",
+                "name": "project_conversation_turns_running_deadline_idx",
+                "definition": "CREATE INDEX project_conversation_turns_running_deadline_idx ON project_conversation_turns USING btree (execution_deadline_at) WHERE (status = 'running'::text)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "project_conversation_turns",
                 "name": "project_conversation_turns_running_key",
-                "definition": "CREATE UNIQUE INDEX project_conversation_turns_running_key ON project_conversation_turns USING btree (user_id, project_id) WHERE (status = 'running'::text)",
+                "definition": "CREATE UNIQUE INDEX project_conversation_turns_running_key ON project_conversation_turns USING btree (user_id, thread_id) WHERE (status = 'running'::text)",
                 "valid": true,
                 "ready": true
             },
@@ -6001,8 +7125,15 @@
             },
             {
                 "table_name": "project_research_drafts",
-                "name": "project_research_drafts_project_idx",
-                "definition": "CREATE INDEX project_research_drafts_project_idx ON project_research_drafts USING btree (user_id, project_id)",
+                "name": "project_research_drafts_thread_idx",
+                "definition": "CREATE INDEX project_research_drafts_thread_idx ON project_research_drafts USING btree (user_id, project_id, thread_id)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "project_settings",
+                "name": "project_settings_pkey",
+                "definition": "CREATE UNIQUE INDEX project_settings_pkey ON project_settings USING btree (user_id, project_id)",
                 "valid": true,
                 "ready": true
             },
@@ -6017,6 +7148,97 @@
                 "table_name": "project_tasks",
                 "name": "project_tasks_project_idx",
                 "definition": "CREATE INDEX project_tasks_project_idx ON project_tasks USING btree (user_id, project_id, task_id)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "project_thread_attachments",
+                "name": "project_thread_attachments_cleanup_idx",
+                "definition": "CREATE INDEX project_thread_attachments_cleanup_idx ON project_thread_attachments USING btree (updated_at) WHERE ((thread_id IS NULL) OR (ready_at IS NULL))",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "project_thread_attachments",
+                "name": "project_thread_attachments_content_key",
+                "definition": "CREATE UNIQUE INDEX project_thread_attachments_content_key ON project_thread_attachments USING btree (thread_id, digest)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "project_thread_attachments",
+                "name": "project_thread_attachments_pkey",
+                "definition": "CREATE UNIQUE INDEX project_thread_attachments_pkey ON project_thread_attachments USING btree (id)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "project_thread_items",
+                "name": "project_thread_items_owner_turn_idx",
+                "definition": "CREATE INDEX project_thread_items_owner_turn_idx ON project_thread_items USING btree (user_id, thread_id, turn_id)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "project_thread_items",
+                "name": "project_thread_items_pkey",
+                "definition": "CREATE UNIQUE INDEX project_thread_items_pkey ON project_thread_items USING btree (id)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "project_thread_items",
+                "name": "project_thread_items_thread_seq_key",
+                "definition": "CREATE UNIQUE INDEX project_thread_items_thread_seq_key ON project_thread_items USING btree (thread_id, seq)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "project_thread_run_origins",
+                "name": "project_thread_run_origins_owner_thread_idx",
+                "definition": "CREATE INDEX project_thread_run_origins_owner_thread_idx ON project_thread_run_origins USING btree (user_id, project_id, thread_id)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "project_thread_run_origins",
+                "name": "project_thread_run_origins_user_id_run_id_pk",
+                "definition": "CREATE UNIQUE INDEX project_thread_run_origins_user_id_run_id_pk ON project_thread_run_origins USING btree (user_id, run_id)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "project_threads",
+                "name": "project_threads_default_key",
+                "definition": "CREATE UNIQUE INDEX project_threads_default_key ON project_threads USING btree (user_id, project_id) WHERE is_default",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "project_threads",
+                "name": "project_threads_owner_id_key",
+                "definition": "CREATE UNIQUE INDEX project_threads_owner_id_key ON project_threads USING btree (user_id, id)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "project_threads",
+                "name": "project_threads_owner_project_id_key",
+                "definition": "CREATE UNIQUE INDEX project_threads_owner_project_id_key ON project_threads USING btree (user_id, project_id, id)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "project_threads",
+                "name": "project_threads_pkey",
+                "definition": "CREATE UNIQUE INDEX project_threads_pkey ON project_threads USING btree (id)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "project_threads",
+                "name": "project_threads_project_activity_idx",
+                "definition": "CREATE INDEX project_threads_project_activity_idx ON project_threads USING btree (user_id, project_id, last_activity_at DESC NULLS LAST, id DESC NULLS LAST)",
                 "valid": true,
                 "ready": true
             },
@@ -6539,6 +7761,27 @@
                 "ready": true
             },
             {
+                "table_name": "workflow_notifications",
+                "name": "workflow_notifications_delivery_key",
+                "definition": "CREATE UNIQUE INDEX workflow_notifications_delivery_key ON workflow_notifications USING btree (workflow_run_id, node_id, user_id, channel)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "workflow_notifications",
+                "name": "workflow_notifications_history_idx",
+                "definition": "CREATE INDEX workflow_notifications_history_idx ON workflow_notifications USING btree (user_id, created_at DESC NULLS LAST, id DESC NULLS LAST)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "workflow_notifications",
+                "name": "workflow_notifications_pkey",
+                "definition": "CREATE UNIQUE INDEX workflow_notifications_pkey ON workflow_notifications USING btree (id)",
+                "valid": true,
+                "ready": true
+            },
+            {
                 "table_name": "workflow_runs",
                 "name": "workflow_runs_due_idx",
                 "definition": "CREATE INDEX workflow_runs_due_idx ON workflow_runs USING btree (next_check_at, id) WHERE (status = ANY (ARRAY['queued'::text, 'running'::text, 'cancel_requested'::text]))",
@@ -6554,6 +7797,13 @@
             },
             {
                 "table_name": "workflow_runs",
+                "name": "workflow_runs_owner_id_key",
+                "definition": "CREATE UNIQUE INDEX workflow_runs_owner_id_key ON workflow_runs USING btree (user_id, id)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "workflow_runs",
                 "name": "workflow_runs_pkey",
                 "definition": "CREATE UNIQUE INDEX workflow_runs_pkey ON workflow_runs USING btree (id)",
                 "valid": true,
@@ -6563,6 +7813,34 @@
                 "table_name": "workflow_runs",
                 "name": "workflow_runs_start_key",
                 "definition": "CREATE UNIQUE INDEX workflow_runs_start_key ON workflow_runs USING btree (user_id, workflow_id, start_key_hash)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "workflow_template_executions",
+                "name": "workflow_template_executions_user_id_template_id_template_versi",
+                "definition": "CREATE UNIQUE INDEX workflow_template_executions_user_id_template_id_template_versi ON workflow_template_executions USING btree (user_id, template_id, template_version)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "workflow_template_executions",
+                "name": "workflow_template_executions_workflow_idx",
+                "definition": "CREATE INDEX workflow_template_executions_workflow_idx ON workflow_template_executions USING btree (user_id, workflow_id)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "workflow_templates",
+                "name": "workflow_templates_pkey",
+                "definition": "CREATE UNIQUE INDEX workflow_templates_pkey ON workflow_templates USING btree (id)",
+                "valid": true,
+                "ready": true
+            },
+            {
+                "table_name": "workflow_templates",
+                "name": "workflow_templates_user_created_idx",
+                "definition": "CREATE INDEX workflow_templates_user_created_idx ON workflow_templates USING btree (user_id, created_at DESC NULLS LAST, id DESC NULLS LAST)",
                 "valid": true,
                 "ready": true
             },
@@ -7124,6 +8402,18 @@
             },
             {
                 "table_name": "project_conversation_turns",
+                "constraint_name": "project_conversation_turns_owner_thread_fkey",
+                "event": 5,
+                "enabled": "O"
+            },
+            {
+                "table_name": "project_conversation_turns",
+                "constraint_name": "project_conversation_turns_owner_thread_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "project_conversation_turns",
                 "constraint_name": "project_conversation_turns_project_fkey",
                 "event": 5,
                 "enabled": "O"
@@ -7135,6 +8425,30 @@
                 "enabled": "O"
             },
             {
+                "table_name": "project_conversation_turns",
+                "constraint_name": "project_thread_items_owner_turn_fkey",
+                "event": 9,
+                "enabled": "O"
+            },
+            {
+                "table_name": "project_conversation_turns",
+                "constraint_name": "project_thread_items_owner_turn_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "project_research_drafts",
+                "constraint_name": "project_research_drafts_owner_thread_fkey",
+                "event": 5,
+                "enabled": "O"
+            },
+            {
+                "table_name": "project_research_drafts",
+                "constraint_name": "project_research_drafts_owner_thread_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
                 "table_name": "project_research_drafts",
                 "constraint_name": "project_research_drafts_project_fkey",
                 "event": 5,
@@ -7143,6 +8457,18 @@
             {
                 "table_name": "project_research_drafts",
                 "constraint_name": "project_research_drafts_project_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "project_settings",
+                "constraint_name": "project_settings_project_fkey",
+                "event": 5,
+                "enabled": "O"
+            },
+            {
+                "table_name": "project_settings",
+                "constraint_name": "project_settings_project_fkey",
                 "event": 17,
                 "enabled": "O"
             },
@@ -7167,6 +8493,138 @@
             {
                 "table_name": "project_tasks",
                 "constraint_name": "project_tasks_task_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "project_thread_attachments",
+                "constraint_name": "project_thread_attachments_owner_thread_fkey",
+                "event": 5,
+                "enabled": "O"
+            },
+            {
+                "table_name": "project_thread_attachments",
+                "constraint_name": "project_thread_attachments_owner_thread_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "project_thread_items",
+                "constraint_name": "project_thread_items_owner_thread_fkey",
+                "event": 5,
+                "enabled": "O"
+            },
+            {
+                "table_name": "project_thread_items",
+                "constraint_name": "project_thread_items_owner_thread_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "project_thread_items",
+                "constraint_name": "project_thread_items_owner_turn_fkey",
+                "event": 5,
+                "enabled": "O"
+            },
+            {
+                "table_name": "project_thread_items",
+                "constraint_name": "project_thread_items_owner_turn_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "project_thread_run_origins",
+                "constraint_name": "project_thread_run_origins_owner_run_fkey",
+                "event": 5,
+                "enabled": "O"
+            },
+            {
+                "table_name": "project_thread_run_origins",
+                "constraint_name": "project_thread_run_origins_owner_run_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "project_thread_run_origins",
+                "constraint_name": "project_thread_run_origins_owner_thread_fkey",
+                "event": 5,
+                "enabled": "O"
+            },
+            {
+                "table_name": "project_thread_run_origins",
+                "constraint_name": "project_thread_run_origins_owner_thread_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "project_threads",
+                "constraint_name": "project_conversation_turns_owner_thread_fkey",
+                "event": 9,
+                "enabled": "O"
+            },
+            {
+                "table_name": "project_threads",
+                "constraint_name": "project_conversation_turns_owner_thread_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "project_threads",
+                "constraint_name": "project_research_drafts_owner_thread_fkey",
+                "event": 9,
+                "enabled": "O"
+            },
+            {
+                "table_name": "project_threads",
+                "constraint_name": "project_research_drafts_owner_thread_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "project_threads",
+                "constraint_name": "project_thread_attachments_owner_thread_fkey",
+                "event": 9,
+                "enabled": "O"
+            },
+            {
+                "table_name": "project_threads",
+                "constraint_name": "project_thread_attachments_owner_thread_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "project_threads",
+                "constraint_name": "project_thread_items_owner_thread_fkey",
+                "event": 9,
+                "enabled": "O"
+            },
+            {
+                "table_name": "project_threads",
+                "constraint_name": "project_thread_items_owner_thread_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "project_threads",
+                "constraint_name": "project_thread_run_origins_owner_thread_fkey",
+                "event": 9,
+                "enabled": "O"
+            },
+            {
+                "table_name": "project_threads",
+                "constraint_name": "project_thread_run_origins_owner_thread_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "project_threads",
+                "constraint_name": "project_threads_owner_project_fkey",
+                "event": 5,
+                "enabled": "O"
+            },
+            {
+                "table_name": "project_threads",
+                "constraint_name": "project_threads_owner_project_fkey",
                 "event": 17,
                 "enabled": "O"
             },
@@ -7196,6 +8654,18 @@
             },
             {
                 "table_name": "projects",
+                "constraint_name": "project_settings_project_fkey",
+                "event": 9,
+                "enabled": "O"
+            },
+            {
+                "table_name": "projects",
+                "constraint_name": "project_settings_project_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "projects",
                 "constraint_name": "project_tasks_project_fkey",
                 "event": 9,
                 "enabled": "O"
@@ -7203,6 +8673,18 @@
             {
                 "table_name": "projects",
                 "constraint_name": "project_tasks_project_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "projects",
+                "constraint_name": "project_threads_owner_project_fkey",
+                "event": 9,
+                "enabled": "O"
+            },
+            {
+                "table_name": "projects",
+                "constraint_name": "project_threads_owner_project_fkey",
                 "event": 17,
                 "enabled": "O"
             },
@@ -7599,6 +9081,18 @@
             {
                 "table_name": "runs",
                 "constraint_name": "outbox_user_id_aggregate_id_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "runs",
+                "constraint_name": "project_thread_run_origins_owner_run_fkey",
+                "event": 9,
+                "enabled": "O"
+            },
+            {
+                "table_name": "runs",
+                "constraint_name": "project_thread_run_origins_owner_run_fkey",
                 "event": 17,
                 "enabled": "O"
             },
@@ -8540,6 +10034,18 @@
             },
             {
                 "table_name": "users",
+                "constraint_name": "workflow_templates_user_id_users_id_fk",
+                "event": 9,
+                "enabled": "O"
+            },
+            {
+                "table_name": "users",
+                "constraint_name": "workflow_templates_user_id_users_id_fk",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "users",
                 "constraint_name": "workflows_user_id_users_id_fk",
                 "event": 9,
                 "enabled": "O"
@@ -8551,6 +10057,30 @@
                 "enabled": "O"
             },
             {
+                "table_name": "workflow_notifications",
+                "constraint_name": "workflow_notifications_owner_run_fkey",
+                "event": 5,
+                "enabled": "O"
+            },
+            {
+                "table_name": "workflow_notifications",
+                "constraint_name": "workflow_notifications_owner_run_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "workflow_runs",
+                "constraint_name": "workflow_notifications_owner_run_fkey",
+                "event": 9,
+                "enabled": "O"
+            },
+            {
+                "table_name": "workflow_runs",
+                "constraint_name": "workflow_notifications_owner_run_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
                 "table_name": "workflow_runs",
                 "constraint_name": "workflow_runs_version_fkey",
                 "event": 5,
@@ -8559,6 +10089,42 @@
             {
                 "table_name": "workflow_runs",
                 "constraint_name": "workflow_runs_version_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "workflow_runs",
+                "constraint_name": "workflow_runs_workflow_fkey",
+                "event": 5,
+                "enabled": "O"
+            },
+            {
+                "table_name": "workflow_runs",
+                "constraint_name": "workflow_runs_workflow_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "workflow_template_executions",
+                "constraint_name": "workflow_template_executions_version_fkey",
+                "event": 5,
+                "enabled": "O"
+            },
+            {
+                "table_name": "workflow_template_executions",
+                "constraint_name": "workflow_template_executions_version_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "workflow_templates",
+                "constraint_name": "workflow_templates_user_id_users_id_fk",
+                "event": 5,
+                "enabled": "O"
+            },
+            {
+                "table_name": "workflow_templates",
+                "constraint_name": "workflow_templates_user_id_users_id_fk",
                 "event": 17,
                 "enabled": "O"
             },
@@ -8576,6 +10142,18 @@
             },
             {
                 "table_name": "workflow_versions",
+                "constraint_name": "workflow_template_executions_version_fkey",
+                "event": 9,
+                "enabled": "O"
+            },
+            {
+                "table_name": "workflow_versions",
+                "constraint_name": "workflow_template_executions_version_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "workflow_versions",
                 "constraint_name": "workflow_versions_workflow_fkey",
                 "event": 5,
                 "enabled": "O"
@@ -8583,6 +10161,18 @@
             {
                 "table_name": "workflow_versions",
                 "constraint_name": "workflow_versions_workflow_fkey",
+                "event": 17,
+                "enabled": "O"
+            },
+            {
+                "table_name": "workflows",
+                "constraint_name": "workflow_runs_workflow_fkey",
+                "event": 9,
+                "enabled": "O"
+            },
+            {
+                "table_name": "workflows",
+                "constraint_name": "workflow_runs_workflow_fkey",
                 "event": 17,
                 "enabled": "O"
             },

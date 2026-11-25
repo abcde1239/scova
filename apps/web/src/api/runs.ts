@@ -48,7 +48,10 @@ const retryEndpoint = defineApiEndpoint<{
     },
     validator: commandValidator,
 });
-const cancelEndpoint = defineApiEndpoint<{ params: { runId: string }; data: RunCommandResponse }>({
+export const cancelRunEndpoint = defineApiEndpoint<{
+    params: { runId: string };
+    data: RunCommandResponse;
+}>({
     method: 'POST',
     path: '/runs/:runId/cancel',
     inputValidators: { params: paramsValidator('runId') },
@@ -114,7 +117,11 @@ export async function requestRunAction(
                     { params: { runId: attempt.runId! }, body },
                     options,
                 )
-              : await scope.request(cancelEndpoint, { params: { runId: attempt.runId! } }, options);
+              : await scope.request(
+                    cancelRunEndpoint,
+                    { params: { runId: attempt.runId! } },
+                    options,
+                );
     const { run, reused } = response.data;
     if (
         run.taskId !== attempt.taskId ||

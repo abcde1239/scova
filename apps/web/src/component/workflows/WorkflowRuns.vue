@@ -1,9 +1,22 @@
 <template>
     <section class="surface-card p-4 layout-grid gap-4" aria-labelledby="workflow-runs-heading">
         <h2 id="workflow-runs-heading" class="m-0">运行工作流</h2>
-        <p v-if="!published" class="m-0 text-muted">发布版本后即可启动运行。</p>
-        <form v-else class="layout-grid gap-3" method="post" @submit.prevent="start">
-            <div class="layout-grid gap-2 max-w-[32rem]">
+        <p v-if="!published && !draftCanvas" class="m-0 text-muted">发布版本后即可启动运行。</p>
+        <form v-else class="layout-grid gap-3" method="post" @submit.prevent="start(previewMode)">
+            <fieldset
+                v-if="draftCanvas && published"
+                class="flex flex-wrap gap-3 m-0 p-0 border-none"
+                :disabled="starting.isPending.value || filePending"
+            >
+                <legend class="font-semibold p-0">运行方式</legend>
+                <label class="flex items-center gap-2"
+                    ><input v-model="runMode" type="radio" value="published" /> 正式运行</label
+                >
+                <label class="flex items-center gap-2"
+                    ><input v-model="runMode" type="radio" value="draft" /> 草稿试跑</label
+                >
+            </fieldset>
+            <div v-if="published && !previewMode" class="layout-grid gap-2 max-w-[32rem]">
                 <label for="workflow-version">发布版本</label>
                 <select
                     id="workflow-version"
@@ -18,10 +31,24 @@
                     </option>
                 </select>
             </div>
-            <p v-if="selectedVersion" class="m-0 text-muted">
+            <p v-if="selectedVersion && !previewMode" class="m-0 text-muted">
                 {{ selectedVersion.title }} · {{ selectedVersion.bindings.length }} 个研究节点
             </p>
-            <div v-if="versions.isError.value || versions.hasNextPage.value">
+            <workflow-run-inputs
+                v-if="activeCanvas"
+                :key="`${runMode}-${versionId}-${draftRevision}`"
+                v-model="canvasInput"
+                :graph="activeCanvas"
+                :busy="starting.isPending.value || filePending"
+                @file-pending="filePending = $event"
+            />
+            <div
+                v-if="
+                    published &&
+                    !previewMode &&
+                    (versions.isError.value || versions.hasNextPage.value)
+                "
+            >
                 <action-button
                     :busy="versions.isFetching.value"
                     @click="versions.isError.value ? versions.refetch() : versions.fetchNextPage()"
@@ -29,25 +56,21 @@
                     {{ versions.isError.value ? '重试读取发布版本' : '加载更早的版本' }}
                 </action-button>
             </div>
-            <div>
+            <div class="flex flex-wrap gap-2">
                 <action-button
                     type="primary"
                     attr-type="submit"
-                    :disabled="!selectedVersion"
+                    :disabled="filePending || (previewMode ? draftDirty : !selectedVersion)"
                     :busy="starting.isPending.value"
+                    >{{ previewMode ? '试跑已保存草稿' : '启动运行' }}</action-button
                 >
-                    {{
-                        startKeys.has(versionId) && !starting.isPending.value
-                            ? '重试启动'
-                            : '启动运行'
-                    }}
-                </action-button>
             </div>
+            <p v-if="draftDirty && previewMode" class="m-0 text-muted">保存当前改动后可试跑。</p>
         </form>
         <p v-if="problem" role="alert" class="m-0">{{ problem }}</p>
         <p v-if="actionResult" role="status" class="m-0">{{ actionResult }}</p>
 
-        <div v-if="published || items.length" class="layout-grid gap-2">
+        <div v-if="published || draftCanvas || items.length" class="layout-grid gap-2">
             <h3 class="m-0">运行历史</h3>
             <state-panel
                 v-if="history.isPending.value"
@@ -100,7 +123,7 @@
             <template v-if="run">
                 <p class="m-0 break-anywhere" role="status">
                     {{ statusLabels[run.status] }} ·
-                    {{ run.mode === 'live' ? '实际运行' : '演示运行' }}
+                    {{ run.preview ? '草稿试跑' : run.mode === 'live' ? '正式运行' : '演示运行' }}
                     <template v-if="run.failureCode"> · {{ run.failureCode }}</template>
                 </p>
                 <div v-if="canCancel">
@@ -108,31 +131,18 @@
                         >取消运行</action-button
                     >
                 </div>
-                <ol class="layout-grid gap-2 m-0 p-0 list-none" aria-label="节点运行状态">
-                    <li
-                        v-for="node in run.nodes"
-                        :key="node.id"
-                        class="run-node layout-grid gap-1 break-anywhere"
-                    >
-                        <span class="font-semibold"
-                            >{{ nodeLabels[node.type] }} · {{ statusLabels[node.status] }}</span
-                        >
-                        <span v-if="node.parallelGroup">
-                            并行组 {{ parallelGroups.indexOf(node.parallelGroup) + 1 }}
-                        </span>
-                        <span v-if="node.type === 'study'">执行尝试 {{ node.attempt }}</span>
-                        <span v-if="node.failureCode">{{ node.failureCode }}</span>
-                        <router-link
-                            v-if="node.childRunId"
-                            class="internal-link"
-                            :to="{ name: 'run-detail', params: { runId: node.childRunId } }"
-                        >
-                            查看研究执行{{
-                                node.childStatus ? `（${childStatusLabel(node.childStatus)}）` : ''
-                            }}
-                        </router-link>
-                    </li>
-                </ol>
+                <router-link
+                    class="internal-link"
+                    :to="{ name: 'workflow-run-detail', params: { runId: run.id } }"
+                    >打开运行详情页</router-link
+                >
+                <workflow-run-results
+                    :run="run"
+                    :graph="
+                        run.draftSnapshot ??
+                        versionOptions.find((version) => version.id === run?.versionId)?.graph
+                    "
+                />
             </template>
         </section>
     </section>
@@ -142,7 +152,13 @@
 import { computed, nextTick, onScopeDispose, reactive, ref, watch } from 'vue';
 import { RouterLink } from 'vue-router';
 import { useQuery } from '@tanstack/vue-query';
-import type { Run, WorkflowRun, WorkflowVersionListSchema } from '@scova/models';
+import {
+    isWorkflowCanvasGraph,
+    type WorkflowCanvasInput,
+    type WorkflowGraph,
+    type WorkflowRun,
+    type WorkflowVersionListSchema,
+} from '@scova/models';
 import {
     cancelWorkflowRunEndpoint,
     startWorkflowEndpoint,
@@ -155,27 +171,31 @@ import type { ApiResponse } from '@/api/client';
 import { toApiError } from '@/api/errors';
 import { shouldReportQueryError } from '@/api/query';
 import ActionButton from '@/component/common/ActionButton.vue';
+import WorkflowRunInputs from '@/component/workflows/WorkflowRunInputs.vue';
+import WorkflowRunResults from '@/component/workflows/WorkflowRunResults.vue';
 import StatePanel from '@/component/common/StatePanel.vue';
 import { useSessionLifecycle, useSessionMutation } from '@/composable/useSessionQuery';
 import { useWorkflowPages } from '@/composable/useWorkflowPages';
-import { workflowRunIsActive } from '@/utils/workflow/serial';
+import { workflowRunIsActive, workflowStatusLabels as statusLabels } from '@/utils/workflow/serial';
 
-const props = defineProps<{ workflowId: string; published: WorkflowDetail['publishedVersion'] }>();
+const props = defineProps<{
+    workflowId: string;
+    published: WorkflowDetail['publishedVersion'];
+    draft: WorkflowGraph;
+    draftRevision: number;
+    draftDirty: boolean;
+}>();
+const draftCanvas = computed(() => (isWorkflowCanvasGraph(props.draft) ? props.draft : null));
+const canvasInput = ref<WorkflowCanvasInput>({});
+const filePending = ref(false);
+const runMode = ref<'published' | 'draft'>(props.published ? 'published' : 'draft');
+const previewMode = computed(() =>
+    Boolean(draftCanvas.value && (runMode.value === 'draft' || !props.published)),
+);
 const lifecycle = useSessionLifecycle();
 const lifetime = new AbortController();
 onScopeDispose(() => lifetime.abort());
 const runTime = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-const statusLabels = {
-    queued: '排队中',
-    running: '运行中',
-    cancel_requested: '取消中',
-    succeeded: '已完成',
-    canceled: '已取消',
-    failed: '失败',
-    pending: '待运行',
-    skipped: '已跳过',
-};
-const nodeLabels = { start: '开始', study: '研究', end: '结束' };
 const historyKey = ['workflows', props.workflowId, 'runs'];
 const { query: history, items } = useWorkflowPages<WorkflowRun>(
     lifecycle,
@@ -186,7 +206,7 @@ const { query: history, items } = useWorkflowPages<WorkflowRun>(
             { params: { workflowId: props.workflowId }, query },
             { signal },
         ),
-    () => props.published !== null,
+    () => props.published !== null || draftCanvas.value !== null,
 );
 const versionId = ref(props.published?.id ?? '');
 const runId = ref('');
@@ -209,7 +229,7 @@ const { query: versions, items: publishedVersions } = useWorkflowPages<
             { params: { workflowId: props.workflowId }, query },
             { signal },
         ),
-    () => props.published !== null,
+    () => props.published !== null || draftCanvas.value !== null,
 );
 const versionOptions = computed(() => {
     const latest = props.published;
@@ -224,6 +244,7 @@ watch(
     () => props.published?.id,
     (id, previous) => {
         if (!versionId.value || versionId.value === previous) versionId.value = id ?? '';
+        if (id && !previous) runMode.value = 'published';
         void lifecycle.queryClient.invalidateQueries({
             queryKey: lifecycle.capture().queryKey(versionsKey),
         });
@@ -252,17 +273,7 @@ const runQuery = useQuery(
     lifecycle.queryClient,
 );
 const run = computed(() => runQuery.data.value?.data);
-const parallelGroups = computed(() => [
-    ...new Set(
-        run.value?.nodes.flatMap((node) => (node.parallelGroup ? [node.parallelGroup] : [])),
-    ),
-]);
 const canCancel = computed(() => run.value?.status === 'queued' || run.value?.status === 'running');
-
-function childStatusLabel(status: Run['status']) {
-    const labels = { ...statusLabels, recovering: '恢复中', partial: '部分完成' };
-    return labels[status];
-}
 
 function selectRun(id: string) {
     runId.value = id;
@@ -279,11 +290,40 @@ watch(
     },
 );
 
-async function start() {
-    if (!selectedVersion.value || starting.isPending.value) return;
+const activeCanvas = computed(() => {
+    if (previewMode.value) return draftCanvas.value;
+    const graph = selectedVersion.value?.graph;
+    return graph && isWorkflowCanvasGraph(graph) ? graph : null;
+});
+watch([runMode, versionId, () => props.draftRevision], () => {
+    canvasInput.value = {};
+});
+
+function requestKey(preview: boolean) {
+    return JSON.stringify(
+        preview
+            ? { draftRevision: props.draftRevision, preview: true, input: canvasInput.value }
+            : { versionId: versionId.value, input: canvasInput.value },
+    );
+}
+
+async function start(preview: boolean) {
+    if (
+        starting.isPending.value ||
+        filePending.value ||
+        (preview ? !draftCanvas.value || props.draftDirty : !selectedVersion.value)
+    )
+        return;
     const scope = lifecycle.capture();
-    const body = { versionId: selectedVersion.value.id };
-    const attempt = body.versionId;
+    const body = preview
+        ? { draftRevision: props.draftRevision, preview: true, input: canvasInput.value }
+        : {
+              versionId: selectedVersion.value!.id,
+              ...(isWorkflowCanvasGraph(selectedVersion.value!.graph)
+                  ? { input: canvasInput.value }
+                  : {}),
+          };
+    const attempt = requestKey(preview);
     const key = startKeys.get(attempt) ?? crypto.randomUUID();
     startKeys.set(attempt, key);
     problem.value = '';

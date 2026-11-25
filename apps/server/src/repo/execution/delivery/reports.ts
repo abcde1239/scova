@@ -14,6 +14,7 @@ import {
 } from '@scova/db';
 import { type AgentCandidate, type AgentContext } from '@scova/agent-core';
 import { appendEvent } from '../runs.ts';
+import { enqueueThreadRunResult } from '@/repo/thread-run-results.ts';
 import { createTerminalNotifications } from '../notifications.ts';
 import { type PageRecords } from './sources.ts';
 import { createEvidenceWriter } from './evidence.ts';
@@ -152,5 +153,6 @@ export async function saveReport(
                   reportId: report.id,
               },
     });
+    await enqueueThreadRunResult(tx, run, now);
     return { reportId: report.id, reused: false };
 }

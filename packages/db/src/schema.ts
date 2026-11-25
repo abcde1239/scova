@@ -56,6 +56,7 @@ export { runGraphSnapshots } from './schema/run-graph.ts';
 export { reportExports } from './schema/report-exports.ts';
 export { reportResources } from './schema/report-resources.ts';
 export * from './schema/workflows.ts';
+export * from './schema/workflow-templates.ts';
 export {
     toolCalls,
     type ToolCall,
@@ -94,6 +95,8 @@ export {
     inboxItems,
     type InboxItem,
     notifications,
+    workflowNotifications,
+    type WorkflowNotification,
     type Notification,
     feedback,
     type Feedback,
@@ -133,6 +136,7 @@ export { changeRecordsRelations, changeEvidenceRelations } from './schema/relati
 export {
     inboxItemsRelations,
     notificationsRelations,
+    workflowNotificationsRelations,
     feedbackRelations,
 } from './schema/relations/notifications.ts';
 export { bookmarksRelations, notesRelations } from './schema/relations/library.ts';
@@ -141,4 +145,16 @@ export {
     questionEvidenceRelations,
 } from './schema/relations/questions.ts';
 export { projects, projectTasks } from './schema/projects.ts';
+export { projectSettings } from './schema/project-settings.ts';
 export { projectConversationTurns, projectResearchDrafts } from './schema/project-conversations.ts';
+export {
+    projectThreadItems,
+    projectThreadRunOrigins,
+    projectThreads,
+    type ProjectThreadItemRow,
+    type ProjectThreadRow,
+} from './schema/project-conversations.ts';
+export {
+    projectThreadAttachments,
+    type ProjectThreadAttachmentRow,
+} from './schema/project-thread-attachments.ts';

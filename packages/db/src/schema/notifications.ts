@@ -5,6 +5,7 @@ import {
     uuid,
     boolean,
     timestamp,
+    text,
     index,
     uniqueIndex,
     foreignKey,
@@ -17,6 +18,7 @@ import { notificationKindEnum, feedbackKindEnum } from './enums.ts';
 import { runs } from './runs.ts';
 import { tasks } from './tasks.ts';
 import { sources } from './sources.ts';
+import { workflowRuns } from './workflows.ts';
 
 export const inboxItems = pgTable(
     'inbox_items',
@@ -106,6 +108,45 @@ export const notifications = pgTable(
 );
 
 export type Notification = typeof notifications.$inferSelect;
+
+export const workflowNotifications = pgTable(
+    'workflow_notifications',
+    {
+        id: uuid('id').notNull().primaryKey().$defaultFn(randomUUID),
+        userId: uuid('user_id').notNull(),
+        workflowRunId: uuid('workflow_run_id').notNull(),
+        nodeId: text('node_id').notNull(),
+        artifactNodeId: text('artifact_node_id'),
+        channel: text('channel').$type<'in_app'>().notNull().default('in_app'),
+        title: text('title').notNull(),
+        body: text('body').notNull(),
+        readAt: timestamp('read_at', { withTimezone: true, precision: 6, mode: 'date' }),
+        createdAt: timestamp('created_at', { withTimezone: true, precision: 6, mode: 'date' })
+            .notNull()
+            .defaultNow(),
+    },
+    (table): PgTableExtraConfigValue[] => [
+        uniqueIndex('workflow_notifications_delivery_key').on(
+            table.workflowRunId,
+            table.nodeId,
+            table.userId,
+            table.channel,
+        ),
+        index('workflow_notifications_history_idx').on(
+            table.userId,
+            table.createdAt.desc(),
+            table.id.desc(),
+        ),
+        foreignKey({
+            name: 'workflow_notifications_owner_run_fkey',
+            columns: [table.userId, table.workflowRunId],
+            foreignColumns: [workflowRuns.userId, workflowRuns.id],
+        }).onDelete('cascade'),
+        check('workflow_notifications_channel_valid', sql.raw("channel = 'in_app'")),
+    ],
+);
+
+export type WorkflowNotification = typeof workflowNotifications.$inferSelect;
 
 export const feedback = pgTable(
     'feedback',

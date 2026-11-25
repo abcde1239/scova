@@ -1,7 +1,7 @@
-import type { WorkflowGraph, WorkflowNode } from './schema.ts';
+import type { LegacyWorkflowGraph, WorkflowNode } from './schema.ts';
 
 /** Each stage points to every node in the next stage. A stage has no internal dependencies. */
-export function readWorkflowStages(graph: WorkflowGraph): WorkflowNode[][] | null {
+export function readWorkflowStages(graph: LegacyWorkflowGraph): WorkflowNode[][] | null {
     const nodes = new Map(graph.nodes.map((node) => [node.id, node]));
     if (nodes.size !== graph.nodes.length) return null;
     const starts = graph.nodes.filter((node) => node.type === 'start');

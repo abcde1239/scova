@@ -135,7 +135,7 @@ describe('session recovery and navigation', () => {
             '//evil.example',
             '/unknown',
         ])
-            expect(sessionReturnTarget(router, value, true)).toBe('/tasks');
+            expect(sessionReturnTarget(router, value, true)).toBe('/');
         expect(sessionReturnTarget(router, '/login?redirect=/library', true)).toBe(
             '/login?redirect=/library',
         );
@@ -306,7 +306,7 @@ describe('session recovery and navigation', () => {
         undefined,
     ])('rejects unsafe, unknown or recursive return target %s', (value) => {
         const { router } = setup();
-        expect(sessionReturnTarget(router, value)).toBe('/tasks');
+        expect(sessionReturnTarget(router, value)).toBe('/');
     });
     it('retains a valid local target including query and fragment', () => {
         const { router } = setup();

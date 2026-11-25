@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { DatabaseTransaction } from '@scova/db';
+import { and, eq, reports, type DatabaseTransaction } from '@scova/db';
 import { TaskConfigSchema, parseContract, ContractValidationError, type Mode } from '@scova/models';
 import { createRunStore } from '@/repo/runs.ts';
 import { runComparisonScopeHash } from '@/service/runs.ts';
@@ -24,7 +24,9 @@ export function bindWorkflowResearch(
     tx: DatabaseTransaction,
     identity: { id: string; userId: string; mode: Mode },
     now: Date,
-): WorkflowResearch {
+): WorkflowResearch & {
+    output(runId: string): Promise<{ reportId: string; text: string } | undefined>;
+} {
     const { id: workflowRunId, userId, mode } = identity;
     const runs = createRunStore(tx);
     async function read(node: StartedStudyNode) {
@@ -40,6 +42,19 @@ export function bindWorkflowResearch(
     }
     return {
         read,
+        async output(runId) {
+            const [report] = await tx
+                .select({ reportId: reports.id, title: reports.title, summary: reports.summary })
+                .from(reports)
+                .where(and(eq(reports.userId, userId), eq(reports.runId, runId)))
+                .limit(1);
+            return report
+                ? {
+                      reportId: report.reportId,
+                      text: `${report.title}\n\n${report.summary}`.slice(0, 64_000),
+                  }
+                : undefined;
+        },
         async launch(node) {
             if (!(await runs.lockTask(node.taskId, userId)).length)
                 return { failureCode: 'TASK_UNAVAILABLE' };

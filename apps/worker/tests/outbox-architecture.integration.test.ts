@@ -47,6 +47,23 @@ describe('Outbox 分层的真实持久化和故障边界', () => {
         expect(await repository.ack(replacement!, now)).toBe(true);
     });
 
+    it('队首被锁定时可以领取下一项，释放行锁后仍可领取队首', async () => {
+        const first = await fixture.seed(later(-2));
+        const second = await fixture.seed(later(-1));
+        await fixture.db.transaction(async (tx) => {
+            await tx
+                .select({ id: dbOutbox.id })
+                .from(dbOutbox)
+                .where(eq(dbOutbox.id, first.id))
+                .for('update');
+            const claimed = await repository.claim(now, later(10));
+            expect(claimed?.id).toBe(second.id);
+        });
+        const claimed = await repository.claim(now, later(10));
+        expect(claimed?.id).toBe(first.id);
+        expect(await repository.claim(now, later(10))).toBeNull();
+    });
+
     it('取消信号只阻止下一次领取，当前投递完成确认', async () => {
         const item = await fixture.seed(now);
         const controller = new AbortController();

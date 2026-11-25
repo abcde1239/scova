@@ -6,7 +6,12 @@ import { createOutboxHandler } from '../handler/outbox.ts';
 import { createSchedulerHandler } from '../handler/scheduler.ts';
 import { createOutboxQueue } from '../repo/queue/outbox.ts';
 import { enqueueRecoverableRuns } from '../repo/queue/recoverable-runs.ts';
-import { createOutboxRepository } from '../repo/outbox.ts';
+import { createOutboxRepository } from '@/repo/outbox.ts';
+import { THREAD_RUN_TERMINAL } from '@/repo/thread-run-results.ts';
+import { expireProjectTurns } from '@/service/project-turns.ts';
+import { cleanThreadAttachments } from '@/service/thread-attachments.ts';
+import type { ApiServices } from '@/app/services.ts';
+import { createThreadRunResultBatch } from '@/service/thread-run-results.ts';
 import { listRecoverableRuns } from '../repo/recoverable-runs.ts';
 import { createRedisConnection } from '../repo/redis.ts';
 import { createSchedulerRepository } from '../repo/scheduler.ts';
@@ -16,7 +21,10 @@ import { createWorkflowBatch } from '../service/workflow-batch.ts';
 import { readRunControlConfig, type RunControlConfig } from './run-control-config.ts';
 
 /** Server 的后台控制面：定时落库、Outbox 发布、恢复回补；不执行 Agent。 */
-export function createRunControl(config: RunControlConfig = readRunControlConfig()) {
+export function createRunControl(
+    config: RunControlConfig = readRunControlConfig(),
+    api?: Pick<ApiServices, 'db' | 'objectStorage' | 'clock'>,
+) {
     const controller = new AbortController();
     const { signal } = controller;
     let database: DatabaseClient | undefined;
@@ -25,6 +33,7 @@ export function createRunControl(config: RunControlConfig = readRunControlConfig
     let publisher: ReturnType<typeof createOutboxQueue> | undefined;
     let outbox: ReturnType<typeof createOutboxHandler> | undefined;
     let scheduler: ReturnType<typeof createSchedulerHandler> | undefined;
+    let threadResults: ReturnType<typeof createThreadRunResultBatch> | undefined;
     let workflows: ReturnType<typeof createWorkflowBatch> | undefined;
     let loops: Promise<void>[] | undefined;
     let closing: Promise<void> | undefined;
@@ -80,7 +89,7 @@ export function createRunControl(config: RunControlConfig = readRunControlConfig
     function outboxHandler(target: { publish(item: OutboxMessage): Promise<void> }) {
         return createOutboxHandler(
             new OutboxService({
-                repository: createOutboxRepository(db()),
+                repository: createOutboxRepository(db(), { excludeEventType: THREAD_RUN_TERMINAL }),
                 publisher: target,
                 leaseSeconds: config.leaseSeconds,
             }),
@@ -97,6 +106,15 @@ export function createRunControl(config: RunControlConfig = readRunControlConfig
             config.batchSize,
         );
         await scheduler(signal);
+    }
+
+    async function expireTurnBatch() {
+        await expireProjectTurns(db(), config.batchSize, signal);
+    }
+
+    async function threadResultBatch() {
+        threadResults ??= createThreadRunResultBatch(db(), config.batchSize);
+        await threadResults(signal);
     }
 
     async function workflowBatch() {
@@ -130,6 +148,28 @@ export function createRunControl(config: RunControlConfig = readRunControlConfig
         start() {
             if (signal.aborted) throw new Error('Server Run 控制面已停止');
             loops ??= [
+                ...(api
+                    ? [
+                          poll(
+                              () => cleanThreadAttachments(api, signal),
+                              60_000,
+                              60_000,
+                              '会话附件清理批次',
+                          ),
+                      ]
+                    : []),
+                poll(
+                    expireTurnBatch,
+                    config.pollIntervalMs,
+                    config.failureDelayMs,
+                    '会话轮次过期批次',
+                ),
+                poll(
+                    threadResultBatch,
+                    config.pollIntervalMs,
+                    config.failureDelayMs,
+                    '会话终态回流批次',
+                ),
                 poll(workflowBatch, config.pollIntervalMs, config.failureDelayMs, '工作流推进批次'),
                 poll(
                     dispatchBatch,

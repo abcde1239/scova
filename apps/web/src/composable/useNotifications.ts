@@ -1,6 +1,10 @@
 import { computed, onScopeDispose, ref, toValue, watch, type MaybeRefOrGetter } from 'vue';
 import { useInfiniteQuery, type InfiniteData } from '@tanstack/vue-query';
-import { ContractValidationError, type Notification } from '@scova/models';
+import {
+    ContractValidationError,
+    type Notification,
+    type ResearchNotification,
+} from '@scova/models';
 import {
     notificationsEndpoint,
     notificationReadEndpoint,
@@ -16,6 +20,7 @@ export const notificationKinds = [
     { value: 'summary', label: '普通汇总' },
     { value: 'important_change', label: '重要变化' },
     { value: 'run_issue', label: '运行问题' },
+    { value: 'workflow', label: '工作流通知' },
 ] as const;
 export type NotificationFilters = {
     kind: 'all' | Notification['kind'];
@@ -29,11 +34,19 @@ export function readNotificationFilters(kind: unknown, read: unknown): Notificat
     };
 }
 export function notificationTarget(item: Notification) {
+    if (item.kind === 'workflow') {
+        return {
+            name: 'workflow-run-detail',
+            params: { runId: item.workflowRunId },
+            ...(item.artifactNodeId ? { query: { artifact: item.artifactNodeId } } : {}),
+        };
+    }
     return item.reportId
         ? { name: 'report-detail', params: { reportId: item.reportId } }
         : { name: 'run-detail', params: { runId: item.runId } };
 }
 export function notificationMessage(item: Notification) {
+    if (item.kind === 'workflow') return item.body;
     if (item.runStatus === 'partial') return '结果已生成，未覆盖项目见报告详情。';
     if (item.runStatus === 'failed') return '本次执行失败，未完成查阅，不能据此判断资料是否变化。';
     if (item.runStatus === 'canceled') return '本次执行已取消，不能据此判断查阅结论。';
@@ -42,6 +55,7 @@ export function notificationMessage(item: Notification) {
     return '本次执行存在运行问题，请查看执行状态与限制。';
 }
 export function notificationLabel(item: Notification) {
+    if (item.kind === 'workflow') return item.title || '工作流通知';
     // Status must never make partial or failed research look like a confirmed important change.
     return item.runStatus === 'partial' ||
         item.runStatus === 'failed' ||
@@ -49,7 +63,7 @@ export function notificationLabel(item: Notification) {
         ? '运行问题'
         : notificationKinds.find((entry) => entry.value === item.kind)!.label;
 }
-export const notificationStatus: Record<Notification['runStatus'], string> = {
+export const notificationStatus: Record<ResearchNotification['runStatus'], string> = {
     queued: '排队中',
     running: '正在执行',
     recovering: '正在恢复',
@@ -90,6 +104,23 @@ export function visibleNotifications(pages: NotificationPage[]) {
             return true;
         });
 }
+function sameNotification(item: Notification, updated: Notification) {
+    if (item.id !== updated.id || item.kind !== updated.kind) return false;
+    if (item.kind === 'workflow') {
+        return (
+            updated.kind === 'workflow' &&
+            item.workflowRunId === updated.workflowRunId &&
+            item.nodeId === updated.nodeId &&
+            item.artifactNodeId === updated.artifactNodeId
+        );
+    }
+    return (
+        updated.kind !== 'workflow' &&
+        item.runId === updated.runId &&
+        item.taskId === updated.taskId &&
+        item.reportId === updated.reportId
+    );
+}
 function matches(item: Notification, kind: unknown, read: unknown) {
     return (
         (kind === 'all' || item.kind === kind) &&
@@ -98,6 +129,7 @@ function matches(item: Notification, kind: unknown, read: unknown) {
 }
 /** Worker publishes delivery + terminal status atomically; summary/change also require a report. */
 export function assertNotification(item: Notification) {
+    if (item.kind === 'workflow') return;
     const valid =
         item.kind === 'run_issue'
             ? item.runStatus === 'partial' || item.runStatus === 'failed'
@@ -221,14 +253,7 @@ export function useNotifications(
                 { signal },
             );
             assertNotification(response.data);
-            if (
-                response.data.id !== item.id ||
-                response.data.runId !== item.runId ||
-                response.data.reportId !== item.reportId ||
-                response.data.taskId !== item.taskId ||
-                response.data.kind !== item.kind ||
-                (response.data.readAt !== null) !== read
-            )
+            if (!sameNotification(item, response.data) || (response.data.readAt !== null) !== read)
                 throw new ContractValidationError([
                     { path: '/id', message: '通知已读响应与操作不一致' },
                 ]);

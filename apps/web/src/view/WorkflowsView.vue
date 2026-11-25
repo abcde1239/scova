@@ -20,6 +20,8 @@
             <p v-if="creationError" class="m-0" role="alert">{{ creationError }}</p>
         </form>
 
+        <workflow-templates @copied="openWorkflow" @started="openRun" />
+
         <state-panel v-if="query.isPending.value" state="loading" message="正在读取工作流" />
         <state-panel
             v-else-if="query.isError.value && !items.length"
@@ -57,13 +59,23 @@ import { createWorkflowEndpoint, workflowsEndpoint } from '@/api/workflows';
 import { toApiError } from '@/api/errors';
 import { shouldReportQueryError } from '@/api/query';
 import ActionButton from '@/component/common/ActionButton.vue';
+import WorkflowTemplates from '@/component/workflows/WorkflowTemplates.vue';
 import StatePanel from '@/component/common/StatePanel.vue';
 import { useSessionLifecycle, useSessionMutation } from '@/composable/useSessionQuery';
 import { useWorkflowPages } from '@/composable/useWorkflowPages';
-import { serialGraph } from '@/utils/workflow/serial';
+import { serialGraph, upgradeWorkflowGraph } from '@/utils/workflow/serial';
 
 const lifecycle = useSessionLifecycle();
 const router = useRouter();
+function openWorkflow(workflowId: string) {
+    void lifecycle.queryClient.invalidateQueries({
+        queryKey: lifecycle.capture().queryKey(listKey),
+    });
+    void router.push({ name: 'workflow-detail', params: { workflowId } });
+}
+function openRun(_workflowId: string, runId: string) {
+    void router.push({ name: 'workflow-run-detail', params: { runId } });
+}
 const listKey = ['workflows', 'list'];
 const title = ref('');
 const creationError = ref('');
@@ -90,10 +102,12 @@ async function create() {
             input: {
                 body: {
                     title: title.value.trim(),
-                    graph: serialGraph({ id: 'start', type: 'start' }, [], {
-                        id: 'end',
-                        type: 'end',
-                    }),
+                    graph: upgradeWorkflowGraph(
+                        serialGraph({ id: 'start', type: 'start' }, [], {
+                            id: 'end',
+                            type: 'end',
+                        }),
+                    ),
                 },
             },
         });
