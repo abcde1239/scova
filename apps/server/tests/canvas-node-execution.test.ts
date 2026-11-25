@@ -10,7 +10,7 @@ const adapter = vi.hoisted(() => ({
     generate: vi.fn(),
 }));
 vi.mock('@/repo/execution/agent-providers', () => ({ activeAgentProvider: adapter.lookup }));
-vi.mock('@scova/shared/credentials', () => ({ openProviderCredentials: adapter.open }));
+vi.mock('@/utils/credentials.ts', () => ({ openProviderCredentials: adapter.open }));
 vi.mock('@scova/connectors', async (importOriginal) => ({
     ...(await importOriginal<typeof import('@scova/connectors')>()),
     createModelProvider: adapter.create,

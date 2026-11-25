@@ -311,6 +311,9 @@ importers:
       '@scova/db':
         specifier: workspace:*
         version: link:packages/db
+      '@scova/execution':
+        specifier: workspace:*
+        version: link:packages/execution
       '@scova/shared':
         specifier: workspace:*
         version: link:packages/shared
@@ -366,6 +369,9 @@ importers:
       '@scova/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@scova/execution':
+        specifier: workspace:*
+        version: link:../../packages/execution
       '@scova/models':
         specifier: workspace:*
         version: link:../../packages/models
@@ -482,12 +488,12 @@ importers:
       '@scova/connectors':
         specifier: workspace:*
         version: link:../../packages/connectors
+      '@scova/execution':
+        specifier: workspace:*
+        version: link:../../packages/execution
       '@scova/models':
         specifier: workspace:*
         version: link:../../packages/models
-      '@scova/shared':
-        specifier: workspace:*
-        version: link:../../packages/shared
       bullmq:
         specifier: 'catalog:'
         version: 6.4.0(ioredis@6.0.0)(pg@8.23.1)
@@ -504,6 +510,9 @@ importers:
       '@scova/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@scova/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@types/node':
         specifier: 'catalog:'
         version: 24.19.2
@@ -589,6 +598,25 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
 
+  packages/execution:
+    dependencies:
+      '@scova/agent-core':
+        specifier: workspace:*
+        version: link:../agent-core
+      '@scova/connectors':
+        specifier: workspace:*
+        version: link:../connectors
+      '@scova/models':
+        specifier: workspace:*
+        version: link:../models
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.19.2
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
   packages/models:
     dependencies:
       '@sinclair/typebox':
@@ -620,15 +648,6 @@ importers:
       '@js-temporal/polyfill':
         specifier: 'catalog:'
         version: 0.5.1
-      '@scova/agent-core':
-        specifier: workspace:*
-        version: link:../agent-core
-      '@scova/connectors':
-        specifier: workspace:*
-        version: link:../connectors
-      '@scova/models':
-        specifier: workspace:*
-        version: link:../models
     devDependencies:
       '@types/node':
         specifier: 'catalog:'

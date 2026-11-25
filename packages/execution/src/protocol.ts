@@ -30,9 +30,11 @@ export type ExecutionOperation =
     | 'markInterruptedUnknown'
     | 'usage'
     | 'readCheckpointPages'
+    | 'readCheckpointPageBatch'
     | 'readAuthorizedCheckpoint'
     | 'promoteCheckpoint'
     | 'readPages'
+    | 'readPageBatch'
     | 'searchPage'
     | 'checkpointGet'
     | 'checkpointPut'
@@ -41,6 +43,18 @@ export type ExecutionOperation =
     | 'queueRenew'
     | 'queueSettle'
     | 'searchState';
+
+export const executionPageBatchLimit = 20;
+
+export interface ExecutionPageCursor {
+    operationKey: string;
+    attemptNo: number;
+}
+
+export interface ExecutionPageBatch<Page, Cursor> {
+    pages: Page[];
+    next: Cursor | null;
+}
 
 export type ExecutionCandidate = Omit<AgentCandidate, 'pages'> & { pages: AgentPageRef[] };
 

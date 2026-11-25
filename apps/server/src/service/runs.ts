@@ -3,9 +3,9 @@ import {
     type DatabaseTransaction,
     type Run as StoredRun,
 } from '@scova/db';
-import { openCredential } from '@scova/shared/credentials';
+import { openCredential } from '@/utils/credentials.ts';
 import { createHash } from 'node:crypto';
-import { effectiveRunScopeHash } from '@scova/shared';
+import { effectiveRunScopeHash } from '@/utils/research-scope.ts';
 import {
     PageQuerySchema,
     RunListResponseSchema,

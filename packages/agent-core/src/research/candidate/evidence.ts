@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { selectedOutputFormats } from '@scova/models';
 import { isDeepStrictEqual } from 'node:util';
 import {
+    FIRECRAWL_EXTRACTION_VERSION,
     pageCollectionGaps,
     PAGE_TEXT_CHAR_LIMIT,
     validPageCollection,
@@ -38,6 +39,9 @@ export function prepareCandidateEvidence(
     const gaps = [
         ...state.gaps,
         ...pageCollectionGaps(state.pages),
+        ...(state.pages.some((page) => page.extractionVersion === FIRECRAWL_EXTRACTION_VERSION)
+            ? ['正文来自 Firecrawl 的页面提取，整页覆盖未经验证，不能据此判定整页没有变化']
+            : []),
         ...(state.pages.some(
             (page) =>
                 typeof page.extractionVersion === 'string' &&

@@ -1,5 +1,5 @@
 import { requiredDatabaseValue } from '../../../utils/execution/database.ts';
-import { primaryArtifactSummary } from '../../../utils/execution/report-summary.ts';
+import { primaryArtifactSummary } from '@scova/models';
 import {
     type Run,
     reports as dbReports,

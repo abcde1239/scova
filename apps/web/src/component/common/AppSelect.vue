@@ -1,7 +1,11 @@
 <template>
     <div
         class="app-select"
-        :class="{ 'app-select--invalid': invalid, 'app-select--compact': compact }"
+        :class="{
+            'app-select--invalid': invalid,
+            'app-select--compact': compact,
+            'app-select--icon': iconOnly,
+        }"
     >
         <button
             :id="id"
@@ -11,6 +15,7 @@
             :role="searchable ? undefined : 'combobox'"
             :aria-haspopup="searchable ? 'dialog' : 'listbox'"
             :aria-label="label"
+            :title="iconOnly ? `${label}: ${selected?.label ?? placeholder}` : undefined"
             :aria-expanded="open"
             :aria-controls="open ? (searchable ? `${id}-panel` : `${id}-options`) : undefined"
             :aria-activedescendant="open && !searchable ? activeId : undefined"
@@ -22,8 +27,12 @@
             @focusout="onFocusout"
         >
             <span v-if="selected?.color || selected?.icon || icon" class="select-leading">
+                <template v-if="iconOnly && icon && selected?.color">
+                    <app-icon :name="icon" />
+                    <span class="select-badge" :style="{ background: selected.color }" />
+                </template>
                 <span
-                    v-if="selected?.color"
+                    v-else-if="selected?.color"
                     class="select-swatch"
                     :style="{ background: selected.color }"
                 />
@@ -133,6 +142,7 @@ const props = withDefaults(
         options: readonly Option[];
         searchable?: boolean;
         compact?: boolean;
+        iconOnly?: boolean;
         searchPlaceholder?: string;
         disabled?: boolean;
         invalid?: boolean;
@@ -377,6 +387,31 @@ defineExpose({ focus: () => trigger.value?.focus() });
 }
 .select-chevron {
     @apply ml-auto text-muted [transition:transform_150ms];
+}
+.app-select--icon .select-trigger {
+    @apply justify-center w-9 h-9 min-h-9 p-0 gap-0 rounded-2 border-transparent bg-transparent text-muted;
+}
+.app-select--icon .select-leading {
+    @apply relative w-5 h-5 text-muted;
+}
+.select-badge {
+    @apply absolute right-[-0.1875rem] bottom-[-0.125rem] w-2.5 h-2.5 rounded-full
+        [box-shadow:0_0_0_0.125rem_var(--scova-surface)];
+}
+.app-select--icon .select-value {
+    @apply hidden;
+}
+.app-select--icon .select-chevron {
+    @apply hidden;
+}
+.app-select--icon .select-trigger:hover:not(:disabled),
+.app-select--icon .select-trigger[aria-expanded='true'] {
+    @apply border-transparent [background:var(--scova-selected)] text-default;
+}
+@media (pointer: coarse) {
+    .app-select--icon .select-trigger {
+        @apply w-11 h-11 min-h-11;
+    }
 }
 [aria-expanded='true'] .select-chevron {
     @apply [transform:rotate(180deg)];

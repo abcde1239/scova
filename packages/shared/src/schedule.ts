@@ -64,12 +64,14 @@ function matchingDate(
         ? local.subtract({ days: (local.dayOfWeek - plan.weekday + 7) % 7 })
         : local.add({ days: (plan.weekday - local.dayOfWeek + 7) % 7 });
 }
-function latest(plan: PeriodicPlan, at: Temporal.Instant) {
-    let date = matchingDate(plan, at.toZonedDateTimeISO(plan.timezone).toPlainDate(), 'before');
+function scheduledSlot(plan: PeriodicPlan, at: Temporal.Instant, direction: 'before' | 'after') {
+    let date = matchingDate(plan, at.toZonedDateTimeISO(plan.timezone).toPlainDate(), direction);
     for (let attempt = 0; attempt < 4; attempt++) {
         const value = zoned(plan, date);
-        if (Temporal.Instant.compare(value.toInstant(), at) <= 0) return { date, value };
-        date = date.subtract({ days: plan.period });
+        const comparison = Temporal.Instant.compare(value.toInstant(), at);
+        // Recovery includes the current slot; the next run must be strictly in the future.
+        if (direction === 'before' ? comparison <= 0 : comparison > 0) return { date, value };
+        date = date.add({ days: direction === 'before' ? -plan.period : plan.period });
     }
     throw new RangeError('计划时区跨度超出支持范围');
 }
@@ -86,20 +88,7 @@ export function resolveScheduledDate(plan: SchedulePlan, localDate: string): Dat
 /** Strictly after `after`, including between the two instances of a folded wall-clock time. */
 export function nextScheduledAt(plan: SchedulePlan, after: Date): Date | null {
     const parsed = periodic(plan);
-    if (!parsed) return null;
-    const afterInstant = instant(after);
-    let date = matchingDate(
-        parsed,
-        afterInstant.toZonedDateTimeISO(parsed.timezone).toPlainDate(),
-        'after',
-    );
-    for (let attempt = 0; attempt < 4; attempt++) {
-        const candidate = zoned(parsed, date);
-        if (Temporal.Instant.compare(candidate.toInstant(), afterInstant) > 0)
-            return asDate(candidate);
-        date = date.add({ days: parsed.period });
-    }
-    throw new RangeError('计划时区跨度超出支持范围');
+    return parsed ? asDate(scheduledSlot(parsed, instant(after), 'after').value) : null;
 }
 
 /** Count nominal slots in a local interval, clipped to the processed first/last nominal dates. */
@@ -126,8 +115,8 @@ function localSlotCount(
 /** Coalesce equal actual instants caused by a skipped date (for example Apia midnight). */
 function duplicateInstants(
     plan: PeriodicPlan,
-    first: ReturnType<typeof latest>,
-    last: ReturnType<typeof latest>,
+    first: ReturnType<typeof scheduledSlot>,
+    last: ReturnType<typeof scheduledSlot>,
 ) {
     let cursor = first.value,
         duplicate = 0;
@@ -159,14 +148,14 @@ export function dueSchedule(plan: SchedulePlan, firstDueAt: Date, now: Date): Du
     const firstInstant = instant(firstDueAt),
         current = instant(now);
     if (Temporal.Instant.compare(firstInstant, current) > 0) return null;
-    const first = latest(parsed, firstInstant),
-        last = latest(parsed, current);
+    const first = scheduledSlot(parsed, firstInstant, 'before'),
+        last = scheduledSlot(parsed, current, 'before');
     if (Temporal.Instant.compare(first.value.toInstant(), firstInstant) !== 0)
         throw new RangeError('持久化计划时点与当前计划不一致');
     const days = first.date.until(last.date).days;
     if (days < 0 || days > MAX_DAYS) throw new RangeError('待补计划跨度超过安全上限');
     const missedCount = Math.floor(days / parsed.period) - duplicateInstants(parsed, first, last);
-    const nextRunAt = nextScheduledAt(plan, now);
-    if (!nextRunAt || missedCount < 0) throw new RangeError('待补计划计数无效');
+    if (missedCount < 0) throw new RangeError('待补计划计数无效');
+    const nextRunAt = asDate(scheduledSlot(parsed, current, 'after').value);
     return { scheduledAt: asDate(last.value), missedCount, nextRunAt };
 }

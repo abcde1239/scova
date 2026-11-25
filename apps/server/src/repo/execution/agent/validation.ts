@@ -6,7 +6,7 @@ import {
     AgentPersistenceError,
     type AgentReservationInput,
     type AgentCheckpointRef,
-} from '@scova/shared/execution/agent';
+} from '@scova/execution/agent';
 
 const COUNTERS = ['searches', 'pages', 'inputTokens', 'outputTokens'] as const;
 

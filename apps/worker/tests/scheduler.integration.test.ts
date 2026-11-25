@@ -26,12 +26,11 @@ import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
+import { dueSchedule, resolveScheduledDate } from '@scova/shared';
 import {
-    dueSchedule,
     effectiveRunScopeHash,
     researchComparisonScopeHash,
-    resolveScheduledDate,
-} from '@scova/shared';
+} from '../../server/src/utils/research-scope.ts';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vite-plus/test';
 import { createSchedulerRepository } from '../../server/src/repo/scheduler.ts';
 import { SchedulerService } from '../../server/src/service/scheduler.ts';

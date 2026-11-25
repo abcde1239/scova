@@ -90,6 +90,7 @@ export function registerSourceAuthentication() {
             const state = checkpoint.channel_values.research as {
                 gaps: string[];
                 pages: AgentCandidate['pages'];
+                manifest: AgentCandidate['manifest'];
             };
             const originalHash = state.pages[0].contentHash;
             const repository = createAgentRepository(fixture.db, seed.claimed.token);
@@ -112,6 +113,7 @@ export function registerSourceAuthentication() {
                     complete: true,
                     limitations: [],
                 };
+            state.manifest!.pages[0]!.completeComparisonInput = 1;
             state.gaps = [];
             expect(state.pages[0].contentHash).toBe(originalHash);
             checkpoint.id = crypto.randomUUID();

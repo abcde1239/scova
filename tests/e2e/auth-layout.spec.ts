@@ -100,7 +100,7 @@ for (const [path, title] of [
     ['/login', '登录'],
     ['/register', '注册'],
 ] as const) {
-    for (const width of [1024, 1440]) {
+    for (const width of [1024, 1440, 1920]) {
         test(`${title}：${width}桌面分栏，表单在右栏居中`, async ({ page }) => {
             await page.setViewportSize({ width, height: 1000 });
             await page.goto(path);
@@ -132,10 +132,13 @@ for (const [path, title] of [
             expect(column!.x).toBeGreaterThan(width * 0.4);
             expect(Math.abs(panel!.x + panel!.width / 2 - center)).toBeLessThan(2);
             expect(Math.abs(form!.x + form!.width / 2 - center)).toBeLessThan(2);
+            expect(Math.abs(panel!.y + panel!.height / 2 - 500)).toBeLessThan(2);
+            expect(column!.width).toBeLessThanOrEqual(576);
             expect(panel!.y).toBeGreaterThanOrEqual(0);
             expect(panel!.y + panel!.height).toBeLessThanOrEqual(1000);
             expect(form!.width).toBeLessThanOrEqual(448);
             expect(form!.width).toBeGreaterThan(300);
+            if (width >= 1440) expect(form!.width).toBe(448);
         });
     }
     for (const [width, height, scale] of [
@@ -252,7 +255,12 @@ test('桌面报告卡响应悬停与键盘翻面，减少动态效果时保留�
     await expect(tilt).toHaveCSS('rotate', '-3deg');
     await expect(progress).toHaveCSS('rotate', '2.75deg');
     await expect(button).toHaveAttribute('aria-expanded', 'false');
-    await button.press('Enter');
+    await expect(button).toHaveText('');
+    const cardBounds = await tilt.boundingBox();
+    const hitBounds = await button.boundingBox();
+    expect(Math.abs(hitBounds!.width - cardBounds!.width)).toBeLessThan(2);
+    expect(Math.abs(hitBounds!.height - cardBounds!.height)).toBeLessThan(2);
+    await button.click();
     const back = page.getByRole('button', { name: '返回报告摘要' });
     await expect(back).toBeFocused();
     await expect(back).toHaveAttribute('aria-expanded', 'true');
@@ -267,16 +275,120 @@ test('桌面报告卡响应悬停与键盘翻面，减少动态效果时保留�
     await expect(button).toBeFocused();
     await expect(page.getByText('仓库许可证文件')).toBeHidden();
     await expect(page.getByText('两项实质许可证变更，一项存疑')).toBeVisible();
+    await button.press('Enter');
+    await expect(back).toHaveAttribute('aria-expanded', 'true');
+});
+
+test('登录预览对话响应悬停，工作流节点支持键盘切换与减少动态效果', async ({ page }) => {
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await page.goto('/login');
+    const sources = page.locator('.preview-card--watch');
+    await expect(sources).toHaveCSS('rotate', '2deg');
+    await sources.hover();
+    await expect(sources).toHaveCSS('rotate', '3deg');
+
+    await page.getByRole('link', { name: '向下探索产品预览' }).press('Enter');
+    const conversation = page.locator('.demo-conversation');
+    await conversation.hover();
+    await expect(conversation.locator('.demo-prompt')).not.toHaveCSS('transform', 'none');
+    await expect(conversation.locator('.demo-draft')).not.toHaveCSS('transform', 'none');
+
+    const firstNode = page.getByRole('button', { name: /研究 1/ });
+    const secondNode = page.getByRole('button', { name: /研究 2/ });
+    const inspector = page.getByRole('region', { name: '节点检查器' });
+    const details = inspector.locator('dl[aria-hidden="false"]');
+    await expect(firstNode).toHaveAttribute('aria-pressed', 'true');
+    const inspectorHeight = await inspector.evaluate((element) => element.clientHeight);
+    await secondNode.click();
+    await expect(secondNode).toHaveAttribute('aria-pressed', 'true');
+    await expect(firstNode).toHaveAttribute('aria-pressed', 'false');
+    await expect(details).toContainText('核对变更的影响范围');
+    await expect(details).toHaveCSS('animation-name', /demo-inspect/);
+    expect(await inspector.evaluate((element) => element.clientHeight)).toBe(inspectorHeight);
+
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await secondNode.press('Shift+Tab');
+    await expect(firstNode).toBeFocused();
+    await firstNode.press('Space');
+    await expect(firstNode).toBeFocused();
+    await expect(firstNode).toHaveAttribute('aria-pressed', 'true');
+    await expect(details).toContainText('对比许可证版本');
+    await expect(details).toHaveCSS('animation-name', 'none');
+    await expect(conversation.locator('.demo-prompt')).toHaveCSS('transform', 'none');
+    await expect(sources).toHaveCSS('rotate', '2deg');
+});
+
+test('认证工具保持紧凑，主题、外观及语言可独立操作', async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/login');
+    await expect(page.getByLabel('邮箱', { exact: true })).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
+    await page.screenshot({
+        path: testInfo.outputPath('login-desktop.png'),
+        animations: 'disabled',
+    });
+    const tools = page.locator('.auth-tools');
+    for (const control of await tools.getByRole('combobox').all()) {
+        const bounds = await control.boundingBox();
+        expect(bounds!.width).toBeGreaterThanOrEqual(32);
+        expect(bounds!.width).toBeLessThanOrEqual(44);
+        expect(bounds!.height).toBeLessThanOrEqual(44);
+    }
+    await expect(page.getByLabel('主题', { exact: true })).toHaveAttribute('title', /主题: /);
+    await chooseOption(page, '主题', '松绿');
+    await expect(page.getByLabel('主题', { exact: true })).toHaveAttribute('title', '主题: 松绿');
+    await chooseOption(page, '外观', '深色');
+    await expect(page.locator('.scova-theme')).toHaveClass(/scova-theme--dark/);
+    await page.getByLabel('界面语言', { exact: true }).click();
+    const languages = page.getByRole('listbox', { name: '界面语言', exact: true });
+    await expect(languages.getByRole('option', { name: '简体中文' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+    );
+    await page.screenshot({ path: testInfo.outputPath('language-menu.png') });
+    await page.getByRole('combobox', { name: '界面语言', exact: true }).press('Escape');
+    await expect(page.getByLabel('界面语言', { exact: true })).toBeFocused();
+    await chooseOption(page, '界面语言', 'English');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Sign in');
+    await chooseOption(page, 'Interface language', '简体中文');
+    await chooseOption(page, '主题', '蓝色');
+    await chooseOption(page, '外观', '浅色');
+    await page.reload();
+    await expect(page.getByLabel('邮箱', { exact: true })).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
+    await page.mouse.move(1000, 800);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({
+        path: testInfo.outputPath('login-mobile.png'),
+        animations: 'disabled',
+    });
+    const overflow = await page.locator('body *').evaluateAll((elements) =>
+        elements
+            .filter((element) => element.getBoundingClientRect().right > innerWidth)
+            .map((element) => ({
+                tag: element.tagName,
+                class: element.className,
+                right: element.getBoundingClientRect().right,
+                width: getComputedStyle(element).width,
+            })),
+    );
+    expect(overflow).toEqual([]);
 });
 
 for (const width of [1440, 1024]) {
-    test(`登录页 ${width}：仅左栏滚动，右栏位置和表单输入保持`, async ({ page }) => {
+    test(`登录页 ${width}：仅左栏滚动，右栏位置和表单输入保持`, async ({ page }, testInfo) => {
         await page.setViewportSize({ width, height: 900 });
         const reduced = width === 1024;
         await page.emulateMedia({ reducedMotion: reduced ? 'reduce' : 'no-preference' });
         await page.goto('/login');
         const email = page.getByLabel('邮箱', { exact: true });
         const showcase = page.locator('.auth-showcase');
+        await expect(showcase).toHaveCSS('scrollbar-width', 'none');
+        await expect(page.locator('.product-demo')).toHaveCSS(
+            'background-color',
+            'rgba(0, 0, 0, 0)',
+        );
         const form = page.locator('.auth-form-column');
         await email.fill('preview@example.test');
         await page.evaluate(() => document.fonts.ready);
@@ -290,11 +402,13 @@ for (const width of [1440, 1024]) {
         await expect
             .poll(() => showcase.evaluate((element) => element.scrollTop))
             .toBeGreaterThan(0);
+        if (reduced) await expect(page.locator('.auth-pitch')).toHaveCSS('transform', 'none');
         expect(await form.boundingBox()).toEqual(before);
         expect(await page.evaluate(() => scrollY)).toBe(0);
         await explore.press('Enter');
         await expect(demo).toBeFocused();
         await expect(demo).toBeInViewport();
+        await page.screenshot({ path: testInfo.outputPath('login-product-demo.png') });
         const chat = showcase.getByRole('article', { name: '在项目对话中起草研究' });
         await expect(chat.getByText('待确认', { exact: true })).toBeInViewport();
         const workflow = showcase.getByRole('article', { name: '可编辑的研究工作流' });
@@ -313,3 +427,78 @@ for (const width of [1440, 1024]) {
         await expect(email).toHaveValue('preview@example.test');
     });
 }
+
+test('登录页左栏滚动时网格、来源标签、进度轨与进度条随之移动，滚到底示例完整显示', async ({
+    page,
+}) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await page.goto('/login');
+    await expect(page.getByLabel('邮箱', { exact: true })).toBeVisible();
+    const showcase = page.locator('.auth-showcase');
+    const ambient = showcase.locator('.auth-ambient');
+    await expect(ambient).toHaveAttribute('aria-hidden', 'true');
+    await expect(ambient).toHaveCSS('pointer-events', 'none');
+    const sample = () =>
+        page.evaluate(() => {
+            const pick = (selector: string) => document.querySelector<HTMLElement>(selector)!;
+            return {
+                grid: getComputedStyle(pick('.auth-grid')).transform,
+                chip: getComputedStyle(pick('.auth-chip')).transform,
+                rail: getComputedStyle(pick('.auth-rail i')).transform,
+                progress: pick('.preview-progress i').getBoundingClientRect().width,
+                progressLayoutWidth: pick('.preview-progress i').offsetWidth,
+            };
+        });
+    const before = await sample();
+    await showcase.evaluate((element) => element.scrollTo(0, element.scrollHeight));
+    await expect.poll(async () => (await sample()).grid).not.toBe(before.grid);
+    const after = await sample();
+    expect(after.chip).not.toBe(before.chip);
+    expect(after.rail).not.toBe(before.rail);
+    expect(after.progress).toBeGreaterThan(before.progress);
+    expect(after.progressLayoutWidth).toBe(before.progressLayoutWidth);
+    await expect
+        .poll(() =>
+            page.evaluate(() =>
+                [
+                    ...document.querySelectorAll<HTMLElement>(
+                        '.demo-copy, .demo-node, .demo-boundary, .demo-inspector dd, .demo-composer',
+                    ),
+                ].every((element) => getComputedStyle(element).opacity === '1'),
+            ),
+        )
+        .toBe(true);
+    expect(await showcase.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
+        true,
+    );
+    expect(await page.evaluate(() => scrollY)).toBe(0);
+});
+
+test('减少动态效果时左栏氛围层静态保留，进度轨隐藏且不随滚动移动', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto('/login');
+    await expect(page.getByLabel('邮箱', { exact: true })).toBeVisible();
+    const showcase = page.locator('.auth-showcase');
+    await expect(showcase.locator('.auth-glow').first()).toBeVisible();
+    await expect(showcase.locator('.auth-chip').first()).toBeVisible();
+    await expect(showcase.locator('.auth-chip').first()).toHaveCSS('animation-name', 'none');
+    await expect(showcase.locator('.auth-rail')).toBeHidden();
+    const chip = await showcase.locator('.auth-chip').first().boundingBox();
+    await showcase.evaluate((element) => element.scrollTo(0, 600));
+    await expect.poll(() => showcase.evaluate((element) => element.scrollTop)).toBe(600);
+    expect(await showcase.locator('.auth-chip').first().boundingBox()).toEqual(chip);
+    await expect(page.locator('.demo-window').first()).toHaveCSS('animation-name', 'none');
+});
+
+test('注册页与窄屏不渲染左栏氛围层', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/register');
+    await expect(page.getByLabel('邮箱', { exact: true })).toBeVisible();
+    await expect(page.locator('.auth-ambient')).toHaveCount(0);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/login');
+    await expect(page.getByLabel('邮箱', { exact: true })).toBeVisible();
+    await expect(page.locator('.auth-ambient')).toBeHidden();
+});

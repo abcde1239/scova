@@ -31,7 +31,7 @@ import { join } from 'node:path';
 import pg from 'pg';
 import { Queue } from 'bullmq';
 import { Redis } from 'ioredis';
-import { outboxJobId } from '@scova/shared/outbox-job';
+import { outboxJobId } from '@scova/execution/queue';
 
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import {

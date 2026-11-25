@@ -36,29 +36,42 @@ release. Add a tool name to select part of the graph. For example, run
 
 `docs/overall` 为私有开发资料目录，仅保留本地，不提交到公开 Git，也不从公开文档链接。所有工作完成后将通用经验合并至 `docs/overall/MEMORY.md`，重点总结开发过程与优化点。
 
-## 前端与通信
+## Documentation and evidence
 
-前端代码风格以 community 为主要参照，遵循 `docs/public/reference/frontend-conventions.md` 的 Vue SFC、目录分层、命名与前端格式约定；格式仍由 Vite+ 管理。前后端 HTTP 统一使用 requestlane，SSE 通过同一 Fetch transport 的 native 入口在统一通信模块中桥接。页面不得另建 fetch/axios 请求层；Vue Query 管服务端缓存，Pinia 管客户端状态，保留 Scova 的同源 Cookie 会话。
+- Use `docs/public/` for published guides, reference material, and examples. Keep PRDs, decisions, and verification procedures or durable summaries in `docs/prd/`, `docs/decision/`, and `docs/verification/`, respectively. Keep these internal directories and `docs/overall/` local, and link to them only from internal material. See `docs/structure.md` for the local directory map.
+- Store generated reports, logs, screenshots, and traces from ad hoc verification in one registered `artifacts/runs/<id>/` directory per work item. Use `harness artifacts create`, then `finish` after writing and `keep` before linking retained evidence. Keep Playwright and repository verification scripts on their configured output paths. Place retired design previews and archived evidence under `artifacts/snapshots/`.
+- Keep `.harness/` for CLI state and managed hooks. Place temporary Harness JSON under `.harness/tmp/`. Keep executable tests and reusable fixtures in the framework's test directories.
+
+## Web conventions and API access
+
+Use [the frontend conventions](docs/public/reference/frontend-conventions.md) for Vue SFCs, naming, and directory responsibilities. Web API requests use the shared requestlane client in `apps/web/src/api/client.ts`. The Run SSE adapter uses the same Fetch transport through `native`, with explicit session, cancellation, and event validation. Keep page code on the shared API and composable entry points. Vue Query owns server data and caching, Pinia owns client state, and the app uses same-origin cookie sessions.
 
 ## README 写作
 
 所有 README 面向阅读和使用仓库或包的人，保持简洁、准确。按需要提供名称与简介、当前功能或状态、安装与快速开始、常用命令和文档入口；包级 README 聚焦用途、用法和验证。避免重复章节、模板占位、冗长约束和开发流水账，详细设计放在参考文档并链接。README 中的命令、路径与实现状态必须与代码一致，公开 README 不链接私有资料。
 
-## 目录与后端分层
+## Scova verification
 
-后端以 Bun 为主运行时，Node.js 为显式兼容运行时。Server/Worker 的默认 `dev`、`start`、数据库迁移及容器入口使用 Bun；Node.js 通过 `:node` 命令选择，不自动降级。Vite+ 工具链与 Reader 的 Node 子进程独立于后端主进程；使用 `node:*` API 或 Node HTTP 适配器不改变主运行时定位。运行时变更须验证 Bun 主入口及 Node 兼容入口。
+- Run `vp check` for static checks and `vp test` for the root unit suite. The root suite excludes browser E2E and `*.integration.test.ts`. Run integration suites through `vp run test:integration` with dedicated services or select the applicable `tests/*.vite.config.ts` with `vp test --config`. Use `vp run test:e2e` for the configured Playwright suite.
+- Run `vp run harness-lint` for repository governance and `vp run ready` for the full configured gate. See [the verification reference](docs/public/reference/harness.md) for prerequisites and task coverage. The installed Harness Kit CLI supplies `doctor`, `check`, and artifact lifecycle commands.
 
-每个 `apps/*`、`packages/*` 工作区均以 `src` 保存源码，配置本工作区的 `@/* → ./src/*` 别名。应用内部使用 `@/`，跨包通过包名和 exports 引用；直接导出源码的共享包内部保留相对引用，避免消费方 TypeScript 将 `@/` 解析到错误工作区。Vite/Vitest 开启按导入文件解析 tsconfig paths；Node.js 入口通过 `vpx` 执行。
+## Runtimes and source layout
+
+Bun is the default for Server and Worker development, startup, containers, and database migration. Use `vp run server#dev:node`, `vp run worker#dev:node`, or `vp run db:migrate:node` when validating the Node.js compatibility path. Vite+ and the Reader's Node subprocess have their own runtime boundaries. Verify backend runtime changes with both `vp run test:runtime` and `vp run test:runtime:node` when they cover the change.
+
+Use the workspace `src/` directory for source and its local `@/*` alias for application imports. Import across workspaces through package exports. Source-exporting packages use relative imports internally so aliases do not resolve against a consumer workspace. Keep `resolve.tsconfigPaths` enabled for Vite and Vitest. Verify alias resolution against each package's declared source entry.
 
 Web 的 `src/` 顶层目录仅用 `component`（仅 `.vue`：复用 UI、应用级 UI provider）、`layout`（应用页面外壳及其专用导航、菜单和面包屑）、`composable`（复用交互和响应式流程）、`utils`（通用辅助，以及按领域分组的纯函数、展示类型和静态配置）、`store`（Pinia 客户端状态）、`api`（requestlane、SSE 与接口契约适配）、`view`（页面）、`router`（Vue Router 装配、路由登记和元数据）。使用这些单数目录名；报告等专用辅助模块放在 `utils` 的对应领域子目录，不在 `component` 存放独立 `.ts` 文件，也不另设顶层目录。
 
-Server 的 `src/` 顶层目录仅用 `repo`、`handler`、`service`、`model`、`utils`、`app`、`router`。调用链为 `main → app → router → handler → service → repo`：`app` 装配 Elysia、Node 适配和生命周期；`router` 声明接口与中文文档；`handler` 适配 HTTP/会话/响应；`service` 组织规则和事务；`repo` 执行 PostgreSQL/Redis 访问及队列投递；`model` 保存 Server 专用 schema 与框架契约注册；`utils` 仅放辅助代码。PostgreSQL 的 Drizzle schema、行类型、客户端和迁移统一放在 `packages/db`；共享 DTO 和事件 schema 由 `@scova/models` 管理，不在应用内复制。业务查询使用原生 Drizzle；历史 SQL 保持不可变，存量库接管先验证实际结构与迁移状态，不重置用户数据库。
+Server 的 `src/` 顶层目录仅用 `repo`、`handler`、`service`、`model`、`utils`、`app`、`router`。调用链为 `main → app → router → handler → service → repo`：`app` 装配 Elysia、Node 适配和生命周期；`router` 声明接口与中文文档；`handler` 适配 HTTP/会话/响应；`service` 组织规则和事务；`repo` 执行 PostgreSQL/Redis 访问及队列投递；`model` 保存 Server 专用 schema 与框架契约注册；`utils` 仅放辅助代码。
+
+`@scova/db` owns the PostgreSQL Drizzle schema, row types, client, and migrations. Use Drizzle for business queries and preserve historical SQL. Before adopting an existing database, verify its schema and migration history, then preserve user data throughout the adoption. Public DTOs and event schemas come from `@scova/models`. Server and Worker share their internal execution protocol, queue and lease types, and wire encoding through the subpath exports of `@scova/execution`.
 
 Server 的 `handler/http` 放 Cookie、Origin/CSRF、会话桥接、请求体限制与 SSE 背压/心跳/连接清理，`repo` 包含 Redis 客户端适配及数据访问，`repo/queue` 放 BullMQ 发布、回补和维护操作；长期连接由 `app` 装配并关闭。Server 后台控制由 `app` 装配独立批次和资源，负责调度、Outbox 投递及可恢复 Run 回补，不暴露 HTTP 路由；停止先阻止新批次并等待在途工作，再关闭资源。
 
 Worker 复用后端分层的实际子集，不建空 `router` 或 `model`：只消费 Run 作业、管理执行并运行 agent-core，禁止周期调度、发布 Run 或扫描回补。`app/queue` 承载运行时消费适配，`handler` 接收作业，`service` 编排，`repo` 通过 Server 的内部执行接口申请租约、持久化工具账本和 checkpoint、提交候选成果。Server 校验账号、租约和 epoch，执行交付事务。SQLite 队列经同一接口消费；Worker 生产代码不访问 PostgreSQL 或 SQLite 文件。停止先中断并等待在途执行收敛，再释放消费者及执行依赖；导入模块不连接外部服务。队列确认不能视为 Agent 已完成执行。
 
-以上限制只针对应用 `src/` 的一级目录，不限制层内按职责分组、工作区根级的测试/静态资源/工具配置，或 `src/` 顶层真实入口文件（如 Web 的 `main.ts`、`App.vue`、`main.css`、`env.d.ts`，后端的 `main.ts`、`node.ts` 及部署实际调用的健康检查/维护 CLI）。不给入口增加纯转发文件或空目录；如确需额外一级目录，在变更说明中写明现有层为何不适合、边界和使用方，并同步公开架构文档。
+These layout rules govern the immediate subdirectories of application `src/` folders. Group related code within its layer and keep tests, static assets, and tooling configuration at the workspace level as appropriate. Web `main.ts` starts the recovery boundary and loads `bootstrap.ts`, which mounts Vue and loads the base CSS. Backend root entries include `main.ts`, `node.ts`, and the health and operations entry points used by deployment. Give each entry file a direct startup or tooling responsibility. If a new top-level directory is necessary, record its responsibility and callers, explain why the existing layers do not fit, and update [the architecture reference](docs/public/reference/architecture.md).
 
 <!-- prettier-ignore-start -->
 

@@ -2,7 +2,12 @@ import { runStructuredFixture as runResearchAgent } from './structured-fixtures.
 import { createHash, randomUUID } from 'node:crypto';
 import { MemorySaver } from '@langchain/langgraph';
 import { describe, expect, it, vi } from 'vite-plus/test';
-import { ConnectorError, normalizeUrl, type ReadPage } from '@scova/connectors';
+import {
+    ConnectorError,
+    FIRECRAWL_EXTRACTION_VERSION,
+    normalizeUrl,
+    type ReadPage,
+} from '@scova/connectors';
 import {
     compareResearch,
     candidateFromCheckpoint,
@@ -119,30 +124,34 @@ async function execute(
     const reads: string[] = [];
     const pages = new Map<string, Source>();
     const tools: AgentTools = {
-        search: vi.fn<AgentTools['search']>(async () => ({
-            kind: 'search_results',
-            mode: 'live',
-            provider: 'searxng',
-            query: 'facts',
-            searchedAt: date,
-            results: sources.map((s) => ({
-                kind: 'search_snippet',
-                originalUrl: s.url,
-                url: normalizeUrl(s.url),
-                title: 'source',
-                snippet: 'not evidence',
-            })),
-            coverage: {
-                complete: true,
-                gaps: [],
-                unresponsiveEngines: [],
-                receivedResults: sources.length,
-                returnedResults: sources.length,
-                discardedResults: 0,
-                totalResults: sources.length,
-                truncated: false,
-            },
-        })),
+        search: vi.fn<AgentTools['search']>(async (key, query) => {
+            const offset = key === 'search-1' ? 10 : 0;
+            const returned = sources.slice(offset, offset + 10);
+            return {
+                kind: 'search_results',
+                mode: 'live',
+                provider: 'searxng',
+                query,
+                searchedAt: date,
+                results: returned.map((s) => ({
+                    kind: 'search_snippet',
+                    originalUrl: s.url,
+                    url: normalizeUrl(s.url),
+                    title: 'source',
+                    snippet: 'not evidence',
+                })),
+                coverage: {
+                    complete: true,
+                    gaps: [],
+                    unresponsiveEngines: [],
+                    receivedResults: returned.length,
+                    returnedResults: returned.length,
+                    discardedResults: 0,
+                    totalResults: returned.length,
+                    truncated: false,
+                },
+            };
+        }),
         read: vi.fn(async (_key, url): Promise<ReadPage> => {
             reads.push(url);
             if (options.failedUrls?.includes(normalizeUrl(url)))
@@ -179,10 +188,15 @@ async function execute(
         }),
         model: vi.fn<AgentTools['model']>(async (key, input) => ({
             mode: 'live',
+            researchPolicy: input.researchPolicy,
             usage: { inputTokens: 20, outputTokens: 20, estimated: false },
             data:
                 key === 'plan-0'
-                    ? { queries: [{ query: 'facts', questionIds: ['q0'] }] }
+                    ? {
+                          queries: (sources.length > 10 ? ['facts', 'more facts'] : ['facts']).map(
+                              (query) => ({ query, questionIds: ['q0'] }),
+                          ),
+                      }
                     : key.startsWith('compare-facts')
                       ? {
                             pages: (
@@ -195,23 +209,28 @@ async function execute(
                             })),
                         }
                       : {
-                            claims: [...pages.entries()].map(([pageId, s]) => ({
-                                kind: 'fact',
-                                assessment: {
-                                    relevance: 'direct',
-                                    support: 'direct',
-                                    role: 'answer',
-                                    sourceRelation: 'unknown',
-                                    reason: '对比题的明确原文',
-                                    conditions: '',
-                                    gap: '',
-                                },
-                                text: s.facts[0]?.quote ?? s.text.slice(0, 100),
-                                citations: [
-                                    { pageId, quote: s.facts[0]?.quote ?? s.text.slice(0, 100) },
-                                ],
-                                questionIds: ['q0'],
-                            })),
+                            claims: [...pages.entries()]
+                                .slice(0, sources.length > 10 ? 1 : undefined)
+                                .map(([pageId, s]) => ({
+                                    kind: 'fact',
+                                    assessment: {
+                                        relevance: 'direct',
+                                        support: 'direct',
+                                        role: 'answer',
+                                        sourceRelation: 'unknown',
+                                        reason: '对比题的明确原文',
+                                        conditions: '',
+                                        gap: '',
+                                    },
+                                    text: s.facts[0]?.quote ?? s.text.slice(0, 100),
+                                    citations: [
+                                        {
+                                            pageId,
+                                            quote: s.facts[0]?.quote ?? s.text.slice(0, 100),
+                                        },
+                                    ],
+                                    questionIds: ['q0'],
+                                })),
                         },
         })),
     };
@@ -236,21 +255,92 @@ async function execute(
 }
 
 describe('two-run continuous comparison through the persistent graph', () => {
-    it('does not certify complete-page comparisons from API extracts even when locally untruncated', async () => {
-        const result = await execute([
-            source('/api-extract', 'Price free.', [
-                fact('service', 'price', 'free', 'Price free.'),
-            ]),
-        ]);
-        const pages = structuredClone(result.output.pages);
-        const manifest = structuredClone(result.output.manifest!);
-        pages[0].extractionVersion = 'search-api/deepseek/v1';
-        pages[0].truncated = false;
-        manifest.pages[0].extractorVersion = pages[0].extractionVersion;
-        const comparison = compareResearch(result.ctx, pages, manifest);
-        expect(comparison.changes[0].kind).toBe('uncertain');
-        expect(comparison.gaps.join(' ')).toContain('不能声明没有重要变化');
+    const enableReuse = (ctx: AgentContext) => {
+        ctx.comparisonReuse = true;
+    };
+    const comparisonCalls = (run: Awaited<ReturnType<typeof execute>>) =>
+        vi.mocked(run.tools.model).mock.calls.filter(([key]) => key.startsWith('compare-facts'));
+
+    it('skips unchanged pages and preserves the original operation key for the changed tail page', async () => {
+        const withLargeBudget = (ctx: AgentContext) => {
+            enableReuse(ctx);
+            ctx.budget = { ...ctx.budget, maxInputTokens: 160_000, maxOutputTokens: 60_000 };
+        };
+        const sources = Array.from({ length: 20 }, (_, i) => {
+            const quote = `Source ${i} confirms the initial value.`;
+            return source(`/item-${i}`, quote, [fact(`item-${i}`, 'value', 'initial', quote)]);
+        });
+        const first = await execute(sources, undefined, { mutate: withLargeBudget });
+        expect(comparisonCalls(first)).toHaveLength(7);
+        expect(first.output.manifest?.pages).toHaveLength(20);
+        expect(first.output.coverage.baseline?.eligible).toBe(true);
+        expect(first.output.manifest?.pages.every((p) => p.completeComparisonInput === 1)).toBe(
+            true,
+        );
+        const previous = baseline(first.output);
+        const same = await execute(sources, previous, { mutate: withLargeBudget });
+        expect(comparisonCalls(same)).toHaveLength(0);
+        expect(same.output.changes?.map((c) => c.kind)).toEqual(Array(20).fill('duplicate'));
+        const checkpoint = (await same.checkpointer.getTuple(same.graphConfig))!.checkpoint
+            .channel_values.research;
+        expect(candidateFromCheckpoint(same.ctx, checkpoint)).toEqual(same.output);
+        expect(() =>
+            candidateFromCheckpoint({ ...same.ctx, baseline: null }, checkpoint),
+        ).toThrow();
+
+        const text = 'Source 19 confirms the revised value.';
+        const changed = await execute(
+            [
+                ...sources.slice(0, 19),
+                source('/item-19', text, [fact('item-19', 'value', 'revised', text)]),
+            ],
+            previous,
+            { mutate: withLargeBudget },
+        );
+        const calls = comparisonCalls(changed);
+        expect(calls.map(([key]) => key)).toEqual(['compare-facts-batch-6-v2']);
+        expect(calls[0]![1].untrustedSources).toMatchObject([{ url: `${origin}/item-19` }]);
+        expect(changed.output.changes?.at(-1)).toMatchObject({
+            kind: 'changed',
+            oldValue: 'initial',
+            newValue: 'revised',
+        });
     });
+
+    it('extracts normally when coverage, evidence or scope cannot authorize reuse', async () => {
+        const text = 'The original source confirms the price is free.';
+        const sources = [source('/reuse-fallback', text, [fact('course', 'price', 'free', text)])];
+        const first = await execute(sources, undefined, { mutate: enableReuse });
+        const qualified = baseline(first.output);
+        expect(qualified.manifest?.pages[0]?.completeComparisonInput).toBe(1);
+        for (const reason of ['coverage', 'quote', 'scope'] as const) {
+            const previous = structuredClone(qualified);
+            if (reason === 'coverage') delete previous.manifest!.pages[0]!.completeComparisonInput;
+            if (reason === 'quote') previous.evidence = [];
+            if (reason === 'scope') previous.comparisonScopeHash = 'other-scope';
+            const next = await execute(sources, previous, { mutate: enableReuse });
+            expect(comparisonCalls(next)).toHaveLength(1);
+        }
+    });
+
+    it.each(['search-api/deepseek/v1', FIRECRAWL_EXTRACTION_VERSION])(
+        'does not certify complete-page comparisons from %s extracts even when locally untruncated',
+        async (extractionVersion) => {
+            const result = await execute([
+                source('/api-extract', 'Price free.', [
+                    fact('service', 'price', 'free', 'Price free.'),
+                ]),
+            ]);
+            const pages = structuredClone(result.output.pages);
+            const manifest = structuredClone(result.output.manifest!);
+            pages[0].extractionVersion = extractionVersion;
+            pages[0].truncated = false;
+            manifest.pages[0].extractorVersion = pages[0].extractionVersion;
+            const comparison = compareResearch(result.ctx, pages, manifest);
+            expect(comparison.changes[0].kind).toBe('uncertain');
+            expect(comparison.gaps.join(' ')).toContain('不能声明没有重要变化');
+        },
+    );
     it('英语材料：重复、同URL费用变化、新增、转载和排除分别分类并保留双方引用', async () => {
         const first = await execute([
             source('/english/lesson-1', 'B1 subtitles free', [
@@ -564,12 +654,36 @@ describe('two-run continuous comparison through the persistent graph', () => {
             'new',
         );
     });
+    it('extracts a change after character 32000 even with a reusable baseline', async () => {
+        const front = 'Navigation data. '.repeat(2100);
+        const event = (day: string) => {
+            const quote = `Deadline November ${day}.`;
+            return source('/late-change', `${front}${quote}`, [
+                fact('item', 'deadline', `November ${day}`, quote),
+            ]);
+        };
+        const mutate = (ctx: AgentContext) => {
+            enableReuse(ctx);
+            ctx.budget = { ...ctx.budget, maxInputTokens: 160_000 };
+        };
+        const first = await execute([event('15')], undefined, { mutate });
+        expect(first.output.coverage.baseline?.eligible).toBe(true);
+        expect(first.output.manifest?.pages[0]?.completeComparisonInput).toBe(1);
+        const next = await execute([event('22')], baseline(first.output), { mutate });
+        expect(comparisonCalls(next)).toHaveLength(1);
+        expect(next.output.changes?.[0]).toMatchObject({
+            kind: 'changed',
+            newValue: 'November 22',
+        });
+    });
+
     it('marks budget-clipped comparison partial while retaining the long-page tail', async () => {
         const front = 'Price free. ' + 'Navigation data. '.repeat(2100);
         const old = source('/long', `${front} Deadline November 15.`, [
             fact('item', 'price', 'free', 'Price free.'),
         ]);
-        const first = await execute([old]);
+        const first = await execute([old], undefined, { mutate: enableReuse });
+        expect(first.output.manifest?.pages[0]?.completeComparisonInput).toBeUndefined();
         const next = await execute(
             [{ ...old, text: `${front} Deadline November 22.` }],
             baseline(first.output),

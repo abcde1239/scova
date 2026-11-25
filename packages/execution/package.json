@@ -1,0 +1,29 @@
+{
+    "name": "@scova/execution",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "exports": {
+        "./agent": "./src/agent.ts",
+        "./protocol": "./src/protocol.ts",
+        "./queue": "./src/queue.ts",
+        "./runs": "./src/runs.ts",
+        "./search": "./src/search.ts",
+        "./tool-failure": "./src/tool-failure.ts",
+        "./wire": "./src/wire.ts"
+    },
+    "scripts": {
+        "build": "tsc --noEmit",
+        "test": "vp test",
+        "check": "vp check"
+    },
+    "dependencies": {
+        "@scova/agent-core": "workspace:*",
+        "@scova/connectors": "workspace:*",
+        "@scova/models": "workspace:*"
+    },
+    "devDependencies": {
+        "@types/node": "catalog:",
+        "typescript": "catalog:"
+    }
+}

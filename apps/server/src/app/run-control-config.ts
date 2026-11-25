@@ -1,5 +1,5 @@
 import { readSqliteStatePath } from '@scova/db/sqlite-state';
-import { readRunQueueName } from '@scova/shared/outbox-job';
+import { readRunQueueName } from '@scova/execution/queue';
 
 function integerSetting(env: NodeJS.ProcessEnv, name: string, fallback: number, maximum: number) {
     const value = env[name] === undefined ? fallback : Number(env[name]);

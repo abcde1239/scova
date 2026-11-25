@@ -7,7 +7,7 @@ import {
     type DatabaseTransaction,
 } from '@scova/db';
 import { withRunFence } from '../runs.ts';
-import { RunFenceError, type RunLeaseToken } from '@scova/shared/execution/runs';
+import { RunFenceError, type RunLeaseToken } from '@scova/execution/runs';
 
 /** All business writes share the Run fence; no provider/checkpointer I/O in this transaction. */
 export function createDeliveryRepository(db: DatabaseClient) {

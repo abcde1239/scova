@@ -1,8 +1,8 @@
 import type { DatabaseClient } from '@scova/db';
 import { reportSearchConfigurationHash } from '@scova/db';
-import { openProviderCredentials } from '@scova/shared/credentials';
-import type { ExecutionCredentials } from '@scova/shared/execution/protocol';
-import { RunExecutionError, RunFenceError, type RunLeaseToken } from '@scova/shared/execution/runs';
+import { openProviderCredentials } from '@/utils/credentials.ts';
+import type { ExecutionCredentials } from '@scova/execution/protocol';
+import { RunExecutionError, RunFenceError, type RunLeaseToken } from '@scova/execution/runs';
 import { TaskConfigSchema, ReportConversationContextSchema, parseContract } from '@scova/models';
 import { activeAgentProvider } from '../../repo/execution/agent-providers.ts';
 import { accountSearchConfiguration } from '../../repo/execution/search-configuration.ts';

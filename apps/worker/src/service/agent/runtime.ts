@@ -6,7 +6,7 @@ import { searchScope } from '@/utils/search-scope.ts';
 import { type AgentCandidate } from '@scova/agent-core';
 import { ConnectorError, createConnectorBundle, type ConnectorBundle } from '@scova/connectors';
 import type { RunExecutionContext, RunExecutor } from '@/service/runs.ts';
-import { RunExecutionError, type RunLeaseToken } from '@scova/shared/execution/runs';
+import { RunExecutionError, type RunLeaseToken } from '@scova/execution/runs';
 import { digest } from '@/service/agent/tool-results.ts';
 import { createAgentSession } from '@/service/agent/session.ts';
 
@@ -42,7 +42,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions) {
         const live = createConnectorBundle({
             ...credentials,
             managedSearch: true,
-            modelSearch: 'disabled',
+            firecrawlApiKey: env.READER_FIRECRAWL_API_KEY,
         });
         if (live.mode !== 'live') throw new RunExecutionError('AGENT_CONFIGURATION_INVALID');
         live.searchProvider = credentials.searchProvider;

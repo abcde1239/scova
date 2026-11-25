@@ -63,9 +63,16 @@
                 {{ login.fields.value.password }}
             </p>
         </div>
-        <action-button type="primary" attr-type="submit" :busy="login.pending.value">{{
-            t(login.pending.value ? 'auth.signingIn' : 'pages.login')
-        }}</action-button>
+        <action-button
+            class="login-submit"
+            type="primary"
+            attr-type="submit"
+            :busy="login.pending.value"
+        >
+            <span class="login-submit-label">{{
+                t(login.pending.value ? 'auth.signingIn' : 'pages.login')
+            }}</span>
+        </action-button>
     </form>
 </template>
 
@@ -107,3 +114,23 @@ onUnmounted(() => {
     login.dispose();
 });
 </script>
+
+<style scoped>
+@media (prefers-reduced-motion: no-preference) {
+    .login-submit-label {
+        transition: transform 140ms ease-out;
+    }
+    .login-submit:active:not([aria-disabled='true']) .login-submit-label {
+        transform: scale(0.94);
+    }
+    .field-error {
+        animation: login-field-error-in 160ms ease-out;
+    }
+}
+@keyframes login-field-error-in {
+    from {
+        opacity: 0.65;
+        transform: translateY(-0.1875rem);
+    }
+}
+</style>

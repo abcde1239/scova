@@ -42,9 +42,11 @@ Worker 的配置与生命周期、Agent 有限图与原文校验单元纳入根�
 
 根 Vitest 只扫描 `apps/*`、`packages/*` 的 `tests` 下 `*.test.ts` 和 `*.spec.ts`，排除产物、E2E 和 `*.integration.test.ts`，避免临时快照被重复发现。数据库、认证、任务、执行与 Outbox 集成须启动专用服务，再依次运行 `vp test --config tests/<suite>.vite.config.ts`，其中 suite 分别为 `database`、`auth`、`tasks`、`runs`、`worker-outbox`；使用同一测试 Redis 的套件不要并行。根命令和覆盖声明不能代替这些真实集成。
 
-验证日志、浏览器报告、截图和 trace 保存在 `artifacts/`。现有项目脚本沿用各自配置的输出路径。已有新版 Harness Kit 技能时，临时人工验收可通过技能 CLI 的 `artifacts create <名称>` 分配 `artifacts/runs/<id>/`，写入结束后执行 `artifacts finish <id>`，长期引用的证据用 `artifacts keep <id>` 保留。`artifacts clean` 预览已登记跑次的清理范围。
+一项工作的新人工验收证据用技能 CLI 的 `artifacts create <名称>` 分配到 `artifacts/runs/<id>/`。把生成的报告、日志、浏览器截图和 trace 写到返回的目录。写入结束后执行 `artifacts finish <id>`，长期引用时执行 `artifacts keep <id>`。`artifacts clean` 默认预览已登记跑次的清理范围。
 
-`.harness/` 保存 Harness Kit 的托管清单、验证摘要和任务续作状态。仓库内置 `vp run harness-lint` 和 `vp run harness-verify` 使用固定工具快照。上述产物管理与 `doctor` 由已安装技能的 `scripts/harness.mjs` 提供，可用 `node <技能目录>/scripts/harness.mjs <命令> --root <项目绝对路径> --json` 调用。两个本地目录均由 Git 忽略。
+Playwright 和项目脚本沿用配置的输出路径，例如 `artifacts/e2e/`、`artifacts/verify-web/` 和 `artifacts/verify-mvp-full/`。历史快照放 `artifacts/snapshots/`。验证步骤和长期摘要归文档，测试源码与夹具归项目的测试目录。
+
+`.harness/` 保存 Harness Kit 的托管清单、验证摘要、任务续作状态和托管 Hook。Harness 临时 JSON 放在 `.harness/tmp/`。仓库内置 `vp run harness-lint` 和 `vp run harness-verify` 使用固定工具快照。上述产物管理与 `doctor` 由已安装技能的 `scripts/harness.mjs` 提供，可用 `node <技能目录>/scripts/harness.mjs <命令> --root <项目绝对路径> --json` 调用。两个本地目录均由 Git 忽略。
 
 脚本缓存关闭，确保治理每次读取 Git index；需要构建缓存时使用显式 Vite task，不能缓存外层入口。Vite/Vitest 使用原生 `resolve.tsconfigPaths` 按导入文件解析工作区别名。
 

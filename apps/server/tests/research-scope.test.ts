@@ -1,11 +1,20 @@
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vite-plus/test';
-import { effectiveRunScopeHash, researchComparisonScopeHash } from '@scova/shared';
+import { effectiveRunScopeHash, researchComparisonScopeHash } from '@/utils/research-scope.ts';
 import type { TaskConfig } from '@scova/models';
 import { comparisonScopeHash } from '../src/service/tasks.ts';
 import { runComparisonScopeHash } from '../src/service/runs.ts';
 import { draftConfig } from './support/task-drafts.ts';
 
 const config = (): TaskConfig => draftConfig();
+
+it('keeps the existing versioned effective Run scope algorithm identical for both producers', () => {
+    const expected = createHash('sha256')
+        .update(JSON.stringify(['run-scope-v2', 'version-hash', 'live', 'scova-comparison-v1']))
+        .digest('hex');
+    expect(effectiveRunScopeHash('version-hash', 'live')).toBe(expected);
+    expect(effectiveRunScopeHash('version-hash', 'demo')).not.toBe(expected);
+});
 
 describe('research collection scope', () => {
     it('date-unknown handling resets collection scope only when its effective policy changes', () => {

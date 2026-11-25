@@ -3,7 +3,7 @@ import { COVERAGE_PASSES } from '../synthesis-batches.ts';
 import { ConnectorError, normalizeUrl } from '@scova/connectors';
 import { researchInputLimits } from '@scova/models';
 import {
-    comparisonBatches,
+    comparisonPlan,
     comparisonOperation,
     comparisonOutputLimits,
     comparisonRepairPages,
@@ -48,14 +48,15 @@ export function compareNode(rt: AgentRuntime) {
         // Old promoted checkpoints retain the old decoder. New executions carry immutable
         // model receipts so delivery can independently rebuild every accepted/uncertain item.
         state.comparisonExtractions ??= [];
-        const batches = comparisonBatches(state.pages);
+        const { batches } = comparisonPlan(context, state.pages, state.comparisonReusePolicy);
         const outputLimits = comparisonOutputLimits(state.pages.length, comparisonOutputTokens);
         const batchInput = researchInputLimits(
             context.budget.maxInputTokens,
             state.pages.length,
         ).comparison;
-        for (const [index, pages] of batches.entries()) {
+        for (const [index, { extract: pages }] of batches.entries()) {
             if (state.modelBlocked) break;
+            if (!pages.length) continue;
             const batchOutput = outputLimits[index];
             try {
                 if (batchOutput.initial < 256)

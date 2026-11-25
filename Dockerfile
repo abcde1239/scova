@@ -15,6 +15,7 @@ COPY packages/agent-core/package.json packages/agent-core/package.json
 COPY packages/connectors/package.json packages/connectors/package.json
 COPY packages/models/package.json packages/models/package.json
 COPY packages/db/package.json packages/db/package.json
+COPY packages/execution/package.json packages/execution/package.json
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/object-storage/package.json packages/object-storage/package.json
 RUN VP_GIT_HOOKS=0 vp install --frozen-lockfile

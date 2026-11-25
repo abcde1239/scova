@@ -16,7 +16,7 @@ import {
     credentialStorageReady,
     sealProviderCredentials,
     openProviderCredentials,
-} from '@scova/shared/credentials';
+} from '@/utils/credentials.ts';
 import type { ApiServices } from '@/app/services';
 import { createAgentProviderRepo } from '@/repo/agent-providers';
 import { ApiError } from '@/utils/errors';

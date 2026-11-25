@@ -42,6 +42,15 @@
                     </ul>
                 </div>
             </div>
+            <button
+                v-if="interactive"
+                type="button"
+                class="preview-toggle keyboard-focus"
+                aria-controls="auth-report-sources"
+                :aria-label="t(sources ? 'auth.demo.backToReport' : 'auth.demo.seeSources')"
+                :aria-expanded="sources"
+                @click="sources = !sources"
+            />
         </div>
         <div class="preview-card preview-card--run" aria-hidden="true">
             <div class="preview-row">
@@ -52,25 +61,32 @@
             </div>
             <span class="preview-progress"><i /></span>
         </div>
-        <button
-            v-if="interactive"
-            type="button"
-            class="preview-switch keyboard-focus"
-            aria-controls="auth-report-sources"
-            :aria-expanded="sources"
-            @click="sources = !sources"
-        >
-            <app-icon :name="sources ? 'back' : 'source'" />{{
-                t(sources ? 'auth.demo.backToReport' : 'auth.demo.seeSources')
-            }}
-        </button>
+        <div class="preview-card preview-card--watch" aria-hidden="true">
+            <div class="preview-row">
+                <strong class="preview-title">{{ t('auth.showcase.watchTitle') }}</strong>
+                <span class="preview-meta preview-meta--end">{{
+                    t('auth.showcase.watchCount')
+                }}</span>
+            </div>
+            <ul class="preview-watch" role="list">
+                <li v-for="item in watchItems" :key="item.label">
+                    <span>{{ t(item.label) }}</span>
+                    <span
+                        class="preview-change"
+                        :class="{ 'preview-change--quiet': !item.changed }"
+                        >{{
+                            t(item.changed ? 'auth.showcase.changed' : 'auth.showcase.unchanged')
+                        }}</span
+                    >
+                </li>
+            </ul>
+        </div>
     </div>
 </template>
 
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import AppIcon from '@/component/common/AppIcon.vue';
 
 const props = defineProps<{ interactive: boolean }>();
 const { t } = useI18n({ useScope: 'global' });
@@ -78,6 +94,11 @@ const sourceKeys = [
     { number: 1, label: 'auth.demo.sourceRelease' },
     { number: 2, label: 'auth.demo.sourceLicense' },
     { number: 4, label: 'auth.demo.sourceDiscussion' },
+] as const;
+const watchItems = [
+    { label: 'auth.showcase.watchUpstream', changed: true },
+    { label: 'auth.showcase.watchRegistry', changed: true },
+    { label: 'auth.showcase.watchAdvisory', changed: false },
 ] as const;
 const sources = ref(false);
 watch(
@@ -90,7 +111,40 @@ watch(
 
 <style scoped>
 .auth-preview {
-    @apply grid gap-0 max-w-[28rem];
+    @apply grid gap-0 max-w-[30rem];
+}
+.preview-card--watch {
+    @apply hidden;
+}
+/* Room beside the report: show the watched sources as a third card. */
+@container auth-showcase (min-width: 50rem) {
+    .auth-preview {
+        @apply [grid-template-columns:minmax(0,_30rem)_14rem] max-w-none;
+    }
+    .preview-report,
+    .preview-card--run {
+        grid-column: 1;
+    }
+    .preview-card--watch {
+        @apply grid relative z-1 self-start mt-10 ml-[-1.5rem] [grid-column:2] [grid-row:1_/_span_2];
+        rotate: 2deg;
+    }
+}
+.preview-watch {
+    @apply grid gap-2 m-0 p-0 list-none text-muted;
+}
+.preview-watch li {
+    @apply flex items-center justify-between gap-2 min-w-0;
+}
+.preview-watch li > span:first-child {
+    @apply min-w-0 truncate;
+}
+.preview-change {
+    @apply shrink-0 rounded-1 px-1.5 text-[0.6875rem] font-bold [color:var(--scova-success)]
+        [background:color-mix(in_srgb,_var(--scova-success)_12%,_transparent)];
+}
+.preview-change--quiet {
+    @apply text-muted [background:var(--scova-selected)];
 }
 .preview-card {
     @apply grid gap-2.5 border-subtle rounded-3.5 bg-surface py-4 px-4.5 text-[0.8125rem]
@@ -141,9 +195,26 @@ watch(
     @apply block h-1 rounded-full overflow-hidden [background:var(--scova-selected)];
 }
 .preview-progress i {
-    @apply block w-[58%] h-full [background:var(--scova-primary)];
+    @apply block w-full h-full origin-left [background:var(--scova-primary)];
+    transform: scaleX(0.58);
+}
+/* On the login tour the run keeps reading sources as the showcase scrolls. */
+@media (prefers-reduced-motion: no-preference) {
+    @supports (animation-timeline: scroll()) {
+        .preview-progress i {
+            animation: preview-progress linear both;
+            animation-timeline: --auth-tour;
+            animation-range: 0% 60%;
+        }
+    }
+}
+@keyframes preview-progress {
+    to {
+        transform: scaleX(1);
+    }
 }
 .preview-report {
+    position: relative;
     perspective: 52rem;
     rotate: -1deg;
 }
@@ -166,12 +237,8 @@ watch(
 .preview-sources .preview-cite {
     @apply shrink-0 text-primary;
 }
-.preview-switch {
-    @apply inline-flex items-center gap-1.5 justify-self-end mt-1 px-2 min-h-11
-        rounded-2 border-none bg-transparent text-primary text-[0.8125rem] cursor-pointer font-inherit;
-}
-.preview-switch:hover {
-    background: var(--scova-selected);
+.preview-toggle {
+    @apply absolute inset-0 w-full h-full p-0 rounded-3.5 border-none bg-transparent cursor-pointer;
 }
 @media (prefers-reduced-motion: no-preference) {
     .preview-flip {
@@ -190,7 +257,8 @@ watch(
 }
 @media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
     .preview-report,
-    .preview-card--run {
+    .preview-card--run,
+    .preview-card--watch {
         transition:
             translate 240ms ease-out,
             rotate 240ms ease-out;
@@ -202,6 +270,10 @@ watch(
     .auth-preview:not([aria-hidden='true']):hover .preview-card--run {
         translate: 0 -0.1rem;
         rotate: 2.75deg;
+    }
+    .auth-preview:not([aria-hidden='true']):hover .preview-card--watch {
+        translate: 0.25rem -0.3rem;
+        rotate: 3deg;
     }
 }
 </style>

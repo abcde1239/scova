@@ -1,7 +1,7 @@
 import { ConnectorError, type SearchApiOptions } from '@scova/connectors';
 import type { SearchMode } from '@scova/models';
 import type { searchConfigurations } from '@scova/db';
-import { openCredential } from '@scova/shared/credentials';
+import { openCredential } from '@/utils/credentials.ts';
 
 export interface AccountSearchConfig {
     defaultMode: 'api' | 'searxng';
@@ -87,7 +87,6 @@ export function effectiveSearchConfig(
         return {
             searchProvider: 'searxng' as const,
             searxngBaseUrl: env.SEARXNG_BASE_URL,
-            modelSearch: 'disabled' as const,
         };
     if (selected !== 'api' || !account?.searchApi?.apiKey.trim())
         throw new SearchConfigurationError('SEARCH_API_NOT_CONFIGURED');
@@ -96,6 +95,5 @@ export function effectiveSearchConfig(
     return {
         searchProvider: 'api' as const,
         searchApi: account.searchApi,
-        modelSearch: 'disabled' as const,
     };
 }

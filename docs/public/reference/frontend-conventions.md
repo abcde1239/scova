@@ -24,7 +24,7 @@ apps/web/src/
 - 采用 naive-ui 显式组件导入，UnoCSS 维护 page-container、卡片、表单和空态等语义 shortcut；集中处理主题，不在页面复制大段全局 CSS。
 - 样式默认使用 UnoCSS 模板原子类，hover、focus、显隐、简单动画、过渡和响应式效果也沿用 UnoCSS。配置统一放在 `apps/web/unocss.config.ts`；高频组合提取用途明确的 shortcuts，状态或断点组合可使用 variant group。shortcut 命名避免与预设已有规则或变体冲突。
 - 站内普通跳转用 `internal-link`，辅助前进入口用 `navigation-link` 配尾部 chevron，宽度随内容、左对齐；站外来源用 `external-link` 配常显外部打开图标，保留新窗口说明。普通链接无常驻下划线、底色或胶囊边框，悬停变色，前进入口的尾部 chevron 在允许动效时右移 0.125rem；按下显示下划线，键盘有清晰焦点；标题用 `title-link` 保持正文色，文末页内引用用轻量 `reference-link`。目录、面包屑不统一加箭头；菜单选中态、整卡片和按钮保留各自用途样式。
-- `main.ts` 是框架装配入口，引入集中存放基础样式的 `main.css`。`index.html` 保留不依赖外部脚本、CSS 和字体的启动界面；`utils/startup.ts` 负责装配失败时恢复可重试的界面。阅读字体样式与加载逻辑同在 `composable/`，仍按需加载，不承载页面样式。复杂动画可保留 scoped CSS；类名组合过长、拆分后难以阅读的局部控件也允许 scoped，优先使用简短的 UnoCSS `@apply` 规则或语义 shortcuts，不强行堆叠长类名。
+- `main.ts` 在 `utils/startup.ts` 的恢复流程中加载 `bootstrap.ts`。`bootstrap.ts` 装配 Vue、路由、会话与插件，并导入基础样式 `main.css`。`index.html` 保留独立的启动界面，装配失败时由 `utils/startup.ts` 恢复重试入口。阅读字体样式与加载逻辑同在 `composable/`，仍按需加载，不承载页面样式。复杂动画可保留 scoped CSS；类名组合过长、拆分后难以阅读的局部控件也允许 scoped，优先使用简短的 UnoCSS `@apply` 规则或语义 shortcuts，不强行堆叠长类名。
 - 全仓格式统一由根 Vite+ fmt 管理：4 空格缩进、单引号、100 字符行宽，分号沿用工具默认规则；前端不另设格式覆盖。文本由根 `.gitattributes` 统一检出为 LF，避免 Windows 的 `core.autocrlf` 与格式检查冲突；自动识别的二进制文件保持原始字节。Vue/TS 使用 import type 分离类型。
 - 字号、间距、圆角、控件尺寸与响应式断点默认使用 `rem`，保留浏览器默认根字号，行高使用无单位值。容器结合百分比、弹性布局和 `min/max/clamp` 自适应；局部图标等需要随当前文字缩放时可使用 `em`。`px` 仅用于确有需要的特殊情况，并在代码或变更说明中解释用途；测试视口和图片原始分辨率的像素不属于页面布局尺寸。避免固定高度裁切放大后的文字，并验证窄屏及 200% 文字放大。
 - 保持 loading/empty/error/success 状态、可重试错误、键盘焦点和移动端基础适配。异步读取可取消，卸载/换参数时终止旧请求，防止迟到响应覆盖新状态。
@@ -32,7 +32,7 @@ apps/web/src/
 
 ## 2. 数据与状态责任
 
-Vue Query 负责服务端数据、缓存、失效与请求状态；Pinia 只存用户摘要、会话 epoch、布局与未保存草稿等客户端状态。DTO 和运行时 schema 来自 packages/models，应用内部 models 仅保存前端视图模型，不重复定义共享 DTO。
+Vue Query 负责服务端数据、缓存、失效与请求状态；Pinia 只存用户摘要、会话 epoch、布局与未保存草稿等客户端状态。共享 DTO 和运行时 schema 来自 `@scova/models`。前端专用的展示类型放在 `utils/` 的对应领域目录。
 
 community 中存在 Service/store 组合和 JWT 持久化；Scova 借用分层风格，保留自己的 Cookie 会话设计。不要把服务端列表复制进 Pinia，不向 localStorage 写登录 token 或模型密钥。
 
@@ -40,7 +40,7 @@ community 中存在 Service/store 组合和 JWT 持久化；Scova 借用分层�
 
 核实的源码基线：[requestlane commit e9f5147](https://github.com/abcde1239/requestlane/tree/e9f5147a73b6b8dee6b672dac6b6b23356f92183)，package.json 版本 0.1.3。实现时通过 Vite+ 安装并锁定已验证发行版，确认浏览器构建和 API 行为；若发行版与所读源码不符，先核实兼容性，不退回另一套请求封装。
 
-- 在模块作用域创建共享 Client 与 Fetch transport，baseURL 由根环境文件的 VITE_API_BASE_URL 决定，credentials=include；开发直连 API，不使用 Vite proxy，生产默认 /api/v1；Server 仅允许 APP_ORIGIN 来源的 credentialed CORS，保留 SameSite Cookie、Origin 与 CSRF 校验；端点在模块作用域用 defineEndpoint 定义，输入/输出通过共享 models schema 验证。
+- 在模块作用域创建共享 Client 与 Fetch transport，baseURL 由根环境文件的 VITE_API_BASE_URL 决定，credentials=include；开发直连 API，不使用 Vite proxy，生产默认 /api/v1；Server 仅允许 APP_ORIGIN 来源的 credentialed CORS，保留 SameSite Cookie、Origin 与 CSRF 校验；端点在模块作用域用 `defineApiEndpoint` 定义，通过 `modelValidator` 适配共享 schema。
 - 使用普通 JSON 数据和真实 HTTP 状态。requestlane 默认 identity codec，sendsCodec 是可选且不属于 Scova API 协议。错误经 classifyError 和 Scova 错误体映射，保留 status、code、requestId、fieldErrors。
 - 通过请求选项/统一 beforeRequest 注入 CSRF、Idempotency-Key 和 If-Match。请求 key 对同一用户动作重发保持稳定，不能每次网络重试生成新 key；写请求不自动重试。
 - Vue Query 的 signal 传入 requestlane；取消不显示失败 toast。每个用户会话持有独立客户端生命周期/epoch，退出或换号时 dispose、清空 Query 缓存并停止 SSE；旧会话迟到的 401 不能清掉新登录会话。

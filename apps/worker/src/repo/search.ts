@@ -1,7 +1,7 @@
 import type { Redis } from 'ioredis';
 
-import { searchCooldown, type SearchStateRepository } from '@scova/shared/execution/search';
-export type { SearchStateRepository } from '@scova/shared/execution/search';
+import { searchCooldown, type SearchStateRepository } from '@scova/execution/search';
+export type { SearchStateRepository } from '@scova/execution/search';
 
 const clock = "local t=redis.call('TIME'); local now=t[1]*1000+math.floor(t[2]/1000); ";
 const eligible = `${clock}

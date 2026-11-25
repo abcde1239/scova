@@ -1,23 +1,21 @@
 import { timingSafeEqual } from 'node:crypto';
-import { AgentPersistenceError } from '@scova/shared/execution/agent';
-import { executionPath } from '@scova/shared/execution/protocol';
-import {
-    RunExecutionError,
-    RunFenceError,
-    RUN_FAILURE_MESSAGES,
-} from '@scova/shared/execution/runs';
-import { isRetryableExecutionFailure } from '@scova/shared/execution/tool-failure';
+import { AgentPersistenceError } from '@scova/execution/agent';
+import { executionPath } from '@scova/execution/protocol';
+import { RunExecutionError, RunFenceError, RUN_FAILURE_MESSAGES } from '@scova/execution/runs';
+import { isRetryableExecutionFailure } from '@scova/execution/tool-failure';
 import {
     decodeExecutionValue,
     encodeExecutionValue,
     executionOperationHeader,
     executionRequestLimit,
     readExecutionBody,
-} from '@scova/shared/execution/wire';
+} from '@scova/execution/wire';
 import {
     InvalidExecutionRequest,
     type createExecutionService,
 } from '../service/execution/protocol.ts';
+
+import { ExecutionPageBatchResponse } from '../utils/execution/page-batch.ts';
 
 export function createExecutionHandler(
     secret: string,
@@ -61,6 +59,10 @@ export function createExecutionHandler(
         }
         try {
             const result = await service.dispatch(action, args);
+            if (result instanceof ExecutionPageBatchResponse)
+                return new Response(result.body, {
+                    headers: { 'cache-control': 'no-store', 'content-type': 'application/json' },
+                });
             return send(200, { result: encodeExecutionValue(result) });
         } catch (error) {
             if (error instanceof InvalidExecutionRequest)

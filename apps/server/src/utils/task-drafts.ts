@@ -1,4 +1,5 @@
 import {
+    DEFAULT_TASK_BUDGET,
     ContractValidationError,
     TaskConfigSchema,
     TaskDraftQuestionsResultSchema,
@@ -9,7 +10,6 @@ import {
     type TaskConfig,
     type TaskDraftInput,
 } from '@scova/models';
-import { TASK_DRAFT_DEFAULT_BUDGET } from '@/app/task-policy.ts';
 
 export interface DraftDefaults {
     timezone: string;
@@ -172,7 +172,7 @@ export function manualDraft(input: TaskDraftInput, defaults: DraftDefaults): Tas
         schedule: { frequency: 'manual' },
         outputFormat: 'brief',
         researchMode: 'analysis',
-        budget: { ...TASK_DRAFT_DEFAULT_BUDGET },
+        budget: { ...DEFAULT_TASK_BUDGET },
         notificationPreference: defaults.notificationPreference,
         ...input.searchScope,
     });

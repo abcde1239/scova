@@ -4,7 +4,7 @@ import type { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import type { AgentRepository } from '../../server/src/repo/execution/agent.ts';
 import { createSessionPersistence } from '../src/service/agent/persistence.ts';
 import { RunService, type RunExecutionContext } from '../src/service/runs.ts';
-import { RunExecutionError, RunFenceError } from '@scova/shared/execution/runs';
+import { RunExecutionError, RunFenceError } from '@scova/execution/runs';
 import { AgentPersistenceError } from '../../server/src/repo/execution/agent.ts';
 import { ConnectorError } from '@scova/connectors';
 import { within } from '../src/utils/timeout.ts';

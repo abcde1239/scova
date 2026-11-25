@@ -9,9 +9,9 @@ import {
     type AgentContext,
 } from '@scova/agent-core';
 import { ConnectorError, type ConnectorBundle } from '@scova/connectors';
-import { type AgentRepository } from '@scova/shared/execution/agent';
+import { type AgentRepository } from '@scova/execution/agent';
 import type { RunExecutionContext } from '@/service/runs.ts';
-import { RunExecutionError, type RunLeaseToken } from '@scova/shared/execution/runs';
+import { RunExecutionError, type RunLeaseToken } from '@scova/execution/runs';
 import { within } from '@/utils/timeout.ts';
 import { digest, readPage } from '@/service/agent/tool-results.ts';
 import { createSessionCheckpoints } from '@/service/agent/checkpoints.ts';
@@ -73,6 +73,7 @@ export function createAgentSession({
     const agentContext: AgentContext = {
         conversation: context.conversation,
         coverageDriven: true,
+        comparisonReuse: true,
         fieldDriven: true,
         modelAnswerFallback: true,
         evidenceReasoning: true,

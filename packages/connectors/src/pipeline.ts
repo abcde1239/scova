@@ -4,10 +4,10 @@ import { createTavilySearch } from './search/tavily.ts';
 import { createModelProvider } from './model/provider.ts';
 import { pageFingerprint } from './reader/http-reader.ts';
 import { createPageReader } from './reader/browser.ts';
+import { createFirecrawlReader } from './reader/firecrawl.ts';
 import { createSearxngSearch } from './search/searxng.ts';
 import { createSearchApi, type SearchApiOptions } from './search/api.ts';
 import { createCustomJsonSearch } from './search/custom.ts';
-import { createModelSearch, type ModelSearchProtocol } from './search/model.ts';
 import { ConnectorError } from './types.ts';
 import type { ModelProtocol } from './model/protocol.ts';
 import type {
@@ -40,78 +40,51 @@ export function createConnectorBundle(
         searchProvider?: 'searxng' | 'tavily' | 'api';
         searchApi?: SearchApiOptions;
         searxngBaseUrl?: string;
+        firecrawlApiKey?: string;
         managedSearch?: boolean;
         modelApiKey?: string;
         model?: string;
         modelBaseUrl?: string;
         modelProtocol?: ModelProtocol;
-        modelSearch?: ModelSearchProtocol | 'disabled';
         http?: SafeHttpClient;
     } = {},
 ): ConnectorBundle {
     const searchProvider = options.searchProvider ?? 'searxng';
-    const modelSearch =
-        searchProvider === 'api' || options.modelSearch === 'disabled'
-            ? undefined
-            : options.modelSearch;
     if (!['searxng', 'tavily', 'api'].includes(searchProvider))
         throw new ConnectorError('configuration', '搜索服务选项无效');
-    if (!modelSearch && searchProvider === 'api' && !options.searchApi)
+    const searchApi = searchProvider === 'api' ? options.searchApi : undefined;
+    if (searchProvider === 'api' && !searchApi)
         throw new ConnectorError('configuration', '搜索 API 未配置');
-    if (!modelSearch && searchProvider === 'api' && options.searchApi?.protocol === 'perplexity')
+    if (searchApi?.protocol === 'perplexity')
         throw new ConnectorError(
             'configuration',
             'Perplexity Search 暂不支持独立网页读取，请选择 DeepSeek 或 Tavily',
         );
+    let customSearch: SearchProvider | undefined;
+    let apiSearch: (SearchProvider & PageReader) | undefined;
+    if (searchApi) {
+        const apiOptions = {
+            ...searchApi,
+            http: searchApi.http ?? options.http,
+            maxResults: options.managedSearch ? 10 : searchApi.maxResults,
+        };
+        if (searchApi.protocol === 'custom_json') {
+            if (searchApi.contentMode !== 'reader' || !searchApi.custom || !searchApi.baseUrl)
+                throw new ConnectorError(
+                    'configuration',
+                    '自定义 JSON 搜索须明确选择本地 Reader 并填写模板',
+                );
+            customSearch = createCustomJsonSearch({
+                ...apiOptions,
+                baseUrl: searchApi.baseUrl,
+                custom: searchApi.custom,
+            });
+        } else {
+            apiSearch = createSearchApi(apiOptions);
+        }
+    }
     if (
-        (modelSearch === 'anthropic_web_search' &&
-            options.modelProtocol !== 'anthropic_messages') ||
-        (modelSearch === 'openai_responses' &&
-            options.modelProtocol &&
-            !['openai_chat_completions', 'openai_json'].includes(options.modelProtocol))
-    )
-        throw new ConnectorError('configuration', '内置搜索与模型协议不匹配');
-    const nativeSearch = modelSearch
-        ? createModelSearch({
-              protocol: modelSearch,
-              model: options.model ?? '',
-              baseUrl: options.modelBaseUrl ?? 'https://api.openai.com/v1',
-              apiKey: options.modelApiKey ?? '',
-              http: options.http,
-          })
-        : undefined;
-    const customSearch =
-        !nativeSearch && searchProvider === 'api' && options.searchApi?.protocol === 'custom_json'
-            ? (() => {
-                  if (
-                      options.searchApi.contentMode !== 'reader' ||
-                      !options.searchApi.custom ||
-                      !options.searchApi.baseUrl
-                  )
-                      throw new ConnectorError(
-                          'configuration',
-                          '自定义 JSON 搜索须明确选择本地 Reader 并填写模板',
-                      );
-                  return createCustomJsonSearch({
-                      ...options.searchApi,
-                      baseUrl: options.searchApi.baseUrl,
-                      custom: options.searchApi.custom,
-                      http: options.searchApi.http ?? options.http,
-                      maxResults: options.managedSearch ? 10 : options.searchApi.maxResults,
-                  });
-              })()
-            : undefined;
-    const apiSearch =
-        !nativeSearch && !customSearch && searchProvider === 'api'
-            ? createSearchApi({
-                  ...options.searchApi!,
-                  http: options.searchApi!.http ?? options.http,
-                  maxResults: options.managedSearch ? 10 : options.searchApi!.maxResults,
-              })
-            : undefined;
-    if (
-        (nativeSearch ||
-            searchProvider === 'searxng' ||
+        (searchProvider === 'searxng' ||
             apiSearch ||
             customSearch ||
             options.tavilyApiKey?.trim()) &&
@@ -123,12 +96,11 @@ export function createConnectorBundle(
             searchProvider:
                 apiSearch || customSearch
                     ? 'api'
-                    : !nativeSearch && searchProvider === 'searxng'
+                    : searchProvider === 'searxng'
                       ? 'searxng'
                       : undefined,
             ...(customSearch ? { providerReads: false } : {}),
             search:
-                nativeSearch ??
                 apiSearch ??
                 customSearch ??
                 (searchProvider === 'searxng'
@@ -139,7 +111,11 @@ export function createConnectorBundle(
                           maxAttempts: options.managedSearch ? 1 : undefined,
                       })
                     : createTavilySearch({ apiKey: options.tavilyApiKey!, http: options.http })),
-            reader: apiSearch ?? createPageReader({ http: options.http }),
+            reader:
+                apiSearch ??
+                (searchProvider === 'searxng' && options.firecrawlApiKey?.trim()
+                    ? createFirecrawlReader({ apiKey: options.firecrawlApiKey, http: options.http })
+                    : createPageReader({ http: options.http })),
             model: createModelProvider({
                 apiKey: options.modelApiKey,
                 model: options.model,

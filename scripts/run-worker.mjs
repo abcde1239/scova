@@ -41,15 +41,15 @@ for (const key of Object.keys(env)) {
         delete env[key];
 }
 
-const watch = mode === 'dev' ? ['--watch'] : [];
+const watch = mode === 'dev' ? ['--dev'] : [];
 const command =
     runtime === 'bun'
         ? {
               executable: process.execPath,
               args: [
                   fileURLToPath(new URL('./run-bun.mjs', import.meta.url)),
-                  '--no-env-file',
                   ...watch,
+                  '--no-env-file',
                   'src/main.ts',
               ],
           }

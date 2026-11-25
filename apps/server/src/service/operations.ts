@@ -22,7 +22,7 @@ export function createOperationService(pool: pg.Pool, config: OperationConfig) {
             throw new Error('维护命令要求 SCOVA_MAINTENANCE=1，并先停止 API/Worker');
         const active =
             await pool.query(`SELECT 1 FROM pg_stat_activity WHERE datname=current_database()
-      AND pid<>pg_backend_pid() AND application_name IN ('scova-api','scova-worker') LIMIT 1`);
+      AND pid<>pg_backend_pid() AND application_name IN ('scova-api','scova-worker','scova-run-control') LIMIT 1`);
         if (active.rowCount) throw new Error('API/Worker 仍连接数据库，请先停止并等待在途写入结束');
     }
     return {

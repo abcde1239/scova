@@ -1,16 +1,17 @@
+import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vite-plus/test';
-import { createConnectorBundle } from '@scova/connectors';
+import { createConnectorBundle, DEMO_URL } from '@scova/connectors';
 import { eq, runs, reports, toolCalls, sql, queryRows } from '@scova/db';
 import { emptyCheckpoint } from '@langchain/langgraph';
 import { createFetchTransport } from 'requestlane/fetch';
-import { executionPath } from '@scova/shared/execution/protocol';
-import { encodeExecutionValue } from '@scova/shared/execution/wire';
+import { executionPath } from '@scova/execution/protocol';
+import { encodeExecutionValue, executionBodyLimit } from '@scova/execution/wire';
 import { createExecutionClient } from '../src/repo/execution.ts';
 import { createAgentRuntime } from '../src/service/agent.ts';
 import { RunService } from '../src/service/runs.ts';
 import { outboxDatabase } from './support/outbox-database.ts';
 import { prepareTestCheckpointSchema } from './support/checkpoint-schema.ts';
-import { seedRun } from './support/run-database.ts';
+import { emptyUsage, seedRun } from './support/run-database.ts';
 import { testWorkerExecution } from './support/worker-execution.ts';
 
 const fixture = outboxDatabase();
@@ -162,6 +163,80 @@ describe('Server 持久化与 Worker 内部执行协议', () => {
             ),
         ).rejects.toMatchObject({ code: 'INVALID_CHECKPOINT' });
     });
+    it.each([
+        { text: 'Small page', requests: 1 },
+        { text: '你"'.repeat(419_000), requests: 2 },
+    ])('按编码字节批量恢复五页，保持凭据、顺序与回退游标', async ({ text, requests }) => {
+        const seed = await seedRun(fixture.db);
+        const claimed = await client.runs.claim(seed.run.id, 'test', 60_000);
+        if (claimed.kind !== 'claimed') throw new Error('Fixture run unavailable');
+        const repo = client.persistence.repository(claimed.token);
+        const page = await createConnectorBundle().reader.read(DEMO_URL);
+        const hash = (value: string) => createHash('sha256').update(value).digest('hex');
+        const refs = [];
+        for (let index = 0; index < 5; index++) {
+            const id = `read-${index}`;
+            const originalUrl = `https://example.test/${index}`;
+            const { text: _demoText, ...metadata } = {
+                ...page,
+                originalUrl,
+                contentHash: hash(text),
+            };
+            const reservation = await repo.reserve({
+                operationKey: `${id}:${hash(JSON.stringify(originalUrl))}`,
+                tool: 'read',
+                reserved: { ...emptyUsage(), pages: 1 },
+            });
+            await repo.settle({
+                toolCallId: reservation.toolCallId,
+                output: { ...metadata, text },
+            });
+            refs.push({ ...metadata, id, questionIds: ['q1'] });
+        }
+        const fetcher = globalThis.fetch;
+        const responses: number[] = [];
+        globalThis.fetch = Object.assign(async (...args: Parameters<typeof fetch>) => {
+            const response = await fetcher(...args);
+            responses.push((await response.clone().arrayBuffer()).byteLength);
+            return response;
+        }, fetcher);
+        let observed: ReturnType<typeof createExecutionClient>;
+        try {
+            observed = createExecutionClient(execution.url, execution.token);
+        } finally {
+            globalThis.fetch = fetcher;
+        }
+        const recovery = observed.persistence.repository(claimed.token);
+        const reversed = [...refs].reverse();
+        const restored = await recovery.readCheckpointPages(reversed);
+        expect(restored.map((page) => page.id)).toEqual(reversed.map((ref) => ref.id));
+        expect(restored.every((page) => page.text === text)).toBe(true);
+        expect(responses).toHaveLength(requests);
+        expect(Math.max(...responses)).toBeLessThanOrEqual(executionBodyLimit);
+        responses.length = 0;
+        await fixture.db
+            .update(runs)
+            .set({ deadlineAt: new Date() })
+            .where(eq(runs.id, seed.run.id));
+        const fallback = await recovery.readPages({ allowDeadline: true });
+        expect(fallback.map((page) => (page as { originalUrl: string }).originalUrl)).toEqual(
+            refs.map((ref) => ref.originalUrl),
+        );
+        expect(responses).toHaveLength(requests);
+        expect(Math.max(...responses)).toBeLessThanOrEqual(executionBodyLimit);
+        await expect(
+            recovery.readCheckpointPages(
+                [...refs.slice(0, -1), { ...refs.at(-1)!, contentHash: '0'.repeat(64) }],
+                { allowDeadline: true },
+            ),
+        ).rejects.toMatchObject({ code: 'INVALID_CHECKPOINT' });
+        await expect(
+            observed.persistence
+                .repository({ ...claimed.token, leaseEpoch: claimed.token.leaseEpoch + 1 })
+                .readPages({ allowDeadline: true }),
+        ).rejects.toMatchObject({ code: 'LEASE_LOST' });
+    });
+
     it('检查点写入耗时超过 deadline 时回滚原始 checkpoint 行', async () => {
         const seed = await seedRun(fixture.db);
         const claimed = await client.runs.claim(seed.run.id, 'test');

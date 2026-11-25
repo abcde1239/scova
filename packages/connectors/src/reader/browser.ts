@@ -4,6 +4,7 @@ import { createReaderHttpClient } from './http.ts';
 import { createDelegatedReader } from './runtime/delegate.ts';
 import { readDiagnostics } from './diagnostics.ts';
 import { ConnectorError, PAGE_TEXT_CHAR_LIMIT, type PageReader } from '../types.ts';
+import { createPageExtractor } from './extraction/process.ts';
 import { createPageRenderer } from './browser/render.ts';
 
 export interface BrowserReaderOptions {
@@ -33,7 +34,8 @@ export function createPageReader(options: BrowserReaderOptions = {}): PageReader
     let tail: Promise<unknown> = Promise.resolve();
     let closed = false;
 
-    const render = createPageRenderer(http, maxText, waitMs);
+    const extractor = createPageExtractor();
+    const render = createPageRenderer(http, maxText, waitMs, extractor.extract);
 
     return {
         read(originalUrl, context = {}) {
@@ -73,6 +75,7 @@ export function createPageReader(options: BrowserReaderOptions = {}): PageReader
             closed = true;
             for (const controller of controllers) controller.abort();
             await Promise.allSettled(cleanup);
+            await extractor.close();
         },
     };
 }

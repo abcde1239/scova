@@ -4,7 +4,7 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "dev": "vp run -r --parallel dev",
+        "dev": "vpx --env-file-if-exists=.env.local scripts/check-dev.ts && vp run -r --parallel dev",
         "dev:frontend": "vp run web#dev",
         "dev:server": "vp run server#dev",
         "dev:worker": "vp run worker#dev",
@@ -42,6 +42,7 @@
         "@langchain/langgraph": "catalog:",
         "@langchain/langgraph-checkpoint-postgres": "catalog:",
         "@scova/db": "workspace:*",
+        "@scova/execution": "workspace:*",
         "@scova/shared": "workspace:*",
         "bullmq": "catalog:",
         "drizzle-orm": "catalog:",

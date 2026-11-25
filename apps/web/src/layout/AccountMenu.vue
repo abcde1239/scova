@@ -3,6 +3,7 @@
         v-if="session.user.value && session.phase.value === 'ready'"
         ref="root"
         class="account-menu relative min-w-0 [@media(max-width:_53.999rem)]:hidden"
+        :class="{ 'account-menu--compact': compact }"
         @pointerenter="enter"
         @pointerleave="leave"
         @focusout="blur"
@@ -14,8 +15,10 @@
                 :email="session.user.value.email"
                 :version="session.user.value.avatarVersion"
             />
-            <span class="account-email truncate">{{ session.user.value.email }}</span>
-            <app-icon class="account-chevron" name="expand" />
+            <span v-if="!compact" class="account-email truncate">{{
+                session.user.value.email
+            }}</span>
+            <app-icon v-if="!compact" class="account-chevron" name="expand" />
         </n-button>
         <nav
             v-if="open"
@@ -54,7 +57,9 @@
         class="account-login [@media(max-width:_53.999rem)]:[&&]:hidden"
         to="/login"
         icon="account"
-        >{{ t('pages.login') }}</navigation-button
+        :label="t('pages.login')"
+        v-bind="{ title: compact ? t('pages.login') : undefined }"
+        >{{ compact ? '' : t('pages.login') }}</navigation-button
     >
 </template>
 
@@ -71,6 +76,7 @@ import AccountAvatar from '@/component/account/AccountAvatar.vue';
 
 const session = useSession();
 const route = useRoute();
+const props = defineProps<{ compact?: boolean }>();
 const { t } = useI18n({ useScope: 'global' });
 
 const root = ref<HTMLElement>();
@@ -81,6 +87,7 @@ const triggerAccessibility = computed(() => ({
     'aria-current': route.meta.section === 'account' ? 'true' : undefined,
     'aria-expanded': open.value,
     'aria-controls': panelId,
+    title: props.compact ? t('shell.accountMenu') : undefined,
 }));
 let pinned = false;
 let leaveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -168,6 +175,12 @@ onUnmounted(() => {
 }
 .account-trigger :deep(.n-button__content) {
     @apply grid grid-cols-[auto_minmax(0,_1fr)_auto] items-center gap-2 w-full min-w-0 text-start;
+}
+.account-menu--compact .account-trigger {
+    @apply px-0;
+}
+.account-menu--compact .account-trigger :deep(.n-button__content) {
+    @apply flex justify-center;
 }
 .account-chevron {
     @apply rotate-180 text-muted;

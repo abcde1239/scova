@@ -8,6 +8,20 @@
                 :tabindex="register ? undefined : 0"
                 :aria-label="t('auth.highlights.label')"
             >
+                <div v-if="!register" class="auth-ambient" aria-hidden="true">
+                    <span class="auth-grid" />
+                    <span class="auth-glow auth-glow--a" />
+                    <span class="auth-glow auth-glow--b" />
+                    <span
+                        v-for="chip in ambientChips"
+                        :key="chip.text"
+                        class="auth-chip"
+                        lang="en"
+                        :style="{ '--x': chip.x, '--y': chip.y, '--rise': chip.rise }"
+                        >{{ chip.text }}</span
+                    >
+                    <span class="auth-rail"><i /></span>
+                </div>
                 <div id="auth-start" class="auth-showcase-intro">
                     <div class="auth-wordmark">
                         <span class="auth-mark" aria-hidden="true">S</span>
@@ -34,7 +48,8 @@
                             href="#auth-demo-title"
                             @click.prevent="showDemo"
                         >
-                            {{ t('auth.demo.explore') }} <app-icon name="expand" />
+                            <span class="auth-explore-icon"><app-icon name="expand" /></span>
+                            {{ t('auth.demo.explore') }}
                         </a>
                     </div>
                 </div>
@@ -47,7 +62,9 @@
                         v-model="accent"
                         :label="t('auth.theme')"
                         :options="themes"
+                        icon="appearance"
                         compact
+                        icon-only
                     />
                     <app-select
                         id="auth-appearance"
@@ -55,8 +72,9 @@
                         :label="t('pages.appearance')"
                         :options="modes"
                         compact
+                        icon-only
                     />
-                    <interface-language-select />
+                    <interface-language-select icon-only />
                 </div>
                 <div class="auth-panel">
                     <div class="auth-brand">
@@ -66,7 +84,7 @@
                         </div>
                         <p>{{ t('auth.tagline') }}</p>
                     </div>
-                    <header class="auth-heading">
+                    <header class="auth-heading" :class="{ 'auth-heading--login': !register }">
                         <h1 id="page-title">{{ title }}</h1>
                         <p>{{ t(register ? 'auth.start' : 'auth.resume') }}</p>
                     </header>
@@ -126,6 +144,15 @@ watch(
     () => showcase.value?.scrollTo(0, 0),
 );
 
+// Decorative source fragments; each rises at its own speed while the showcase scrolls.
+const ambientChips = [
+    { text: 'CHANGELOG.md', x: '78%', y: '14%', rise: '-35dvh' },
+    { text: 'LICENSE', x: '88%', y: '56%', rise: '-70dvh' },
+    { text: 'issue #482', x: '80%', y: '88%', rise: '-100dvh' },
+    { text: 'v3.2.0', x: '90%', y: '122%', rise: '-140dvh' },
+    { text: 'RFC 0042', x: '82%', y: '156%', rise: '-175dvh' },
+    { text: 'SECURITY.md', x: '86%', y: '196%', rise: '-215dvh' },
+] as const;
 const highlights = [
     { label: 'auth.highlights.track', icon: 'search' },
     { label: 'auth.highlights.research', icon: 'report' },
@@ -180,7 +207,7 @@ const mode = computed({
     @apply relative flex flex-col min-w-0 py-6 px-5 [@media(max-width:_30rem)]:px-4;
 }
 .auth-tools {
-    @apply flex flex-wrap justify-end items-center gap-2 text-muted;
+    @apply flex flex-wrap justify-end items-center gap-1 text-muted;
 }
 .auth-panel {
     @apply grid gap-8 w-[min(100%,_24rem)] min-w-0 m-auto pt-10 pb-6;
@@ -212,40 +239,229 @@ const mode = computed({
     @apply grid gap-3;
 }
 .auth-explore {
-    @apply inline-flex items-center gap-2 min-h-11 justify-self-start rounded-2
-        text-primary text-[0.875rem] font-medium underline underline-offset-4;
+    @apply inline-flex items-center gap-3 min-h-11 justify-self-start rounded-2
+        text-muted text-[0.8125rem] font-medium no-underline hover:text-default;
+}
+.auth-explore-icon {
+    @apply inline-grid place-items-center w-8 h-8 shrink-0 rounded-full border-subtle;
+}
+.auth-explore:is(:hover, :focus-visible) .auth-explore-icon {
+    @apply [border-color:var(--scova-primary)] text-primary;
+}
+@media (prefers-reduced-motion: no-preference) {
+    .auth-heading--login {
+        animation: auth-heading-in 220ms ease-out;
+    }
+    .auth-explore-icon :deep(.app-icon) {
+        transition: translate 160ms ease-out;
+    }
+    .auth-explore:focus-visible .auth-explore-icon :deep(.app-icon) {
+        translate: 0 0.1875rem;
+    }
+    @media (hover: hover) {
+        .auth-explore:hover .auth-explore-icon :deep(.app-icon) {
+            translate: 0 0.1875rem;
+        }
+    }
+}
+@keyframes auth-heading-in {
+    from {
+        opacity: 0.72;
+        transform: translateY(0.25rem);
+    }
 }
 
 @media (min-width: 54rem) {
     .auth-hero {
-        @apply [grid-template-columns:minmax(0,_1.1fr)_minmax(0,_1fr)];
+        @apply [grid-template-columns:minmax(0,_1fr)_minmax(26rem,_min(42%,_36rem))];
+    }
+    .auth-form-column {
+        @apply grid [grid-template-rows:2.75rem_1fr_2.75rem] px-8;
+    }
+    .auth-tools {
+        @apply self-start;
+    }
+    .auth-panel {
+        @apply w-[min(100%,_28rem)] py-6;
     }
     .auth-showcase {
+        --auth-grid-line: color-mix(in srgb, var(--scova-border) 12%, transparent);
+        container: auth-showcase / inline-size;
         @apply block min-w-0 overflow-hidden
             [background:color-mix(in_srgb,_var(--scova-primary)_6%,_var(--scova-canvas))]
             [border-inline-end:0.0625rem_solid_var(--auth-line)];
     }
+    .auth-showcase,
+    .auth-grid {
+        background-image:
+            linear-gradient(var(--auth-grid-line) 1px, transparent 1px),
+            linear-gradient(90deg, var(--auth-grid-line) 1px, transparent 1px);
+        background-size: 2.5rem 2.5rem;
+    }
     .auth-showcase--tour {
-        @apply h-[100dvh] [overflow-y:auto] [overscroll-behavior-y:contain] keyboard-focus-inset;
+        @apply h-[100dvh] [overflow-y:auto] [overscroll-behavior-y:contain] [scrollbar-width:none] keyboard-focus-inset;
     }
     .auth-showcase-intro {
         @apply relative [isolation:isolate] grid [grid-template-rows:auto_1fr_auto] gap-8 min-w-0 min-h-[100dvh]
             overflow-hidden py-8 px-[clamp(2rem,_4vw,_4rem)];
-    }
-    /* Static grid that fades toward the lower right; purely decorative. */
-    .auth-showcase-intro::before {
-        @apply content-[''] absolute [inset:0] z-[-1] opacity-70
-            [background-image:linear-gradient(var(--auth-line)_1px,_transparent_1px),linear-gradient(90deg,_var(--auth-line)_1px,_transparent_1px)]
-            [background-size:2.5rem_2.5rem]
-            [mask-image:linear-gradient(160deg,_#000,_transparent_70%)];
     }
     .auth-brand {
         @apply hidden;
     }
 }
 
+@supports not (scrollbar-width: none) {
+    .auth-showcase--tour::-webkit-scrollbar {
+        display: none;
+    }
+}
+
+@media (min-width: 54rem) and (prefers-reduced-motion: no-preference) {
+    @supports ((animation-timeline: view()) and (animation-range: exit)) {
+        .auth-showcase--tour .auth-showcase-intro {
+            view-timeline: --auth-intro block;
+        }
+        .auth-showcase--tour .auth-pitch {
+            animation: auth-pitch-depth linear both;
+            animation-timeline: --auth-intro;
+            animation-range: exit 0% exit 100%;
+        }
+        .auth-showcase--tour .auth-showcase-footer {
+            animation: auth-footer-out linear both;
+            animation-timeline: --auth-intro;
+            animation-range: exit 0% exit 70%;
+        }
+    }
+}
+@keyframes auth-footer-out {
+    to {
+        opacity: 0.2;
+        transform: translateY(2rem);
+    }
+}
+@keyframes auth-pitch-depth {
+    to {
+        transform: translateY(3rem);
+    }
+}
+
+/* Ambient layer: fills the empty strips; under motion it keeps every part moving while scrolling. */
+.auth-ambient,
+.auth-grid {
+    @apply hidden;
+}
+@media (min-width: 54rem) {
+    .auth-showcase--tour > :not(.auth-ambient) {
+        @apply relative z-1;
+    }
+    .auth-ambient {
+        @apply block sticky top-0 z-0 h-[100dvh] mb-[-100dvh] overflow-hidden pointer-events-none;
+    }
+    .auth-glow {
+        @apply absolute w-[32rem] h-[32rem] rounded-full
+            [background:radial-gradient(closest-side,_color-mix(in_srgb,_var(--scova-primary)_14%,_transparent),_transparent)];
+    }
+    .auth-glow--a {
+        @apply top-[-8rem] right-[-10rem];
+    }
+    .auth-glow--b {
+        @apply bottom-[-12rem] left-[-8rem];
+    }
+    .auth-chip {
+        @apply absolute left-[var(--x)] top-[var(--y)] rounded-2 px-2 py-1 border-subtle text-muted
+            text-[0.6875rem] font-medium whitespace-nowrap opacity-70
+            [background:color-mix(in_srgb,_var(--scova-surface)_70%,_transparent)];
+    }
+    /* Progress only means something when it follows the scroll. */
+    .auth-rail {
+        @apply hidden;
+    }
+}
+@media (min-width: 54rem) and (prefers-reduced-motion: no-preference) {
+    @supports (animation-timeline: scroll()) {
+        .auth-showcase--tour {
+            --auth-grid-travel: 30rem;
+            scroll-timeline: --auth-tour block;
+            background-image: none;
+        }
+        .auth-grid {
+            /* Overscan by the travel distance so the clipped grid always covers the showcase. */
+            @apply block absolute inset-0;
+            inset-block-end: calc(-1 * var(--auth-grid-travel));
+        }
+        .auth-grid,
+        .auth-glow,
+        .auth-chip,
+        .auth-rail i {
+            animation: linear both;
+            animation-timeline: --auth-tour;
+        }
+        .auth-grid {
+            animation-name: auth-grid-drift;
+        }
+        .auth-glow--a {
+            animation-name: auth-glow-a;
+        }
+        .auth-glow--b {
+            animation-name: auth-glow-b;
+        }
+        .auth-chip {
+            animation-name: auth-chip-rise;
+        }
+        .auth-rail {
+            @apply block absolute top-[18%] bottom-[18%] right-4 w-0.5 rounded-full
+                [background:color-mix(in_srgb,_var(--scova-border)_30%,_transparent)];
+        }
+        .auth-rail i {
+            @apply block h-full rounded-full origin-top [background:var(--scova-primary)];
+            animation-name: auth-rail-fill;
+        }
+    }
+}
+@keyframes auth-grid-drift {
+    to {
+        transform: translateY(calc(-1 * var(--auth-grid-travel)));
+    }
+}
+@keyframes auth-glow-a {
+    to {
+        transform: translate(-24rem, 60dvh);
+    }
+}
+@keyframes auth-glow-b {
+    to {
+        transform: translate(20rem, -50dvh);
+    }
+}
+@keyframes auth-chip-rise {
+    to {
+        transform: translateY(var(--rise));
+    }
+}
+@keyframes auth-rail-fill {
+    from {
+        transform: scaleY(0.04);
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .auth-showcase {
+        background-attachment: local;
+    }
+}
+
 .auth-pitch {
-    @apply grid content-center gap-8 max-w-[32rem];
+    @apply grid content-center gap-8 max-w-[34rem];
+}
+/* The showcase grows with the viewport while the form column stays capped; fill it in steps. */
+@container auth-showcase (min-width: 50rem) {
+    .auth-pitch {
+        @apply max-w-[46rem];
+    }
+}
+@container auth-showcase (min-width: 76rem) {
+    .auth-pitch {
+        @apply [grid-template-columns:minmax(0,_1fr)_auto] items-center gap-16 max-w-[80rem];
+    }
 }
 .auth-headline {
     @apply m-0 text-default text-[clamp(1.75rem,_2.6vw,_2.25rem)] leading-[1.3] [font-weight:650]
@@ -265,8 +481,8 @@ const mode = computed({
 }
 
 @media (prefers-reduced-transparency: reduce) {
-    .auth-showcase-intro::before {
-        @apply hidden;
+    .auth-showcase {
+        background-image: none;
     }
 }
 </style>

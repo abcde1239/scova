@@ -12,7 +12,7 @@ import {
     eq,
 } from '@scova/db';
 import { migrateDatabase } from '@scova/db/migrate';
-import { openCredential, sealProviderCredentials } from '@scova/shared/credentials';
+import { openCredential, sealProviderCredentials } from '@/utils/credentials.ts';
 import { BRAVE_SEARCH_PRESET, type SearchConfiguration } from '@scova/models';
 import { createDefaultServices } from '../src/app/services';
 import { createApiErrorPlugin } from '../src/app/errors';

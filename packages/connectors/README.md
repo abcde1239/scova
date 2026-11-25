@@ -18,7 +18,7 @@ Scova 的搜索、远程模型与安全网页阅读适配器。默认使用自�
 
 搜索可传 `search(query, { language: 'ja' })`。`SearchOptions` 接受有限的 ISO 语言代码，SearXNG/Tavily 透传语言，Perplexity 映射语言过滤；DeepSeek 通过查询文本语言检索，不发送未支持的参数。调用方负责生成对应语言的查询，连接器不执行翻译。
 
-`createSearchApi({ protocol, apiKey, baseUrl? })` 接入独立服务；`createModelSearch({ protocol, apiKey, model, baseUrl })` 接入模型搜索，通过 `tokenReservation` 与返回的 `usage` 供调用方预留、结算。调用方必须在 `beforeAttempt` 中先持久预留预算；候选不能直接充当正文证据。
+`createSearchApi({ protocol, apiKey, baseUrl? })` 接入独立服务；`createModelSearch({ protocol, apiKey, model, baseUrl })` 是独立模型搜索适配器，通过 `tokenReservation` 与返回的 `usage` 供调用方预留、结算。`createConnectorBundle` 的搜索由 `searchProvider` 选择，不再接受 `modelSearch` 自动替换；生产执行使用账号搜索配置。调用方必须在 `beforeAttempt` 中先持久预留预算；候选不能直接充当正文证据。
 
 搜索与阅读可以独立于模型使用：
 
@@ -46,6 +46,8 @@ if (first) {
 SearxNG 在最多 30 条候选中按查询相关性排序后截取返回条目；相关性分数不证明来源可靠。内部客户端的 `engines` 仅接受部署白名单的去重子集，查询中的引擎切换语法会被移除。Worker 的共享搜索包装层负责 Redis 节流、冷却与缓存；`managedSearch` 装配关闭内层自动重试，由包装层逐次申请资格并记账。独立连接器不自建 Redis 连接。
 
 默认阅读器先从安全下载的主 HTML 提取可用正文，正文尚未生成或主区动态数据未就绪时使用 Crawlee `PlaywrightCrawler` 驱动一次性 Chromium 上下文；费用等绑定字段仍显示加载失败时保留部分采集标记。主区内有实质说明的步骤导航会保留，普通菜单会清理。同步提取在可终止的 Node 子进程内运行，使用 Readability 轻量 DOM 保留长文；纯 ruby 注音结构可在有界、保真归一化后执行原结构节点上限。浏览器资源在有界窗口内加载，已有正文不会因可选资源超限被丢弃，受限状态随工具账本保存。所有脚本/JSON/CSS 请求重新经过同一安全 HTTP 客户端。页面不能发起写请求、iframe/图片/下载、WebSocket、service worker 或二次导航；不转发 Cookie、Authorization 和 Set-Cookie。阅读器仅允许 HTTP/HTTPS 默认端口与公共 IP，拒绝混合公私 DNS，将已验证地址绑定实际连接，每跳重验，公开 GET 最多尝试三个已校验地址。单地址连接计时从实际出站开始，响应头到达后正文继续受原总期限约束；排队也计入总期限。所有调用共享最多 15 秒 deadline，主 HTML/单资源最多 2 MiB、总资源最多 8 MiB、最多 32 次请求（含主文档），正文和 DOM 另有限制。
+
+`createConnectorBundle` 可在 SearXNG 路径设置 `firecrawlApiKey`，通过 Firecrawl Cloud Scrape 读取选中页面的 Markdown。Worker 从 `READER_FIRECRAWL_API_KEY` 读取配置，空值使用本地 Reader。账号 DeepSeek/Tavily 和自定义 JSON 搜索保持各自的读取方式。
 
 Worker 使用 Bun 时，完整 Reader 由 Node 子进程通过仓库 Vite+ loader 执行，Bun 仅通过受控行协议转发 HTTP、预算和取消，避免 Windows/Bun 的 Playwright WebSocket 兼容问题。`scripts/run-bun.mjs` 自动传入 Node 路径；独立启动 Bun 时可设置 `READER_NODE_EXECUTABLE`，默认查找 `node`。容器 `worker-runtime` 镜像预装 Chromium，设置 `PLAYWRIGHT_BROWSERS_PATH`。本地可用 `vp exec playwright install chromium` 安装浏览器；Linux 容器默认关闭 Chromium sandbox，依靠非 root、只读根文件系统、cap drop 和 no-new-privileges，宿主机默认启用 Chromium sandbox。
 

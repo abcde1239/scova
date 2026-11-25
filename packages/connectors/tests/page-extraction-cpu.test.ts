@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 const state = vi.hoisted(() => ({
     fixture: '',
     cpu: false,
+    spawned: 0,
     started: undefined as (() => void) | undefined,
     child: undefined as ChildProcessWithoutNullStreams | undefined,
 }));
@@ -19,8 +20,9 @@ vi.mock('node:child_process', async (importOriginal) => {
                 state.cpu ? [...(parameters ?? []).slice(0, -1), state.fixture] : parameters,
                 options,
             ) as ChildProcessWithoutNullStreams;
+            state.spawned++;
+            state.child = child;
             if (state.cpu) {
-                state.child = child;
                 child.stderr.on('data', (chunk: Buffer) => {
                     if (chunk.toString().includes('CPU_READY')) state.started?.();
                 });
@@ -29,7 +31,7 @@ vi.mock('node:child_process', async (importOriginal) => {
         },
     };
 });
-import { extractPageIsolated } from '../src/reader/extraction/process.ts';
+import { createPageExtractor } from '../src/reader/extraction/process.ts';
 
 afterEach(() => {
     state.cpu = false;
@@ -55,12 +57,15 @@ describe('actual synchronous extraction CPU isolation', () => {
             body: '<article><p>The next article still works after a CPU deadline.</p></article>',
         };
         const before = performance.now();
-        const result = extractPageIsolated(url, response, 1_000_000, undefined, false, {
-            timeoutMs: 1200,
-        }).then(
-            () => null,
-            (error) => error,
-        );
+        const extractor = createPageExtractor();
+        const result = extractor
+            .extract(url, response, 1_000_000, undefined, false, {
+                timeoutMs: 1200,
+            })
+            .then(
+                () => null,
+                (error) => error,
+            );
         await Promise.race([
             entered,
             result.then(() => {
@@ -74,7 +79,26 @@ describe('actual synchronous extraction CPU isolation', () => {
         expect(performance.now() - before).toBeLessThan(3000);
         expect(state.child?.exitCode !== null || state.child?.signalCode !== null).toBe(true);
         state.cpu = false;
-        const recovered = await extractPageIsolated(url, response, 1_000_000);
-        expect(recovered.text).toContain('next article still works');
+        const beforeRecovery = state.spawned;
+        try {
+            const recovered = await extractor.extract(url, response, 1_000_000);
+            expect(recovered.text).toContain('next article still works');
+            await expect(
+                extractor.extract(url, { ...response, headers: {} }, 1_000_000),
+            ).rejects.toMatchObject({ code: 'invalid_response' });
+            const next = await extractor.extract(
+                url,
+                { ...response, body: '<main>Second article.</main>' },
+                1_000_000,
+            );
+            expect(next.text).toBe('Second article.');
+            expect(state.spawned - beforeRecovery).toBe(1);
+        } finally {
+            await extractor.close();
+        }
+        expect(state.child?.exitCode !== null || state.child?.signalCode !== null).toBe(true);
+        await expect(extractor.extract(url, response, 10)).rejects.toMatchObject({
+            code: 'aborted',
+        });
     });
 });

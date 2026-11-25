@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { AgentError, type AgentDependencies } from '@scova/agent-core';
-import type { RunProgressEvent } from '@scova/shared/execution/runs';
+import type { RunProgressEvent } from '@scova/execution/runs';
 
 /** Correlates a logical checkpoint transition with each actual attempt, without exposing either lease or checkpoint. */
 export function createGraphStepReporter(

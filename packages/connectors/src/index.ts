@@ -1,5 +1,6 @@
 export * from './types.ts';
 export * from './reader/collection.ts';
+export { FIRECRAWL_EXTRACTION_VERSION } from './reader/firecrawl.ts';
 export type { ModelProtocol } from './model/protocol.ts';
 export * from './http/index.ts';
 export { createTavilySearch } from './search/tavily.ts';
