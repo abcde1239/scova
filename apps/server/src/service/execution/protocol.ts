@@ -132,13 +132,17 @@ function searchOperation(search: SearchStateRepository, method: unknown, args: u
 
 export function createExecutionService(options: {
     db: () => DatabaseClient;
-    databaseUrl: string;
+    databaseUrl?: string;
     checkpointSchema: string;
     sqlitePath?: string;
     env: NodeJS.ProcessEnv;
 }) {
     const { db, env, sqlitePath } = options;
-    const checkpoints = createExecutionCheckpoints(options.databaseUrl, options.checkpointSchema);
+    const checkpoints = createExecutionCheckpoints(
+        db,
+        options.databaseUrl,
+        options.checkpointSchema,
+    );
     let queue: ReturnType<typeof openSqliteRunQueue> | undefined;
     let state: ReturnType<typeof openSqliteState> | undefined;
     const sqliteQueue = () =>

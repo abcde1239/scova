@@ -60,6 +60,12 @@
                     </table>
                 </div>
             </details>
+            <details v-if="node.output?.json">
+                <summary>JSON 预览</summary>
+                <pre class="m-0 whitespace-pre-wrap break-anywhere">{{
+                    node.output.json.slice(0, 4000)
+                }}</pre>
+            </details>
             <details v-if="node.output?.text">
                 <summary>文本输出</summary>
                 <pre class="m-0 whitespace-pre-wrap">{{ node.output.text.slice(0, 4000) }}</pre>
@@ -108,9 +114,14 @@ function elapsed(start: string, end: string) {
     return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`;
 }
 function download(artifact: NonNullable<WorkflowCanvasOutput['artifact']>) {
-    const mime =
-        artifact.format === 'csv' ? 'text/csv;charset=utf-8' : 'text/markdown;charset=utf-8';
-    const url = URL.createObjectURL(new Blob([artifact.content], { type: mime }));
+    const mime = {
+        csv: 'text/csv',
+        markdown: 'text/markdown',
+        json: 'application/json',
+    }[artifact.format];
+    const url = URL.createObjectURL(
+        new Blob([artifact.content], { type: `${mime};charset=utf-8` }),
+    );
     const link = document.createElement('a');
     link.href = url;
     link.download = artifact.filename;

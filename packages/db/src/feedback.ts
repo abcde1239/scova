@@ -64,14 +64,16 @@ export async function captureFeedbackSnapshot(
     const historical = await queryRows<{ feedbackId: string; contentHash: string | null }>(
         tx,
         sql`
-    SELECT DISTINCT ON (f.id) f.id AS "feedbackId", s.content_hash AS "contentHash"
+    SELECT "feedbackId", "contentHash" FROM (
+    SELECT f.id AS "feedbackId", s.content_hash AS "contentHash",
+        row_number() OVER (PARTITION BY f.id ORDER BY rs.observed_at DESC, rs.id DESC) AS observation_rank
     FROM feedback f
     JOIN run_sources rs ON rs.source_id=f.source_id AND rs.user_id=f.user_id
     JOIN runs r ON r.id=rs.run_id AND r.user_id=f.user_id AND r.task_id=f.task_id
     LEFT JOIN source_snapshots s ON s.id=rs.snapshot_id AND s.user_id=f.user_id
-    WHERE f.user_id=${userId}::uuid AND f.task_id=${taskId}::uuid AND f.active=true
+    WHERE f.user_id=${userId} AND f.task_id=${taskId} AND f.active=true
       AND rs.observed_at<=f.updated_at
-    ORDER BY f.id, rs.observed_at DESC, rs.id DESC
+    ) AS prior_observations WHERE observation_rank = 1
   `,
     );
     const hashes = new Map(historical.map((row) => [row.feedbackId, row.contentHash]));

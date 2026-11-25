@@ -31,7 +31,7 @@ export async function projectRunAllowance(
     // Serialize automatic admissions across projects for the duration of the write transaction.
     await tx.select({ id: users.id }).from(users).where(eq(users.id, userId)).for('no key update');
     const midnight = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-    const count = { value: sql<number>`count(*)::int` };
+    const count = { value: sql<number>`cast(count(*) as integer)` };
     const [[oneShots], [recurrences], [alreadyScheduled]] = await Promise.all([
         tx
             .select(count)

@@ -7,6 +7,7 @@ import {
     projectThreadItems,
     projectThreads,
     sql,
+    isSqliteDatabase,
     type DatabaseExecutor,
     type DatabaseTransaction,
 } from '@scova/db';
@@ -83,7 +84,7 @@ export function createProjectThreadStore(db: DatabaseExecutor, userId: string) {
                         input.archived === undefined
                             ? undefined
                             : input.archived
-                              ? sql`coalesce(${projectThreads.archivedAt}, ${now.toISOString()}::timestamptz)`
+                              ? sql`coalesce(${projectThreads.archivedAt}, ${sql.param(now, projectThreads.archivedAt)})`
                               : null,
                 })
                 .where(owned(threadId))
@@ -182,7 +183,9 @@ export async function appendProjectThreadItems(
     await tx
         .update(projectThreads)
         .set({
-            lastActivityAt: sql`greatest(${projectThreads.lastActivityAt}, ${now.toISOString()}::timestamptz)`,
+            lastActivityAt: isSqliteDatabase(tx)
+                ? sql`max(${projectThreads.lastActivityAt}, ${sql.param(now, projectThreads.lastActivityAt)})`
+                : sql`greatest(${projectThreads.lastActivityAt}, ${sql.param(now, projectThreads.lastActivityAt)})`,
         })
         .where(owner);
 }

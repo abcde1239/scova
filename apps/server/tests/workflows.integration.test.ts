@@ -794,6 +794,49 @@ describe('自定义工作流画布', () => {
         expect((await request(`${runPath}/${live.run.id}`, stranger)).status).toBe(404);
     });
 
+    it('accepts valid JSON through the workflow API and persists a filtered JSON delivery', async () => {
+        const owner = await account();
+        const graph = structuredClone(canvas);
+        const delivery = graph.nodes.find((node) => node.type === 'deliver');
+        if (!delivery) throw new Error('Missing delivery node');
+        delivery.config.format = 'json';
+        delivery.config.filename = 'west.json';
+        const { workflow } = await create(owner, graph);
+        const version = await publish(owner, workflow.id);
+        const invalid = await request(
+            `${workflowsPath}/${workflow.id}/runs`,
+            owner,
+            'POST',
+            { versionId: version.id, input: { json: '{' } },
+            { 'idempotency-key': randomUUID() },
+        );
+        expect(invalid.status).toBe(422);
+        expect(await invalid.json()).toMatchObject({ code: 'WORKFLOW_INVALID_JSON' });
+
+        const ambiguous = await request(
+            `${workflowsPath}/${workflow.id}/runs`,
+            owner,
+            'POST',
+            { versionId: version.id, input: { csv: 'name\nApple', json: '[]' } },
+            { 'idempotency-key': randomUUID() },
+        );
+        expect(ambiguous.status).toBe(422);
+        expect(await ambiguous.json()).toMatchObject({ code: 'WORKFLOW_INVALID_INPUT' });
+
+        const { run } = await submit(owner, workflow.id, {
+            versionId: version.id,
+            input: { json: '[{"name":"Apple","region":"west"},{"name":"Banana","region":"east"}]' },
+        });
+        await createWorkflowBatch(db, { batchSize: 50, intervalMs: 0 })(signal);
+        const finished = await get(owner, run.id);
+        expect(finished.status).toBe('succeeded');
+        expect(finished.nodes.find((node) => node.id === 'deliver')?.output?.artifact).toEqual({
+            filename: 'west.json',
+            format: 'json',
+            content: '[{"name":"Apple","region":"west"}]',
+        });
+    });
+
     it('发布时拒绝循环和缺少有效上游的工作流', async () => {
         const owner = await account();
         const invalid = structuredClone(canvas);

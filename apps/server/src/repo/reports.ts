@@ -79,13 +79,13 @@ export function createReportRepo(services: Pick<ApiServices, 'db'>) {
             });
         },
         async listReports(userId: string, take: number, taskId?: string, cursor?: Cursor) {
-            const task = taskId ? sql`AND task_id=${taskId}::uuid` : sql.empty();
+            const task = taskId ? sql`AND task_id=${taskId}` : sql.empty();
             const boundary = cursor
-                ? sql`AND (published_at,id)<(SELECT published_at,id FROM reports WHERE user_id=${userId}::uuid AND id=${cursor.id}::uuid)`
+                ? sql`AND (published_at,id)<(SELECT published_at,id FROM reports WHERE user_id=${userId} AND id=${cursor.id})`
                 : sql.empty();
             const ids = await queryRows<{ id: string }>(
                 services.db(),
-                sql`SELECT id FROM reports WHERE user_id=${userId}::uuid ${task} ${boundary} ORDER BY published_at DESC,id DESC LIMIT ${take}`,
+                sql`SELECT id FROM reports WHERE user_id=${userId} ${task} ${boundary} ORDER BY published_at DESC,id DESC LIMIT ${take}`,
             );
             return services.db().query.reports.findMany({
                 where: and(
@@ -128,11 +128,11 @@ export function createReportRepo(services: Pick<ApiServices, 'db'>) {
                               ? sql`AND read_at IS NULL`
                               : sql`AND read_at IS NOT NULL`;
                     const boundary = cursor
-                        ? sql`AND (created_at,id)<(SELECT created_at,id FROM inbox_items WHERE user_id=${userId}::uuid AND id=${cursor.id}::uuid)`
+                        ? sql`AND (created_at,id)<(SELECT created_at,id FROM inbox_items WHERE user_id=${userId} AND id=${cursor.id})`
                         : sql.empty();
                     const ids = await queryRows<{ id: string }>(
                         tx,
-                        sql`SELECT id FROM inbox_items WHERE user_id=${userId}::uuid ${read} ${boundary} ORDER BY created_at DESC,id DESC LIMIT ${take}`,
+                        sql`SELECT id FROM inbox_items WHERE user_id=${userId} ${read} ${boundary} ORDER BY created_at DESC,id DESC LIMIT ${take}`,
                     );
                     return tx.query.inboxItems.findMany({
                         where: and(

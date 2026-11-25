@@ -1,3 +1,4 @@
+import { readDatabaseClock, rowLock, timestampCursor } from '@scova/db';
 import {
     queryRows,
     isUniqueConflict,
@@ -210,16 +211,10 @@ export function createTaskStore(database: DatabaseExecutor) {
         lockTask(taskId: string, userId: string) {
             return queryRows<{ id: string }>(
                 database,
-                querySql`SELECT id FROM tasks WHERE id = ${taskId}::uuid AND user_id = ${userId}::uuid FOR NO KEY UPDATE`,
+                querySql`SELECT id FROM tasks WHERE id = ${taskId} AND user_id = ${userId} ${rowLock(database, 'no key update')}`,
             );
         },
-        async now() {
-            const [result] = await queryRows<{ now: Date }>(
-                database,
-                querySql`SELECT clock_timestamp() AS now`,
-            );
-            return result!.now;
-        },
+        now: () => readDatabaseClock(database),
         findTask(taskId: string, userId: string) {
             return database.query.tasks
                 .findFirst({
@@ -231,8 +226,8 @@ export function createTaskStore(database: DatabaseExecutor) {
             const [anchor] = await queryRows<{ id: string; cursorTime: string }>(
                 database,
                 querySql`
-        SELECT id, to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "cursorTime"
-        FROM tasks WHERE id=${taskId}::uuid AND user_id=${userId}::uuid
+        SELECT id, ${timestampCursor(database, querySql`updated_at`)} AS "cursorTime"
+        FROM tasks WHERE id=${taskId} AND user_id=${userId}
       `,
             );
             return anchor;
@@ -272,12 +267,12 @@ export function createTaskStore(database: DatabaseExecutor) {
         },
         async listTasks(userId: string, take: number, cursor?: { updatedAt: string; id: string }) {
             const boundary = cursor
-                ? querySql`AND (updated_at,id)<(SELECT updated_at,id FROM tasks WHERE user_id=${userId}::uuid AND id=${cursor.id}::uuid)`
+                ? querySql`AND (updated_at,id)<(SELECT updated_at,id FROM tasks WHERE user_id=${userId} AND id=${cursor.id})`
                 : querySql.empty();
             const ids = await queryRows<{ id: string; cursorTime: string }>(
                 database,
-                querySql`SELECT id, to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "cursorTime"
-        FROM tasks WHERE user_id=${userId}::uuid ${boundary} ORDER BY updated_at DESC,id DESC LIMIT ${take}`,
+                querySql`SELECT id, ${timestampCursor(database, querySql`updated_at`)} AS "cursorTime"
+        FROM tasks WHERE user_id=${userId} ${boundary} ORDER BY updated_at DESC,id DESC LIMIT ${take}`,
             );
             const tasks = await database.query.tasks.findMany({
                 where: and(
@@ -330,8 +325,8 @@ export function createTaskStore(database: DatabaseExecutor) {
             const [result] = await queryRows<{ id: string }>(
                 database,
                 querySql`
-        SELECT id FROM runs WHERE task_id = ${taskId}::uuid AND user_id = ${userId}::uuid
-        AND status IN ('queued', 'running', 'recovering', 'cancel_requested') FOR UPDATE`,
+        SELECT id FROM runs WHERE task_id = ${taskId} AND user_id = ${userId}
+        AND status IN ('queued', 'running', 'recovering', 'cancel_requested') ${rowLock(database, 'update')}`,
             );
             return result
                 ? database.query.runs

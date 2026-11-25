@@ -27,7 +27,7 @@ flowchart LR
   Graph -->|结构化候选成果| Worker
 ```
 
-API 和 Worker 是分别运行的后端进程，默认基础服务为 PostgreSQL 和 Redis，单机可用 SQLite 文件替换 Redis 协调服务。同机 Compose 通过反向代理提供同源网页、`/api` 和 `/api/.../events`；不引入独立调度集群、搜索集群或额外向量数据库。
+API 和 Worker 是分别运行的后端进程，默认基础服务为 PostgreSQL 和 Redis。个人单机可显式启用轻量 SQLite 模式，由 Server 持有业务库和协调库，分别保存业务及检查点、队列及协调状态。Worker 经同一内部 HTTP 协议消费作业和持久化执行状态。SQLite 用串行写事务协调 Run 租约与检查点写入。同机 Compose 通过反向代理提供同源网页、`/api` 和 `/api/.../events`；不引入独立调度集群、搜索集群或额外向量数据库。
 
 ## 2. 工作区与职责
 
@@ -121,7 +121,7 @@ Server 默认每 30 秒扫描到期任务，以 `FOR NO KEY UPDATE SKIP LOCKED` 
 
 频率为手动/每日/每周，持久化当地时间、IANA timezone 和 UTC `nextRunAt`。共享 Temporal 日历计算将不存在的当地时刻顺延到首个有效时刻，重复时刻只选择较早一次；下一次从原始当地时分重建。停机后最多补最近一次时点，更早记录为 `missedCount`；活动执行时记 `skipped_overlap`。修改计划或时区在锁内重算 nextRunAt 并增加 scheduleRevision，普通标题等编辑保留原到期时点。暂停清空下一时点，恢复只安排未来时点，归档请求取消已有活动执行。
 
-单机可选 SQLite WAL 作为队列与协调存储。Outbox 仍由 Server 发布和确认，Worker 通过内部接口领取、续租和确认 SQLite 作业，再向 Server 领取业务 Run 租约。SQLite 文件只由 Server 和 Server 维护命令访问。每个 Worker 共用一个空闲领取循环，领取到新作业后填充可用执行槽。成功领取（含空队列）和续租会刷新 SQLite 消费者的就绪状态，连接失败时撤下就绪心跳，通信恢复后自动重建。恢复扫描使用 PostgreSQL 的 Run 状态和租约 epoch，晚到的消费确认受 SQLite 领取令牌保护。业务记录、报告和 Agent 检查点继续使用 PostgreSQL。
+`compose.sqlite.yaml` 为使用 PostgreSQL 的单机部署提供可选的 SQLite WAL 队列与协调存储。Outbox 仍由 Server 发布和确认，Worker 通过内部接口领取、续租和确认 SQLite 作业，再向 Server 领取业务 Run 租约。SQLite 文件只由 Server 和 Server 维护命令访问。每个 Worker 共用一个空闲领取循环，领取到新作业后填充可用执行槽。成功领取（含空队列）和续租会刷新 SQLite 消费者的就绪状态，连接失败时撤下就绪心跳，通信恢复后自动重建。恢复扫描使用 PostgreSQL 的 Run 状态和租约 epoch，晚到的消费确认受 SQLite 领取令牌保护。业务记录、报告和 Agent 检查点继续使用 PostgreSQL。
 
 ### 交付与后续对比
 

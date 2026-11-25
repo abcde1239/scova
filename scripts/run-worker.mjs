@@ -34,7 +34,7 @@ for (const file of files) {
 Object.assign(env, process.env);
 for (const key of Object.keys(env)) {
     if (
-        /^((?:SCOVA_TEST_|RUNTIME_)?DATABASE_|POSTGRES_|PG[A-Z]|AGENT_|STORAGE_|SCOVA_SQLITE_STATE_PATH$|MODEL_(?!DNS_RESOLVER$))/.test(
+        /^((?:SCOVA_TEST_|RUNTIME_)?DATABASE_|POSTGRES_|PG[A-Z]|AGENT_|STORAGE_|SCOVA_SQLITE_(?:STATE|DATABASE)_PATH$|MODEL_(?!DNS_RESOLVER$))/.test(
             key.toUpperCase(),
         )
     )

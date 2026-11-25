@@ -12,6 +12,7 @@ const fieldBase = {
 
 export const WorkflowTemplateFieldSchema = Type.Union([
     Type.Object({ ...fieldBase, key: Type.Literal('csv') }, strict),
+    Type.Object({ ...fieldBase, key: Type.Literal('json') }, strict),
     Type.Object({ ...fieldBase, key: Type.Literal('text') }, strict),
     Type.Object({ ...fieldBase, key: Type.Literal('providerId') }, strict),
     Type.Object(
@@ -40,7 +41,7 @@ export const WorkflowTemplateFieldSchema = Type.Union([
     ),
 ]);
 const fields = Type.Array(WorkflowTemplateFieldSchema, {
-    maxItems: 7,
+    maxItems: 8,
     description: '公开的运行输入及可复用默认值',
 });
 

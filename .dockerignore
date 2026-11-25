@@ -34,3 +34,5 @@ docs/agent_guide.md
 docs/*-prd.md
 **/memory
 **/memories
+
+.scova-local

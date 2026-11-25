@@ -14,6 +14,7 @@ export function launchAgent(
     runId: string,
     boundary: 'search' | 'read',
     execution: Awaited<ReturnType<typeof testWorkerExecution>>,
+    options: { deliver?: boolean } = {},
 ) {
     const bun =
         process.env.BUN_BIN ??
@@ -21,7 +22,7 @@ export function launchAgent(
     if (runtime === 'bun' && !existsSync(bun))
         throw new Error('Recovery tests require the standalone Bun runtime');
     const script = 'tests/support/agent-process.ts';
-    const args = [phase, runId, boundary];
+    const args = [phase, runId, boundary, ...(options.deliver ? ['--deliver'] : [])];
     const command =
         runtime === 'bun'
             ? { executable: bun, args: ['--no-env-file', script, ...args] }
@@ -45,6 +46,7 @@ export function launchAgent(
     const messages: {
         type: string;
         kind?: string;
+        reportId?: string;
         candidate?: { runId: string; pages: unknown[]; mode: string };
     }[] = [];
     let output = '';

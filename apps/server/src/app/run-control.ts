@@ -26,6 +26,7 @@ import { readRunControlConfig, type RunControlConfig } from './run-control-confi
 export function createRunControl(
     config: RunControlConfig = readRunControlConfig(),
     api?: Pick<ApiServices, 'db' | 'objectStorage' | 'clock'>,
+    sharedDatabase?: () => DatabaseClient,
 ) {
     const controller = new AbortController();
     const { signal } = controller;
@@ -40,6 +41,7 @@ export function createRunControl(
     let loops: Promise<void>[] | undefined;
     let closing: Promise<void> | undefined;
     const db = () =>
+        sharedDatabase?.() ??
         (database ??= createDatabaseClient({
             connectionString: config.databaseUrl,
             applicationName: 'scova-run-control',

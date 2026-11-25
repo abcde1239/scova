@@ -1,5 +1,9 @@
 import {
+    databaseClock,
+    isSqliteDatabase,
     queryRows,
+    rowLock,
+    timestampCursor,
     sql as querySql,
     and,
     eq,
@@ -15,42 +19,65 @@ import type { LibrarySearchQuery, LibraryTarget, NoteListQuery, NoteInput } from
 import type { LibraryCursor } from '@/utils/library.ts';
 import { firstRow, requireRow } from '@/utils/database.ts';
 
-const timeText = (column: SQL) =>
-    querySql`to_char(${column} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
-const activeBody = querySql`(ss.text_body IS NOT NULL AND (ss.text_expires_at IS NULL OR ss.text_expires_at > statement_timestamp()))`;
+const activeBody = (db: DatabaseExecutor) =>
+    querySql`(ss.text_body IS NOT NULL AND (ss.text_expires_at IS NULL OR ss.text_expires_at > ${databaseClock(db, 'statement')}))`;
 const latestObservation = querySql`
-  JOIN LATERAL (
-    SELECT rs.id, rs.run_id, rs.observed_at, rs.requested_url, rs.fetched_url, rs.metadata_json, r.mode
-    FROM run_sources rs JOIN runs r ON r.user_id=rs.user_id AND r.id=rs.run_id
+  JOIN run_sources observation ON observation.id = (
+    SELECT rs.id FROM run_sources rs
     WHERE rs.user_id=ss.user_id AND rs.source_id=ss.source_id AND rs.snapshot_id=ss.id
       AND rs.fetch_status='succeeded' AND rs.fetched_url IS NOT NULL
     ORDER BY rs.observed_at DESC, rs.id DESC LIMIT 1
-  ) observation ON true`;
-const snapshotProjection = (includeBody: boolean) => querySql`
+  ) AND observation.user_id=ss.user_id
+  JOIN runs observation_run ON observation_run.user_id=observation.user_id AND observation_run.id=observation.run_id`;
+const snapshotProjection = (db: DatabaseExecutor, includeBody: boolean) => querySql`
  ss.id, ss.user_id AS "userId", ss.source_id AS "sourceId", ss.title, ss.content_hash AS "contentHash",
  ss.extractor_version AS "extractorVersion", ss.text_expires_at AS "textExpiresAt",
- CASE WHEN ${includeBody}::boolean AND ${activeBody} THEN ss.text_body ELSE NULL END AS "textBody",
- ${activeBody} AS "bodyAvailable",
+ CASE WHEN ${includeBody} AND ${activeBody(db)} THEN ss.text_body ELSE NULL END AS "textBody",
+ ${activeBody(db)} AS "bodyAvailable",
  s.canonical_url AS "canonicalUrl", observation.id AS "observationId", observation.run_id AS "runId",
  observation.requested_url AS "originalUrl", observation.fetched_url AS "fetchedUrl",
- observation.observed_at AS "observedAt", observation.metadata_json AS metadata, observation.mode,
- ${timeText(querySql`observation.observed_at`)} AS "cursorTime"`;
-const bookmarkProjection = querySql`
+ observation.observed_at AS "observedAt", observation.metadata_json AS metadata, observation_run.mode,
+ ${timestampCursor(db, querySql`observation.observed_at`)} AS "cursorTime"`;
+const bookmarkProjection = (db: DatabaseExecutor) => querySql`
  b.id, b.source_id AS "sourceId", b.created_at AS "createdAt",
  s.canonical_url AS "canonicalUrl", latest.title, latest.snapshot_id AS "latestSnapshotId",
- latest.observed_at AS "lastObservedAt", ${timeText(querySql`b.created_at`)} AS "cursorTime"`;
+ latest.observed_at AS "lastObservedAt", ${timestampCursor(db, querySql`b.created_at`)} AS "cursorTime"`;
 const bookmarkJoins = querySql`
  JOIN sources s ON s.user_id=b.user_id AND s.id=b.source_id
- LEFT JOIN LATERAL (
-   SELECT rs.snapshot_id, rs.observed_at, ss.title
+ LEFT JOIN (
+   SELECT rs.id, rs.user_id, rs.snapshot_id, rs.observed_at, ss.title
    FROM run_sources rs JOIN source_snapshots ss ON ss.user_id=rs.user_id AND ss.source_id=rs.source_id AND ss.id=rs.snapshot_id
-   JOIN runs r ON r.user_id=rs.user_id AND r.id=rs.run_id
-   WHERE rs.user_id=b.user_id AND rs.source_id=b.source_id AND rs.fetch_status='succeeded'
+ ) latest ON latest.id = (
+   SELECT rs.id FROM run_sources rs
+   WHERE rs.user_id=b.user_id AND rs.source_id=b.source_id AND rs.fetch_status='succeeded' AND rs.snapshot_id IS NOT NULL
    ORDER BY rs.observed_at DESC,rs.id DESC LIMIT 1
- ) latest ON true`;
-const noteProjection = querySql`n.id,n.user_id AS "userId",n.source_id AS "sourceId",n.report_id AS "reportId",
+ ) AND latest.user_id=b.user_id`;
+const noteProjection = (
+    db: DatabaseExecutor,
+) => querySql`n.id,n.user_id AS "userId",n.source_id AS "sourceId",n.report_id AS "reportId",
  n.body,n.revision,n.created_at AS "createdAt",n.updated_at AS "updatedAt",
- ${timeText(querySql`n.updated_at`)} AS "cursorTime"`;
+ ${timestampCursor(db, querySql`n.updated_at`)} AS "cursorTime"`;
+
+async function libraryRows<T>(db: DatabaseExecutor, query: SQL) {
+    const rows = await queryRows<T>(db, query);
+    if (!isSqliteDatabase(db)) return rows;
+    return rows.map((row) => {
+        const fields = row as Record<string, unknown>;
+        for (const key of [
+            'createdAt',
+            'updatedAt',
+            'lastObservedAt',
+            'textExpiresAt',
+            'observedAt',
+        ]) {
+            if (typeof fields[key] === 'string') fields[key] = new Date(fields[key]);
+        }
+        if (typeof fields.metadata === 'string') fields.metadata = JSON.parse(fields.metadata);
+        if (typeof fields.bodyAvailable === 'number')
+            fields.bodyAvailable = Boolean(fields.bodyAvailable);
+        return row;
+    });
+}
 export interface StoredLibraryBookmark {
     id: string;
     sourceId: string;
@@ -105,8 +132,8 @@ export interface StoredLibraryHit {
     cursorTime: string;
 }
 function filterNote(query: Pick<NoteListQuery, 'sourceId' | 'reportId'>) {
-    return querySql`${query.sourceId ? querySql`AND n.source_id=${query.sourceId}::uuid` : querySql.empty()}
- ${query.reportId ? querySql`AND n.report_id=${query.reportId}::uuid` : querySql.empty()}`;
+    return querySql`${query.sourceId ? querySql`AND n.source_id=${query.sourceId}` : querySql.empty()}
+ ${query.reportId ? querySql`AND n.report_id=${query.reportId}` : querySql.empty()}`;
 }
 function noteStore(tx: DatabaseExecutor) {
     return {
@@ -115,7 +142,7 @@ function noteStore(tx: DatabaseExecutor) {
                 tx,
                 querySql`
        INSERT INTO idempotency_records(id,user_id,scope,key_hash,payload_hash,status,expires_at)
-       VALUES(${randomUUID()}::uuid,${userId}::uuid,'notes:create',${keyHash},${payloadHash},'pending',${expiresAt})
+       VALUES(${randomUUID()},${userId},'notes:create',${keyHash},${payloadHash},'pending',${expiresAt})
        ON CONFLICT(user_id,scope,key_hash) DO NOTHING RETURNING id`,
             );
             const record = await tx.query.idempotencyRecords
@@ -184,11 +211,11 @@ export function createLibraryRepo(services: Pick<ApiServices, 'db'>) {
                       .then((row) => row ?? null);
         },
         async bookmark(userId: string, id: string) {
-            const [row] = await queryRows<StoredLibraryBookmark>(
+            const [row] = await libraryRows<StoredLibraryBookmark>(
                 services.db(),
                 querySql`
-       SELECT ${bookmarkProjection} FROM bookmarks b ${bookmarkJoins}
-       WHERE b.user_id=${userId}::uuid AND b.id=${id}::uuid`,
+       SELECT ${bookmarkProjection(services.db())} FROM bookmarks b ${bookmarkJoins}
+       WHERE b.user_id=${userId} AND b.id=${id}`,
             );
             return row;
         },
@@ -197,7 +224,7 @@ export function createLibraryRepo(services: Pick<ApiServices, 'db'>) {
                 const rows = await queryRows<{ id: string }>(
                     tx,
                     querySql`
-         INSERT INTO bookmarks(id,user_id,source_id) VALUES(${randomUUID()}::uuid,${userId}::uuid,${sourceId}::uuid)
+         INSERT INTO bookmarks(id,user_id,source_id) VALUES(${randomUUID()},${userId},${sourceId})
          ON CONFLICT(user_id,source_id) DO NOTHING RETURNING id`,
                 );
                 const row = await tx.query.bookmarks
@@ -215,13 +242,13 @@ export function createLibraryRepo(services: Pick<ApiServices, 'db'>) {
         },
         async bookmarks(userId: string, take: number, cursor?: LibraryCursor) {
             const boundary = cursor
-                ? querySql`AND (b.created_at,b.id)<(${cursor.time}::timestamptz,${cursor.id}::uuid)`
+                ? querySql`AND (b.created_at,b.id)<(${cursor.time},${cursor.id})`
                 : querySql.empty();
-            return queryRows<StoredLibraryBookmark>(
+            return libraryRows<StoredLibraryBookmark>(
                 services.db(),
                 querySql`
-       SELECT ${bookmarkProjection} FROM bookmarks b ${bookmarkJoins}
-       WHERE b.user_id=${userId}::uuid ${boundary} ORDER BY b.created_at DESC,b.id DESC LIMIT ${take}`,
+       SELECT ${bookmarkProjection(services.db())} FROM bookmarks b ${bookmarkJoins}
+       WHERE b.user_id=${userId} ${boundary} ORDER BY b.created_at DESC,b.id DESC LIMIT ${take}`,
             );
         },
         async bookmarkAnchor(userId: string, cursor: LibraryCursor) {
@@ -230,7 +257,7 @@ export function createLibraryRepo(services: Pick<ApiServices, 'db'>) {
                     await queryRows<{ id: string }>(
                         services.db(),
                         querySql`SELECT id FROM bookmarks
-       WHERE user_id=${userId}::uuid AND id=${cursor.id}::uuid AND created_at=${cursor.time}::timestamptz`,
+       WHERE user_id=${userId} AND id=${cursor.id} AND created_at=${cursor.time}`,
                     )
                 ).length === 1
             );
@@ -245,21 +272,21 @@ export function createLibraryRepo(services: Pick<ApiServices, 'db'>) {
         noteCommand: <T>(work: (store: ReturnType<typeof noteStore>) => Promise<T>) =>
             services.db().transaction((tx) => work(noteStore(tx))),
         async note(userId: string, id: string) {
-            const [row] = await queryRows<StoredLibraryNote>(
+            const [row] = await libraryRows<StoredLibraryNote>(
                 services.db(),
                 querySql`
-       SELECT ${noteProjection} FROM notes n WHERE n.user_id=${userId}::uuid AND n.id=${id}::uuid`,
+       SELECT ${noteProjection(services.db())} FROM notes n WHERE n.user_id=${userId} AND n.id=${id}`,
             );
             return row;
         },
         async notes(userId: string, query: NoteListQuery, take: number, cursor?: LibraryCursor) {
             const boundary = cursor
-                ? querySql`AND (n.updated_at,n.id)<(${cursor.time}::timestamptz,${cursor.id}::uuid)`
+                ? querySql`AND (n.updated_at,n.id)<(${cursor.time},${cursor.id})`
                 : querySql.empty();
-            return queryRows<StoredLibraryNote>(
+            return libraryRows<StoredLibraryNote>(
                 services.db(),
-                querySql`SELECT ${noteProjection} FROM notes n
-       WHERE n.user_id=${userId}::uuid ${filterNote(query)} ${boundary} ORDER BY n.updated_at DESC,n.id DESC LIMIT ${take}`,
+                querySql`SELECT ${noteProjection(services.db())} FROM notes n
+       WHERE n.user_id=${userId} ${filterNote(query)} ${boundary} ORDER BY n.updated_at DESC,n.id DESC LIMIT ${take}`,
             );
         },
         async noteAnchor(userId: string, query: NoteListQuery, cursor: LibraryCursor) {
@@ -267,8 +294,8 @@ export function createLibraryRepo(services: Pick<ApiServices, 'db'>) {
                 (
                     await queryRows<{ id: string }>(
                         services.db(),
-                        querySql`SELECT n.id FROM notes n WHERE n.user_id=${userId}::uuid
-       AND n.id=${cursor.id}::uuid AND n.updated_at=${cursor.time}::timestamptz ${filterNote(query)}`,
+                        querySql`SELECT n.id FROM notes n WHERE n.user_id=${userId}
+       AND n.id=${cursor.id} AND n.updated_at=${cursor.time} ${filterNote(query)}`,
                     )
                 ).length === 1
             );
@@ -316,24 +343,24 @@ export function createLibraryRepo(services: Pick<ApiServices, 'db'>) {
         },
         async snapshots(userId: string, sourceId: string, take: number, cursor?: LibraryCursor) {
             const boundary = cursor
-                ? querySql`AND (observation.observed_at,ss.id)<(${cursor.time}::timestamptz,${cursor.id}::uuid)`
+                ? querySql`AND (observation.observed_at,ss.id)<(${cursor.time},${cursor.id})`
                 : querySql.empty();
-            return queryRows<StoredLibrarySnapshot>(
+            return libraryRows<StoredLibrarySnapshot>(
                 services.db(),
                 querySql`
-       SELECT ${snapshotProjection(false)} FROM source_snapshots ss
+       SELECT ${snapshotProjection(services.db(), false)} FROM source_snapshots ss
        JOIN sources s ON s.user_id=ss.user_id AND s.id=ss.source_id ${latestObservation}
-       WHERE ss.user_id=${userId}::uuid AND ss.source_id=${sourceId}::uuid ${boundary}
+       WHERE ss.user_id=${userId} AND ss.source_id=${sourceId} ${boundary}
        ORDER BY observation.observed_at DESC,ss.id DESC LIMIT ${take}`,
             );
         },
         async snapshot(userId: string, sourceId: string, id: string) {
-            const [row] = await queryRows<StoredLibrarySnapshot>(
+            const [row] = await libraryRows<StoredLibrarySnapshot>(
                 services.db(),
                 querySql`
-       SELECT ${snapshotProjection(true)} FROM source_snapshots ss
+       SELECT ${snapshotProjection(services.db(), true)} FROM source_snapshots ss
        JOIN sources s ON s.user_id=ss.user_id AND s.id=ss.source_id ${latestObservation}
-       WHERE ss.user_id=${userId}::uuid AND ss.source_id=${sourceId}::uuid AND ss.id=${id}::uuid`,
+       WHERE ss.user_id=${userId} AND ss.source_id=${sourceId} AND ss.id=${id}`,
             );
             return row;
         },
@@ -342,8 +369,8 @@ export function createLibraryRepo(services: Pick<ApiServices, 'db'>) {
                 services.db(),
                 querySql`
        SELECT ss.id FROM source_snapshots ss ${latestObservation}
-       WHERE ss.user_id=${userId}::uuid AND ss.source_id=${sourceId}::uuid AND ss.id=${cursor.id}::uuid
-       AND observation.observed_at=${cursor.time}::timestamptz`,
+       WHERE ss.user_id=${userId} AND ss.source_id=${sourceId} AND ss.id=${cursor.id}
+       AND observation.observed_at=${cursor.time}`,
             );
             return rows.length === 1;
         },
@@ -389,18 +416,26 @@ export function createLibraryRepo(services: Pick<ApiServices, 'db'>) {
             take: number,
             cursor?: LibraryCursor,
         ) {
+            const db = services.db();
+            const sqlite = isSqliteDatabase(db);
+            const position = (text: SQL, term: string) =>
+                sqlite
+                    ? querySql`instr(lower(${text}), lower(${term}))`
+                    : querySql`strpos(lower(${text}), lower(${term}))`;
             const tsquery = querySql`plainto_tsquery('simple'::regconfig,${query.q})`;
             const titleFts = querySql`to_tsvector('simple'::regconfig,coalesce(ss.title,'')) @@ ${tsquery}`;
-            const fullFts = querySql`(${activeBody} AND to_tsvector('simple'::regconfig,coalesce(ss.title,'') || ' ' || coalesce(ss.text_body,'')) @@ ${tsquery})`;
-            const sourceFts = querySql`(${titleFts} OR ${fullFts})`;
-            const sourceText = querySql`(coalesce(ss.title,'') || ' ' || CASE WHEN ${activeBody} THEN ss.text_body ELSE '' END)`;
+            const fullFts = querySql`(${activeBody(db)} AND to_tsvector('simple'::regconfig,coalesce(ss.title,'') || ' ' || coalesce(ss.text_body,'')) @@ ${tsquery})`;
+            const sourceFts = sqlite ? querySql`false` : querySql`(${titleFts} OR ${fullFts})`;
+            const sourceText = querySql`(coalesce(ss.title,'') || ' ' || CASE WHEN ${activeBody(db)} THEN ss.text_body ELSE '' END)`;
             const sourceSub = querySql.join(
-                terms.map((term) => querySql`strpos(lower(${sourceText}),lower(${term}))>0`),
+                terms.map((term) => querySql`${position(sourceText, term)}>0`),
                 querySql.raw(' AND '),
             );
-            const noteFts = querySql`to_tsvector('simple'::regconfig,n.body) @@ ${tsquery}`;
+            const noteFts = sqlite
+                ? querySql`false`
+                : querySql`to_tsvector('simple'::regconfig,n.body) @@ ${tsquery}`;
             const noteSub = querySql.join(
-                terms.map((term) => querySql`strpos(lower(n.body),lower(${term}))>0`),
+                terms.map((term) => querySql`${position(querySql`n.body`, term)}>0`),
                 querySql.raw(' AND '),
             );
             const bookmarkFilter =
@@ -413,30 +448,35 @@ export function createLibraryRepo(services: Pick<ApiServices, 'db'>) {
                     : querySql`AND ${query.bookmarked ? querySql.empty() : querySql`NOT`} EXISTS(SELECT 1 FROM bookmarks b WHERE b.user_id=n.user_id AND b.source_id=n.source_id)`;
             const kind = query.kind ? querySql`AND kind=${query.kind}` : querySql.empty();
             const boundary = cursor
-                ? querySql`AND (time,kind,id)<(${cursor.time}::timestamptz,${cursor.kind},${cursor.id}::uuid)`
+                ? querySql`AND (time,kind,id)<(${cursor.time},${cursor.kind},${cursor.id})`
                 : querySql.empty();
             return services.db().transaction(async (tx) => {
-                await tx.execute(querySql`SELECT set_config('statement_timeout','3000',true)`);
-                return queryRows<StoredLibraryHit>(
+                if (!isSqliteDatabase(tx))
+                    await tx.execute(querySql`SELECT set_config('statement_timeout','3000',true)`);
+                return libraryRows<StoredLibraryHit>(
                     tx,
                     querySql`
        WITH hits AS (
-         SELECT 'source'::text AS kind,ss.id,ss.source_id AS "sourceId",NULL::uuid AS "reportId",ss.id AS "snapshotId",
+         SELECT 'source' AS kind,ss.id,ss.source_id AS "sourceId",NULL AS "reportId",ss.id AS "snapshotId",
            ss.title,${sourceText} AS text,CASE WHEN ${sourceFts} THEN 'fts' ELSE 'substring' END AS "matchedBy",
            observation.observed_at AS time
          FROM source_snapshots ss ${latestObservation}
-         WHERE ss.user_id=${userId}::uuid ${bookmarkFilter} AND (${sourceFts} OR (${sourceSub}))
+         WHERE ss.user_id=${userId} ${bookmarkFilter} AND (${sourceFts} OR (${sourceSub}))
          UNION ALL
-         SELECT 'note',n.id,n.source_id,n.report_id,NULL::uuid,coalesce(r.title,s.canonical_url,'笔记'),n.body,
+         SELECT 'note',n.id,n.source_id,n.report_id,NULL,coalesce(r.title,s.canonical_url,'笔记'),n.body,
            CASE WHEN ${noteFts} THEN 'fts' ELSE 'substring' END,n.updated_at
          FROM notes n LEFT JOIN sources s ON s.user_id=n.user_id AND s.id=n.source_id
            LEFT JOIN reports r ON r.user_id=n.user_id AND r.id=n.report_id
-         WHERE n.user_id=${userId}::uuid ${noteBookmark} AND (${noteFts} OR (${noteSub}))
+         WHERE n.user_id=${userId} ${noteBookmark} AND (${noteFts} OR (${noteSub}))
        )
        SELECT kind,id,"sourceId","reportId","snapshotId",title,
-         substring(text FROM greatest(1,strpos(lower(text),lower(${terms[0]}))-80) FOR 500) AS text,
+         ${
+             sqlite
+                 ? querySql`substr(text, max(1, ${position(querySql`text`, terms[0])}-80), 500)`
+                 : querySql`substr(text, greatest(1, ${position(querySql`text`, terms[0])}-80), 500)`
+         } AS text,
          "matchedBy",time AS "updatedAt",
-         ${timeText(querySql`time`)} AS "cursorTime"
+         ${timestampCursor(tx, querySql`time`)} AS "cursorTime"
        FROM hits WHERE true ${kind} ${boundary} ORDER BY time DESC,kind DESC,id DESC LIMIT ${take}`,
                 );
             });
@@ -446,21 +486,22 @@ export function createLibraryRepo(services: Pick<ApiServices, 'db'>) {
             if (cursor.kind !== 'source') return false;
             const [row] = await queryRows<{ sourceId: string }>(
                 services.db(),
-                querySql`SELECT source_id AS "sourceId" FROM source_snapshots WHERE user_id=${userId}::uuid AND id=${cursor.id}::uuid`,
+                querySql`SELECT source_id AS "sourceId" FROM source_snapshots WHERE user_id=${userId} AND id=${cursor.id}`,
             );
             return row ? this.snapshotAnchor(userId, row.sourceId, cursor) : false;
         },
         async purgeExpiredBodies(limit: number, userId?: string) {
             return services.db().transaction(async (tx) => {
-                await tx.execute(querySql`SELECT set_config('statement_timeout','3000',true)`);
+                if (!isSqliteDatabase(tx))
+                    await tx.execute(querySql`SELECT set_config('statement_timeout','3000',true)`);
                 const rows = await queryRows<{ id: string }>(
                     tx,
                     querySql`
-         UPDATE source_snapshots ss SET text_body=NULL WHERE ss.id IN (
-           SELECT id FROM source_snapshots WHERE text_body IS NOT NULL AND text_expires_at<=clock_timestamp()
-           ${userId ? querySql`AND user_id=${userId}::uuid` : querySql.empty()}
-           ORDER BY text_expires_at,id LIMIT ${limit} FOR UPDATE SKIP LOCKED
-         ) RETURNING ss.id`,
+         UPDATE source_snapshots SET text_body=NULL WHERE id IN (
+           SELECT id FROM source_snapshots WHERE text_body IS NOT NULL AND text_expires_at<=${databaseClock(tx)}
+           ${userId ? querySql`AND user_id=${userId}` : querySql.empty()}
+           ORDER BY text_expires_at,id LIMIT ${limit} ${rowLock(tx, 'update', true)}
+         ) RETURNING id`,
                 );
                 return { cleared: rows.length };
             });

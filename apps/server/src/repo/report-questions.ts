@@ -1,3 +1,4 @@
+import { rowLock } from '@scova/db';
 import {
     queryRows,
     sql as querySql,
@@ -66,7 +67,7 @@ export function createReportQuestionStore(database: DatabaseExecutor) {
         async lockReport(userId: string, reportId: string) {
             const rows = await queryRows<{ id: string }>(
                 database,
-                querySql`SELECT id FROM reports WHERE id=${reportId}::uuid AND user_id=${userId}::uuid FOR NO KEY UPDATE`,
+                querySql`SELECT id FROM reports WHERE id=${reportId} AND user_id=${userId} ${rowLock(database, 'no key update')}`,
             );
             if (!rows.length) throw new ApiError(404, 'NOT_FOUND', '资源不存在');
         },
@@ -170,7 +171,7 @@ export function createReportQuestionRepo(services: Pick<ApiServices, 'db' | 'clo
         async round(userId: string, reportId: string, row: ReportQuestion) {
             const rows = await queryRows<{ count: string }>(
                 services.db(),
-                querySql`SELECT count(*)::text AS count FROM report_questions WHERE user_id=${userId}::uuid AND report_id=${reportId}::uuid AND (created_at,id)<=(${row.createdAt},${row.id}::uuid)`,
+                querySql`SELECT cast(count(*) as text) AS count FROM report_questions WHERE user_id=${userId} AND report_id=${reportId} AND (created_at,id)<=(${row.createdAt},${row.id})`,
             );
             return Number(rows[0]?.count ?? 0);
         },

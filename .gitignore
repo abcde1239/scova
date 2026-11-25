@@ -72,3 +72,5 @@ tests/runtime/.generated/
 !.vscode/extensions.json
 
 /backups/
+
+/.scova-local/

@@ -7,6 +7,7 @@
         ".": "./src/index.ts",
         "./feedback": "./src/feedback.ts",
         "./migrate": "./src/migrate.ts",
+        "./sqlite": "./src/sqlite-client.ts",
         "./sqlite-state": "./src/sqlite-state.ts"
     },
     "scripts": {

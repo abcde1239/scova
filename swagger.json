@@ -241601,6 +241601,10 @@
                                                                                     {
                                                                                         "const": "markdown",
                                                                                         "type": "string"
+                                                                                    },
+                                                                                    {
+                                                                                        "const": "json",
+                                                                                        "type": "string"
                                                                                     }
                                                                                 ],
                                                                                 "description": "报告展示形式"
@@ -241887,6 +241891,10 @@
                                                                             {
                                                                                 "const": "markdown",
                                                                                 "type": "string"
+                                                                            },
+                                                                            {
+                                                                                "const": "json",
+                                                                                "type": "string"
                                                                             }
                                                                         ],
                                                                         "description": "报告展示形式"
@@ -241903,6 +241911,11 @@
                                                                 "description": "接口字段 count 的配置或结果",
                                                                 "minimum": 0,
                                                                 "type": "integer"
+                                                            },
+                                                            "json": {
+                                                                "description": "接口字段 json 的配置或结果",
+                                                                "maxLength": 262144,
+                                                                "type": "string"
                                                             },
                                                             "notification": {
                                                                 "additionalProperties": false,
@@ -242595,6 +242608,10 @@
                                                                                     {
                                                                                         "const": "markdown",
                                                                                         "type": "string"
+                                                                                    },
+                                                                                    {
+                                                                                        "const": "json",
+                                                                                        "type": "string"
                                                                                     }
                                                                                 ],
                                                                                 "description": "报告展示形式"
@@ -242881,6 +242898,10 @@
                                                                             {
                                                                                 "const": "markdown",
                                                                                 "type": "string"
+                                                                            },
+                                                                            {
+                                                                                "const": "json",
+                                                                                "type": "string"
                                                                             }
                                                                         ],
                                                                         "description": "报告展示形式"
@@ -242897,6 +242918,11 @@
                                                                 "description": "接口字段 count 的配置或结果",
                                                                 "minimum": 0,
                                                                 "type": "integer"
+                                                            },
+                                                            "json": {
+                                                                "description": "接口字段 json 的配置或结果",
+                                                                "maxLength": 262144,
+                                                                "type": "string"
                                                             },
                                                             "notification": {
                                                                 "additionalProperties": false,
@@ -243589,6 +243615,10 @@
                                                                                     {
                                                                                         "const": "markdown",
                                                                                         "type": "string"
+                                                                                    },
+                                                                                    {
+                                                                                        "const": "json",
+                                                                                        "type": "string"
                                                                                     }
                                                                                 ],
                                                                                 "description": "报告展示形式"
@@ -243875,6 +243905,10 @@
                                                                             {
                                                                                 "const": "markdown",
                                                                                 "type": "string"
+                                                                            },
+                                                                            {
+                                                                                "const": "json",
+                                                                                "type": "string"
                                                                             }
                                                                         ],
                                                                         "description": "报告展示形式"
@@ -243891,6 +243925,11 @@
                                                                 "description": "接口字段 count 的配置或结果",
                                                                 "minimum": 0,
                                                                 "type": "integer"
+                                                            },
+                                                            "json": {
+                                                                "description": "接口字段 json 的配置或结果",
+                                                                "maxLength": 262144,
+                                                                "type": "string"
                                                             },
                                                             "notification": {
                                                                 "additionalProperties": false,
@@ -245808,6 +245847,10 @@
                                                                                     {
                                                                                         "const": "markdown",
                                                                                         "type": "string"
+                                                                                    },
+                                                                                    {
+                                                                                        "const": "json",
+                                                                                        "type": "string"
                                                                                     }
                                                                                 ],
                                                                                 "description": "报告展示形式"
@@ -246094,6 +246137,10 @@
                                                                             {
                                                                                 "const": "markdown",
                                                                                 "type": "string"
+                                                                            },
+                                                                            {
+                                                                                "const": "json",
+                                                                                "type": "string"
                                                                             }
                                                                         ],
                                                                         "description": "报告展示形式"
@@ -246110,6 +246157,11 @@
                                                                 "description": "接口字段 count 的配置或结果",
                                                                 "minimum": 0,
                                                                 "type": "integer"
+                                                            },
+                                                            "json": {
+                                                                "description": "接口字段 json 的配置或结果",
+                                                                "maxLength": 262144,
+                                                                "type": "string"
                                                             },
                                                             "notification": {
                                                                 "additionalProperties": false,
@@ -246802,6 +246854,10 @@
                                                                                     {
                                                                                         "const": "markdown",
                                                                                         "type": "string"
+                                                                                    },
+                                                                                    {
+                                                                                        "const": "json",
+                                                                                        "type": "string"
                                                                                     }
                                                                                 ],
                                                                                 "description": "报告展示形式"
@@ -247088,6 +247144,10 @@
                                                                             {
                                                                                 "const": "markdown",
                                                                                 "type": "string"
+                                                                            },
+                                                                            {
+                                                                                "const": "json",
+                                                                                "type": "string"
                                                                             }
                                                                         ],
                                                                         "description": "报告展示形式"
@@ -247104,6 +247164,11 @@
                                                                 "description": "接口字段 count 的配置或结果",
                                                                 "minimum": 0,
                                                                 "type": "integer"
+                                                            },
+                                                            "json": {
+                                                                "description": "接口字段 json 的配置或结果",
+                                                                "maxLength": 262144,
+                                                                "type": "string"
                                                             },
                                                             "notification": {
                                                                 "additionalProperties": false,
@@ -247796,6 +247861,10 @@
                                                                                     {
                                                                                         "const": "markdown",
                                                                                         "type": "string"
+                                                                                    },
+                                                                                    {
+                                                                                        "const": "json",
+                                                                                        "type": "string"
                                                                                     }
                                                                                 ],
                                                                                 "description": "报告展示形式"
@@ -248082,6 +248151,10 @@
                                                                             {
                                                                                 "const": "markdown",
                                                                                 "type": "string"
+                                                                            },
+                                                                            {
+                                                                                "const": "json",
+                                                                                "type": "string"
                                                                             }
                                                                         ],
                                                                         "description": "报告展示形式"
@@ -248098,6 +248171,11 @@
                                                                 "description": "接口字段 count 的配置或结果",
                                                                 "minimum": 0,
                                                                 "type": "integer"
+                                                            },
+                                                            "json": {
+                                                                "description": "接口字段 json 的配置或结果",
+                                                                "maxLength": 262144,
+                                                                "type": "string"
                                                             },
                                                             "notification": {
                                                                 "additionalProperties": false,
@@ -249634,6 +249712,33 @@
                                                                     "additionalProperties": false,
                                                                     "properties": {
                                                                         "key": {
+                                                                            "const": "json",
+                                                                            "description": "接口字段 key 的配置或结果",
+                                                                            "type": "string"
+                                                                        },
+                                                                        "label": {
+                                                                            "description": "模板表单中显示的字段名称",
+                                                                            "maxLength": 160,
+                                                                            "minLength": 1,
+                                                                            "pattern": "\\S",
+                                                                            "type": "string"
+                                                                        },
+                                                                        "required": {
+                                                                            "description": "解析默认值后是否必须提供此输入",
+                                                                            "type": "boolean"
+                                                                        }
+                                                                    },
+                                                                    "required": [
+                                                                        "label",
+                                                                        "required",
+                                                                        "key"
+                                                                    ],
+                                                                    "type": "object"
+                                                                },
+                                                                {
+                                                                    "additionalProperties": false,
+                                                                    "properties": {
+                                                                        "key": {
                                                                             "const": "text",
                                                                             "description": "接口字段 key 的配置或结果",
                                                                             "type": "string"
@@ -249814,7 +249919,7 @@
                                                                 }
                                                             ]
                                                         },
-                                                        "maxItems": 7,
+                                                        "maxItems": 8,
                                                         "type": "array"
                                                     },
                                                     "graph": {
@@ -250252,6 +250357,10 @@
                                                                                                 },
                                                                                                 {
                                                                                                     "const": "markdown",
+                                                                                                    "type": "string"
+                                                                                                },
+                                                                                                {
+                                                                                                    "const": "json",
                                                                                                     "type": "string"
                                                                                                 }
                                                                                             ],
@@ -250500,6 +250609,33 @@
                                                                     "additionalProperties": false,
                                                                     "properties": {
                                                                         "key": {
+                                                                            "const": "json",
+                                                                            "description": "接口字段 key 的配置或结果",
+                                                                            "type": "string"
+                                                                        },
+                                                                        "label": {
+                                                                            "description": "模板表单中显示的字段名称",
+                                                                            "maxLength": 160,
+                                                                            "minLength": 1,
+                                                                            "pattern": "\\S",
+                                                                            "type": "string"
+                                                                        },
+                                                                        "required": {
+                                                                            "description": "解析默认值后是否必须提供此输入",
+                                                                            "type": "boolean"
+                                                                        }
+                                                                    },
+                                                                    "required": [
+                                                                        "label",
+                                                                        "required",
+                                                                        "key"
+                                                                    ],
+                                                                    "type": "object"
+                                                                },
+                                                                {
+                                                                    "additionalProperties": false,
+                                                                    "properties": {
+                                                                        "key": {
                                                                             "const": "text",
                                                                             "description": "接口字段 key 的配置或结果",
                                                                             "type": "string"
@@ -250680,7 +250816,7 @@
                                                                 }
                                                             ]
                                                         },
-                                                        "maxItems": 7,
+                                                        "maxItems": 8,
                                                         "type": "array"
                                                     },
                                                     "graph": {
@@ -251118,6 +251254,10 @@
                                                                                                 },
                                                                                                 {
                                                                                                     "const": "markdown",
+                                                                                                    "type": "string"
+                                                                                                },
+                                                                                                {
+                                                                                                    "const": "json",
                                                                                                     "type": "string"
                                                                                                 }
                                                                                             ],
@@ -251366,6 +251506,33 @@
                                                                     "additionalProperties": false,
                                                                     "properties": {
                                                                         "key": {
+                                                                            "const": "json",
+                                                                            "description": "接口字段 key 的配置或结果",
+                                                                            "type": "string"
+                                                                        },
+                                                                        "label": {
+                                                                            "description": "模板表单中显示的字段名称",
+                                                                            "maxLength": 160,
+                                                                            "minLength": 1,
+                                                                            "pattern": "\\S",
+                                                                            "type": "string"
+                                                                        },
+                                                                        "required": {
+                                                                            "description": "解析默认值后是否必须提供此输入",
+                                                                            "type": "boolean"
+                                                                        }
+                                                                    },
+                                                                    "required": [
+                                                                        "label",
+                                                                        "required",
+                                                                        "key"
+                                                                    ],
+                                                                    "type": "object"
+                                                                },
+                                                                {
+                                                                    "additionalProperties": false,
+                                                                    "properties": {
+                                                                        "key": {
                                                                             "const": "text",
                                                                             "description": "接口字段 key 的配置或结果",
                                                                             "type": "string"
@@ -251546,7 +251713,7 @@
                                                                 }
                                                             ]
                                                         },
-                                                        "maxItems": 7,
+                                                        "maxItems": 8,
                                                         "type": "array"
                                                     },
                                                     "graph": {
@@ -251984,6 +252151,10 @@
                                                                                                 },
                                                                                                 {
                                                                                                     "const": "markdown",
+                                                                                                    "type": "string"
+                                                                                                },
+                                                                                                {
+                                                                                                    "const": "json",
                                                                                                     "type": "string"
                                                                                                 }
                                                                                             ],
@@ -253286,6 +253457,29 @@
                                                     "additionalProperties": false,
                                                     "properties": {
                                                         "key": {
+                                                            "const": "json",
+                                                            "description": "接口字段 key 的配置或结果",
+                                                            "type": "string"
+                                                        },
+                                                        "label": {
+                                                            "description": "模板表单中显示的字段名称",
+                                                            "maxLength": 160,
+                                                            "minLength": 1,
+                                                            "pattern": "\\S",
+                                                            "type": "string"
+                                                        },
+                                                        "required": {
+                                                            "description": "解析默认值后是否必须提供此输入",
+                                                            "type": "boolean"
+                                                        }
+                                                    },
+                                                    "required": ["label", "required", "key"],
+                                                    "type": "object"
+                                                },
+                                                {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                        "key": {
                                                             "const": "text",
                                                             "description": "接口字段 key 的配置或结果",
                                                             "type": "string"
@@ -253442,7 +253636,7 @@
                                                 }
                                             ]
                                         },
-                                        "maxItems": 7,
+                                        "maxItems": 8,
                                         "type": "array"
                                     },
                                     "title": {
@@ -253519,6 +253713,29 @@
                                                     "additionalProperties": false,
                                                     "properties": {
                                                         "key": {
+                                                            "const": "json",
+                                                            "description": "接口字段 key 的配置或结果",
+                                                            "type": "string"
+                                                        },
+                                                        "label": {
+                                                            "description": "模板表单中显示的字段名称",
+                                                            "maxLength": 160,
+                                                            "minLength": 1,
+                                                            "pattern": "\\S",
+                                                            "type": "string"
+                                                        },
+                                                        "required": {
+                                                            "description": "解析默认值后是否必须提供此输入",
+                                                            "type": "boolean"
+                                                        }
+                                                    },
+                                                    "required": ["label", "required", "key"],
+                                                    "type": "object"
+                                                },
+                                                {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                        "key": {
                                                             "const": "text",
                                                             "description": "接口字段 key 的配置或结果",
                                                             "type": "string"
@@ -253675,7 +253892,7 @@
                                                 }
                                             ]
                                         },
-                                        "maxItems": 7,
+                                        "maxItems": 8,
                                         "type": "array"
                                     },
                                     "title": {
@@ -253752,6 +253969,29 @@
                                                     "additionalProperties": false,
                                                     "properties": {
                                                         "key": {
+                                                            "const": "json",
+                                                            "description": "接口字段 key 的配置或结果",
+                                                            "type": "string"
+                                                        },
+                                                        "label": {
+                                                            "description": "模板表单中显示的字段名称",
+                                                            "maxLength": 160,
+                                                            "minLength": 1,
+                                                            "pattern": "\\S",
+                                                            "type": "string"
+                                                        },
+                                                        "required": {
+                                                            "description": "解析默认值后是否必须提供此输入",
+                                                            "type": "boolean"
+                                                        }
+                                                    },
+                                                    "required": ["label", "required", "key"],
+                                                    "type": "object"
+                                                },
+                                                {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                        "key": {
                                                             "const": "text",
                                                             "description": "接口字段 key 的配置或结果",
                                                             "type": "string"
@@ -253908,7 +254148,7 @@
                                                 }
                                             ]
                                         },
-                                        "maxItems": 7,
+                                        "maxItems": 8,
                                         "type": "array"
                                     },
                                     "title": {
@@ -253968,6 +254208,29 @@
                                                         "properties": {
                                                             "key": {
                                                                 "const": "csv",
+                                                                "description": "接口字段 key 的配置或结果",
+                                                                "type": "string"
+                                                            },
+                                                            "label": {
+                                                                "description": "模板表单中显示的字段名称",
+                                                                "maxLength": 160,
+                                                                "minLength": 1,
+                                                                "pattern": "\\S",
+                                                                "type": "string"
+                                                            },
+                                                            "required": {
+                                                                "description": "解析默认值后是否必须提供此输入",
+                                                                "type": "boolean"
+                                                            }
+                                                        },
+                                                        "required": ["label", "required", "key"],
+                                                        "type": "object"
+                                                    },
+                                                    {
+                                                        "additionalProperties": false,
+                                                        "properties": {
+                                                            "key": {
+                                                                "const": "json",
                                                                 "description": "接口字段 key 的配置或结果",
                                                                 "type": "string"
                                                             },
@@ -254146,7 +254409,7 @@
                                                     }
                                                 ]
                                             },
-                                            "maxItems": 7,
+                                            "maxItems": 8,
                                             "type": "array"
                                         },
                                         "graph": {
@@ -254564,6 +254827,10 @@
                                                                                     },
                                                                                     {
                                                                                         "const": "markdown",
+                                                                                        "type": "string"
+                                                                                    },
+                                                                                    {
+                                                                                        "const": "json",
                                                                                         "type": "string"
                                                                                     }
                                                                                 ],
@@ -254792,6 +255059,29 @@
                                                         "additionalProperties": false,
                                                         "properties": {
                                                             "key": {
+                                                                "const": "json",
+                                                                "description": "接口字段 key 的配置或结果",
+                                                                "type": "string"
+                                                            },
+                                                            "label": {
+                                                                "description": "模板表单中显示的字段名称",
+                                                                "maxLength": 160,
+                                                                "minLength": 1,
+                                                                "pattern": "\\S",
+                                                                "type": "string"
+                                                            },
+                                                            "required": {
+                                                                "description": "解析默认值后是否必须提供此输入",
+                                                                "type": "boolean"
+                                                            }
+                                                        },
+                                                        "required": ["label", "required", "key"],
+                                                        "type": "object"
+                                                    },
+                                                    {
+                                                        "additionalProperties": false,
+                                                        "properties": {
+                                                            "key": {
                                                                 "const": "text",
                                                                 "description": "接口字段 key 的配置或结果",
                                                                 "type": "string"
@@ -254948,7 +255238,7 @@
                                                     }
                                                 ]
                                             },
-                                            "maxItems": 7,
+                                            "maxItems": 8,
                                             "type": "array"
                                         },
                                         "graph": {
@@ -255366,6 +255656,10 @@
                                                                                     },
                                                                                     {
                                                                                         "const": "markdown",
+                                                                                        "type": "string"
+                                                                                    },
+                                                                                    {
+                                                                                        "const": "json",
                                                                                         "type": "string"
                                                                                     }
                                                                                 ],
@@ -255594,6 +255888,29 @@
                                                         "additionalProperties": false,
                                                         "properties": {
                                                             "key": {
+                                                                "const": "json",
+                                                                "description": "接口字段 key 的配置或结果",
+                                                                "type": "string"
+                                                            },
+                                                            "label": {
+                                                                "description": "模板表单中显示的字段名称",
+                                                                "maxLength": 160,
+                                                                "minLength": 1,
+                                                                "pattern": "\\S",
+                                                                "type": "string"
+                                                            },
+                                                            "required": {
+                                                                "description": "解析默认值后是否必须提供此输入",
+                                                                "type": "boolean"
+                                                            }
+                                                        },
+                                                        "required": ["label", "required", "key"],
+                                                        "type": "object"
+                                                    },
+                                                    {
+                                                        "additionalProperties": false,
+                                                        "properties": {
+                                                            "key": {
                                                                 "const": "text",
                                                                 "description": "接口字段 key 的配置或结果",
                                                                 "type": "string"
@@ -255750,7 +256067,7 @@
                                                     }
                                                 ]
                                             },
-                                            "maxItems": 7,
+                                            "maxItems": 8,
                                             "type": "array"
                                         },
                                         "graph": {
@@ -256168,6 +256485,10 @@
                                                                                     },
                                                                                     {
                                                                                         "const": "markdown",
+                                                                                        "type": "string"
+                                                                                    },
+                                                                                    {
+                                                                                        "const": "json",
                                                                                         "type": "string"
                                                                                     }
                                                                                 ],
@@ -257994,6 +258315,10 @@
                                                                                             {
                                                                                                 "const": "markdown",
                                                                                                 "type": "string"
+                                                                                            },
+                                                                                            {
+                                                                                                "const": "json",
+                                                                                                "type": "string"
                                                                                             }
                                                                                         ],
                                                                                         "description": "报告展示形式"
@@ -258745,6 +259070,10 @@
                                                                                                             },
                                                                                                             {
                                                                                                                 "const": "markdown",
+                                                                                                                "type": "string"
+                                                                                                            },
+                                                                                                            {
+                                                                                                                "const": "json",
                                                                                                                 "type": "string"
                                                                                                             }
                                                                                                         ],
@@ -259527,6 +259856,10 @@
                                                                                             {
                                                                                                 "const": "markdown",
                                                                                                 "type": "string"
+                                                                                            },
+                                                                                            {
+                                                                                                "const": "json",
+                                                                                                "type": "string"
                                                                                             }
                                                                                         ],
                                                                                         "description": "报告展示形式"
@@ -260278,6 +260611,10 @@
                                                                                                             },
                                                                                                             {
                                                                                                                 "const": "markdown",
+                                                                                                                "type": "string"
+                                                                                                            },
+                                                                                                            {
+                                                                                                                "const": "json",
                                                                                                                 "type": "string"
                                                                                                             }
                                                                                                         ],
@@ -261060,6 +261397,10 @@
                                                                                             {
                                                                                                 "const": "markdown",
                                                                                                 "type": "string"
+                                                                                            },
+                                                                                            {
+                                                                                                "const": "json",
+                                                                                                "type": "string"
                                                                                             }
                                                                                         ],
                                                                                         "description": "报告展示形式"
@@ -261811,6 +262152,10 @@
                                                                                                             },
                                                                                                             {
                                                                                                                 "const": "markdown",
+                                                                                                                "type": "string"
+                                                                                                            },
+                                                                                                            {
+                                                                                                                "const": "json",
                                                                                                                 "type": "string"
                                                                                                             }
                                                                                                         ],
@@ -263144,6 +263489,11 @@
                                                 "maxLength": 256,
                                                 "type": "string"
                                             },
+                                            "json": {
+                                                "description": "UTF-8 JSON 原文",
+                                                "maxLength": 262144,
+                                                "type": "string"
+                                            },
                                             "notify": {
                                                 "description": "接口字段 notify 的配置或结果",
                                                 "type": "boolean"
@@ -263193,6 +263543,11 @@
                                                 "maxLength": 256,
                                                 "type": "string"
                                             },
+                                            "json": {
+                                                "description": "UTF-8 JSON 原文",
+                                                "maxLength": 262144,
+                                                "type": "string"
+                                            },
                                             "notify": {
                                                 "description": "接口字段 notify 的配置或结果",
                                                 "type": "boolean"
@@ -263240,6 +263595,11 @@
                                             "inventoryColumn": {
                                                 "description": "接口字段 inventoryColumn 的配置或结果",
                                                 "maxLength": 256,
+                                                "type": "string"
+                                            },
+                                            "json": {
+                                                "description": "UTF-8 JSON 原文",
+                                                "maxLength": 262144,
                                                 "type": "string"
                                             },
                                             "notify": {
@@ -263719,6 +264079,10 @@
                                                                                             {
                                                                                                 "const": "markdown",
                                                                                                 "type": "string"
+                                                                                            },
+                                                                                            {
+                                                                                                "const": "json",
+                                                                                                "type": "string"
                                                                                             }
                                                                                         ],
                                                                                         "description": "报告展示形式"
@@ -264010,6 +264374,10 @@
                                                                                     {
                                                                                         "const": "markdown",
                                                                                         "type": "string"
+                                                                                    },
+                                                                                    {
+                                                                                        "const": "json",
+                                                                                        "type": "string"
                                                                                     }
                                                                                 ],
                                                                                 "description": "报告展示形式"
@@ -264026,6 +264394,11 @@
                                                                         "description": "接口字段 count 的配置或结果",
                                                                         "minimum": 0,
                                                                         "type": "integer"
+                                                                    },
+                                                                    "json": {
+                                                                        "description": "接口字段 json 的配置或结果",
+                                                                        "maxLength": 262144,
+                                                                        "type": "string"
                                                                     },
                                                                     "notification": {
                                                                         "additionalProperties": false,
@@ -264744,6 +265117,10 @@
                                                                                             {
                                                                                                 "const": "markdown",
                                                                                                 "type": "string"
+                                                                                            },
+                                                                                            {
+                                                                                                "const": "json",
+                                                                                                "type": "string"
                                                                                             }
                                                                                         ],
                                                                                         "description": "报告展示形式"
@@ -265035,6 +265412,10 @@
                                                                                     {
                                                                                         "const": "markdown",
                                                                                         "type": "string"
+                                                                                    },
+                                                                                    {
+                                                                                        "const": "json",
+                                                                                        "type": "string"
                                                                                     }
                                                                                 ],
                                                                                 "description": "报告展示形式"
@@ -265051,6 +265432,11 @@
                                                                         "description": "接口字段 count 的配置或结果",
                                                                         "minimum": 0,
                                                                         "type": "integer"
+                                                                    },
+                                                                    "json": {
+                                                                        "description": "接口字段 json 的配置或结果",
+                                                                        "maxLength": 262144,
+                                                                        "type": "string"
                                                                     },
                                                                     "notification": {
                                                                         "additionalProperties": false,
@@ -265769,6 +266155,10 @@
                                                                                             {
                                                                                                 "const": "markdown",
                                                                                                 "type": "string"
+                                                                                            },
+                                                                                            {
+                                                                                                "const": "json",
+                                                                                                "type": "string"
                                                                                             }
                                                                                         ],
                                                                                         "description": "报告展示形式"
@@ -266060,6 +266450,10 @@
                                                                                     {
                                                                                         "const": "markdown",
                                                                                         "type": "string"
+                                                                                    },
+                                                                                    {
+                                                                                        "const": "json",
+                                                                                        "type": "string"
                                                                                     }
                                                                                 ],
                                                                                 "description": "报告展示形式"
@@ -266076,6 +266470,11 @@
                                                                         "description": "接口字段 count 的配置或结果",
                                                                         "minimum": 0,
                                                                         "type": "integer"
+                                                                    },
+                                                                    "json": {
+                                                                        "description": "接口字段 json 的配置或结果",
+                                                                        "maxLength": 262144,
+                                                                        "type": "string"
                                                                     },
                                                                     "notification": {
                                                                         "additionalProperties": false,
@@ -269414,6 +269813,10 @@
                                                                                         {
                                                                                             "const": "markdown",
                                                                                             "type": "string"
+                                                                                        },
+                                                                                        {
+                                                                                            "const": "json",
+                                                                                            "type": "string"
                                                                                         }
                                                                                     ],
                                                                                     "description": "报告展示形式"
@@ -270095,6 +270498,10 @@
                                                                                         {
                                                                                             "const": "markdown",
                                                                                             "type": "string"
+                                                                                        },
+                                                                                        {
+                                                                                            "const": "json",
+                                                                                            "type": "string"
                                                                                         }
                                                                                     ],
                                                                                     "description": "报告展示形式"
@@ -270775,6 +271182,10 @@
                                                                                         },
                                                                                         {
                                                                                             "const": "markdown",
+                                                                                            "type": "string"
+                                                                                        },
+                                                                                        {
+                                                                                            "const": "json",
                                                                                             "type": "string"
                                                                                         }
                                                                                     ],
@@ -271475,6 +271886,10 @@
                                                                                             },
                                                                                             {
                                                                                                 "const": "markdown",
+                                                                                                "type": "string"
+                                                                                            },
+                                                                                            {
+                                                                                                "const": "json",
                                                                                                 "type": "string"
                                                                                             }
                                                                                         ],
@@ -272227,6 +272642,10 @@
                                                                                                             },
                                                                                                             {
                                                                                                                 "const": "markdown",
+                                                                                                                "type": "string"
+                                                                                                            },
+                                                                                                            {
+                                                                                                                "const": "json",
                                                                                                                 "type": "string"
                                                                                                             }
                                                                                                         ],
@@ -273009,6 +273428,10 @@
                                                                                             {
                                                                                                 "const": "markdown",
                                                                                                 "type": "string"
+                                                                                            },
+                                                                                            {
+                                                                                                "const": "json",
+                                                                                                "type": "string"
                                                                                             }
                                                                                         ],
                                                                                         "description": "报告展示形式"
@@ -273760,6 +274183,10 @@
                                                                                                             },
                                                                                                             {
                                                                                                                 "const": "markdown",
+                                                                                                                "type": "string"
+                                                                                                            },
+                                                                                                            {
+                                                                                                                "const": "json",
                                                                                                                 "type": "string"
                                                                                                             }
                                                                                                         ],
@@ -274542,6 +274969,10 @@
                                                                                             {
                                                                                                 "const": "markdown",
                                                                                                 "type": "string"
+                                                                                            },
+                                                                                            {
+                                                                                                "const": "json",
+                                                                                                "type": "string"
                                                                                             }
                                                                                         ],
                                                                                         "description": "报告展示形式"
@@ -275293,6 +275724,10 @@
                                                                                                             },
                                                                                                             {
                                                                                                                 "const": "markdown",
+                                                                                                                "type": "string"
+                                                                                                            },
+                                                                                                            {
+                                                                                                                "const": "json",
                                                                                                                 "type": "string"
                                                                                                             }
                                                                                                         ],
@@ -277299,6 +277734,10 @@
                                                                                             {
                                                                                                 "const": "markdown",
                                                                                                 "type": "string"
+                                                                                            },
+                                                                                            {
+                                                                                                "const": "json",
+                                                                                                "type": "string"
                                                                                             }
                                                                                         ],
                                                                                         "description": "报告展示形式"
@@ -278050,6 +278489,10 @@
                                                                                                             },
                                                                                                             {
                                                                                                                 "const": "markdown",
+                                                                                                                "type": "string"
+                                                                                                            },
+                                                                                                            {
+                                                                                                                "const": "json",
                                                                                                                 "type": "string"
                                                                                                             }
                                                                                                         ],
@@ -278832,6 +279275,10 @@
                                                                                             {
                                                                                                 "const": "markdown",
                                                                                                 "type": "string"
+                                                                                            },
+                                                                                            {
+                                                                                                "const": "json",
+                                                                                                "type": "string"
                                                                                             }
                                                                                         ],
                                                                                         "description": "报告展示形式"
@@ -279583,6 +280030,10 @@
                                                                                                             },
                                                                                                             {
                                                                                                                 "const": "markdown",
+                                                                                                                "type": "string"
+                                                                                                            },
+                                                                                                            {
+                                                                                                                "const": "json",
                                                                                                                 "type": "string"
                                                                                                             }
                                                                                                         ],
@@ -280365,6 +280816,10 @@
                                                                                             {
                                                                                                 "const": "markdown",
                                                                                                 "type": "string"
+                                                                                            },
+                                                                                            {
+                                                                                                "const": "json",
+                                                                                                "type": "string"
                                                                                             }
                                                                                         ],
                                                                                         "description": "报告展示形式"
@@ -281116,6 +281571,10 @@
                                                                                                             },
                                                                                                             {
                                                                                                                 "const": "markdown",
+                                                                                                                "type": "string"
+                                                                                                            },
+                                                                                                            {
+                                                                                                                "const": "json",
                                                                                                                 "type": "string"
                                                                                                             }
                                                                                                         ],
@@ -283119,6 +283578,10 @@
                                                                                         {
                                                                                             "const": "markdown",
                                                                                             "type": "string"
+                                                                                        },
+                                                                                        {
+                                                                                            "const": "json",
+                                                                                            "type": "string"
                                                                                         }
                                                                                     ],
                                                                                     "description": "报告展示形式"
@@ -283800,6 +284263,10 @@
                                                                                         {
                                                                                             "const": "markdown",
                                                                                             "type": "string"
+                                                                                        },
+                                                                                        {
+                                                                                            "const": "json",
+                                                                                            "type": "string"
                                                                                         }
                                                                                     ],
                                                                                     "description": "报告展示形式"
@@ -284480,6 +284947,10 @@
                                                                                         },
                                                                                         {
                                                                                             "const": "markdown",
+                                                                                            "type": "string"
+                                                                                        },
+                                                                                        {
+                                                                                            "const": "json",
                                                                                             "type": "string"
                                                                                         }
                                                                                     ],
@@ -285180,6 +285651,10 @@
                                                                                             },
                                                                                             {
                                                                                                 "const": "markdown",
+                                                                                                "type": "string"
+                                                                                            },
+                                                                                            {
+                                                                                                "const": "json",
                                                                                                 "type": "string"
                                                                                             }
                                                                                         ],
@@ -285932,6 +286407,10 @@
                                                                                                             },
                                                                                                             {
                                                                                                                 "const": "markdown",
+                                                                                                                "type": "string"
+                                                                                                            },
+                                                                                                            {
+                                                                                                                "const": "json",
                                                                                                                 "type": "string"
                                                                                                             }
                                                                                                         ],
@@ -286714,6 +287193,10 @@
                                                                                             {
                                                                                                 "const": "markdown",
                                                                                                 "type": "string"
+                                                                                            },
+                                                                                            {
+                                                                                                "const": "json",
+                                                                                                "type": "string"
                                                                                             }
                                                                                         ],
                                                                                         "description": "报告展示形式"
@@ -287465,6 +287948,10 @@
                                                                                                             },
                                                                                                             {
                                                                                                                 "const": "markdown",
+                                                                                                                "type": "string"
+                                                                                                            },
+                                                                                                            {
+                                                                                                                "const": "json",
                                                                                                                 "type": "string"
                                                                                                             }
                                                                                                         ],
@@ -288247,6 +288734,10 @@
                                                                                             {
                                                                                                 "const": "markdown",
                                                                                                 "type": "string"
+                                                                                            },
+                                                                                            {
+                                                                                                "const": "json",
+                                                                                                "type": "string"
                                                                                             }
                                                                                         ],
                                                                                         "description": "报告展示形式"
@@ -288998,6 +289489,10 @@
                                                                                                             },
                                                                                                             {
                                                                                                                 "const": "markdown",
+                                                                                                                "type": "string"
+                                                                                                            },
+                                                                                                            {
+                                                                                                                "const": "json",
                                                                                                                 "type": "string"
                                                                                                             }
                                                                                                         ],
@@ -291015,6 +291510,10 @@
                                                                                             {
                                                                                                 "const": "markdown",
                                                                                                 "type": "string"
+                                                                                            },
+                                                                                            {
+                                                                                                "const": "json",
+                                                                                                "type": "string"
                                                                                             }
                                                                                         ],
                                                                                         "description": "报告展示形式"
@@ -291766,6 +292265,10 @@
                                                                                                             },
                                                                                                             {
                                                                                                                 "const": "markdown",
+                                                                                                                "type": "string"
+                                                                                                            },
+                                                                                                            {
+                                                                                                                "const": "json",
                                                                                                                 "type": "string"
                                                                                                             }
                                                                                                         ],
@@ -292548,6 +293051,10 @@
                                                                                             {
                                                                                                 "const": "markdown",
                                                                                                 "type": "string"
+                                                                                            },
+                                                                                            {
+                                                                                                "const": "json",
+                                                                                                "type": "string"
                                                                                             }
                                                                                         ],
                                                                                         "description": "报告展示形式"
@@ -293299,6 +293806,10 @@
                                                                                                             },
                                                                                                             {
                                                                                                                 "const": "markdown",
+                                                                                                                "type": "string"
+                                                                                                            },
+                                                                                                            {
+                                                                                                                "const": "json",
                                                                                                                 "type": "string"
                                                                                                             }
                                                                                                         ],
@@ -294081,6 +294592,10 @@
                                                                                             {
                                                                                                 "const": "markdown",
                                                                                                 "type": "string"
+                                                                                            },
+                                                                                            {
+                                                                                                "const": "json",
+                                                                                                "type": "string"
                                                                                             }
                                                                                         ],
                                                                                         "description": "报告展示形式"
@@ -294832,6 +295347,10 @@
                                                                                                             },
                                                                                                             {
                                                                                                                 "const": "markdown",
+                                                                                                                "type": "string"
+                                                                                                            },
+                                                                                                            {
+                                                                                                                "const": "json",
                                                                                                                 "type": "string"
                                                                                                             }
                                                                                                         ],
@@ -296762,6 +297281,10 @@
                                                                                                 {
                                                                                                     "const": "markdown",
                                                                                                     "type": "string"
+                                                                                                },
+                                                                                                {
+                                                                                                    "const": "json",
+                                                                                                    "type": "string"
                                                                                                 }
                                                                                             ],
                                                                                             "description": "报告展示形式"
@@ -297053,6 +297576,10 @@
                                                                                         {
                                                                                             "const": "markdown",
                                                                                             "type": "string"
+                                                                                        },
+                                                                                        {
+                                                                                            "const": "json",
+                                                                                            "type": "string"
                                                                                         }
                                                                                     ],
                                                                                     "description": "报告展示形式"
@@ -297069,6 +297596,11 @@
                                                                             "description": "接口字段 count 的配置或结果",
                                                                             "minimum": 0,
                                                                             "type": "integer"
+                                                                        },
+                                                                        "json": {
+                                                                            "description": "接口字段 json 的配置或结果",
+                                                                            "maxLength": 262144,
+                                                                            "type": "string"
                                                                         },
                                                                         "notification": {
                                                                             "additionalProperties": false,
@@ -297812,6 +298344,10 @@
                                                                                                 {
                                                                                                     "const": "markdown",
                                                                                                     "type": "string"
+                                                                                                },
+                                                                                                {
+                                                                                                    "const": "json",
+                                                                                                    "type": "string"
                                                                                                 }
                                                                                             ],
                                                                                             "description": "报告展示形式"
@@ -298103,6 +298639,10 @@
                                                                                         {
                                                                                             "const": "markdown",
                                                                                             "type": "string"
+                                                                                        },
+                                                                                        {
+                                                                                            "const": "json",
+                                                                                            "type": "string"
                                                                                         }
                                                                                     ],
                                                                                     "description": "报告展示形式"
@@ -298119,6 +298659,11 @@
                                                                             "description": "接口字段 count 的配置或结果",
                                                                             "minimum": 0,
                                                                             "type": "integer"
+                                                                        },
+                                                                        "json": {
+                                                                            "description": "接口字段 json 的配置或结果",
+                                                                            "maxLength": 262144,
+                                                                            "type": "string"
                                                                         },
                                                                         "notification": {
                                                                             "additionalProperties": false,
@@ -298862,6 +299407,10 @@
                                                                                                 {
                                                                                                     "const": "markdown",
                                                                                                     "type": "string"
+                                                                                                },
+                                                                                                {
+                                                                                                    "const": "json",
+                                                                                                    "type": "string"
                                                                                                 }
                                                                                             ],
                                                                                             "description": "报告展示形式"
@@ -299153,6 +299702,10 @@
                                                                                         {
                                                                                             "const": "markdown",
                                                                                             "type": "string"
+                                                                                        },
+                                                                                        {
+                                                                                            "const": "json",
+                                                                                            "type": "string"
                                                                                         }
                                                                                     ],
                                                                                     "description": "报告展示形式"
@@ -299169,6 +299722,11 @@
                                                                             "description": "接口字段 count 的配置或结果",
                                                                             "minimum": 0,
                                                                             "type": "integer"
+                                                                        },
+                                                                        "json": {
+                                                                            "description": "接口字段 json 的配置或结果",
+                                                                            "maxLength": 262144,
+                                                                            "type": "string"
                                                                         },
                                                                         "notification": {
                                                                             "additionalProperties": false,
@@ -300719,6 +301277,11 @@
                                                 "maxLength": 256,
                                                 "type": "string"
                                             },
+                                            "json": {
+                                                "description": "UTF-8 JSON 原文",
+                                                "maxLength": 262144,
+                                                "type": "string"
+                                            },
                                             "notify": {
                                                 "description": "接口字段 notify 的配置或结果",
                                                 "type": "boolean"
@@ -300787,6 +301350,11 @@
                                                 "maxLength": 256,
                                                 "type": "string"
                                             },
+                                            "json": {
+                                                "description": "UTF-8 JSON 原文",
+                                                "maxLength": 262144,
+                                                "type": "string"
+                                            },
                                             "notify": {
                                                 "description": "接口字段 notify 的配置或结果",
                                                 "type": "boolean"
@@ -300853,6 +301421,11 @@
                                             "inventoryColumn": {
                                                 "description": "接口字段 inventoryColumn 的配置或结果",
                                                 "maxLength": 256,
+                                                "type": "string"
+                                            },
+                                            "json": {
+                                                "description": "UTF-8 JSON 原文",
+                                                "maxLength": 262144,
                                                 "type": "string"
                                             },
                                             "notify": {
@@ -301345,6 +301918,10 @@
                                                                                             {
                                                                                                 "const": "markdown",
                                                                                                 "type": "string"
+                                                                                            },
+                                                                                            {
+                                                                                                "const": "json",
+                                                                                                "type": "string"
                                                                                             }
                                                                                         ],
                                                                                         "description": "报告展示形式"
@@ -301636,6 +302213,10 @@
                                                                                     {
                                                                                         "const": "markdown",
                                                                                         "type": "string"
+                                                                                    },
+                                                                                    {
+                                                                                        "const": "json",
+                                                                                        "type": "string"
                                                                                     }
                                                                                 ],
                                                                                 "description": "报告展示形式"
@@ -301652,6 +302233,11 @@
                                                                         "description": "接口字段 count 的配置或结果",
                                                                         "minimum": 0,
                                                                         "type": "integer"
+                                                                    },
+                                                                    "json": {
+                                                                        "description": "接口字段 json 的配置或结果",
+                                                                        "maxLength": 262144,
+                                                                        "type": "string"
                                                                     },
                                                                     "notification": {
                                                                         "additionalProperties": false,
@@ -302370,6 +302956,10 @@
                                                                                             {
                                                                                                 "const": "markdown",
                                                                                                 "type": "string"
+                                                                                            },
+                                                                                            {
+                                                                                                "const": "json",
+                                                                                                "type": "string"
                                                                                             }
                                                                                         ],
                                                                                         "description": "报告展示形式"
@@ -302661,6 +303251,10 @@
                                                                                     {
                                                                                         "const": "markdown",
                                                                                         "type": "string"
+                                                                                    },
+                                                                                    {
+                                                                                        "const": "json",
+                                                                                        "type": "string"
                                                                                     }
                                                                                 ],
                                                                                 "description": "报告展示形式"
@@ -302677,6 +303271,11 @@
                                                                         "description": "接口字段 count 的配置或结果",
                                                                         "minimum": 0,
                                                                         "type": "integer"
+                                                                    },
+                                                                    "json": {
+                                                                        "description": "接口字段 json 的配置或结果",
+                                                                        "maxLength": 262144,
+                                                                        "type": "string"
                                                                     },
                                                                     "notification": {
                                                                         "additionalProperties": false,
@@ -303395,6 +303994,10 @@
                                                                                             {
                                                                                                 "const": "markdown",
                                                                                                 "type": "string"
+                                                                                            },
+                                                                                            {
+                                                                                                "const": "json",
+                                                                                                "type": "string"
                                                                                             }
                                                                                         ],
                                                                                         "description": "报告展示形式"
@@ -303686,6 +304289,10 @@
                                                                                     {
                                                                                         "const": "markdown",
                                                                                         "type": "string"
+                                                                                    },
+                                                                                    {
+                                                                                        "const": "json",
+                                                                                        "type": "string"
                                                                                     }
                                                                                 ],
                                                                                 "description": "报告展示形式"
@@ -303702,6 +304309,11 @@
                                                                         "description": "接口字段 count 的配置或结果",
                                                                         "minimum": 0,
                                                                         "type": "integer"
+                                                                    },
+                                                                    "json": {
+                                                                        "description": "接口字段 json 的配置或结果",
+                                                                        "maxLength": 262144,
+                                                                        "type": "string"
                                                                     },
                                                                     "notification": {
                                                                         "additionalProperties": false,
@@ -305866,6 +306478,10 @@
                                                                                                         {
                                                                                                             "const": "markdown",
                                                                                                             "type": "string"
+                                                                                                        },
+                                                                                                        {
+                                                                                                            "const": "json",
+                                                                                                            "type": "string"
                                                                                                         }
                                                                                                     ],
                                                                                                     "description": "报告展示形式"
@@ -306682,6 +307298,10 @@
                                                                                                         {
                                                                                                             "const": "markdown",
                                                                                                             "type": "string"
+                                                                                                        },
+                                                                                                        {
+                                                                                                            "const": "json",
+                                                                                                            "type": "string"
                                                                                                         }
                                                                                                     ],
                                                                                                     "description": "报告展示形式"
@@ -307497,6 +308117,10 @@
                                                                                                         },
                                                                                                         {
                                                                                                             "const": "markdown",
+                                                                                                            "type": "string"
+                                                                                                        },
+                                                                                                        {
+                                                                                                            "const": "json",
                                                                                                             "type": "string"
                                                                                                         }
                                                                                                     ],
@@ -309510,6 +310134,10 @@
                                                                                             {
                                                                                                 "const": "markdown",
                                                                                                 "type": "string"
+                                                                                            },
+                                                                                            {
+                                                                                                "const": "json",
+                                                                                                "type": "string"
                                                                                             }
                                                                                         ],
                                                                                         "description": "报告展示形式"
@@ -310271,6 +310899,10 @@
                                                                                             {
                                                                                                 "const": "markdown",
                                                                                                 "type": "string"
+                                                                                            },
+                                                                                            {
+                                                                                                "const": "json",
+                                                                                                "type": "string"
                                                                                             }
                                                                                         ],
                                                                                         "description": "报告展示形式"
@@ -311031,6 +311663,10 @@
                                                                                             },
                                                                                             {
                                                                                                 "const": "markdown",
+                                                                                                "type": "string"
+                                                                                            },
+                                                                                            {
+                                                                                                "const": "json",
                                                                                                 "type": "string"
                                                                                             }
                                                                                         ],

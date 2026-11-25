@@ -1,3 +1,4 @@
+import { rowLock } from '@scova/db';
 import {
     queryRows,
     and,
@@ -23,7 +24,7 @@ function store(tx: DatabaseExecutor) {
         lockTask(userId: string, taskId: string) {
             return queryRows<{ id: string }>(
                 tx,
-                sql`SELECT id FROM tasks WHERE id=${taskId}::uuid AND user_id=${userId}::uuid FOR NO KEY UPDATE`,
+                sql`SELECT id FROM tasks WHERE id=${taskId} AND user_id=${userId} ${rowLock(tx, 'no key update')}`,
             );
         },
         find(userId: string, id: string) {

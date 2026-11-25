@@ -1,8 +1,23 @@
 # 本地开发环境
 
-前端、Server、Worker 在宿主机运行并监听源码变化。`compose.local.yaml` 默认只启动 PostgreSQL 17 和 Redis 7；SearXNG 是同一个 `scova-local` Compose 项目中的可选服务。
+Web、Server 和 Worker 均在宿主机运行。默认开发环境通过 Docker 启动 PostgreSQL 17、Redis 7 和可选的 SearXNG。个人单机使用或试用可显式选择 SQLite。
 
-## 启动与停止
+## SQLite 本机版
+
+在单台电脑上运行一个 Server 实例，Web 与后端只监听回环地址。标准部署和共享环境使用 PostgreSQL + Redis。
+
+```sh
+vp install
+vp run local:sqlite
+```
+
+打开 http://127.0.0.1:5173 注册账号。此命令在回环地址启动 Web、Server 和 Worker，首次启动自动创建并迁移数据库。按 Ctrl+C 停止。用 `--node` 选择 Node.js 24 或更新版本，用 `--backend-only` 仅启用 Server 与 Worker。
+
+- `.scova-local/business.sqlite` 保存业务记录、Run 租约及 Agent 检查点。`.scova-local/state.sqlite` 保存队列、限流和搜索协调状态。Worker 通过 Server 接口领作业。
+- `.scova-local/.env` 首次生成执行令牌和凭据加密密钥。可在这里配置模型、搜索和 R2/S3。使用 `SCOVA_LOCAL_DATA_DIR` 选择本机目录，或用 `SCOVA_LOCAL_WEB_PORT`、`SCOVA_LOCAL_API_PORT`、`SCOVA_LOCAL_EXECUTION_PORT` 更改端口。默认端口为 5173、3000、3001。
+- 资料库使用字面子串搜索。联网研究需要模型和搜索供应商，大附件需要 R2/S3。备份时停止应用并复制整个数据目录，包括 `.env`。首次创建本机库会得到空工作区。
+
+## PostgreSQL 与 Redis 开发环境
 
 先启动 Docker Desktop（Linux 容器），在仓库根目录运行：
 
