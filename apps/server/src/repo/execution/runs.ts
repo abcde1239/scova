@@ -1,3 +1,4 @@
+import { readDatabaseClock, rowLock } from '@scova/db';
 import { requiredDatabaseValue } from '../../utils/execution/database.ts';
 import {
     type DatabaseClient,
@@ -55,14 +56,9 @@ export type RunRepository = SharedRunRepository<Run>;
 async function lockRun(tx: DatabaseTransaction, runId: string) {
     await queryRows<Record<string, unknown>>(
         tx,
-        sql`SELECT id FROM runs WHERE id = ${runId}::uuid FOR UPDATE`,
+        sql`SELECT id FROM runs WHERE id = ${runId} ${rowLock(tx, 'update')}`,
     );
     return tx.query.runs.findFirst({ where: eq(dbRuns.id, runId) });
-}
-
-async function databaseNow(tx: DatabaseTransaction): Promise<Date> {
-    const [row] = await queryRows<{ now: Date }>(tx, sql`SELECT clock_timestamp() AS now`);
-    return row!.now;
 }
 
 function active(run: Run) {
@@ -94,7 +90,7 @@ export function withRunFence<T>(
 ): Promise<T> {
     return db.transaction(async (tx) => {
         const run = await lockRun(tx, token.runId);
-        const now = await databaseNow(tx);
+        const now = await readDatabaseClock(tx);
         if (!validLease(run, token, now)) throw new RunFenceError('LEASE_LOST');
         if (purpose !== 'control' && (run.cancelRequestedAt || run.status === 'cancel_requested'))
             throw new RunFenceError('RUN_CANCELED');
@@ -114,7 +110,7 @@ export function withRunFence<T>(
         const result = await operation(tx, run, now);
         // callback 可能执行多条 SQL；事务变长不能把已过期权限带到提交点。
         // 用加锁时的租约核验，允许 callback 自己原子终结 Run 或续期。
-        const finishingAt = await databaseNow(tx);
+        const finishingAt = await readDatabaseClock(tx);
         if (run.leaseExpiresAt! <= finishingAt) throw new RunFenceError('LEASE_LOST');
         if ((purpose === 'work' || purpose === 'delivery') && run.deadlineAt! <= finishingAt)
             throw new RunFenceError('DEADLINE_EXCEEDED');
@@ -218,14 +214,14 @@ function leaseExpiry(now: Date, leaseMs: number) {
     return new Date(now.getTime() + leaseMs);
 }
 
-/** PostgreSQL 是执行事实源；BullMQ 的锁与 payload 不授予任何业务写权限。 */
+/** 业务数据库是执行事实源；队列的锁与 payload 不授予业务写权限。 */
 export function createRunRepository(db: DatabaseClient): RunRepository {
     return {
         claim(runId, leaseOwner, leaseMs = 30_000, options = {}) {
             if (!leaseOwner || leaseOwner.length > 200) throw new Error('Run worker 标识无效');
             return db.transaction(async (tx): Promise<RunClaim<Run>> => {
                 const run = await lockRun(tx, runId);
-                const now = await databaseNow(tx);
+                const now = await readDatabaseClock(tx);
                 if (!run || !active(run)) return { kind: 'ignored' };
                 if (run.leaseExpiresAt && run.leaseExpiresAt > now) return { kind: 'busy' };
                 const recovering =

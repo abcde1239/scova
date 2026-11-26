@@ -29,6 +29,8 @@ await closeDatabase(db);
 
 本包仅供服务端使用，不依赖 Elysia；反馈投影使用 `@scova/models` 的快照结构。HTTP DTO、事件与运行时校验由 models 管理；不要向前端返回内部实体或引入数据库客户端。
 
+默认使用 PostgreSQL 客户端。可选本机版从 `@scova/db/sqlite` 显式导入 `createSqliteDatabaseClient(path)`，由该入口自动迁移 SQLite 文件，业务仓储共用 Drizzle 查询接口。Server 用单连接串行事务保护 Run 租约、检查点与业务写入；Worker 通过 Server 的内部执行接口访问这些数据。SQLite 迁移记录在 `sqlite/` 和 `scova_business_migrations`，参见[SQLite 本机版](../../docs/public/guides/local-development.md#sqlite-本机版)。
+
 ## 迁移
 
 `@scova/db/migrate` 提供 `migrateDatabase({ connectionString })` 与只读 `verifyDatabase`。迁移使用 Drizzle Kit journal、不可变 SQL 和 `_scova_migrations` 名称/校验和账本，并在同一事务内获取按数据库/schema 隔离的 advisory lock。连接超时 5 秒，迁移锁等待上限 30 秒；锁超时会回滚当前事务并明确失败。

@@ -1,5 +1,8 @@
 import {
-    REPORT_ATTACHMENT_INLINE_MAX_BYTES,
+    workflowFileMaxBytes,
+    REPORT_ATTACHMENT_MAX_CELL_CHARS,
+    REPORT_ATTACHMENT_MAX_COLUMNS,
+    REPORT_ATTACHMENT_MAX_ROWS,
     type WorkflowCanvasInput,
     type WorkflowCanvasNode,
     type WorkflowCanvasOutput,
@@ -17,7 +20,7 @@ export type WorkflowGenerator = (args: {
     providerId: string | undefined;
 }) => Promise<string>;
 
-const maxBytes = REPORT_ATTACHMENT_INLINE_MAX_BYTES;
+const maxBytes = workflowFileMaxBytes;
 const maxNotificationFieldBytes = 8000 * 4;
 // Filenames become download labels, so reject path separators and header control characters.
 // oxlint-disable-next-line no-control-regex
@@ -28,6 +31,8 @@ type CanvasNodeErrorCode =
     | 'MISSING_SOURCE'
     | 'INVALID_SOURCE'
     | 'INVALID_CSV'
+    | 'INVALID_JSON'
+    | 'JSON_LIMIT_EXCEEDED'
     | 'CSV_LIMIT_EXCEEDED'
     | 'INVALID_COLUMN'
     | 'INVALID_FILTER'
@@ -125,11 +130,71 @@ function readCsv(text: string): Table {
     return { columns: header.cells, rows: rows.map((row) => row.cells) };
 }
 
+function readJson(text: string): unknown {
+    if (Buffer.byteLength(text) > maxBytes)
+        throw new CanvasNodeError('JSON_LIMIT_EXCEEDED', 'JSON 超过大小限制');
+    try {
+        return JSON.parse(text);
+    } catch (cause) {
+        throw new CanvasNodeError('INVALID_JSON', 'JSON 格式无效', { cause });
+    }
+}
+
+export function validateWorkflowFileInput(input: WorkflowCanvasInput | undefined) {
+    if (input?.json === undefined) return;
+    if (input.csv !== undefined)
+        throw new ApiError(422, 'WORKFLOW_INVALID_INPUT', '一次运行只能提供 CSV 或 JSON 文件');
+    try {
+        readJson(input.json);
+    } catch (error) {
+        if (!(error instanceof CanvasNodeError)) throw error;
+        throw new ApiError(422, 'WORKFLOW_INVALID_JSON', error.message, [
+            { path: '/input/json', message: error.message },
+        ]);
+    }
+}
+
+function jsonTable(text: string): Table {
+    const records = readJson(text);
+    if (!Array.isArray(records) || !records.length)
+        throw new CanvasNodeError('INVALID_JSON', '整理表格需要非空的 JSON 对象数组');
+    if (records.length >= REPORT_ATTACHMENT_MAX_ROWS)
+        throw new CanvasNodeError('JSON_LIMIT_EXCEEDED', 'JSON 表格超过行数限制');
+
+    const columns = new Set<string>();
+    const cells = records.map((record: unknown) => {
+        if (!record || typeof record !== 'object' || Array.isArray(record))
+            throw new CanvasNodeError('INVALID_JSON', 'JSON 表格的每一行必须是对象');
+        return new Map(
+            Object.entries(record).map(([column, value]) => {
+                columns.add(column);
+                const cell =
+                    value == null ? '' : typeof value === 'string' ? value : JSON.stringify(value);
+                if (
+                    column.length > REPORT_ATTACHMENT_MAX_CELL_CHARS ||
+                    cell.length > REPORT_ATTACHMENT_MAX_CELL_CHARS
+                )
+                    throw new CanvasNodeError('JSON_LIMIT_EXCEEDED', 'JSON 表格单元格过长');
+                return [column, cell] as const;
+            }),
+        );
+    });
+    if (columns.size > REPORT_ATTACHMENT_MAX_COLUMNS)
+        throw new CanvasNodeError('JSON_LIMIT_EXCEEDED', 'JSON 表格超过列数限制');
+    const names = [...columns];
+    return {
+        columns: names,
+        rows: cells.map((row) => names.map((column) => row.get(column) ?? '')),
+    };
+}
+
 function csvTable(source: WorkflowCanvasOutput): Table {
     if (source.table) return source.table;
+    if (source.json !== undefined) return jsonTable(source.json);
+    if (source.artifact?.format === 'json') return jsonTable(source.artifact.content);
     if (source.artifact?.format === 'csv') return readCsv(source.artifact.content);
     if (source.text !== undefined) return readCsv(source.text);
-    throw new CanvasNodeError('INVALID_SOURCE', 'CSV 节点需要表格或 CSV 文本');
+    throw new CanvasNodeError('INVALID_SOURCE', '整理表格节点需要表格、CSV 文本或 JSON 对象数组');
 }
 
 function csvFilter(
@@ -154,18 +219,20 @@ function executeCsv(
     upstream: Upstream,
 ): WorkflowCanvasOutput {
     const table = csvTable(
-        config.source === undefined ? { text: input.csv } : readSource(upstream, config.source),
+        config.source === undefined
+            ? { text: input.csv, json: input.json }
+            : readSource(upstream, config.source),
     );
     if (
         !table.columns.length ||
         table.columns.some((name) => !name.trim()) ||
         new Set(table.columns).size !== table.columns.length
     )
-        throw new CanvasNodeError('INVALID_COLUMN', 'CSV 表头需要非空且唯一的列名');
+        throw new CanvasNodeError('INVALID_COLUMN', '表格需要非空且唯一的列名');
 
     function columnIndex(name: string) {
         const index = table.columns.indexOf(name);
-        if (index < 0) throw new CanvasNodeError('INVALID_COLUMN', 'CSV 中找不到指定列');
+        if (index < 0) throw new CanvasNodeError('INVALID_COLUMN', '表格中找不到指定列');
         return index;
     }
     const filters = config.filters.map(({ column, operator, value }) =>
@@ -175,7 +242,7 @@ function executeCsv(
         ? config.columns.map((column) => render(column, input))
         : table.columns;
     if (new Set(columns).size !== columns.length)
-        throw new CanvasNodeError('INVALID_COLUMN', 'CSV 投影中的列名必须唯一');
+        throw new CanvasNodeError('INVALID_COLUMN', '表格投影中的列名必须唯一');
     const indices = columns.map(columnIndex);
     const rows = table.rows
         .filter((row) => filters.every((filter) => filter(row)))
@@ -201,7 +268,10 @@ async function runNode(
     switch (node.type) {
         case 'start': {
             const text = input.text ?? input.csv;
-            return text === undefined ? {} : { text };
+            return {
+                ...(text === undefined ? {} : { text }),
+                ...(input.json === undefined ? {} : { json: input.json }),
+            };
         }
         case 'merge':
         case 'end':
@@ -244,14 +314,24 @@ async function runNode(
             )
                 throw new CanvasNodeError('INVALID_ARTIFACT_FILENAME', '交付文件名无效');
             const output = readSource(upstream, source);
-            const content =
-                format === 'csv' && output.table
-                    ? encodeCsv(output.table)
-                    : output.artifact?.format === format
-                      ? output.artifact.content
-                      : format === 'markdown'
-                        ? output.text
-                        : undefined;
+            let content = output.artifact?.format === format ? output.artifact.content : undefined;
+            if (format === 'csv' && output.table) content = encodeCsv(output.table);
+            if (format === 'markdown' && !output.artifact) content = output.text;
+            if (format === 'json' && !output.artifact) {
+                if (output.table) {
+                    const { columns, rows } = output.table;
+                    content = JSON.stringify(
+                        rows.map((row) =>
+                            Object.fromEntries(
+                                columns.map((column, index) => [column, row[index]]),
+                            ),
+                        ),
+                    );
+                } else {
+                    content = output.json ?? output.text;
+                }
+            }
+            if (format === 'json' && content !== undefined) readJson(content);
             if (content === undefined)
                 throw new CanvasNodeError('INVALID_SOURCE', '上游输出与所选交付格式不匹配');
             return { artifact: { filename, format, content } };
@@ -280,6 +360,10 @@ export async function executeCanvasNode(
     generate: WorkflowGenerator,
 ): Promise<WorkflowCanvasOutput> {
     const output = await runNode(node, input, upstream, generate);
-    bound(JSON.stringify(output));
+    // A JSON file is bounded by its UTF-8 bytes. Storage escaping should not reduce its file limit.
+    const artifact =
+        output.artifact?.format === 'json' ? { ...output.artifact, content: '' } : output.artifact;
+    if (output.json !== undefined) bound(output.json);
+    bound(JSON.stringify({ ...output, json: undefined, artifact }));
     return output;
 }

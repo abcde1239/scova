@@ -1,11 +1,23 @@
 import pg from 'pg';
 import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
-import type { SQL } from 'drizzle-orm';
+import { sql, type SQL } from 'drizzle-orm';
 import * as schema from './schema.ts';
 
-export type DatabaseClient = NodePgDatabase<typeof schema> & { $client: pg.Pool };
+export type DatabaseClient = NodePgDatabase<typeof schema>;
 export type DatabaseTransaction = Parameters<Parameters<DatabaseClient['transaction']>[0]>[0];
 export type DatabaseExecutor = DatabaseClient | DatabaseTransaction;
+
+const sqliteConnections = new WeakMap<DatabaseClient, () => Promise<void>>();
+const sqliteSessions = new WeakSet<DatabaseExecutor['_']['session']>();
+
+export function registerSqliteConnection(database: DatabaseClient, close: () => Promise<void>) {
+    sqliteConnections.set(database, close);
+    sqliteSessions.add(database._.session);
+}
+
+export function isSqliteDatabase(database: DatabaseExecutor): boolean {
+    return sqliteSessions.has(database._.session);
+}
 
 export interface DatabaseOptions {
     connectionString?: string;
@@ -37,7 +49,7 @@ export function databaseConnection(options: DatabaseOptions = {}) {
 }
 
 /** Construction is offline. The application owns the native pool and its shutdown. */
-export function createDatabaseClient(options: DatabaseOptions = {}): DatabaseClient {
+export function createDatabaseClient(options: DatabaseOptions = {}) {
     const config = databaseConnection(options);
     const pool = new pg.Pool({
         connectionString: config.connectionString,
@@ -59,11 +71,13 @@ export function createDatabaseClient(options: DatabaseOptions = {}): DatabaseCli
 }
 
 export async function connectDatabase(database: DatabaseClient): Promise<void> {
-    await database.$client.query('SELECT 1');
+    await database.execute(sql`SELECT 1`);
 }
 
 export async function closeDatabase(database: DatabaseClient): Promise<void> {
-    await database.$client.end();
+    const sqliteClose = sqliteConnections.get(database);
+    if (sqliteClose) await sqliteClose();
+    else await (database as DatabaseClient & { $client: pg.Pool }).$client.end();
 }
 
 /** Parameterized SQL escape hatch; row shape must be declared at the repository boundary. */
@@ -89,7 +103,14 @@ export function isUniqueConflict(error: unknown): boolean {
     const seen = new Set<unknown>();
     while (error && typeof error === 'object' && !seen.has(error)) {
         seen.add(error);
-        if ('code' in error && error.code === '23505') return true;
+        if (
+            'code' in error &&
+            (error.code === '23505' ||
+                error.code === 'SQLITE_CONSTRAINT_UNIQUE' ||
+                error.code === 'SQLITE_CONSTRAINT_PRIMARYKEY')
+        )
+            return true;
+        if ('errcode' in error && (error.errcode === 2067 || error.errcode === 1555)) return true;
         error = 'cause' in error ? error.cause : undefined;
     }
     return false;

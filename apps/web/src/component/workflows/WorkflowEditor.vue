@@ -1,6 +1,9 @@
 <template>
     <section class="surface-card p-4 layout-grid gap-4" aria-labelledby="workflow-draft-heading">
-        <h2 id="workflow-draft-heading" class="m-0">工作流草稿</h2>
+        <div class="flex flex-wrap items-center justify-between gap-2">
+            <h2 id="workflow-draft-heading" class="m-0">工作流草稿</h2>
+            <action-button @click="exportDraft">导出已保存草稿 JSON</action-button>
+        </div>
         <state-panel
             v-if="!graph && !canvasGraph"
             state="error"
@@ -573,6 +576,17 @@ async function reload() {
 }
 
 watch(dirty, (value) => emit('dirty', value), { immediate: true });
+
+function exportDraft() {
+    const { workflow, draft } = baseline.value.data;
+    const content = JSON.stringify({ title: workflow.title, graph: draft });
+    const url = URL.createObjectURL(new Blob([content], { type: 'application/json' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `workflow-${workflow.id}.json`;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 
 async function save() {
     if (busy.value || !dirty.value || conflict.value) return;

@@ -10,6 +10,7 @@ import {
     projectThreadItems,
     projectThreads,
     sql,
+    isSqliteDatabase,
     type DatabaseExecutor,
 } from '@scova/db';
 
@@ -32,9 +33,10 @@ export function createWorkspaceIntakeStore(db: DatabaseExecutor, userId: string)
                 .where(eq(projectThreads.userId, userId))
                 .groupBy(projectThreads.projectId)
                 .as('workspace_project_activity');
-            const lastActivityAt = sql`greatest(${projects.createdAt}, ${activity.latest})`.mapWith(
-                projects.createdAt,
-            );
+            const latest = isSqliteDatabase(db)
+                ? sql`max(${projects.createdAt}, coalesce(${activity.latest}, ${projects.createdAt}))`
+                : sql`greatest(${projects.createdAt}, ${activity.latest})`;
+            const lastActivityAt = latest.mapWith(projects.createdAt);
             return db
                 .select({
                     id: projects.id,
@@ -74,8 +76,8 @@ export function createWorkspaceIntakeStore(db: DatabaseExecutor, userId: string)
                     and(
                         eq(projectResearchDrafts.threadId, projectThreads.id),
                         eq(projectResearchDrafts.userId, userId),
-                        sql`${projectResearchDrafts.id}::text = ${projectThreadItems.payload}->>'draftId'`,
-                        sql`${projectResearchDrafts.revision}::text = ${projectThreadItems.payload}->>'revision'`,
+                        sql`cast(${projectResearchDrafts.id} as text) = ${projectThreadItems.payload}->>'draftId'`,
+                        sql`cast(${projectResearchDrafts.revision} as text) = cast(${projectThreadItems.payload}->>'revision' as text)`,
                     ),
                 )
                 .where(

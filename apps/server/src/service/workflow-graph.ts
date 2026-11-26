@@ -146,14 +146,14 @@ function validateCanvasNode(
     const requireSource = (
         source: string,
         types: WorkflowCanvasNode['type'][],
-        format?: 'csv' | 'markdown',
+        formats?: ('csv' | 'markdown' | 'json')[],
     ) => {
         const upstream = nodes.get(source);
         if (
             !upstream ||
             !ancestors.has(source) ||
             !types.includes(upstream.type) ||
-            (format && upstream.type === 'deliver' && upstream.config.format !== format)
+            (formats && upstream.type === 'deliver' && !formats.includes(upstream.config.format))
         )
             invalid(path, `节点 ${node.label ?? node.id} 的输入必须来自兼容的上游节点`);
     };
@@ -166,7 +166,7 @@ function validateCanvasNode(
             break;
         case 'csv':
             if (node.config.source)
-                requireSource(node.config.source, ['start', 'csv', 'deliver'], 'csv');
+                requireSource(node.config.source, ['start', 'csv', 'deliver'], ['csv', 'json']);
             if (node.config.filters.some(({ column }) => !column.trim()))
                 invalid(path, '筛选需要列名');
             break;
@@ -181,8 +181,10 @@ function validateCanvasNode(
                 node.config.source,
                 node.config.format === 'csv'
                     ? ['csv', 'deliver']
-                    : ['start', 'generate', 'study', 'deliver'],
-                node.config.format,
+                    : node.config.format === 'json'
+                      ? ['start', 'csv', 'generate', 'deliver']
+                      : ['start', 'generate', 'study', 'deliver'],
+                [node.config.format],
             );
             break;
         case 'notify':

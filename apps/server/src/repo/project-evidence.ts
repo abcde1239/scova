@@ -12,6 +12,7 @@ import {
     sources,
     sourceSnapshots,
     sql,
+    isSqliteDatabase,
     type DatabaseExecutor,
     type SQLWrapper,
 } from '@scova/db';
@@ -20,9 +21,8 @@ const summaryLength = 1_700;
 const sourceLimit = 12;
 const titleLength = 200;
 const excerptLength = 2_400;
-const bounded = (field: SQLWrapper, limit: number) => sql<string>`left(${field}, ${limit})`;
-const includes = (field: SQLWrapper, query: string) =>
-    sql`strpos(lower(${field}), lower(${query})) > 0`;
+const bounded = (field: SQLWrapper, limit: number) => sql<string>`substr(${field}, 1, ${limit})`;
+
 const reportFields = {
     id: reports.id,
     taskId: reports.taskId,
@@ -42,6 +42,11 @@ export function createProjectEvidenceStore(
     userId: string,
     projectId: string,
 ) {
+    const sqlite = isSqliteDatabase(db);
+    const includes = (field: SQLWrapper, query: string) =>
+        sqlite
+            ? sql`instr(lower(${field}), lower(${query})) > 0`
+            : sql`strpos(lower(${field}), lower(${query})) > 0`;
     const membership = and(
         eq(projectTasks.userId, reports.userId),
         eq(projectTasks.taskId, reports.taskId),
@@ -83,9 +88,15 @@ export function createProjectEvidenceStore(
                 ),
                 sql` + `,
             );
+            type Match = {
+                sourceId: string;
+                snapshotId: string;
+                title: string;
+                canonicalUrl: string;
+            };
             const matchingClaim = db
                 .select({
-                    text: sql<string | null>`left(${claims.text}, 600)`.as('claim_text'),
+                    text: sql<string | null>`substr(${claims.text}, 1, 600)`.as('claim_text'),
                 })
                 .from(claims)
                 .where(
@@ -97,16 +108,10 @@ export function createProjectEvidenceStore(
                     ),
                 )
                 .orderBy(asc(claims.order))
-                .limit(1)
-                .as('matching_claim');
+                .limit(1);
             const matchingSource = db
                 .select({
-                    value: sql<{
-                        sourceId: string;
-                        snapshotId: string;
-                        title: string;
-                        canonicalUrl: string;
-                    } | null>`jsonb_build_object(
+                    value: sql<Match | null>`${sqlite ? sql`json_object` : sql`jsonb_build_object`}(
                         'sourceId', ${sourceFields.sourceId}, 'snapshotId', ${sourceFields.snapshotId},
                         'title', ${sourceFields.title}, 'canonicalUrl', ${sourceFields.canonicalUrl}
                     )`.as('source_match'),
@@ -121,26 +126,25 @@ export function createProjectEvidenceStore(
                     ),
                 )
                 .orderBy(desc(runSources.observedAt), desc(runSources.id))
-                .limit(1)
-                .as('matching_source');
+                .limit(1);
+            const claim = sql<string | null>`(${matchingClaim})`;
+            const source = sql<Match | null>`(${matchingSource})`.mapWith({
+                mapFromDriverValue(value: string | Match) {
+                    return typeof value === 'string' ? (JSON.parse(value) as Match) : value;
+                },
+            });
             return db
-                .select({
-                    ...reportFields,
-                    matchingClaim: matchingClaim.text,
-                    matchingSource: matchingSource.value,
-                })
+                .select({ ...reportFields, matchingClaim: claim, matchingSource: source })
                 .from(reports)
                 .innerJoin(projectTasks, membership)
-                .leftJoinLateral(matchingClaim, sql`true`)
-                .leftJoinLateral(matchingSource, sql`true`)
                 .where(
                     and(
                         owned,
                         or(
                             matches(reports.title),
                             matches(reports.summary),
-                            sql`${matchingClaim.text} IS NOT NULL`,
-                            sql`${matchingSource.value} IS NOT NULL`,
+                            sql`${claim} IS NOT NULL`,
+                            sql`${source} IS NOT NULL`,
                         ),
                     ),
                 )
@@ -179,7 +183,7 @@ export function createProjectEvidenceStore(
                     reportId: reports.id,
                     publishedAt: sourceSnapshots.publishedAt,
                     excerpt: sql<string | null>`CASE
-                    WHEN ${sourceSnapshots.textExpiresAt} IS NULL OR ${sourceSnapshots.textExpiresAt} > ${now.toISOString()}::timestamptz
+                    WHEN ${sourceSnapshots.textExpiresAt} IS NULL OR ${sourceSnapshots.textExpiresAt} > ${sql.param(now, sourceSnapshots.textExpiresAt)}
                     THEN ${bounded(sourceSnapshots.textBody, excerptLength)}
                     ELSE NULL END`,
                 })

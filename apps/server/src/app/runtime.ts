@@ -2,6 +2,7 @@ import { createApiApp } from '@/app/index.ts';
 import { createDefaultServices, type ApiServices } from '@/app/services';
 import { serve } from 'srvx/node';
 import { createRunControl } from '@/app/run-control.ts';
+import { readLocalSqlitePaths } from './sqlite-local.ts';
 import { readSqliteStatePath } from '@scova/db/sqlite-state';
 import { startWorkerExecution } from './worker-execution.ts';
 
@@ -11,17 +12,25 @@ export function startServer(
     runtime: 'bun' | 'node',
     options: { services?: ApiServices; runControl?: boolean } = {},
 ) {
+    const localSqlite = !options.services && readLocalSqlitePaths();
     const controlEnabled =
         options.runControl ??
         (!options.services &&
-            Boolean(process.env.DATABASE_URL && (readSqliteStatePath() || process.env.REDIS_URL)));
+            Boolean(
+                localSqlite ||
+                (process.env.DATABASE_URL && (readSqliteStatePath() || process.env.REDIS_URL)),
+            ));
     const services = options.services ?? createDefaultServices();
-    const runControl = controlEnabled ? createRunControl(undefined, services) : undefined;
+    if (localSqlite) services.db();
+    const runControl = controlEnabled
+        ? createRunControl(undefined, services, localSqlite ? () => services.db() : undefined)
+        : undefined;
     const app = createApiApp(runtime, services).compile();
     const workerExecution = startWorkerExecution(() => services.db());
     const port = Number(process.env.PORT ?? 3000);
     const server = serve({
         port,
+        ...(localSqlite ? { hostname: '127.0.0.1' } : {}),
         silent: true,
         gracefulShutdown: false,
         fetch(request) {

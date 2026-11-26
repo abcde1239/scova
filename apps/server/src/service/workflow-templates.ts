@@ -2,6 +2,7 @@ import {
     isWorkflowCanvasGraph,
     parseContract,
     WorkflowTemplateSaveSchema,
+    workflowFileMaxBytes,
     WorkflowTemplateStartSchema,
     UuidSchema,
     type WorkflowCanvasGraph,
@@ -13,6 +14,7 @@ import {
 } from '@scova/models';
 import type { ApiServices } from '@/app/services';
 import { createWorkflowTemplateRepository } from '@/repo/workflow-templates.ts';
+import { validateWorkflowFileInput } from '@/service/canvas-node-execution.ts';
 import { workflowCanvasOrder, workflowStages } from '@/service/workflow-graph.ts';
 import { createWorkflowService } from '@/service/workflows.ts';
 import { ApiError } from '@/utils/errors.ts';
@@ -196,13 +198,17 @@ export function resolveWorkflowTemplateInput(
         const { key } = field;
         const supplied = input[key];
         const normalized =
-            typeof supplied === 'string' && !['csv', 'text'].includes(key)
+            typeof supplied === 'string' && !['csv', 'json', 'text'].includes(key)
                 ? supplied.trim()
                 : supplied;
         const value = normalized === undefined && 'default' in field ? field.default : normalized;
         if (field.required && (value === undefined || (typeof value === 'string' && !value.trim())))
             invalidInput(`/input/${key}`, `请填写${field.label}`);
-        if (key === 'csv' && typeof value === 'string' && Buffer.byteLength(value) > 262144)
+        if (
+            key === 'csv' &&
+            typeof value === 'string' &&
+            Buffer.byteLength(value) > workflowFileMaxBytes
+        )
             invalidInput('/input/csv', 'CSV 文件不能超过 256 KiB');
         if (value === undefined) return [];
         if (key === 'providerId' && typeof value === 'string')
@@ -286,6 +292,7 @@ export function createWorkflowTemplateService(services: Pick<ApiServices, 'db' |
                 );
             const { input } = parseContract(WorkflowTemplateStartSchema, body);
             const resolved = resolveWorkflowTemplateInput(template.fields, input);
+            validateWorkflowFileInput(resolved);
             workflowCanvasOrder(template.graph);
             const { workflowId, versionId } = await repository.ensureExecution(
                 userId,

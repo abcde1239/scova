@@ -1,3 +1,4 @@
+import { isSqliteDatabase } from '@scova/db';
 import {
     and,
     desc,
@@ -71,7 +72,10 @@ export function createWorkflowTemplateRepository(db: () => DatabaseClient) {
             return db().transaction(async (tx) => {
                 // Serialize first use across server processes before creating either backing row.
                 const key = `scova:workflow-template:${userId}:${template.id}:${template.version}`;
-                await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`);
+                if (!isSqliteDatabase(tx))
+                    await tx.execute(
+                        sql`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`,
+                    );
                 const [existing] = await tx
                     .select()
                     .from(workflowTemplateExecutions)

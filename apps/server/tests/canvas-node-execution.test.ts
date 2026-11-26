@@ -1,6 +1,14 @@
 import { describe, expect, it, vi } from 'vite-plus/test';
-import type { WorkflowCanvasNode, WorkflowCanvasOutput } from '@scova/models';
-import { CanvasNodeError, executeCanvasNode } from '@/service/canvas-node-execution';
+import {
+    workflowFileMaxBytes,
+    type WorkflowCanvasNode,
+    type WorkflowCanvasOutput,
+} from '@scova/models';
+import {
+    CanvasNodeError,
+    executeCanvasNode,
+    validateWorkflowFileInput,
+} from '@/service/canvas-node-execution';
 import { createWorkflowGenerator } from '@/service/workflow-generation';
 
 const adapter = vi.hoisted(() => ({
@@ -22,11 +30,94 @@ const csvNode = (config: Partial<CsvNode['config']> = {}): CsvNode => ({
     type: 'csv',
     config: { filters: [], ...config },
 });
-const deliverNode = (source: string, format: 'csv' | 'markdown', filename: string) =>
+const deliverNode = (source: string, format: 'csv' | 'markdown' | 'json', filename: string) =>
     ({ id: 'file', type: 'deliver', config: { source, format, filename } }) as const;
 const unexpectedGenerate = () => Promise.reject(new Error('unexpected model call'));
 
 describe('canvas node execution', () => {
+    it('filters JSON object rows and delivers a valid JSON file', async () => {
+        const input = { json: '[{"sku":"A","stock":4},{"sku":"B","stock":12}]' };
+        const start = await executeCanvasNode(
+            { id: 'start', type: 'start' },
+            input,
+            {},
+            unexpectedGenerate,
+        );
+        const stock = await executeCanvasNode(
+            csvNode({
+                source: 'start',
+                filters: [{ column: 'stock', operator: 'lessThan', value: '10' }],
+            }),
+            input,
+            { start },
+            unexpectedGenerate,
+        );
+        const file = await executeCanvasNode(
+            deliverNode('stock', 'json', '库存.json'),
+            input,
+            { stock },
+            unexpectedGenerate,
+        );
+        expect(file.artifact).toEqual({
+            filename: '库存.json',
+            format: 'json',
+            content: '[{"sku":"A","stock":"4"}]',
+        });
+        await expect(
+            executeCanvasNode(csvNode({ source: 'file' }), {}, { file }, unexpectedGenerate),
+        ).resolves.toEqual(stock);
+    });
+
+    it('preserves raw JSON and rejects malformed or oversized input before execution', async () => {
+        const json = '{"nested":[false,null,{"name":"知巡"}]}';
+        const input = { json };
+        validateWorkflowFileInput({ json });
+        const start = await executeCanvasNode(
+            { id: 'start', type: 'start' },
+            input,
+            {},
+            unexpectedGenerate,
+        );
+        const file = await executeCanvasNode(
+            deliverNode('start', 'json', '原文.json'),
+            input,
+            { start },
+            unexpectedGenerate,
+        );
+        expect(file.artifact?.content).toBe(json);
+        const fullSizeJson = JSON.stringify('a'.repeat(workflowFileMaxBytes - 2));
+        const fullSizeStart = await executeCanvasNode(
+            { id: 'start', type: 'start' },
+            { json: fullSizeJson },
+            {},
+            unexpectedGenerate,
+        );
+        const fullSizeFile = await executeCanvasNode(
+            deliverNode('start', 'json', '原文.json'),
+            {},
+            { start: fullSizeStart },
+            unexpectedGenerate,
+        );
+        expect(fullSizeFile.artifact?.content).toBe(fullSizeJson);
+        expect(() => validateWorkflowFileInput({ json: '{' })).toThrow('JSON 格式无效');
+        expect(() =>
+            validateWorkflowFileInput({ json: JSON.stringify('知'.repeat(100_000)) }),
+        ).toThrow('JSON 超过大小限制');
+        await expect(
+            executeCanvasNode(csvNode(), input, {}, unexpectedGenerate),
+        ).rejects.toMatchObject({ code: 'INVALID_JSON' });
+        await expect(
+            executeCanvasNode(
+                deliverNode('generated', 'json', '生成.json'),
+                {},
+                {
+                    generated: { text: 'not JSON' },
+                },
+                unexpectedGenerate,
+            ),
+        ).rejects.toMatchObject({ code: 'INVALID_JSON' });
+    });
+
     it('filters inventory and round-trips projected RFC4180 cells through CSV delivery', async () => {
         const input = {
             csv: '\uFEFFsku,stock,state,note\r\n"A,1",2,open,"He said ""go""\r\nnow"\r\nB,10,open,normal\r\nC,,open,blank\r\nD,0x01,open,hex\r\nE,1,closed,skip\r\nF,3,open,\r\n',

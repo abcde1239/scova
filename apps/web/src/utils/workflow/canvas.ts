@@ -22,7 +22,7 @@ export const nodeTypes: Record<
 > = {
     start: { name: '开始', description: '提供本次运行的输入', mark: '▷' },
     study: { name: '研究', description: '调用已有研究任务', mark: '研' },
-    csv: { name: '整理 CSV', description: '筛选行、选择列', mark: '表' },
+    csv: { name: '整理表格', description: '筛选行、选择列', mark: '表' },
     generate: { name: 'AI 生成', description: '根据上游材料生成内容', mark: '文' },
     merge: { name: '汇合', description: '等待所有上游分支成功', mark: '合' },
     deliver: { name: '交付', description: '生成可下载文件', mark: '件' },
@@ -122,10 +122,18 @@ export function nodeLimitReason(graph: WorkflowCanvasGraph, type: CanvasNodeType
 export function acceptsCanvasSource(node: WorkflowCanvasNode, source: WorkflowCanvasNode) {
     const csvArtifact = source.type === 'deliver' && source.config.format === 'csv';
     const markdownArtifact = source.type === 'deliver' && source.config.format === 'markdown';
+    const jsonArtifact = source.type === 'deliver' && source.config.format === 'json';
     switch (node.type) {
         case 'csv':
-            return source.type === 'start' || source.type === 'csv' || csvArtifact;
+            return source.type === 'start' || source.type === 'csv' || csvArtifact || jsonArtifact;
         case 'deliver':
+            if (node.config.format === 'json')
+                return (
+                    source.type === 'start' ||
+                    source.type === 'csv' ||
+                    source.type === 'generate' ||
+                    jsonArtifact
+                );
             return node.config.format === 'csv'
                 ? source.type === 'csv' || csvArtifact
                 : source.type === 'start' ||

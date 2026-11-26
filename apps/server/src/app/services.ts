@@ -1,4 +1,6 @@
 import { createDatabaseClient, closeDatabase, type DatabaseClient } from '@scova/db';
+import { createSqliteDatabaseClient } from '@scova/db/sqlite';
+import { readLocalSqlitePaths } from './sqlite-local.ts';
 import { listProviderModels, readProviderBalance, type ModelProvider } from '@scova/connectors';
 import {
     createTaskDraftModel,
@@ -71,7 +73,8 @@ export function createDefaultServices(overrides: ApiServiceOverrides = {}): ApiS
     let database: DatabaseClient | undefined;
     let cache: Redis | undefined;
     let localState: SqliteState | undefined;
-    const sqlitePath = readSqliteStatePath();
+    const localSqlite = readLocalSqlitePaths();
+    const sqlitePath = localSqlite?.state ?? readSqliteStatePath();
     let draftModel: ModelProvider | null | undefined;
     let questionModel: ModelProvider | null | undefined;
     let images: ImageStorageClient | null | undefined;
@@ -161,8 +164,11 @@ export function createDefaultServices(overrides: ApiServiceOverrides = {}): ApiS
             overrides.db ??
             (() => {
                 if (!database) {
-                    if (!process.env.DATABASE_URL) throw new Error('尚未配置业务数据库');
-                    database = createDatabaseClient({ applicationName: 'scova-api' });
+                    if (!localSqlite && !process.env.DATABASE_URL)
+                        throw new Error('尚未配置业务数据库');
+                    database = localSqlite
+                        ? createSqliteDatabaseClient(localSqlite.business)
+                        : createDatabaseClient({ applicationName: 'scova-api' });
                 }
                 return database;
             }),

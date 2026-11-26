@@ -1,3 +1,4 @@
+import { databaseClock, readDatabaseClock, rowLock } from '@scova/db';
 import { requireRow } from '../utils/database.ts';
 import {
     type DatabaseClient,
@@ -43,7 +44,7 @@ export function createSchedulerRepository(database: DatabaseClient): SchedulerRe
                 return await database.transaction(async (tx) => {
                     const excluded = excludedTaskIds.length
                         ? sql`AND id NOT IN (${sql.join(
-                              excludedTaskIds.map((id) => sql`${id}::uuid`),
+                              excludedTaskIds.map((id) => sql`${id}`),
                               sql`, `,
                           )})`
                         : sql``;
@@ -52,18 +53,14 @@ export function createSchedulerRepository(database: DatabaseClient): SchedulerRe
                         sql`
             SELECT id FROM tasks
             WHERE status = 'active' AND next_run_at IS NOT NULL
-              AND next_run_at <= statement_timestamp() ${excluded}
+              AND next_run_at <= ${databaseClock(tx, 'statement')} ${excluded}
             ORDER BY next_run_at, id
-            LIMIT 1 FOR NO KEY UPDATE SKIP LOCKED
+            LIMIT 1 ${rowLock(tx, 'no key update', true)}
           `,
                     );
                     if (!locked || signal?.aborted) return null;
                     taskId = locked.id;
-                    const [clock] = await queryRows<{ now: Date }>(
-                        tx,
-                        sql`SELECT clock_timestamp() AS now`,
-                    );
-                    const now = clock!.now;
+                    const now = await readDatabaseClock(tx);
                     const task = await tx.query.tasks
                         .findFirst({ where: eq(dbTasks.id, taskId) })
                         .then((row) => requireRow(row));

@@ -1,9 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { mkdirSync } from 'node:fs';
-import { dirname, isAbsolute, resolve } from 'node:path';
-import { createRequire } from 'node:module';
-
-const require = createRequire(import.meta.url);
+import { isAbsolute, resolve } from 'node:path';
+import { openSqliteFile } from './sqlite-file.ts';
 
 export function readSqliteStatePath(env: NodeJS.ProcessEnv = process.env) {
     const path = env.SCOVA_SQLITE_STATE_PATH;
@@ -12,18 +9,11 @@ export function readSqliteStatePath(env: NodeJS.ProcessEnv = process.env) {
     return path === undefined ? undefined : resolve(path);
 }
 
-/** Coordination data for a single host. Business rows and Run leases stay in PostgreSQL. */
+/** Queue and coordination data for a single host. Business rows and Run leases use a separate database. */
 export function openSqliteState(path: string) {
-    mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-    // Bun 1.3 ships bun:sqlite, Node ships node:sqlite; these statements use their shared API.
-    const Database = (
-        process.versions.bun ? require('bun:sqlite').Database : require('node:sqlite').DatabaseSync
-    ) as typeof import('node:sqlite').DatabaseSync;
-    const db = new Database(path);
+    const db = openSqliteFile(path);
     try {
         db.exec(`
-            PRAGMA busy_timeout = 500;
-            PRAGMA journal_mode = WAL;
             CREATE TABLE IF NOT EXISTS scova_ephemeral (
                 key TEXT PRIMARY KEY, value TEXT NOT NULL, expires_at INTEGER NOT NULL
             );
