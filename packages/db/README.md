@@ -11,7 +11,7 @@ vp install
 vp run db:migrate
 ```
 
-迁移前配置 `DATABASE_URL`。`?schema=名称` 指定业务 schema，默认 `public`；客户端明确将其转换为 PostgreSQL `search_path`，保留 `application_name`。连接及升级说明见[数据库参考](../../docs/public/reference/database.md)。
+迁移前配置 `DATABASE_URL`。`?schema=名称` 指定业务 schema，默认 `public`；客户端明确将其转换为 PostgreSQL `search_path`，保留 `application_name`。
 
 ```ts
 import { createDatabaseClient, closeDatabase, eq, users } from '@scova/db';

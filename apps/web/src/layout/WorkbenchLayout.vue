@@ -47,15 +47,6 @@
                     <span class="px-2 pt-2 text-sm font-semibold" lang="zh-CN">管理</span>
                 </div>
                 <router-link
-                    class="sidebar-link create-task"
-                    :to="newTask.path"
-                    :title="sidebar.collapsed ? newTask.label : undefined"
-                    :aria-current="route.path === newTask.path ? 'page' : undefined"
-                >
-                    <app-icon :name="newTask.icon" />
-                    <span class="sidebar-label">{{ newTask.label }}</span>
-                </router-link>
-                <router-link
                     v-if="sidebar.collapsed"
                     class="sidebar-link"
                     :to="{ name: 'projects' }"
@@ -94,7 +85,7 @@
                             v-if="item.meta.section === 'notifications'"
                             :selected="isSelected(item)"
                             placement="right-end"
-                            :compact="sidebar.collapsed"
+                            compact
                         />
                         <router-link
                             v-else
@@ -108,13 +99,9 @@
                             <span class="sidebar-label">{{ routeTitle(item, t) }}</span>
                         </router-link>
                     </template>
+                    <interface-language-select class="sidebar-language" icon-only />
                 </nav>
-                <interface-language-select class="interface-language" />
-                <interface-language-select
-                    v-if="sidebar.collapsed"
-                    class="sidebar-language"
-                    icon-only
-                />
+                <interface-language-select class="mobile-language" />
                 <account-menu :compact="sidebar.collapsed" />
             </div>
             <workspace-separator
@@ -244,14 +231,8 @@ function navigationIcon(section: unknown): IconName {
         return section;
     return 'account';
 }
-const newTask = computed(() => ({
-    path: '/tasks/new',
-    label: t('pages.createTask'),
-    icon: 'create' as const,
-    prominent: true,
-}));
 const mobileItems = computed(() => [
-    newTask.value,
+    { path: '/tasks/new', label: t('pages.createTask'), icon: 'create' as const },
     ...[...primary.value, ...tools.value].map((item) => ({
         path: item.path,
         label: routeTitle(item, t),
@@ -276,7 +257,6 @@ const mobileItems = computed(() => [
     @apply contents;
 }
 .sidebar-toggle,
-.sidebar-language,
 .primary-navigation,
 .tool-navigation {
     @apply hidden;
@@ -284,7 +264,7 @@ const mobileItems = computed(() => [
 .sidebar-footer {
     @apply contents;
 }
-.interface-language {
+.mobile-language {
     @apply ml-auto min-w-0;
 }
 .workbench-main {
@@ -376,25 +356,22 @@ const mobileItems = computed(() => [
         @apply bg-surface font-semibold
             [box-shadow:inset_0.125rem_0_var(--scova-primary),inset_0_0_0_1px_color-mix(in_srgb,_var(--scova-border)_22%,_transparent)];
     }
-    .create-task {
-        @apply mb-2 bg-surface border-theme font-medium
-            [box-shadow:0_1px_2px_color-mix(in_srgb,_var(--scova-text)_8%,_transparent)];
-    }
-    .create-task[aria-current='page'] {
-        @apply [border-color:var(--scova-primary)] text-primary font-semibold;
-    }
     .sidebar-footer {
         @apply grid grid-cols-[minmax(0,_1fr)] gap-1 pt-2
             [border-top:1px_solid_color-mix(in_srgb,_var(--scova-border)_28%,_transparent)];
     }
     .tool-navigation {
-        @apply grid grid-cols-[minmax(0,_1fr)] min-w-0;
+        @apply flex flex-wrap items-center gap-1 min-w-0;
     }
-    .tool-navigation :deep(.notification-trigger) {
-        @apply w-full min-w-0 min-h-11 px-2.5 text-[0.875rem] text-start;
+    .tool-navigation :deep(.notification-trigger),
+    .sidebar-language :deep(.select-trigger) {
+        @apply justify-center w-11 h-11 min-h-11 p-0 text-[1rem];
     }
-    .interface-language {
-        @apply w-full ml-0 text-[0.875rem];
+    .tool-navigation :deep(.notification-trigger:not(.selected):not(:hover)) {
+        @apply text-muted;
+    }
+    .mobile-language {
+        @apply hidden;
     }
     .workbench--collapsed {
         --workbench-sidebar-width: 4rem;
@@ -405,18 +382,13 @@ const mobileItems = computed(() => [
     .workbench--collapsed .sidebar-heading {
         @apply justify-center;
     }
-    .workbench--collapsed .brand,
-    .workbench--collapsed .interface-language {
+    .workbench--collapsed .brand {
         @apply hidden;
     }
-    .workbench--collapsed .sidebar-language {
-        @apply grid;
+    .workbench--collapsed .tool-navigation {
+        @apply flex-col;
     }
-    .workbench--collapsed .sidebar-language :deep(.select-trigger) {
-        @apply w-full min-h-11;
-    }
-    .workbench--collapsed .sidebar-link,
-    .workbench--collapsed .tool-navigation :deep(.notification-trigger) {
+    .workbench--collapsed .sidebar-link {
         @apply justify-center gap-0 px-0;
     }
     .workbench--collapsed .sidebar-label {

@@ -52,7 +52,7 @@ vp run dev           # 启动前端、Server、Worker，监听源码变化
 
 - **配置文件**：`local:up` 首次会生成 `.env.local`，数据库密码和搜索密钥随机生成，已有配置不会被覆盖。只想生成配置时运行 `vp run local:init`。
 - **读取方式**：`db:migrate`、Server 和 Worker 的开发命令自动读取根 `.env.local`，已注入进程的环境变量优先。
-- **升级已有环境**：运行 `vp run local:init` 补齐缺失的 `WORKER_EXECUTION_TOKEN`，Server 与 Worker 共用它。内部执行接口默认监听 `127.0.0.1:3001`。
+- **升级已有环境**：运行 `vp run local:init` 补齐缺失的 `WORKER_EXECUTION_TOKEN`，Server 与 Worker 共用该令牌。内部执行接口默认监听 `127.0.0.1:3001`。
 - **迁移检查**：`vp run dev` 启动前会检查执行令牌和业务迁移。提示有待迁移时，先退出运行中的 Server 和 Worker，再执行 `vp run db:migrate` 和 `vp run dev`。
 
 需要内置搜索时运行 `vp run local:up --search`。
@@ -104,10 +104,7 @@ vp run local:down         # 停止并移除本项目容器和网络
 | Worker 启动 | `vp run worker#start` | `vp run worker#start:node` |
 | 数据库迁移  | `vp run db:migrate`   | `vp run db:migrate:node`   |
 
-- **Bun 查找顺序**：`BUN_BIN`，其次 `~/.bun/bin/bun`（Windows 为 `bun.exe`），最后 PATH。Bun 装在其他位置时，把 `BUN_BIN` 设为可执行文件的绝对路径。
-- **Windows**：如果 Bun 1.3.4 报找不到 `pg` 或 `srvx/node`，请升级 Bun，或将 `BUN_BIN` 指向 Bun 1.4.4。
-- **热重启**：开发命令监听应用和 `packages/*/src` 的源码变化。
-- **运行时检查**：API 的 `/health` 返回实际运行时。`vp run test:processes` 验证 HTTP、Swagger 和优雅退出。
+- **运行时检查**：API 的 `/health` 返回实际运行时。
 
 ### 网页读取（Reader）
 
@@ -124,7 +121,7 @@ Reader 会执行公开页面的 JavaScript，但只允许经过安全 HTTP 客�
 在 PostgreSQL 开发环境下，可只用 SQLite 替代 Redis 处理队列和协调。业务记录、执行租约、报告和 Agent 检查点仍在 PostgreSQL。
 
 1. 运行 `vp run local:init` 准备配置。
-2. 在 `.env.local` 中把 `SCOVA_SQLITE_STATE_PATH` 设为 SQLite 文件的绝对路径，例如 Windows 的 `D:/scova-data/state.sqlite`。
+2. 在 `.env.local` 中把 `SCOVA_SQLITE_STATE_PATH` 设为 SQLite 文件的绝对路径，例如 Windows 的 `C:/scova-data/state.sqlite`。
 3. 启动：
 
 ```sh
@@ -160,8 +157,6 @@ PORT=3000
 - CORS 只允许配置的来源，写请求仍检查 Origin 与 CSRF。
 - Vite 从仓库根目录加载环境文件：`.env.local`（见 `.env.local.example`）由开发和本机构建预览共用，也可用 `.env.development.local`、`.env.production.local` 分别配置。模式专属文件优先于通用文件，进程环境变量优先级最高。
 - 部署独立 API 时，设置同站点的完整 HTTPS 地址。
-- 只有 `VITE_` 开头的变量会进入浏览器，不要放秘密。修改后重启开发服务；preview 使用构建时的地址，修改后需重新构建。
-- 开发端口冲突会直接报错。
 
 ## 搜索与模型
 
@@ -192,10 +187,13 @@ vpx --env-file=.env.local scripts/smoke-search.ts --live
 
 ## Windows 与 Docker Desktop
 
-- 在 D 盘仓库目录执行命令。镜像、容器和命名卷的实际位置由 Docker Desktop 的磁盘映像位置决定，需在 Docker Desktop 里把它设在 D 盘。不要为开发删除已有的 Docker 磁盘或卷。
-- `local:up` 会先检查 Docker 引擎，必要时启动 Desktop 并等待就绪。Docker Desktop 因遗留的 `dockerInference` 或 `engine.sock` 启动失败时，启动器只在 Desktop 和 backend 都已退出的情况下，备份并重建两处临时运行目录；Docker 仍在运行或启动中时只等待。
-- 也可单独运行：
+- **自动启动**：Windows 上的 `local:up` 会先检查 Docker 引擎。没有就绪时自动启动 Docker Desktop 并等待，不需要提前手动打开。
+- **启动卡住时**：先正常退出 Docker Desktop，再重新执行 `local:up`。启动器不会结束正在运行的 Docker 进程，Docker 仍在启动时只会继续等待。
+- **遗留文件导致启动失败**：Docker Desktop 偶尔会留下无法访问的 `dockerInference` 或 `engine.sock`。只有 Desktop 和 backend 都已退出时，启动器才会把 `%LOCALAPPDATA%` 下的 `Docker/run` 和 `docker-secrets-engine` 两个临时目录改名备份并重建。镜像、数据卷和 Docker 设置不会被改动。
+- **单独运行启动器**，用于排查：
 
 ```sh
 powershell -NoProfile -File scripts/start-docker.ps1
 ```
+
+- **Docker 数据位置**：镜像、容器和命名卷保存在 Docker Desktop 的磁盘映像里，位置在 Docker Desktop 的设置中调整，本项目不会修改该位置。不要为开发删除已有的 Docker 磁盘或数据卷。

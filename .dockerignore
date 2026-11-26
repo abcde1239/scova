@@ -20,6 +20,7 @@ docs/prd
 docs/decision
 docs/verification
 .agents
+.agent
 .codex
 .claude
 artifacts

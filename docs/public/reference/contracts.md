@@ -1,6 +1,6 @@
 # @scova/models
 
-`@scova/models` 是 Scova 的纯 TypeScript/TypeBox 接口契约包。Web、API、worker 从本包导入同一份 schema 与 `Static` DTO，不导出数据库行实体、密码哈希、会话凭据、租约或 checkpoint。Bun 为主运行时，Node.js 可导入同样的模块。接口列表见 [API 文档](api.md)，整体架构见[系统架构](architecture.md)。
+`@scova/models` 是 Scova 的纯 TypeScript/TypeBox 接口契约包。Web、API、worker 从本包导入同一份 schema 与 `Static` DTO，不导出数据库行实体、密码哈希、会话凭据、租约或 checkpoint。Bun 为主运行时，Node.js 可导入同样的模块。接口列表见 [API 文档](api.md)。
 
 ## 输入、响应与校验
 
@@ -45,7 +45,7 @@
 **事件与游标**
 
 - **payload**：每种类型有独立 payload schema，拒绝未知结构版本、类型或混用 payload。事件只包含脱敏摘要、工具元数据和用量，不包括密钥、完整提示词、网页全文或思维链。
-- **游标**：SSE `id` 使用 `eventId`，客户端按它去重；服务端在当前已授权 Run 内将 `Last-Event-ID` 映射为 seq。`EventCursorQuerySchema.after` 支持显式序号回放，两种游标同时存在时必须指向同一位置，否则 API 拒绝，不静默选取。
+- **游标**：SSE `id` 使用 `eventId`，客户端按该 ID 去重；服务端在当前已授权 Run 内将 `Last-Event-ID` 映射为 seq。`EventCursorQuerySchema.after` 支持显式序号回放，两种游标同时存在时必须指向同一位置，否则 API 拒绝，不静默选取。
 
 **reset 控制帧**
 
@@ -84,10 +84,3 @@
 - 基线来源始终参与复读；已了解只降低标记当时内容未变的重复结论顺序，保留引用，新值与重要条件变化继续正常比较。
 - 结论级不相关只调整已确认未变结论的展示顺序，不把承载其他事实的整份来源拉黑。
 - 当前生效反馈与历史报告保存的作用分别展示。
-
-## 验证
-
-- `vp test packages/models/tests/contracts.test.ts`：验证非法输入、边界、错误字段位置、TypeBox Value/Compiler 一致性、状态和证据语义、全部持久化事件及 reset 控制帧。真实 API/数据库/队列行为由对应集成测试验证。
-- `vp run test:sse`：验证真实 PostgreSQL 回放、续传、reset、会话失效，以及 Bun/Node 的 socket 背压、取消与带活跃连接的优雅停止。
-- `vp test packages/agent-core/tests/feedback.test.ts`：验证有界计划与新值保护。
-- `vp run test:feedback`：使用真实 PostgreSQL、工具账本和 checkpoint 验证授权、快照冻结、恢复、实际作用与重要变化双侧证据。

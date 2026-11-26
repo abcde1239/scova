@@ -1,6 +1,6 @@
 # 中文接口文档
 
-本文说明 Scova 后端 API 的启动与文档生成方式，并按资源列出各接口的请求约定、权限要求和限制。API 使用 Bun + Elysia，Node.js 通过官方适配器兼容；交互文档和契约来源见[接口契约](contracts.md)，整体架构见[系统架构](architecture.md)。
+本文说明 Scova 后端 API 的启动与文档生成方式，并按资源列出各接口的请求约定、权限要求和限制。API 使用 Bun + Elysia，Node.js 通过官方适配器兼容；交互文档和契约来源见[接口契约](contracts.md)。
 
 ## 启动与文档生成
 
@@ -19,7 +19,6 @@ vp run api:openapi:check
 - **生成产物**：根目录的 [swagger.json](../../../swagger.json) 是生成的 OpenAPI 3.1 文档，不手工编辑。
 - **声明规则**：请求和响应引用 `packages/models` 的运行时 schema；路由使用中文 summary、description、tags 和唯一 operationId，DTO 字段均有中文说明。新增接口必须同时声明请求、成功/失败响应及必要的 Cookie、CSRF、幂等和修订版本头。
 - **生成器校验**：中文说明、模型与 contracts 等价、引用可解析和 operationId 唯一。
-- **CI**：GitHub Actions 运行生成漂移检查、文档测试和 Bun/Node HTTP 启停测试；它不代替真实数据库与队列的业务集成测试。
 
 容器运行、迁移及恢复见[部署维护](../guides/deployment.md)。
 
@@ -55,7 +54,7 @@ vp run api:openapi:check
 
 **覆盖与日期**
 
-- `coverage.delivery` 可选，包含 `answered`（核心问题均有引用答案）、`partial`（部分问题有答案）、`sources_only`（仅来源资料）及问题计数；详情校验分类与保存的结论映射一致。它独立于 `coverage.completeness`、Run 状态和比较基线，旧记录可以缺省。
+- `coverage.delivery` 可选，包含 `answered`（核心问题均有引用答案）、`partial`（部分问题有答案）、`sources_only`（仅来源资料）及问题计数；详情校验分类与保存的结论映射一致。该字段独立于 `coverage.completeness`、Run 状态和比较基线，旧记录可以缺省。
 - 证据快照的可选 `sourceDates` 分别返回 `published`、`modified`，各含 `status`、`instant`、`value` 和 `precision`；`day`、`local` 精度的 `instant` 为 null，不伪造 UTC 时刻。日期来自本轮已保存的来源时间观测并重新校验，不采用模型猜测或更新时间替代发布时间。
 
 **变化**
@@ -69,7 +68,7 @@ vp run api:openapi:check
 ## 报告证据问答
 
 - **提问**：`POST /reports/:reportId/questions` 提交问题，`GET /reports/:reportId/questions/:questionId` 读取已保存回答。创建要求会话、CSRF 与稳定 `Idempotency-Key`，同键异问题返回 409；处理中重放返回 409 且不重复付费调用。
-- **回答范围**：问答仅使用此报告内已授权引用，事实回答采用逐字原文摘录，每条带 `evidenceId/quote`；缺模型、缺资料或无效输出明确标记不足。它使用独立 Redis 用户/全局请求与 token 额度，最多一次模型尝试，不调用搜索或网页阅读。额外资料应先进入受授权报告。
+- **回答范围**：问答仅使用此报告内已授权引用，事实回答采用逐字原文摘录，每条带 `evidenceId/quote`；缺模型、缺资料或无效输出明确标记不足。问答使用独立 Redis 用户/全局请求与 token 额度，最多一次模型尝试，不调用搜索或网页阅读。额外资料应先进入受授权报告。
 - **后续研究**：只有另行 `POST /reports/:reportId/questions/:questionId/followup` 并提交 `{ "confirm": true }` 才启动新研究。该接口要求 CSRF 与幂等键，仅接受真实报告，固定原报告的配置与预算；历史演示报告返回 409 LEGACY_DEMO_RUN，以问题为目标生成独立 Run；Task 锁内原子写入执行、事件、Outbox 和问题关联。
 - **约束**：已有活动执行时返回 409，重复确认返回原关联执行。后续研究及其重试有独立比较范围，不覆盖原报告、任务配置或普通监控基线。取消及已撤销会话的晚返回不保存事实回答。
 

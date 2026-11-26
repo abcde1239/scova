@@ -14,7 +14,7 @@
 
 ## 快速开始
 
-需要 [Vite+](https://viteplus.dev/guide/)、Node.js >= 22.18 和 Bun >= 1.3.4。两种运行方式：
+需要 [Vite+](https://viteplus.dev/guide/)、Node.js >= 22.18 和 Bun >= 1.3.4。标准部署使用 PostgreSQL + Redis。个人电脑可选 SQLite 轻量模式。
 
 | 方式               | 数据与队列               | 需要 Docker | 适合                         |
 | ------------------ | ------------------------ | ----------- | ---------------------------- |
@@ -37,7 +37,7 @@ vp run local:sqlite
 - `--node`：后端改用 Node.js 24 或更新版本，默认使用 Bun。
 - `--backend-only`：只启动 Server 与 Worker。
 
-模型、搜索和 R2 / S3 在 `.scova-local/.env` 中配置，首次启动会为你生成执行令牌和凭据加密密钥。数据目录和端口可用 `SCOVA_LOCAL_DATA_DIR`、`SCOVA_LOCAL_WEB_PORT`、`SCOVA_LOCAL_API_PORT`、`SCOVA_LOCAL_EXECUTION_PORT` 修改。
+模型、搜索和 R2 / S3 在 `.scova-local/.env` 中配置，首次启动会自动生成执行令牌和凭据加密密钥。数据目录和端口可用 `SCOVA_LOCAL_DATA_DIR`、`SCOVA_LOCAL_WEB_PORT`、`SCOVA_LOCAL_API_PORT`、`SCOVA_LOCAL_EXECUTION_PORT` 修改。
 
 限制：仅支持单台电脑上的一个 Server 实例，只监听本机回环地址；资料库使用字面子串搜索；上传超过 256 KiB 的报告附件需要配置 R2 / S3。备份时先停止应用，再复制整个数据目录（包括 `.env`）。详见[本地开发环境](docs/public/guides/local-development.md#sqlite-本机版)。
 
@@ -51,7 +51,7 @@ cd scova
 vp install
 vp run local:up            # PostgreSQL、Redis；需要 SearXNG 时改为 local:up --search
 vp run db:migrate          # 初始化数据库
-vp run dev                 # 前端、Server、Worker，监听源码变化
+vp run dev                 # 前端、Server、Worker
 ```
 
 `local:up` 会生成 `.env.local`（随机数据库密码、搜索密钥和账号模型加密主密钥），已有文件会保留。端口与数据位置见[本地开发环境](docs/public/guides/local-development.md)。
@@ -120,7 +120,7 @@ APP_ORIGIN=http://localhost:9090
 docker compose -f compose.yaml -f compose.sqlite.yaml up -d --build --wait
 ```
 
-PostgreSQL 和 Redis 都不想用，且只在个人电脑上使用时，选 [SQLite 本机版](#sqlite-本机版)，它直接在本机运行，不使用 Docker 容器。
+PostgreSQL 和 Redis 都不想用，且只在个人电脑上使用时，选 [SQLite 本机版](#sqlite-本机版)，该模式直接在本机运行，不使用 Docker 容器。
 
 模型、搜索、对象存储、备份和升级见[部署指南](docs/public/guides/deployment.md)，搜索选项见[搜索配置](docs/public/guides/search.md)。
 
@@ -141,20 +141,46 @@ Vite+ / TypeScript monorepo。前端 Vue 3，后端 Elysia，数据库 PostgreSQ
 | `packages/connectors`                                          | 搜索、网页读取与模型适配           |
 | [`packages/object-storage`](packages/object-storage/README.md) | R2 / S3 文件存储（头像、大附件）   |
 
-## 开发环境
+## 命令速查
 
-```sh
-vp run dev                # 同时启动前端，Server，Worker
-vp run dev:frontend       # 仅前端
-vp run dev:server         # 仅 Server
-vp run dev:worker         # 仅 Worker
-vp run local:status       # 基础服务状态
-vp run local:down         # 停止基础服务，保留数据卷和 .env.local
-```
+在仓库根目录用 `vp run <命令>` 执行。命令分四类：一键启动、开发运行、构建、验证。
 
-Node.js 兼容路径：`vp run server#dev:node`、`vp run worker#dev:node`。后端提供 `/health`、`/swagger` 和 `/swagger/json`。
+### 一键启动
 
-### 测试
+准备并启动运行环境，用法见[快速开始](#快速开始)。
+
+| 命令                          | 作用                                                            |
+| ----------------------------- | --------------------------------------------------------------- |
+| `local:sqlite`                | 一条命令启动 SQLite 本机版：前端、Server、Worker，不需要 Docker |
+| `local:up [--search]`         | 启动 PostgreSQL 和 Redis 容器，加 `--search` 同时启动 SearXNG   |
+| `local:status` / `local:down` | 查看或停止这些容器，数据卷和 `.env.local` 保留                  |
+| `local:init`                  | 只生成 `.env.local`，不启动容器                                 |
+
+### 开发运行
+
+开发时的热更新进程，修改源码后自动重启。
+
+| 命令                                         | 作用                                   |
+| -------------------------------------------- | -------------------------------------- |
+| `dev`                                        | 同时启动前端、Server、Worker           |
+| `dev:frontend` / `dev:server` / `dev:worker` | 只启动其中一个                         |
+| `db:migrate`                                 | 初始化或升级业务数据库，`dev` 之前执行 |
+| `server#dev:node` / `worker#dev:node`        | 用 Node.js 兼容运行时启动后端          |
+
+后端提供 `/health`、`/swagger` 和 `/swagger/json`。
+
+### 构建
+
+| 命令                            | 作用                                                 |
+| ------------------------------- | ---------------------------------------------------- |
+| `build`                         | 构建所有工作区。后端只做类型检查，运行时直接使用源码 |
+| `build:frontend`                | 前端类型检查并生产构建，产物在 `apps/web/dist`       |
+| `build:server` / `build:worker` | 只做对应后端的类型检查                               |
+| `preview:frontend`              | 预览前端产物，只提供静态页面，不启动 API 和 Worker   |
+
+容器镜像用 `docker compose up --build -d` 构建，见[构建与部署](#构建与部署)。
+
+### 验证
 
 ```sh
 vp check                  # 格式、lint、类型检查
@@ -166,17 +192,16 @@ vp run verify:web         # 基础 Web 门禁，需 Chromium 和 Docker
 vp run ready              # 完整门禁
 ```
 
-专项测试登记在 `tests/tasks.ts`，用 `vp run test:<名称>` 执行。各项前置条件见[验证说明](docs/public/reference/harness.md)。
+专项测试登记在 `tests/tasks.ts`，用 `vp run test:<名称>` 执行。
 
 ## 文档
 
-| 主题     | 链接                                                                                                                                                                                                   |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 使用     | [Web 工作台](docs/public/guides/web-workbench.md) · [Agent 配置](docs/public/guides/agent-configuration.md) · [搜索](docs/public/guides/search.md) · [账号头像](docs/public/guides/account-avatars.md) |
-| 部署     | [部署指南](docs/public/guides/deployment.md) · [本地开发](docs/public/guides/local-development.md)                                                                                                     |
-| 架构     | [系统架构](docs/public/reference/architecture.md) · [数据模型](docs/public/reference/data-model.md) · [研究循环](docs/public/reference/agent-research-loop.md)                                         |
-| 接口     | [接口文档](docs/public/reference/api.md) · [共享契约](packages/models/README.md) · [OpenAPI](swagger.json)（`vp run api:openapi` 重新生成）                                                            |
-| 开发约定 | [前端约定](docs/public/reference/frontend-conventions.md) · [浏览器测试](docs/public/reference/browser-testing.md) · [Worker](apps/worker/README.md) · [数据库](packages/db/README.md)                 |
-| 示例     | [两次执行验收](docs/public/examples/two-run-scenarios.md)                                                                                                                                              |
+| 主题     | 链接                                                                                                                                                                                                                                                                             |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 使用指南 | [工作台概览](docs/public/guides/web-workbench.md) · [任务与执行](docs/public/guides/tasks.md) · [报告](docs/public/guides/reports.md) · [项目与对话](docs/public/guides/projects.md) · [工作流](docs/public/guides/workflows.md) · [资料库与通知](docs/public/guides/library.md) |
+| 配置     | [Agent 配置](docs/public/guides/agent-configuration.md) · [搜索](docs/public/guides/search.md) · [账号头像](docs/public/guides/account-avatars.md)                                                                                                                               |
+| 部署     | [部署指南](docs/public/guides/deployment.md) · [本地开发](docs/public/guides/local-development.md)                                                                                                                                                                               |
+| 接口     | [接口文档](docs/public/reference/api.md) · [共享契约](packages/models/README.md) · [OpenAPI](swagger.json)（`vp run api:openapi` 重新生成）                                                                                                                                      |
+| 包与服务 | [Worker](apps/worker/README.md) · [数据库](packages/db/README.md) · [共享模型](packages/models/README.md) · [对象存储](packages/object-storage/README.md)                                                                                                                        |
 
 完整索引见 [docs/public/README.md](docs/public/README.md)。

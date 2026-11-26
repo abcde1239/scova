@@ -103,7 +103,7 @@ export COMPOSE_FILE=compose.yaml:compose.sqlite.yaml
 $env:COMPOSE_FILE='compose.yaml;compose.sqlite.yaml'
 ```
 
-- 协调状态保存在 `sqlite-state` 卷，仅 Server 和维护容器挂载它。API 和 Server 维护命令须使用同一主机上的可写磁盘。
+- 协调状态保存在 `sqlite-state` 卷，仅 Server 和维护容器挂载该卷。API 和 Server 维护命令须使用同一主机上的可写磁盘。
 - 业务备份仍通过 PostgreSQL 维护命令完成。需要保留协调状态时，先停止 API、Worker 和维护进程，再对整个 SQLite 卷做一致快照。
 - 分布式部署继续使用默认的 Redis 协调。
 
@@ -142,7 +142,7 @@ docker compose up -d --no-deps worker
 
 ### 日常维护方式
 
-`vp run operations ...` 会先停止代理、API 和 Worker，再运行一次性维护容器。它不会自动恢复应用，方便你检查结果。
+`vp run operations ...` 会先停止代理、API 和 Worker，再运行一次性维护容器。不会自动恢复应用，便于检查结果。
 
 - 所有维护使用同一个 Compose 项目和 `.env`，完成后执行 `docker compose up -d`。
 - 不要同时启动应用和维护。维护 CLI 需要 `SCOVA_MAINTENANCE=1`，并拒绝仍带生产应用名称的数据库连接。
@@ -243,17 +243,3 @@ docker compose stop
 - **缺凭据导致执行失败**：这是预期行为，补充模型和搜索配置即可，草稿仍可手工编辑。
 - **维护命令拒绝运行**：确认应用已停止，且设置了 `SCOVA_MAINTENANCE=1`。
 - **接口鉴权**：通过 `POST /api/v1/auth/register` 或 `/auth/login` 获取会话和 `csrfToken`，写请求须携带同源 `Origin`、Cookie 和 `x-csrf-token`。完整接口见[契约](../reference/contracts.md)与 [API](../reference/api.md)。
-
-## 部署验收
-
-```sh
-vp run test:deployment
-```
-
-构建后端和 Web 镜像，在两个随机的独立 Compose 项目里验证 Web 静态资源与缓存、API 和 Swagger 路由、迁移、健康检查、代理会话、缺配置失败、重启幂等和空库恢复，结束后移除自己创建的容器和卷。需要 Docker 和网络，不使用现有部署数据，不调用真实供应商。
-
-```sh
-vp run test:operations
-```
-
-用真实 PostgreSQL 和 Redis 验证维护命令。需要 PostgreSQL 17 的 `pg_dump` 和 `pg_restore` 在 PATH 中，并允许测试账号创建两个随机的临时数据库，不会清空共享 Redis。

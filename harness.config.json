@@ -92,6 +92,7 @@
             "docs/decision",
             "docs/verification",
             ".harness",
+            ".agent",
             ".agents",
             ".codex"
         ],
