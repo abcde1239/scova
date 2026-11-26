@@ -1,6 +1,6 @@
 # 前端代码风格与通信约定
 
-状态：当前工程约定，2026-10-31。代码风格以用户指定的 community 项目为主要参照，工具链继续使用 Scova 的 Vite+，通信统一采用 requestlane。参考项目的业务、资源和认证方式不作为需要复制的实现。
+当前工程约定（2026-10-31）。代码风格参照 community 项目，工具链使用 Scova 的 Vite+，通信统一采用 requestlane。参考项目的业务、资源和认证方式不需要复制。
 
 ## 1. 目录与组件
 
@@ -34,7 +34,7 @@ apps/web/src/
 
 Vue Query 负责服务端数据、缓存、失效与请求状态；Pinia 只存用户摘要、会话 epoch、布局与未保存草稿等客户端状态。共享 DTO 和运行时 schema 来自 `@scova/models`。前端专用的展示类型放在 `utils/` 的对应领域目录。
 
-community 中存在 Service/store 组合和 JWT 持久化；Scova 借用分层风格，保留自己的 Cookie 会话设计。不要把服务端列表复制进 Pinia，不向 localStorage 写登录 token 或模型密钥。
+Scova 借用 community 的分层风格，但保留自己的 Cookie 会话设计。不要把服务端列表复制进 Pinia，不向 localStorage 写登录 token 或模型密钥。
 
 ## 3. requestlane 统一入口
 
@@ -64,7 +64,7 @@ native 会跳过 Client 的 endpoint、session、cache 和错误 hook，必须�
 `SseParseError.code` 区分超限、UTF-8、JSON、schema、信封及不完整尾帧错误；失败调用在错误前已完成的消息位于 `completedMessages`，调用方仍须按顺序处理这些消息，再处理错误。
 EOF 不代替空行，不输出部分消息；错误或 finish 后不能复用实例。连接、重连、去重、游标推进和 Query 失效由订阅层实现，reset 不推进 Last-Event-ID。
 
-## 5. 验收
+## 5. 测试与验收
 
 应用与共享包的测试实现放各工作区 `tests/`，固定输入和辅助代码放 `tests/fixtures/` 或 `tests/support/`。Web 组件展示页、素材、报告 HTML 与测试路由定义统一位于 `apps/web/tests/fixtures/`，仅在 test 构建启用；`src/` 保存生产应用代码。根 `tests/` 负责跨工作区与浏览器验证，运行产物写入忽略的 `artifacts/`。竞态测试可复用 `tests/support/deferred.ts` 控制响应顺序，不用固定延时替代明确的异步条件。
 

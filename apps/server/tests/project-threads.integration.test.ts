@@ -18,6 +18,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vite-plus/test';
 import { createApiApp } from '@/app/index.ts';
 import { createDefaultServices } from '@/app/services.ts';
 import { appendProjectThreadItems } from '@/repo/project-threads.ts';
+import { expireProjectTurns } from '@/service/project-turns.ts';
 import { createRedisConnection } from '@/repo/redis.ts';
 import { csrfForSession, tokenHash } from '@/utils/security.ts';
 import { outboxDatabase } from '../../worker/tests/support/outbox-database.ts';
@@ -797,6 +798,79 @@ describe('project agent turns and action decisions', () => {
             'ACTION_CONFLICT',
         );
         expect(await db.select().from(runs).where(eq(runs.userId, owner.id))).toEqual([]);
+    });
+
+    it('offers a one-click research draft when an empty project cannot answer', async () => {
+        const owner = await seedAccount();
+        const project = await createProject(owner);
+        const thread = await createThread(owner, project.id);
+        const send = (message: string) =>
+            request(`${threadPath(thread.id)}/turns`, owner, {
+                method: 'POST',
+                body: { turnId: randomUUID(), message },
+            });
+        const topic = '过去七天开源许可证变更，优先官方发布说明';
+        expect(await json(await send(topic))).toMatchObject({ status: 'completed' });
+        const clarification = (await snapshot(owner, thread.id)).items.at(-1);
+        expect(clarification).toMatchObject({
+            kind: 'disambiguation',
+            payload: {
+                role: 'assistant',
+                text: expect.stringContaining('项目还没有可查询的报告'),
+                choices: [{ label: '起草研究', message: `起草研究计划：${topic}` }],
+            },
+        });
+        const [choice] = clarification!.payload.choices as { message: string }[];
+        expect(await json(await send(choice!.message))).toMatchObject({ status: 'completed' });
+        const plan = (await snapshot(owner, thread.id)).items.find(({ kind }) => kind === 'plan');
+        expect(plan).toMatchObject({ status: 'pending' });
+        expect(await db.select().from(runs).where(eq(runs.userId, owner.id))).toEqual([]);
+    });
+
+    it('expires at most the selected overdue turns per batch, oldest first', async () => {
+        const owner = await seedAccount();
+        const project = await createProject(owner);
+        const threads = [
+            await createThread(owner, project.id, 'Overdue A'),
+            await createThread(owner, project.id, 'Overdue B'),
+        ];
+        const past = new Date(Date.now() - 60_000);
+        const ids: string[] = [randomUUID(), randomUUID()];
+        await db.insert(projectConversationTurns).values(
+            ids.map((id, index) => ({
+                id,
+                userId: owner.id,
+                projectId: project.id,
+                threadId: threads[index]!.id,
+                input: { kind: 'auto' as const, message: `overdue ${index}` },
+                status: 'running' as const,
+                createdAt: past,
+                executionDeadlineAt: new Date(past.getTime() + index),
+            })),
+        );
+        const statuses = async () => {
+            const rows = await db
+                .select({
+                    id: projectConversationTurns.id,
+                    status: projectConversationTurns.status,
+                })
+                .from(projectConversationTurns)
+                .where(eq(projectConversationTurns.userId, owner.id));
+            return ids.map((id) => rows.find((row) => row.id === id)?.status);
+        };
+        // Other suites may leave older overdue turns; drain them so this batch reaches ours.
+        const signal = new AbortController().signal;
+        while ((await statuses())[0] === 'running') await expireProjectTurns(db, 1, signal);
+        expect(await statuses()).toEqual(['failed', 'running']);
+        await expireProjectTurns(db, 1, signal);
+        expect(await statuses()).toEqual(['failed', 'failed']);
+        const [first] = (await snapshot(owner, threads[0]!.id)).items.filter(
+            ({ kind, payload }) => kind === 'message' && payload.role === 'assistant',
+        );
+        expect(first).toMatchObject({
+            turnId: ids[0],
+            payload: { text: '本轮已超时，可重新发送。' },
+        });
     });
 });
 

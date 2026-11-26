@@ -259,7 +259,7 @@
                     >重新载入草稿</action-button
                 >
             </div>
-            <p v-if="!studies.length" class="m-0 text-muted">发布前请添加至少一个研究节点。</p>
+            <p v-if="publishHint" class="m-0 text-muted">{{ publishHint }}</p>
         </form>
     </section>
 </template>
@@ -295,6 +295,7 @@ import {
     upgradeWorkflowGraph,
     type StudyNode,
 } from '@/utils/workflow/serial';
+import { canvasIssues } from '@/utils/workflow/canvas';
 
 const props = defineProps<{ snapshot: ApiResponse<WorkflowDetail> }>();
 const emit = defineEmits<{ dirty: [value: boolean] }>();
@@ -345,13 +346,23 @@ const conflict = ref(false);
 const reloading = ref(false);
 const writing = ref(false);
 const busy = computed(() => writing.value || reloading.value);
-const canPublish = computed(
-    () =>
-        !dirty.value &&
-        !conflict.value &&
-        (canvasGraph.value !== null || studies.value.length > 0) &&
-        baseline.value.data.publishedVersion?.draftRevision !== revision.value,
+const canvasProblemCount = computed(() =>
+    canvasGraph.value ? [...canvasIssues(canvasGraph.value).values()].filter(Boolean).length : 0,
 );
+const published = computed(
+    () => baseline.value.data.publishedVersion?.draftRevision === revision.value,
+);
+// Explain the actual reason publishing is unavailable. The server still validates on publish.
+const publishHint = computed(() => {
+    if (conflict.value) return '';
+    if (dirty.value) return '保存草稿后可以发布。';
+    if (canvasProblemCount.value)
+        return `画布中有 ${canvasProblemCount.value} 个节点需要处理，修正并保存后可以发布。`;
+    if (!canvasGraph.value && !studies.value.length) return '发布前请添加至少一个研究节点。';
+    if (published.value) return '当前草稿已发布。修改并保存后可以发布新版本。';
+    return '';
+});
+const canPublish = computed(() => !conflict.value && !publishHint.value);
 const problem = ref('');
 const announcement = ref('');
 const addButton = ref<HTMLButtonElement>();

@@ -3,7 +3,7 @@
         class="run-actions scova-surface layout-stack rounded-3 break-anywhere p-[clamp(1rem,_3%,_2rem)] [&.run-actions_>_.scova-action-button]:justify-self-start"
         aria-labelledby="run-actions-title"
     >
-        <h2 class="text-[1.25rem] leading-[1.5] m-0" id="run-actions-title">
+        <h2 class="text-[1.25rem] leading-[1.5] m-0" id="run-actions-title" tabindex="-1">
             {{ run ? '执行操作' : '立即执行' }}
         </h2>
         <p v-if="!run && taskStatus === 'archived'">归档任务不能启动执行。</p>

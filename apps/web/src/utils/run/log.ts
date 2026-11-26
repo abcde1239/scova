@@ -45,7 +45,7 @@ const failures: Record<string, string> = {
     TOOL_RESULT_UNKNOWN: '工具结果未确认；旧记录或执行中断未保留具体原因',
     NO_EVIDENCE: '未取得可用证据，未生成报告',
     DEADLINE_EXCEEDED: '执行时间预算已耗尽',
-    AGENT_CONFIGURATION_INVALID: '研究服务配置不可用',
+    AGENT_CONFIGURATION_INVALID: '研究模型未配置或不可用',
     SEARCH_API_NOT_CONFIGURED: '请在账号中配置 Search API，或选择内置 SearXNG',
     SEARCH_CREDENTIAL_INVALID: '搜索密钥无法读取，请在账号中重新保存 Search API',
     SEARCH_CONFIGURATION_CHANGED: '本次执行的自定义搜索配置已更改，请按新配置创建执行',

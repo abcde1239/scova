@@ -1,8 +1,10 @@
-# Scova 数据模型与一致性约束
+# 数据模型与一致性约束
 
-状态：已实现的后端逻辑模型，2026-10-28。主键使用 UUID，时间以 PostgreSQL `timestamptz` 保存；IANA timezone 单独保存。业务 schema 由 Drizzle 定义，部分唯一索引、CHECK 与复合外键均保留在受版本管理的 SQL migration 中。本文用于解释逻辑关系，实际结构以 db 包与迁移为准。
+本文说明 Scova 后端的逻辑数据模型：有哪些实体、它们如何关联，以及数据库和事务如何保证一致性。主键使用 UUID，时间以 PostgreSQL `timestamptz` 保存，IANA timezone 单独保存。
 
-## 1. 概念关系
+业务 schema 由 Drizzle 定义，部分唯一索引、CHECK 与复合外键保留在受版本管理的 SQL migration 中。本文解释逻辑关系，实际结构以 db 包与迁移为准。
+
+## 概念关系
 
 ```mermaid
 erDiagram
@@ -29,11 +31,16 @@ erDiagram
   User ||--o{ Feedback : gives
 ```
 
-长期任务、配置版本、执行、报告是四个实体：任务暂停不删除历史；版本保存后不可变；一个版本可执行多次；执行最多交付一个不可变报告。格式切换只是同一报告的视图，不创建四份成果。
+长期任务、配置版本、执行、报告是四个实体：
 
-## 2. 账号、任务与调度
+- **任务**：暂停不删除历史。
+- **版本**：保存后不可变，一个版本可执行多次。
+- **执行**：最多交付一个不可变报告。
+- **报告**：格式切换只是同一报告的视图，不创建四份成果。
 
-下列所有用户私有实体均带 `userId`，并建立 `(userId,id)` 唯一键。外键使用 owner 复合键，防止把其他用户的合法 ID 拼接进当前用户的数据。
+## 账号、任务与调度
+
+所有用户私有实体均带 `userId`，并建立 `(userId,id)` 唯一键。外键使用 owner 复合键，防止把其他用户的合法 ID 拼接进当前用户的数据。
 
 | 实体               | 主要字段                                                                                                             | 约束/语义                                                                                           |
 | ------------------ | -------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
@@ -44,11 +51,20 @@ erDiagram
 | ScheduleOccurrence | id、userId、taskId、scheduleRevision、scheduledAt、status、runId、missedCount                                        | unique(taskId,scheduleRevision,scheduledAt)；状态 created/skipped_overlap/missed/paused；runId 可空 |
 | Baseline           | userId、taskId、comparisonScopeHash、completeRunId、updatedAt                                                        | unique(userId,taskId,comparisonScopeHash)；只指向同范围完整交付的 Run                               |
 
-configJson 包括主题/目标/关注/排除/来源偏好、滚动或固定时间范围、manual/daily/weekly schedule、当地时分、weekday、timezone、outputFormat、预算、notificationPreference。用户默认时区与提醒偏好由 `PATCH /me/preferences` 保存，创建任务时复制到草稿，保存后以任务版本为准；修改用户默认值不追溯改写已有版本。重复字段仅用于索引的投影必须在保存版本的同一事务更新，禁止应用维护两份各自可写配置。
+**configJson** 包括主题/目标/关注/排除/来源偏好、滚动或固定时间范围、manual/daily/weekly schedule、当地时分、weekday、timezone、outputFormat、预算、notificationPreference。
 
-TaskVersion 的 `comparisonScopeHash` 对标准化配置的语义子集和检索/提取策略版本计算，不把 nextRunAt、展示形式或提醒偏好加入。Run 的同名字段对版本范围、mode 和比较策略版本一起计算，即含服务模式的有效比较范围，不要求与版本字段相等。执行在创建时固化 mode，首次领取固定 `baselineRunId`（也包括没有基线时的 null），恢复不重新选择。反馈快照独立保存，不原地修改配置版本。切换演示到真实执行或升级比较策略必须建立相应范围的基线。
+- 用户默认时区与提醒偏好由 `PATCH /me/preferences` 保存，创建任务时复制到草稿，保存后以任务版本为准；修改用户默认值不追溯改写已有版本。
+- 重复字段仅用于索引的投影必须在保存版本的同一事务更新，禁止应用维护两份各自可写配置。
 
-## 3. 执行与持久化过程
+**比较范围**：
+
+- TaskVersion 的 `comparisonScopeHash` 对标准化配置的语义子集和检索/提取策略版本计算，不把 nextRunAt、展示形式或提醒偏好加入。
+- Run 的同名字段对版本范围、mode 和比较策略版本一起计算，即含服务模式的有效比较范围，不要求与版本字段相等。
+- 执行在创建时固化 mode，首次领取固定 `baselineRunId`（也包括没有基线时的 null），恢复不重新选择。
+- 反馈快照独立保存，不原地修改配置版本。
+- 切换演示到真实执行或升级比较策略必须建立相应范围的基线。
+
+## 执行与持久化过程
 
 | 实体              | 主要字段                                                                                                                        | 约束/语义                                                                              |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
@@ -60,13 +76,23 @@ TaskVersion 的 `comparisonScopeHash` 对标准化配置的语义子集和检索
 | Outbox            | id、userId、aggregateType、aggregateId、eventType、dedupeKey、payload、availableAt、leaseExpiresAt、attempts、sentAt            | dedupeKey 唯一；业务变更同事务插入，有限重试与死信可见                                 |
 | IdempotencyRecord | id、userId、scope、keyHash、payloadHash、status、responseCode、resourceId、expiresAt                                            | unique(userId,scope,keyHash)；不同 payload 同 key 返回 409                             |
 
-Run.status 是执行控制状态，outcome 是业务结论：`baseline/important_change/new_findings/no_important_change/inconclusive`。`no_important_change` 仅允许完整交付且无重要变化；partial 必须是 inconclusive 或明确包含不完整标记的变化结果，不能展示完整查阅无变化文案。
+**status 与 outcome**：Run.status 是执行控制状态，outcome 是业务结论，取值为 `baseline/important_change/new_findings/no_important_change/inconclusive`。`no_important_change` 仅允许完整交付且无重要变化；partial 必须是 inconclusive 或明确包含不完整标记的变化结果，不能展示完整查阅无变化文案。
 
-预算预留与 ToolCall 插入在受租约保护的事务中提交；累计搜索次数、读取次数和 token 使用不可因 worker 恢复回滚。调用结果不确定时保留预算预留。已完成调用结果按 outputRef 重用，不能再执行一次却只计算一次费用。
+**预算与工具账本**：
 
-LangGraph 自己的 checkpoint 表使用独立命名空间/迁移，不由业务 ORM 重建。业务只保存 `checkpointRef={threadId,namespace,checkpointId,leaseEpoch}`；引用的提升必须验证当前租约。checkpoint 原始状态和线程 ID 不允许作为公共 API 参数。详见架构的 epoch 恢复协议。
+- 预算预留与 ToolCall 插入在受租约保护的事务中提交。
+- 累计搜索次数、读取次数和 token 使用不可因 worker 恢复回滚。
+- 调用结果不确定时保留预算预留。
+- 已完成调用结果按 outputRef 重用，不能再执行一次却只计算一次费用。
 
-## 4. 来源、快照、引用与差异
+**checkpoint**：
+
+- LangGraph 自己的 checkpoint 表使用独立命名空间/迁移，不由业务 ORM 重建。
+- 业务只保存 `checkpointRef={threadId,namespace,checkpointId,leaseEpoch}`，引用的提升必须验证当前租约。
+- checkpoint 原始状态和线程 ID 不允许作为公共 API 参数。
+- epoch 恢复协议见[架构](architecture.md)。
+
+## 来源、快照、引用与差异
 
 | 实体           | 主要字段                                                                                                                                                   | 约束/语义                                                                                                                  |
 | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
@@ -79,15 +105,25 @@ LangGraph 自己的 checkpoint 表使用独立命名空间/迁移，不由业务
 | ClaimEvidence  | userId、claimId、evidenceId、relation                                                                                                                      | unique(claimId,evidenceId)；relation=supports/contradicts；全部外键同 owner                                                |
 | ChangeRecord   | id、userId、reportId、sourceId、kind、oldSnapshotId、newSnapshotId、factKey、oldValue、newValue、importance、reason、evidenceIds                           | kind=baseline/new/duplicate/duplicate_candidate/changed/non_material/uncertain；快照必须属于本用户及对应来源或显式转载来源 |
 
-正文稳定指纹只用于内容去重，不代替来源 ID。一个 Source 可对应多个快照，同一个快照可以被多次执行观测。相同规范 URL 先比较自己上一版本的事实，再判断是否与其他页面重复。跨 URL 转载保留独立 Source 和可解释匹配，不把不同机构的相似招生通知合并成一条事实。
+**来源与去重**：
 
-`Report.comparisonJson` 保存版本化事实清单：本次 Run、有效范围与模式、各来源的规范 URL/正文指纹/提取版本，以及带逐字引用的事实键和值。它不复制完整正文；对应引用证据随报告保留。历史缺少可授权事实清单时保留比较缺口，不由空数据推导“无重要变化”。
+- 正文稳定指纹只用于内容去重，不代替来源 ID。
+- 一个 Source 可对应多个快照，同一个快照可以被多次执行观测。
+- 相同规范 URL 先比较自己上一版本的事实，再判断是否与其他页面重复。
+- 跨 URL 转载保留独立 Source 和可解释匹配，不把不同机构的相似招生通知合并成一条事实。
 
-最终交付校验：每条 Claim 的引用必须来自本执行证据或明确引用的基线证据；引用不能是另一用户的数据。changed 必须有 old/new 证据；new 不能伪造旧值。证据不足时降级为 inference/insufficient，不通过生成一个 URL 充当引用。
+**比较清单**：`Report.comparisonJson` 保存版本化事实清单，包括本次 Run、有效范围与模式、各来源的规范 URL/正文指纹/提取版本，以及带逐字引用的事实键和值。它不复制完整正文，对应引用证据随报告保留。历史缺少可授权事实清单时保留比较缺口，不由空数据推导“无重要变化”。
 
-全文搜索先索引 SourceSnapshot 的标题/正文与 Note 内容。PostgreSQL FTS 起步用 `simple` 配置并实测中文召回；达不到目标时优先评估分词/子串检索补充，向量检索以实际评估结果再决定。
+**最终交付校验**：
 
-## 5. 交付、反馈与知识沉淀
+1. 每条 Claim 的引用必须来自本执行证据或明确引用的基线证据。
+2. 引用不能是另一用户的数据。
+3. changed 必须有 old/new 证据，new 不能伪造旧值。
+4. 证据不足时降级为 inference/insufficient，不通过生成一个 URL 充当引用。
+
+**全文搜索**：先索引 SourceSnapshot 的标题/正文与 Note 内容。PostgreSQL FTS 使用 `simple` 配置并实测中文召回；达不到目标时优先评估分词/子串检索补充，向量检索以实际评估结果再决定。
+
+## 交付、反馈与知识沉淀
 
 | 实体           | 主要字段                                                                           | 约束/语义                                                                             |
 | -------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
@@ -98,15 +134,42 @@ LangGraph 自己的 checkpoint 表使用独立命名空间/迁移，不由业务
 | Note           | id、userId、sourceId 或 reportId、body、revision、createdAt、updatedAt             | CHECK 恰有一种目标；纯文本，乐观锁编辑                                                |
 | ReportQuestion | id、userId、reportId、question、answerJson、evidenceRefs、followupRunId、createdAt | 仅检索当前用户已授权证据；新查阅显式关联执行                                          |
 
-Feedback 的条件唯一索引分别覆盖 sourceId 与 claimId，避免 NULL 导致重复；跨任务 claim 反馈须验证 claim 所属报告的 taskId，资料须有本任务的 RunSource 关系。设置、切换与撤销先持有同一 Task 锁，和新 Run 创建串行决定快照。`Run.feedbackSnapshotJson` 包含结构版本、owner/task、反馈及目标的复制信息，空快照同样冻结；恢复不重捕获。资料的“已了解”指纹取标记时间之前最后一次观测，后续新值不会被自动视为已了解。
+**反馈**：
 
-`Report.feedbackEffectsJson` 仅保存本次经工具账本与冻结快照验证的作用解释，公开为 `feedbackEffects`；撤销不更改旧报告。它不替代事实比较、证据引用或覆盖限制。问答中的事实同样要求引用。
+- 条件唯一索引分别覆盖 sourceId 与 claimId，避免 NULL 导致重复。
+- 跨任务 claim 反馈须验证 claim 所属报告的 taskId，资料须有本任务的 RunSource 关系。
+- 设置、切换与撤销先持有同一 Task 锁，和新 Run 创建串行决定快照。
+- `Run.feedbackSnapshotJson` 包含结构版本、owner/task、反馈及目标的复制信息，空快照同样冻结，恢复不重捕获。
+- 资料的“已了解”指纹取标记时间之前最后一次观测，后续新值不会被自动视为已了解。
+- `Report.feedbackEffectsJson` 仅保存本次经工具账本与冻结快照验证的作用解释，公开为 `feedbackEffects`；撤销不更改旧报告。它不替代事实比较、证据引用或覆盖限制，问答中的事实同样要求引用。
 
-报告和 InboxItem 在同一事务中提交。Notification 使用 Run 固定 TaskVersion 的偏好：summary 对每次完整交付提醒；important_change 仅提醒完整且已确认的重要变化；partial/failed 仅生成 run_issue，按独立运行问题偏好控制，failed 可无报告。用户取消不发运行问题提醒。关闭通知不影响报告或收件箱，账号默认只影响后续草稿。损坏的版本提醒配置保守不发通知，不阻止失败终结；不回退读取其他版本或账号默认。通知与成果或失败终态同事务，重放不重复或重置已读状态，不发送外部消息。
+**通知**：
 
-## 6. 必须落实的数据库约束
+- 报告和 InboxItem 在同一事务中提交。
+- Notification 使用 Run 固定 TaskVersion 的偏好。
+- summary 对每次完整交付提醒；important_change 仅提醒完整且已确认的重要变化。
+- partial/failed 仅生成 run_issue，按独立运行问题偏好控制，failed 可无报告；用户取消不发运行问题提醒。
+- 关闭通知不影响报告或收件箱，账号默认只影响后续草稿。
+- 损坏的版本提醒配置保守不发通知，不阻止失败终结，也不回退读取其他版本或账号默认。
+- 通知与成果或失败终态同事务，重放不重复或重置已读状态，不发送外部消息。
 
-以下 SQL 为迁移设计示意，物理表名保留既有 snake_case。字段命名以最终 migration 为准，不能把本文当作已执行迁移。
+**资料库与笔记**：
+
+- 沿用 Source、SourceSnapshot、Bookmark、Note：收藏按 owner/source 唯一；笔记恰一来源或报告目标，同一来源允许多条笔记，创建幂等记录与 Note 同事务提交。
+- 历史快照必须存在同 owner/source 的成功 RunSource。
+- 正文过期仅清正文，保留 Evidence 原文片段、hash、定位、Report 比较清单及 Baseline。
+- 资料检索和历史分页索引由 db 迁移维护。
+
+**报告问答**：
+
+- ReportQuestion 保存原始问题、回答/独立计量和 followupRunId；QuestionEvidence 记录引用关系。
+- 问题与幂等认领先持久化，模型调用在事务外进行，回答与引用在短事务内完成。
+- 进程中断的未完成问题以 409 显示处理中，稳定键不会触发重复调用，用户可用新键重新提交。
+- Run.followupConfigJson 固定显式后续研究的完整配置；原 TaskVersion 和 Task.currentVersionId 不变，Worker 执行与交付从同一固定配置读取，重试保留问题与隔离比较范围。
+
+## 数据库约束
+
+以下 SQL 为迁移设计示意，物理表名保留既有 snake_case。字段命名以最终 migration 为准，本文不是已执行迁移。
 
 ```sql
 -- 同一任务最多一个未终结执行，包括排队与等待取消。
@@ -141,11 +204,13 @@ FOREIGN KEY (user_id, task_id, comparison_scope_hash, complete_run_id)
 REFERENCES runs(user_id, task_id, comparison_scope_hash, id);
 ```
 
-仅 CHECK 无法跨表验证“引用来自该用户且属于合法执行”，要结合复合外键与受控事务。complete baseline 的条件由交付事务锁定并校验；不依赖不合法的跨表 CHECK。snapshot 和证据同 owner 的复合外键必须完整实现，不能只靠界面隐藏。
+- 仅 CHECK 无法跨表验证“引用来自该用户且属于合法执行”，要结合复合外键与受控事务。
+- complete baseline 的条件由交付事务锁定并校验，不依赖不合法的跨表 CHECK。
+- snapshot 和证据同 owner 的复合外键必须完整实现，不能只靠界面隐藏。
 
-推荐索引：tasks(userId,status,updatedAt)、tasks(nextRunAt) WHERE active、runs(userId,taskId,queuedAt DESC)、runs(status,leaseExpiresAt)、run_events(runId,seq)、outbox(sentAt,availableAt)、reports(userId,publishedAt DESC)、inbox(userId,readAt,createdAt)。按实际 EXPLAIN 结果调整，避免为 JSON 所有字段预建索引。
+**推荐索引**：tasks(userId,status,updatedAt)、tasks(nextRunAt) WHERE active、runs(userId,taskId,queuedAt DESC)、runs(status,leaseExpiresAt)、run_events(runId,seq)、outbox(sentAt,availableAt)、reports(userId,publishedAt DESC)、inbox(userId,readAt,createdAt)。按实际 EXPLAIN 结果调整，避免为 JSON 所有字段预建索引。
 
-## 7. 事务清单与删除规则
+## 事务清单
 
 | 事务          | 原子变更                                                                                            | 外部副作用         |
 | ------------- | --------------------------------------------------------------------------------------------------- | ------------------ |
@@ -158,12 +223,12 @@ REFERENCES runs(user_id, task_id, comparison_scope_hash, id);
 
 任何 SQL 事务期间不等待模型或网络请求。并发唯一冲突转为幂等返回或明确 409，不吞掉错误重试整个外部工具调用。
 
-首版任务采用归档，保留证据和历史报告；资料/报告的硬删除必须同步移除依赖和失效的基线指针，下一次重新建基线。账号删除先暂停并取消执行，撤销会话，再受控级联清理；checkpoint/outbox/事件一并清除，不能遗漏 Agent 状态。运行中的 worker 最终写入需重新验证账号仍存在且可运行。
+## 删除与保留
 
-正文与详细工具日志默认 30 天后清理；报告引用片段、指纹和元数据随报告保留，避免全文过期后历史引用不可解释。清理不得删除仍被有效基线比较所需的事实快照摘要。备份保留窗口由部署设置明确，删除并不即时清除既有离线备份。
+- **归档**：首版任务采用归档，保留证据和历史报告。
+- **硬删除**：资料/报告的硬删除必须同步移除依赖和失效的基线指针，下一次重新建基线。
+- **账号删除**：先暂停并取消执行，撤销会话，再受控级联清理；checkpoint/outbox/事件一并清除，不能遗漏 Agent 状态。运行中的 worker 最终写入需重新验证账号仍存在且可运行。
+- **正文与日志**：正文与详细工具日志默认 30 天后清理；报告引用片段、指纹和元数据随报告保留，避免全文过期后历史引用不可解释。清理不得删除仍被有效基线比较所需的事实快照摘要。
+- **备份**：保留窗口由部署设置明确，删除并不即时清除既有离线备份。
 
-相关文档：[架构](architecture.md)、[验收场景](../examples/two-run-scenarios.md)。
-
-资料库沿用 Source、SourceSnapshot、Bookmark、Note：收藏按 owner/source 唯一；笔记恰一来源或报告目标，同一来源允许多条笔记，创建幂等记录与 Note 同事务提交。历史快照必须存在同 owner/source 的成功 RunSource；正文过期仅清正文，保留 Evidence 原文片段、hash、定位、Report 比较清单及 Baseline。资料检索和历史分页索引由 db 迁移维护。
-
-ReportQuestion 保存原始问题、回答/独立计量和 followupRunId；QuestionEvidence 记录引用关系。问题与幂等认领先持久化，模型调用在事务外进行，回答与引用在短事务内完成；进程中断的未完成问题以 409 显示处理中，稳定键不会触发重复调用，用户可用新键重新提交。Run.followupConfigJson 固定显式后续研究的完整配置；原 TaskVersion 和 Task.currentVersionId 不变，Worker 执行与交付从同一固定配置读取，重试保留问题与隔离比较范围。
+相关文档：[架构](architecture.md)、[两次执行验收场景](../examples/two-run-scenarios.md)。

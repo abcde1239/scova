@@ -511,7 +511,7 @@ import {
     canvasAncestors,
     canvasBounds,
     canvasEdgePath,
-    canvasNodeIssue,
+    canvasIssues,
     connectionError,
     edgeKey,
     libraryTypes,
@@ -641,13 +641,7 @@ const availableLibraryTypes = computed(() =>
     ),
 );
 const taskTitles = computed(() => new Map(props.tasks.map((task) => [task.id, task.title])));
-const issues = computed(() => {
-    const end = graph.value.nodes.find(({ type }) => type === 'end');
-    const reachesEnd = end ? canvasAncestors(graph.value.edges, end.id) : new Set<string>();
-    return new Map(
-        graph.value.nodes.map((node) => [node.id, canvasNodeIssue(graph.value, node, reachesEnd)]),
-    );
-});
+const issues = computed(() => canvasIssues(graph.value));
 const renderedEdges = computed(() =>
     graph.value.edges.flatMap((edge) => {
         const from = readCanvasPosition(rendered.value, edge.from.nodeId);

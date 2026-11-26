@@ -24,6 +24,10 @@
                 :error="task.fields.value[field.key]"
                 :disabled="locked"
             />
+            <p v-if="creator && !seedDraft" class="text-muted break-anywhere m-0">
+                填写以上三项即可保存，其余设置已有默认值，可按需调整。
+                <a class="internal-link" href="#task-save-actions" @click="jumpToSave">跳到保存</a>
+            </p>
         </fieldset>
         <fieldset class="layout-grid gap-6 [border:0] m-0 p-0" :disabled="locked">
             <legend class="text-[1.25rem] font-semibold mb-6 p-0">时间与输出</legend>
@@ -245,7 +249,13 @@
                 >重新读取最新版本</action-button
             >
         </section>
-        <div class="save-actions flex items-center flex-wrap gap-[1rem_2rem]">
+        <p v-if="creator && !seedDraft" class="text-muted break-anywhere m-0">
+            「确认保存任务」只创建任务，稍后可在任务页执行；「保存并立即运行」创建后马上开始一次研究。
+        </p>
+        <div
+            id="task-save-actions"
+            class="save-actions flex items-center flex-wrap gap-[1rem_2rem]"
+        >
             <action-button
                 type="primary"
                 attr-type="submit"
@@ -478,6 +488,13 @@ const notifications = [
     { value: 'off', label: '关闭结果提醒' },
 ];
 const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+function jumpToSave(event: MouseEvent) {
+    const submit = form.value?.querySelector<HTMLElement>('#task-save-actions button');
+    if (!submit) return;
+    event.preventDefault();
+    submit.scrollIntoView({ block: 'center' });
+    submit.focus({ preventScroll: true });
+}
 async function enterManualConfiguration() {
     await focusConfiguration();
 }

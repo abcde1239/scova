@@ -1,4 +1,4 @@
-import type { LegacyWorkflowGraph, WorkflowNode } from './schema.ts';
+import type { LegacyWorkflowGraph, WorkflowCanvasNode, WorkflowNode } from './schema.ts';
 
 /** Each stage points to every node in the next stage. A stage has no internal dependencies. */
 export function readWorkflowStages(graph: LegacyWorkflowGraph): WorkflowNode[][] | null {
@@ -37,4 +37,27 @@ export function readWorkflowStages(graph: LegacyWorkflowGraph): WorkflowNode[][]
         stage = graph.nodes.filter((node) => targets.has(node.id));
     }
     return seen.size === nodes.size && stages.at(-1)?.[0]?.type === 'end' ? stages : null;
+}
+
+/**
+ * Study nodes without an ancestor relation may run at the same time, so they must bind
+ * different tasks. Returns every study node that shares its task with such a node.
+ */
+export function concurrentStudyConflicts(
+    nodes: readonly WorkflowCanvasNode[],
+    ancestorsOf: (id: string) => ReadonlySet<string>,
+): Set<string> {
+    const conflicts = new Set<string>();
+    const studies = nodes.filter(
+        (node): node is Extract<WorkflowCanvasNode, { type: 'study' }> =>
+            node.type === 'study' && Boolean(node.taskId),
+    );
+    for (const [index, node] of studies.entries()) {
+        for (const other of studies.slice(index + 1)) {
+            if (node.taskId.toLowerCase() !== other.taskId.toLowerCase()) continue;
+            if (ancestorsOf(node.id).has(other.id) || ancestorsOf(other.id).has(node.id)) continue;
+            conflicts.add(node.id).add(other.id);
+        }
+    }
+    return conflicts;
 }

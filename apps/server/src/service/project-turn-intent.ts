@@ -11,6 +11,10 @@ const pause =
 const update =
     /^(?:请\s*)?(?:(?:帮我|为我)\s*)?(?:调整|修改|更改|改为)|^(?:please\s+)?(?:update|change|reschedule)\b/i;
 const cadence = /每天|每日|每周|日程|周期|\b(?:daily|weekly|schedule)\b/i;
+// Explicit research intent anywhere in the message, e.g. "…先帮我拟研究计划" or "发起一次新研究：…".
+const researchPhrase =
+    /(?:拟|起草|制定|准备|写)(?:一份|一个|个)?(?:新的?)?研究(?:计划|草案|方案)|(?:发起|开展|创建|启动)(?:一[次项个])?(?:新的?)(?:研究|调研)|(?:发起|开展|创建)(?:一[次项个])(?:研究|调研)|\b(?:draft|plan) (?:a )?(?:new )?research\b/iu;
+const filler = /(?:^|[\s，,。.；;：:])(?:请|先|帮我|为我|然后|再)+(?=$|[\s，,。.；;：:])/gu;
 const vagueTarget =
     /^(?:这[个些]|那[个些]|它|此事|这件事|[这那](?:个)?(?:问题|主题|方向|内容|议题|任务)|(?:(?:about|on)\s+)?(?:it|this|that|these|those)(?:\s+(?:topic|issue|subject|question|task))?)$/i;
 const chineseDay = '一二三四五六日天';
@@ -62,6 +66,18 @@ export function projectTurnIntent(message: string) {
             .trim();
         if (!target || vagueTarget.test(target)) return { kind: 'clarify' } as const;
         return { kind: 'research', start: allowAutomatic && start.test(message) } as const;
+    }
+    const phrase = researchPhrase.exec(message);
+    if (phrase) {
+        const rest = (
+            message.slice(0, phrase.index) +
+            ' ' +
+            message.slice(phrase.index + phrase[0].length)
+        )
+            .replace(filler, ' ')
+            .replace(/[\s\p{P}]+/gu, '');
+        if (rest.length < 4 || vagueTarget.test(rest)) return { kind: 'clarify' } as const;
+        return { kind: 'research', start: false } as const;
     }
     return { kind: 'answer' } as const;
 }

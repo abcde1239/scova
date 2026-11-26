@@ -3,7 +3,11 @@ import { describe, expect, it, vi } from 'vite-plus/test';
 import { ContractValidationError, parseContract } from '@scova/models';
 import { WorkflowDraftInputSchema, type WorkflowGraph } from '@scova/models';
 import type { WorkflowRunRow } from '@scova/db';
-import { workflowCheckpointNodes, workflowStages } from '@/service/workflow-graph.ts';
+import {
+    workflowCanvasOrder,
+    workflowCheckpointNodes,
+    workflowStages,
+} from '@/service/workflow-graph.ts';
 import { advanceWorkflow, type WorkflowResearch } from '@/service/workflow-checkpoint.ts';
 import { createApiApp } from '@/app/index.ts';
 import { validateOpenApi } from '../../../scripts/generate-openapi.mjs';
@@ -265,6 +269,31 @@ describe('并行组', () => {
             expect(() => workflowStages(graph)).toThrow(
                 expect.objectContaining({ code: 'WORKFLOW_INVALID_GRAPH' }),
             );
+    });
+
+    it('画布中可能并发的研究节点不能绑定同一任务，串行时允许', () => {
+        const canvas = (edges: ReturnType<typeof edge>[]) => ({
+            version: 2 as const,
+            nodes: [
+                { id: 'start', type: 'start' as const },
+                { id: 'a', type: 'study' as const, taskId: task },
+                { id: 'b', type: 'study' as const, taskId: task },
+                { id: 'end', type: 'end' as const },
+            ],
+            edges,
+            layout: { positions: {}, groups: [] },
+        });
+        const parallel = canvas([
+            edge('start', 'a'),
+            edge('start', 'b'),
+            edge('a', 'end'),
+            edge('b', 'end'),
+        ]);
+        expect(() => workflowCanvasOrder(parallel)).toThrow(
+            expect.objectContaining({ code: 'WORKFLOW_INVALID_GRAPH' }),
+        );
+        const serial = canvas([edge('start', 'a'), edge('a', 'b'), edge('b', 'end')]);
+        expect(workflowCanvasOrder(serial).map(({ id }) => id)).toEqual(['start', 'a', 'b', 'end']);
     });
 
     function parallelRunner() {

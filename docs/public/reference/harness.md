@@ -1,71 +1,110 @@
 # 工程治理与验证
 
-Scova 使用 Vite+ 1.4.0 与 pnpm 工作区。`pnpm-workspace.yaml` 是当前版本支持的工作区配置；Bun 是后端主运行时和治理工具运行时，Node.js 是后端兼容运行时，并承载 Vite+ 工具链与 Reader 子进程。依赖继续由 `vp install` 管理。
+运行仓库的静态检查、测试和完整验证门禁，并管理验证产物。
 
-## 命令
+Scova 使用 Vite+ 1.4.0 和 pnpm 工作区，依赖由 `vp install` 管理。Bun 是后端主运行时和治理工具运行时，Node.js 是后端兼容运行时，同时承载 Vite+ 工具链和 Reader 子进程。
 
-安装 Vite+、兼容项目声明的 Node.js 和独立 Bun >= 1.3.4 后运行：
+## 快速开始
+
+需要 Vite+、项目声明的 Node.js 和独立安装的 Bun >= 1.3.4。
 
 ```sh
 vp install
-vp run harness-lint
-vp run harness-verify
+vp run harness-lint     # 治理检查：测试布局、任务依赖和文档链接，不运行测试
+vp run harness-verify   # 先执行治理检查，再逐项运行下表任务；别名 vp run ready
 ```
 
-`harness-lint` 检查工作区测试布局、任务依赖和验收文档链接，不运行测试；repository.visibility=public 时还检查 Git index 文件边界。仓库当前先采用 private，内部文档仍按约定仅保留本地；未来公开前需切换治理配置并重新验证边界。`harness-verify` 先执行同一治理检查，再逐项运行以下任务；`vp run ready` 是它的别名。
+退出码：0 表示通过，1 表示规则或任务失败，2 表示配置或执行条件错误。请查看 JSON 里每个工作区和任务的状态，不要以外层命令成功代替覆盖判断。
 
-根级 `test:*` 入口由 `tests/tasks.ts` 定义，通过根 `vite.config.ts` 的 `run.tasks` 注册；调用仍为 `vp run test:<名称>`，无需放入根 `package.json`。这些任务显式关闭缓存，集成聚合的 command 数组依次执行各套件，避免共享测试 Redis 的并发干扰。
+## 验证任务
 
-| 任务            | 命令              | 当前覆盖范围                                                     |
-| --------------- | ----------------- | ---------------------------------------------------------------- |
-| static-check    | `vp check`        | 格式、lint、TypeScript 静态检查                                  |
-| unit-tests      | `vp test`         | Web/会话/通信/领域逻辑、contracts、别名隔离、API、Agent 与共享包 |
-| workspace-build | `vp run -r build` | 所有已登记工作区构建/类型检查                                    |
+根级 `test:*` 入口由 `tests/tasks.ts` 定义，通过根 `vite.config.ts` 的 `run.tasks` 注册，调用方式为 `vp run test:<名称>`。这些任务关闭缓存，集成聚合会按顺序执行各套件，避免共享测试 Redis 的并发干扰。
 
-其余必需任务为 `runtime-bun`、`runtime-node`、`connectors-runtime`、`api-openapi`、`api-processes`、`backend-integration`、`web-browser-gate` 和 `web-workbench-gate`。`web-deployment` 已登记为禁用的可选任务，需单独执行 `vp run test:deployment`；完整 `ready` 通过不代表运行过该部署验证。根提交钩子通过 `scripts/check-staged.mjs` 运行 `vp staged`，只允许检查工具更新原先选中的文件；额外改变的暂存范围会还原，工作区内容保留。钩子不执行完整治理或测试；后端 CI 的 `vp run ready` 会先执行 harness lint，再运行必需任务。
+| 任务            | 命令              | 覆盖范围                                                            |
+| --------------- | ----------------- | ------------------------------------------------------------------- |
+| static-check    | `vp check`        | 格式、lint、TypeScript 静态检查                                     |
+| unit-tests      | `vp test`         | Web、会话、通信、领域逻辑、contracts、别名隔离、API、Agent 与共享包 |
+| workspace-build | `vp run -r build` | 所有已登记工作区的构建和类型检查                                    |
 
-根聚合测试只声明实际覆盖的工作区，没有额外配置相同的子任务，避免重复执行。暂无测试的工作区保持 `not-configured`；这不代表业务验收通过。新建工作区或接入真实业务测试后须同时更新 `harness.config.json`、框架扫描配置和真实测试任务；`covers` 只记录覆盖关系，不创建测试。
+其余必需任务：`runtime-bun`、`runtime-node`、`connectors-runtime`、`api-openapi`、`api-processes`、`backend-integration`、`web-browser-gate`、`web-workbench-gate`。
 
-`packages-db` 的客户端单元测试由根 `vp test` 发现，迁移/数据库集成另由 `backend-integration` 覆盖。维护集成已包含在 `test:worker` 的 Worker 集成扫描中，根 `test:integration` 不再重复调用 `test:operations`；该专项入口仍可单独使用。
+- **`web-deployment`** 是默认禁用的可选任务，需单独运行 `vp run test:deployment`，`ready` 不会执行它。
+- **`web-browser-gate`** 依赖 `static-check`、`unit-tests`、`workspace-build` 和 `backend-integration`，通过 `vp run verify:web:browser` 运行浏览器门禁，详见[浏览器测试](browser-testing.md)。
+- **`web-workbench-gate`** 依赖基础浏览器门禁，通过 `vp run verify:mvp:browser` 追加补充页面矩阵和完整用户旅程。独立的 `vp run verify:mvp-full` 先执行完整 `verify:web`，再追加同一阶段，供 Web CI 和单独验收使用。
+- 任务图不包含 `ready`、`harness-lint` 和 `harness-verify`，避免递归。
+- 暂无测试的工作区保持 `not-configured`，不代表业务验收通过。新建工作区或接入真实测试后，需同时更新 `harness.config.json`、框架扫描配置和真实测试任务。`covers` 只记录覆盖关系，不创建测试。
 
-根 TypeScript 配置排除 `artifacts`、`.pnpm-store`、构建和覆盖率产物，避免本地历史工作树与包缓存进入源码类型检查；应用源码和测试仍按各工作区配置检查。
+## 单元与集成测试
 
-Worker 的配置与生命周期、Agent 有限图与原文校验单元纳入根测试；`backend-integration` 通过 `vp run test:integration` 串行验证数据库约束、认证、任务与执行接口、实际 Agent/报告交付、调度/反馈/通知与资料库，以及 Outbox/Run 故障恢复、租约 fencing、取消和 Bun/Node 进程。
+根 Vitest 只扫描 `apps/*` 和 `packages/*` 的 `tests` 目录下的 `*.test.ts` 和 `*.spec.ts`，排除产物、E2E 和 `*.integration.test.ts`。Vite 和 Vitest 用原生 `resolve.tsconfigPaths` 按导入文件解析工作区别名。
 
-`web-browser-gate` 是必需任务，依赖 `static-check`、`unit-tests`、`workspace-build` 和 `backend-integration`，通过 `vp run verify:web:browser` 覆盖 `web-shell-e2e`。该工作区要求配置测试；聚合门禁替代原有单项浏览器任务登记，避免重复运行；专项命令仍可直接运行。浏览器子入口不调用 `ready` 或完整 `verify:web`，因此同一任务图只运行一次静态/单元门禁。它串行切换必要构建模式，所有预览停止后恢复生产构建；运行条件、诊断和人工验收边界见[浏览器测试](browser-testing.md)。
+集成测试需要专用 PostgreSQL 和独立 Bun，完整后端门禁另需 Redis。`vp run test:integration` 串行运行：
 
-`web-workbench-gate` 依赖基础浏览器门禁，通过 `vp run verify:mvp:browser` 追加[补充页面矩阵与完整用户旅程](workbench-verification.md)，不重复基础阶段。独立 `vp run verify:mvp-full` 则先执行完整 `verify:web` 再追加同一阶段，供 Web CI 与单独验收使用。
+- 数据库约束、认证、任务与执行接口。
+- 实际 Agent 与报告交付、调度、反馈、通知和资料库。
+- Outbox 与 Run 故障恢复、租约 fencing、取消，以及 Bun 和 Node 进程。
 
-`vp run test:agent-recovery` 定向运行真实 PostgreSQL checkpointer/工具账本集成：Node/Bun 在工具结果提交、checkpoint 保存前强杀并接管，验证用尽预算后仍复用成功结果、unknown 保留费用、旧 epoch checkpoint/pending writes 隔离和持久化操作 drain。根 `vp test` 排除集成文件，不能用直接传入集成文件路径代替显式的测试配置。上述集成需要专用 PostgreSQL 和独立 Bun，完整后端门禁另需 Redis。
+单独运行某个套件时，依次执行 `vp test --config tests/<suite>.vite.config.ts`，suite 取 `database`、`auth`、`tasks`、`runs`、`worker-outbox`。使用同一测试 Redis 的套件不要并行，也不能直接传入集成文件路径代替显式配置。
 
-任务图中不包含 `ready`、`harness-lint` 或 `harness-verify`，避免递归。检查退出码：0 表示所请求门禁通过，1 表示规则或任务失败，2 表示配置或执行条件错误。查看 JSON 中每个工作区和任务的状态，不以外层命令成功替代测试覆盖判断。
+其他专项入口：
 
-根 Vitest 只扫描 `apps/*`、`packages/*` 的 `tests` 下 `*.test.ts` 和 `*.spec.ts`，排除产物、E2E 和 `*.integration.test.ts`，避免临时快照被重复发现。数据库、认证、任务、执行与 Outbox 集成须启动专用服务，再依次运行 `vp test --config tests/<suite>.vite.config.ts`，其中 suite 分别为 `database`、`auth`、`tasks`、`runs`、`worker-outbox`；使用同一测试 Redis 的套件不要并行。根命令和覆盖声明不能代替这些真实集成。
+- **`vp run test:agent-recovery`**：用真实 PostgreSQL 的 checkpointer 和工具账本，验证 Node 和 Bun 在工具结果提交后、checkpoint 保存前被强杀并接管的恢复，覆盖预算用尽后复用成功结果、unknown 保留费用、旧 epoch 隔离和持久化操作 drain。
+- **`vp run test:operations`**：维护集成。它已包含在 `test:worker` 里，根 `test:integration` 不再重复调用，可单独使用。
 
-一项工作的新人工验收证据用技能 CLI 的 `artifacts create <名称>` 分配到 `artifacts/runs/<id>/`。把生成的报告、日志、浏览器截图和 trace 写到返回的目录。写入结束后执行 `artifacts finish <id>`，长期引用时执行 `artifacts keep <id>`。`artifacts clean` 默认预览已登记跑次的清理范围。
+`packages-db` 的客户端单元测试由根 `vp test` 发现，迁移和数据库集成由 `backend-integration` 覆盖。
 
-Playwright 和项目脚本沿用配置的输出路径，例如 `artifacts/e2e/`、`artifacts/verify-web/` 和 `artifacts/verify-mvp-full/`。历史快照放 `artifacts/snapshots/`。验证步骤和长期摘要归文档，测试源码与夹具归项目的测试目录。
+## 运行时与服务
 
-`.harness/` 保存 Harness Kit 的托管清单、验证摘要、任务续作状态和托管 Hook。Harness 临时 JSON 放在 `.harness/tmp/`。仓库内置 `vp run harness-lint` 和 `vp run harness-verify` 使用固定工具快照。上述产物管理与 `doctor` 由已安装技能的 `scripts/harness.mjs` 提供，可用 `node <技能目录>/scripts/harness.mjs <命令> --root <项目绝对路径> --json` 调用。两个本地目录均由 Git 忽略。
+`runtime-bun`（`vp run test:runtime`）和 `runtime-node`（`vp run test:runtime:node`）用真实 PostgreSQL 和 Redis 验证事务、队列、跨进程 checkpoint 恢复和 fencing。先启动测试服务：
 
-脚本缓存关闭，确保治理每次读取 Git index；需要构建缓存时使用显式 Vite task，不能缓存外层入口。Vite/Vitest 使用原生 `resolve.tsconfigPaths` 按导入文件解析工作区别名。
+```sh
+docker compose -f compose.test.yaml -p scova-runtime-test up -d --wait
+```
 
-## 工具可移植性
+没有服务时测试会明确失败，不会回退到内存。每次实验创建并清理独立的 schema 和命名队列，详见源码中的 `tests/runtime/README.md`。
 
-完整门禁还包含 `runtime-bun`（`vp run test:runtime`）与 `runtime-node`（`vp run test:runtime:node`），验证真实 PostgreSQL/Redis 的事务、队列、跨进程 checkpoint 恢复和 fencing。先运行 `docker compose -f compose.test.yaml -p scova-runtime-test up -d --wait`；没有服务时明确失败，不回退内存。实验每次创建并清理独立 schema 和命名队列，详见源码中的 `tests/runtime/README.md`。
+[本地开发环境](../guides/local-development.md)使用独立的 `compose.local.yaml` 和根 `.env.local`，不能替代这些测试依赖。`compose.local.yaml` 和 `.env.local.example` 是公开配置，真实的 `.env.local` 仅保存在本地。`harness-lint` 本身不启动 Docker，也不调用搜索或模型。
 
-[本地开发环境](../guides/local-development.md)使用独立的 `compose.local.yaml` 和根 `.env.local`。它不替代上述专用测试依赖；`harness-lint` 本身不启动 Docker、不调用搜索或模型，也不验证 Windows 系统启动项。`compose.local.yaml`、`.env.local.example` 已登记为公开配置，真实 `.env.local` 仍仅本地保存。
+## 验证产物
 
-`scripts/vendor/harness-kit.mjs` 是 harness-kit 随附 CLI 的原样快照（schemaVersion 1，SHA-256 `cc523948f6244abe42aa0f7d6be4a5bf14c39c9547bd88e2b2a7322ef594e5e2`），仅依赖 Bun 和 Git，不依赖全局安装的技能。`scripts/harness.mjs` 固定项目根、校验摘要，并使用 `BUN_BIN`、用户目录下独立 Bun 或 PATH 中的 Bun。指定 `BUN_BIN` 时必须是可执行文件路径，不含命令参数。
+- 新的人工验收证据：用 Harness CLI 的 `artifacts create <名称>` 分配 `artifacts/runs/<id>/`，把报告、日志、截图和 trace 写入返回的目录。写完执行 `artifacts finish <id>`，需要长期引用时执行 `artifacts keep <id>`。`artifacts clean` 默认只预览清理范围。
+- Playwright 和项目脚本沿用配置的输出路径，例如 `artifacts/e2e/`、`artifacts/verify-web/`、`artifacts/verify-mvp-full/`。历史快照放 `artifacts/snapshots/`。
+- 验证步骤和长期摘要归文档，测试源码和夹具归项目的测试目录。
+- `.harness/` 保存 Harness Kit 的托管清单、验证摘要、任务续作状态和托管 Hook，临时 JSON 放 `.harness/tmp/`。`artifacts/` 和 `.harness/` 均被 Git 忽略。
+- `doctor` 和产物管理由已安装技能的 `scripts/harness.mjs` 提供：
 
-更新快照时比较上游内容，原样替换文件，更新包装器和本文摘要，重新运行治理检查及验证。仅该快照排除自动格式化和 lint，项目自有包装器正常接受检查。不要手工修补生成代码再沿用旧摘要。
+```sh
+node <技能目录>/scripts/harness.mjs <命令> --root <项目绝对路径> --json
+```
 
-Windows 上包装器会从 PATH 定位原生 `vp.exe` 并放到子进程 PATH 首位，避免 Bun 将 pnpm `.bin/vp` 的 POSIX 脚本当作 Windows 程序启动。保持全局 Vite+ 在 PATH 中；不在配置里写开发者机器的绝对工具路径。
+## Harness CLI 快照
+
+`scripts/vendor/harness-kit.mjs` 是 harness-kit 随附 CLI 的原样快照（schemaVersion 1，SHA-256 `cc523948f6244abe42aa0f7d6be4a5bf14c39c9547bd88e2b2a7322ef594e5e2`），只依赖 Bun 和 Git。`scripts/harness.mjs` 固定项目根、校验摘要，并按 `BUN_BIN`、用户目录下独立的 Bun、PATH 中的 Bun 的顺序选择 Bun。`BUN_BIN` 必须是可执行文件路径，不含命令参数。
+
+更新快照时：
+
+1. 比较上游内容，原样替换文件。
+2. 更新包装器和本文的摘要。
+3. 重新运行治理检查和验证。
+
+只有该快照排除自动格式化和 lint。不要手工修补生成代码后沿用旧摘要。
+
+Windows 上，包装器会从 PATH 找到原生 `vp.exe` 并放到子进程 PATH 首位，避免 Bun 把 pnpm 的 `.bin/vp` POSIX 脚本当成 Windows 程序启动。请让全局 Vite+ 保持在 PATH 中，配置里不要写开发者机器的绝对工具路径。
+
+## 其他约定
+
+- **提交钩子**：通过 `scripts/check-staged.mjs` 运行 `vp staged`，只允许检查工具更新原先选中的文件，额外改变的暂存范围会还原，工作区内容保留。钩子不执行完整治理或测试。
+- **缓存**：治理脚本缓存关闭，确保每次读取 Git index。需要构建缓存时使用显式的 Vite task，不要缓存外层入口。
+- **TypeScript**：根配置排除 `artifacts`、`.pnpm-store`、构建和覆盖率产物。
 
 ## 公开文档边界
 
-根 README 和 `docs/public` 是公开文档入口，只链接公开文件。源码、项目配置、脚本、测试及工作流按配置中的明确路径允许进入公开 Git；本地环境、依赖和构建产物受内部规则保护。PRD、memory、开发决策、验收过程、技能上下文和 harness 答案/计划仅保留本地，并由 `.gitignore` 排除。
+根 README 和 `docs/public` 是公开文档入口，只链接公开文件。源码、项目配置、脚本、测试和工作流按配置中的明确路径进入公开 Git。PRD、memory、开发决策、验收过程、技能上下文和 harness 答案或计划只保留本地，由 `.gitignore` 排除。
 
-公开模式的 lint 会检查已暂存/跟踪内容。仓库尚无提交、文件未暂存时，index 为空，因此通过不意味着全部工作文件已接受发布检查；新增文件应核对 `git status --short` 和 `git check-ignore -v <path>`。私有源仓库的普通 lint 不执行公开 index 审计；可在独立测试快照中显式模拟公开模式验证文档保护。`.gitignore` 无法清除已经跟踪的内容或历史。日常治理检查不包含完整 Git 历史、托管平台资料或发布产物审计。
+- 仓库目前按 private 处理。`repository.visibility=public` 时，lint 还会检查已暂存和已跟踪文件的边界；公开前需要切换该配置并重新验证。
+- 公开模式的检查基于 Git index。文件未暂存时 index 为空，通过不代表所有工作文件都已检查。新增文件请核对 `git status --short` 和 `git check-ignore -v <path>`。
+- `.gitignore` 不能清除已跟踪的内容或历史。日常治理检查不含完整 Git 历史、托管平台资料或发布产物审计。
 
-GitHub Actions 保留中文 OpenAPI、契约测试、API 进程启停及后端持久化恢复门禁，并提供独立 Web 浏览器任务和预期失败传播任务。执行完整 `ready` 的环境还需安装锁定 Chromium 与系统依赖、提供 Docker Engine/Compose 和既有后端测试服务。CI 通过状态须核对实际提交；配置存在不表示该提交已运行成功，自动化也不替代人工读屏或实体设备验收。
+## CI
+
+GitHub Actions 包含中文 OpenAPI、契约测试、API 进程启停和后端持久化恢复门禁，另有独立的 Web 浏览器任务和预期失败传播任务。运行完整 `ready` 的环境还需要锁定版本的 Chromium 及系统依赖、Docker Engine 和 Compose，以及后端测试服务。

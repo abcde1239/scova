@@ -148,6 +148,7 @@
                                 @cancel-run="stopRun"
                                 @read-report="readReport"
                                 @retry-turn="restoreMessage(item)"
+                                @choose="sendChoice"
                             />
                         </li>
                     </ol>
@@ -669,6 +670,11 @@ function restoreMessage(item: ThreadItem) {
     taskRefId.value = content.taskId;
     autonomy.value = content.autonomy;
     composer.value?.focus();
+}
+function sendChoice(text: string) {
+    if (!canEditMessage.value) return;
+    message.value = text;
+    void sendMessage();
 }
 function focusItem(id: string) {
     paneOpen.value = false;

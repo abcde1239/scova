@@ -181,7 +181,8 @@
                                 :name="field.key"
                                 type="file"
                                 accept=".csv,text/csv"
-                                :required="field.required"
+                                :required="field.required && !sampleCsv"
+                                @change="sampleCsv = ''"
                             />
                             <textarea
                                 v-else-if="field.key === 'text'"
@@ -226,6 +227,21 @@
                                 :maxlength="field.key === 'period' ? 128 : 256"
                             />
                         </label>
+                        <div
+                            v-if="field.key === 'csv' && sampleAvailable"
+                            class="flex flex-wrap items-center gap-2"
+                        >
+                            <template v-if="sampleCsv">
+                                <span class="text-muted"
+                                    >已使用示例数据（2 行，库存列
+                                    stock）。选择文件会改用你的数据。</span
+                                >
+                                <action-button text @click="sampleCsv = ''">取消示例</action-button>
+                            </template>
+                            <action-button v-else text @click="useSample"
+                                >使用示例数据</action-button
+                            >
+                        </div>
                     </template>
                     <p v-if="requiresProvider && providers.isError.value" class="m-0 text-muted">
                         模型列表暂不可用。
@@ -323,6 +339,20 @@ const selectionHeading = ref<HTMLHeadingElement>();
 const exposed = ref<(keyof WorkflowCanvasInput)[]>([]);
 const runValues = ref<Record<string, string | number>>({});
 const notify = ref(false);
+// A two-row inventory sample lets a new account finish a run without preparing a file.
+const inventorySample = ['sku,stock', 'sample-A,4', 'sample-B,12', ''].join('\n');
+const sampleCsv = ref('');
+const sampleAvailable = computed(() =>
+    ['csv', 'inventoryColumn'].every((key) =>
+        selected.value?.fields.some((field) => field.key === key),
+    ),
+);
+function useSample() {
+    sampleCsv.value = inventorySample;
+    runValues.value = { ...runValues.value, inventoryColumn: 'stock' };
+    if (runValues.value.threshold === undefined || runValues.value.threshold === '')
+        runValues.value.threshold = 10;
+}
 const nodeLabels = {
     start: '开始',
     study: '研究',
@@ -391,6 +421,7 @@ async function select(item: WorkflowTemplate) {
         ),
     );
     notify.value = item.fields.find((field) => field.key === 'notify')?.default ?? false;
+    sampleCsv.value = '';
     selectedId.value = selectedId.value === next ? '' : next;
     attempt.value = undefined;
     latestRunId.value = '';
@@ -416,7 +447,8 @@ async function readInput(
             const value = form.get(key);
             if (key === 'notify') return [key, form.has(key)] as const;
             if (value instanceof File) {
-                if (!value.name) return;
+                if (!value.name)
+                    return key === 'csv' && sampleCsv.value ? [key, sampleCsv.value] : undefined;
                 if (value.size > 262_144) throw new Error('CSV 文件不能超过 256 KiB');
                 const bytes = await value.arrayBuffer();
                 try {
