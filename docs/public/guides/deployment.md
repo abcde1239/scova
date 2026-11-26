@@ -1,36 +1,47 @@
 # 部署与维护
 
-在单台服务器上用 Docker Compose 部署 Scova，并完成备份、升级和日常维护。个人电脑本地运行可选择 [SQLite 本机版](local-development.md#sqlite-本机版)。
+用 Docker Compose 在单台服务器上部署 Scova。个人电脑可以直接运行 [SQLite 本机版](local-development.md#sqlite-本机版)。
 
-部署包含 Web 工作台、API、Worker、同源静态资源与反向代理、PostgreSQL 17 和 Redis 7。Web 镜像只含构建后的静态资源和 Nginx 配置。后端主运行时为 Bun 1.3.4，后端镜像内装有 Node 24.22.1、Vite+ 1.4.0 和 PostgreSQL 17 客户端。功能范围见[工作台说明](web-workbench.md)。
+[快速开始](#快速开始) · [服务配置](#配置) · [备份与升级](#备份与升级) · [常见问题](#常见问题)
 
 ## 快速开始
 
-需要 Docker Engine（或 Docker Desktop 的 Linux 容器）和 Compose v2。请为 Scova 使用独立的数据库，不要与其他应用共用数据库或 Redis 队列名称。
+需要 Docker Engine，或使用 Linux 容器的 Docker Desktop，以及 Compose v2。为 Scova 使用独立数据库与 Redis 队列名称。
 
-1. 复制 `.env.example` 为 `.env`，修改以下配置，不要提交 `.env`：
-    - 把数据库密码替换为随机值，建议使用随机十六进制文本，避免连接 URL 转义问题。
-    - 为 `WORKER_EXECUTION_TOKEN` 设置独立的 32 字节随机令牌（可用 64 位十六进制）。
-    - 只有启用内置 SearXNG 时才需要设置随机搜索密钥。
-2. 构建并启动，再查看健康状态：
+### 1. 准备配置
+
+将 `.env.example` 复制为 `.env`。请把该文件留在部署环境中。
+
+- 将数据库密码改成随机值。用十六进制文本可以避免连接 URL 转义问题。
+- 为 `WORKER_EXECUTION_TOKEN` 设置独立的 32 字节随机令牌，例如 64 个十六进制字符。
+- 启用内置 SearXNG 时，另设随机 `SEARXNG_SECRET`。
+
+### 2. 启动并检查服务
+
+在仓库根目录执行：
 
 ```sh
 docker compose up --build -d
 docker compose ps
 ```
 
-3. 打开 `http://localhost:8080/tasks`。默认只绑定 `127.0.0.1:8080`。
+首次启动时，`migrate` 会先应用业务和检查点迁移。它成功退出后，API 与 Worker 才会启动。等待 API、Worker 和 Web 代理通过健康检查。
 
-启动时先运行一次性的 `migrate` 服务，业务迁移和 LangGraph saver 迁移都成功后，API 和 Worker 才会启动。更新源码后再次执行 `docker compose up --build -d` 才会重新构建 Web 资源。
+### 3. 打开工作台
 
-健康检查：
+在运行 Compose 的机器上打开 [http://localhost:8080/tasks](http://localhost:8080/tasks)。看到登录页后即可注册或登录。默认监听 `127.0.0.1:8080`。需要从其他机器访问时，先配置[同源地址和 TLS](#同源tls-与-sse)。
 
-- **`GET /health`**：API 存活检查。
-- **API 容器**：额外核验 PostgreSQL、所选协调存储、业务迁移和 saver 版本。
-- **Worker 容器**：启动时验证内部执行接口的鉴权、检查点版本和队列名称，健康检查读取 Worker 的心跳。
-- **代理容器**：验证 Web 入口可读。
+更新源码后，重新执行 `docker compose up --build -d`，构建新的 Web 静态资源。
 
 ## 配置
+
+标准部署包含 Web 工作台、Nginx 代理、API、Worker、PostgreSQL 17 和 Redis 7。Web 镜像包含构建后的静态资源和 Nginx 配置。后端镜像以 Bun 1.3.4 为主运行时，另含 Node.js 24.22.1、Vite+ 1.4.0 和 PostgreSQL 17 客户端。
+
+### 健康检查
+
+- `GET /health` 检查 API 是否存活。API 容器还检查数据库、协调存储与迁移版本。
+- Worker 启动时检查内部接口的鉴权、检查点版本和队列名称。容器通过心跳检查 Worker 状态。
+- Web 代理检查入口是否可读。
 
 ### 搜索与模型
 

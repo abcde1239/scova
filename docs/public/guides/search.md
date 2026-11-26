@@ -2,6 +2,8 @@
 
 研究需要搜索来源。Scova 的搜索与正文提取由账号独立配置，与解析、任务执行的模型分开保存。服务器不提供默认的搜索 Agent 或搜索 API 密钥。
 
+[选择搜索方式](#选择搜索方式) · [配置账号 Search API](#使用-search-api) · [部署 SearXNG](#自托管-searxng) · [验证搜索](#验证搜索) · [排查网页读取](#读取失败排查)
+
 ## 选择搜索方式
 
 | 方式             | 搜索                       | 读取正文                                    | 适合                     |
@@ -122,8 +124,8 @@ vp run search:down
 
 - **默认语言和地区**：`zh-CN`，Agent 可逐条传入搜索语言。
 - **启用的引擎**：Bing、DuckDuckGo 与 Google CSE，开启 HTML/JSON，只查询第一页并限制引擎超时。
-- **Bing**：当前出口的 `www.bing.com` 会重定向到中国网关，因此通过固定的 `cn.bing.com` 网关访问，并采用请求的语言和地区。英文查询使用 `ensearch=1`，其他语言使用 `ensearch=0`。小型 `bing_international.py` 适配层以只读文件挂载，复用固定镜像的原生请求构建与结果解析，不修改其他引擎的地区。
-- **暂时禁用**：Brave（当前出口返回 429）和普通 Google（适配器返回 403）。
+- **Bing**：内置配置使用 `cn.bing.com` 网关，并传入请求的语言和地区。英文查询使用 `ensearch=1`，其他语言使用 `ensearch=0`。
+- **默认禁用**：Brave 和普通 Google。启用其他引擎后，先用当前部署的网络验证实际搜索结果。
 - **Google CSE**：使用 SearxNG 自带的 `google cse` 适配器，无需 API Key，通过 CSE 网页接口和配置的 CX 获取结果，默认使用第三方 CX，不是官方 Custom Search JSON API，也不保证标准 Google 的全网覆盖或长期可用。可在该引擎配置中填写自己的 `CX`，再验证覆盖范围。
 
 修改配置后须重启 SearxNG；新增或改变挂载时须重新执行 Compose up，并分别检查 `/config` 和真实查询。升级镜像须重新验证挂载路径、引擎加载、语言及国际搜索参数，以及 Bing 跳转链接的解析。

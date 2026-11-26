@@ -1,8 +1,12 @@
 # 本地开发环境
 
-在本机运行 Scova 的 Web、Server 和 Worker，用于开发或试用。两种方式：SQLite 本机版（无需 Docker）和 PostgreSQL + Redis（Docker 启动依赖）。
+在本机运行 Scova 的 Web、Server 和 Worker，用于开发或试用。
 
 需要 [Vite+](https://viteplus.dev/guide/)、Node.js >= 22.18 和 Bun >= 1.3.4。
+
+- [SQLite 本机版](#sqlite-本机版)：个人电脑直接运行，无需 Docker。
+- [PostgreSQL + Redis](#postgresql--redis)：使用 Docker 启动数据库与队列。
+- [单机 SQLite 协调模式](#单机-sqlite-协调模式)：继续使用 PostgreSQL 保存业务数据，改用 SQLite 处理队列和协调。
 
 ## SQLite 本机版
 
@@ -33,7 +37,7 @@ vp run local:sqlite
 
 ### 限制与备份
 
-- 资料库使用字面子串搜索。
+- 资料库按连续文字匹配搜索。
 - 联网研究需要配置模型和搜索供应商。
 - 上传超过 256 KiB 的报告附件需要配置 R2 / S3。
 - 首次创建本机库得到的是空工作区。

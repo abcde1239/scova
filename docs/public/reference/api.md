@@ -1,67 +1,82 @@
-# 中文接口文档
+# Scova HTTP 接口
 
-本文说明 Scova 后端 API 的启动与文档生成方式，并按资源列出各接口的请求约定、权限要求和限制。API 使用 Bun + Elysia，Node.js 通过官方适配器兼容；交互文档和契约来源见[接口契约](contracts.md)。
+服务启动后，在浏览器打开 `/swagger` 试用接口，或访问 `/swagger/json` 获取 OpenAPI 3.1。仓库也提供 [OpenAPI JSON](../../../swagger.json)。
 
-## 启动与文档生成
+[任务与草稿](#任务与草稿) · [报告与收件箱](#报告与收件箱) · [报告证据问答](#报告证据问答) · [附件](#附件) · [接口文档维护](#维护接口文档)
 
-启动后访问 `/swagger` 查看交互文档，`/swagger/json` 获取 OpenAPI 3.1 JSON。
-
-```sh
-vp run server#start
-# Node.js 兼容入口
-vp run server#start:node
-# 从真实 Elysia 路由生成中文接口文档
-vp run api:openapi
-# 检查已提交产物是否漂移
-vp run api:openapi:check
-```
-
-- **生成产物**：根目录的 [swagger.json](../../../swagger.json) 是生成的 OpenAPI 3.1 文档，不手工编辑。
-- **声明规则**：请求和响应引用 `packages/models` 的运行时 schema；路由使用中文 summary、description、tags 和唯一 operationId，DTO 字段均有中文说明。新增接口必须同时声明请求、成功/失败响应及必要的 Cookie、CSRF、幂等和修订版本头。
-- **生成器校验**：中文说明、模型与 contracts 等价、引用可解析和 operationId 唯一。
-
-容器运行、迁移及恢复见[部署维护](../guides/deployment.md)。
+浏览器调用使用账号会话。写请求还需要同源和 CSRF 校验。修订与幂等要求见[共享契约与事件](contracts.md)。
 
 ## 任务与草稿
 
-**自然语言草稿**
+### 生成自然语言草稿
 
-- `POST /api/v1/task-drafts` 接收 `{ "inputText": "需求描述", "timezone": "Asia/Tokyo" }`，其中时区可省略。接口使用会话与 CSRF，返回原始描述、完整可编辑配置、`mode`、`requiresConfirmation: true`、警告和独立解析用量；不会保存任务或启用计划。
-- 无模型、解析失败或超时会明确返回手工草稿，限流和基础设施错误仍使用真实 HTTP 状态。确认并编辑后通过 `POST /api/v1/tasks` 保存配置。
+`POST /api/v1/task-drafts` 把需求描述整理为可编辑的任务配置。它需要会话和 CSRF 校验。
 
-**需求澄清**
+请求体示例：
+
+```json
+{
+    "inputText": "整理最近一周发布的 PostgreSQL 安全公告",
+    "timezone": "Asia/Tokyo"
+}
+```
+
+`timezone` 可省略。成功时返回原始描述、任务配置、`mode`、`requiresConfirmation: true`、警告和解析用量。
+
+- **手工草稿**：缺少模型、解析失败或超时时，返回可编辑的手工配置。限流和基础设施故障仍使用对应的 HTTP 状态。
+- **保存**：核对并编辑草稿后，调用 `POST /api/v1/tasks`。生成草稿本身不会保存任务或启用计划。
+
+### 需求澄清
 
 - `POST /api/v1/task-drafts/questions` 接收 `inputText`、可选 `timezone`、`clarifications: [{ question, answer }]` 和从 0 开始的 `round`（0–2）。
 - 需求整理 Agent 根据原文与回答返回摘要、最多三个问题和待确认范围；末轮仅整理范围，需求明确时可提前结束。模型不可用或输出无效时明确返回 `mode: manual`。
 - 问答与草稿生成共用原解析限流和预算，每请求最多两次模型尝试；不保存任务，不搜索网页。最终草稿请求可附带 `clarifications` 和经用户核对的 `searchScope`，服务端强制保留已确认范围。
 
-**任务状态**
+### 任务状态
 
 - `POST /api/v1/tasks/:id/pause`、`resume`、`archive` 使用会话、CSRF 和 `If-Match` 修订控制，返回任务详情和新 `ETag`。
 - 暂停保留当前 Run，恢复仅安排未来周期时点；归档阻止新手动、重试和周期执行，并对当前 Run 请求取消。已完成幂等命令仍可重放原结果。
 
-**执行历史**
+### 查询执行历史
 
-`GET /api/v1/tasks/:taskId/runs` 返回当前账号指定任务的执行历史，按排队时间倒序游标分页，`limit` 最大 100。公开字段包含固定任务版本、模式、预算、状态和覆盖情况，不返回租约、checkpoint、工具正文或反馈内部快照。历史游标绑定账号、任务与数据库原始时间；Task、Report、Inbox 列表同样使用数据库微秒精度边界。
+`GET /api/v1/tasks/:taskId/runs` 使用当前账号会话读取任务的执行记录，按排队时间倒序分页。
+
+在已登录的同源页面上调用：
+
+```js
+const taskId = '替换为任务 ID';
+const url = `/api/v1/tasks/${encodeURIComponent(taskId)}/runs?limit=10`;
+const response = await fetch(url);
+if (!response.ok) throw new Error(`请求失败：${response.status}`);
+const { items, nextCursor } = await response.json();
+```
+
+`limit` 最大为 100。下一页将 `nextCursor` 作为 `cursor` 参数传入。记录包含固定的任务版本、运行模式、预算、状态和覆盖情况。
+
+- `200`：返回 `items` 与 `nextCursor`。执行记录不包含租约、检查点和内部工具正文。
+- `401`：需要登录。
+- `404`：找不到当前账号可访问的任务。
+
+历史游标绑定账号、任务与原始排队时间，保留数据库的微秒精度。任务、报告和收件箱列表也采用微秒精度。
 
 ## 报告与收件箱
 
-**读取**
+### 读取
 
 - `GET /api/v1/reports` 支持任务筛选与游标分页，`GET /api/v1/reports/:id` 返回结构化结论、来源快照元数据和原文引用。
 - `GET /api/v1/inbox` 分页读取收件箱，`PATCH /api/v1/inbox/:id` 以 `{ "read": true }` 标记已读，传 `false` 恢复未读；写请求仍需 CSRF。
 - 报告读取保留演示模式、覆盖缺口和引用定位，完整网页正文及内部工具、checkpoint 不进入响应。
 
-**覆盖与日期**
+### 覆盖与日期
 
 - `coverage.delivery` 可选，包含 `answered`（核心问题均有引用答案）、`partial`（部分问题有答案）、`sources_only`（仅来源资料）及问题计数；详情校验分类与保存的结论映射一致。该字段独立于 `coverage.completeness`、Run 状态和比较基线，旧记录可以缺省。
 - 证据快照的可选 `sourceDates` 分别返回 `published`、`modified`，各含 `status`、`instant`、`value` 和 `precision`；`day`、`local` 精度的 `instant` 为 null，不伪造 UTC 时刻。日期来自本轮已保存的来源时间观测并重新校验，不采用模型猜测或更新时间替代发布时间。
 
-**变化**
+### 变化
 
 报告的 `changes` 使用同一组可访问证据：`oldEvidenceIds` 来自本次执行首次领取时固定的完整基线，`newEvidenceIds` 来自当前执行；两侧还须分别匹配变化记录的来源与快照。非法关联使整个详情返回 `409 INVALID_REPORT_EVIDENCE`。正文过期清理后仍可读取保存的引用片段和定位。
 
-**通知**
+### 通知
 
 `GET /api/v1/notifications` 按游标读取当前账号通知，可按 `kind`、`unread` 筛选；失败通知的 `reportId` 可为空，使用 `runId` 查看执行原因。`PATCH /api/v1/notifications/:id` 使用会话和 CSRF，以 `{ "read": true }` 标为已读，`false` 恢复未读；重复已读保留首次时间。通知和收件箱的已读状态相互独立。
 
@@ -97,12 +112,32 @@ vp run api:openapi:check
 
 ## 附件
 
-**报告附件**
+### 报告附件
 
 - `attachments` 接收 CSV、TXT、Markdown、JSON、TSV、PDF、PNG、JPEG 或 WebP 原始字节，文本使用 UTF-8，单件上限 10 MiB。
 - 256 KiB 以内的附件保存在 PostgreSQL，其中文本支持按逻辑记录读取行号。超过 256 KiB 的附件存入私有 R2/S3，仅提供原件下载。未配置桶或存储暂不可用时返回 503。
 - 解析失败仍保留原件。所有资源按报告和账号授权，删除后由 Server 回收无引用对象。
 
-**项目会话附件**
+### 项目会话附件
 
 `POST /api/v1/threads/:threadId/attachments?filename=…` 用于上传私有项目会话附件，要求会话及 CSRF，并接收不超过 256 KiB 的原始请求体。支持 CSV、TXT、Markdown、JSON、TSV、PDF、PNG、JPEG、WebP，`Content-Type` 必须与文件扩展名匹配。附件元数据及原件下载按账号与会话授权。
+
+## 维护接口文档
+
+在仓库根目录启动 API，或生成和检查仓库中的 OpenAPI 文件。
+
+```sh
+vp run server#start
+# Node.js 兼容入口
+vp run server#start:node
+# 从真实 Elysia 路由生成中文接口文档
+vp run api:openapi
+# 检查已提交产物是否漂移
+vp run api:openapi:check
+```
+
+- **生成产物**：根目录的 [swagger.json](../../../swagger.json) 是生成的 OpenAPI 3.1 文档，不手工编辑。
+- **声明规则**：请求和响应引用 `packages/models` 的运行时 schema；路由使用中文 summary、description、tags 和唯一 operationId，DTO 字段均有中文说明。新增接口必须同时声明请求、成功/失败响应及必要的 Cookie、CSRF、幂等和修订版本头。
+- **生成器校验**：中文说明、模型与 contracts 等价、引用可解析和 operationId 唯一。
+
+容器运行、迁移及恢复见[部署维护](../guides/deployment.md)。
