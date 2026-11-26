@@ -8,7 +8,7 @@ import {
     describeProperties,
 } from '../common/schema.ts';
 
-export { readWorkflowStages } from './graph.ts';
+export { concurrentStudyConflicts, readWorkflowStages } from './graph.ts';
 
 const strict = { additionalProperties: false };
 const nodeId = Type.String({ pattern: '^[A-Za-z0-9_-]{1,64}$', description: '图内唯一节点标识' });

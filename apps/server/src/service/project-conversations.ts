@@ -1,4 +1,3 @@
-import { setTimeout as delay } from 'node:timers/promises';
 import type {
     DatabaseTransaction,
     projectConversationTurns,
@@ -26,6 +25,7 @@ import { createQuestionBudgetRepo } from '@/repo/report-questions.ts';
 import { createTaskDraftService } from '@/service/task-drafts.ts';
 import { confirmThreadDraft } from '@/service/thread-draft-confirmation.ts';
 import { createTaskService } from '@/service/tasks.ts';
+import { watchTurnCancellation } from '@/service/turn-cancel-watch.ts';
 import { ApiError } from '@/utils/errors.ts';
 
 const missing = () => new ApiError(404, 'NOT_FOUND', '资源不存在');
@@ -275,34 +275,18 @@ export function createProjectConversationService(services: ApiServices) {
             const controller = new AbortController();
             active.set(turnId, controller);
             const abort = controller.signal;
-            const monitor = new AbortController();
             const store = createProjectConversationStore(
                 services.db(),
                 userId,
                 projectId,
                 claim.threadId,
             );
-            const check = async () => {
-                const running = await withDeadline(1000, monitor.signal, () =>
-                    store.isRunning(turnId, services.clock()),
-                );
-                if (!running) controller.abort();
-            };
-            let watching: Promise<void> | undefined;
+            const isRunning = () => store.isRunning(turnId, services.clock());
+            let stopWatching: (() => Promise<void>) | undefined;
             try {
-                // Check persisted state before dispatch and while another instance can cancel the turn.
-                await check();
+                if (!(await withDeadline(1000, abort, isRunning))) controller.abort();
                 abort.throwIfAborted();
-                watching = (async () => {
-                    try {
-                        while (!abort.aborted) {
-                            await delay(250, undefined, { signal: monitor.signal });
-                            await check();
-                        }
-                    } catch (error) {
-                        if (!monitor.signal.aborted) controller.abort(error);
-                    }
-                })();
+                stopWatching = watchTurnCancellation(controller, isRunning);
                 let response: string;
                 let config: TaskConfig | undefined;
                 if (input.kind === 'draft') {
@@ -372,8 +356,7 @@ export function createProjectConversationService(services: ApiServices) {
                     return snapshot(store);
                 });
             } finally {
-                monitor.abort();
-                await watching;
+                await stopWatching?.();
                 active.delete(turnId);
             }
         },

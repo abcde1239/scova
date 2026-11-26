@@ -28,7 +28,11 @@ test('workbench locale updates desktop and mobile navigation but not the busines
     page,
 }) => {
     await page.goto('/account/appearance');
-    await page.getByRole('combobox', { name: '界面语言' }).selectOption('en');
+    await page.getByRole('combobox', { name: '界面语言', exact: true }).press('Enter');
+    await page
+        .getByRole('listbox', { name: '界面语言', exact: true })
+        .getByRole('option', { name: 'English', exact: true })
+        .click();
     await expect(page).toHaveTitle('Appearance · Scova');
     await expect(
         page

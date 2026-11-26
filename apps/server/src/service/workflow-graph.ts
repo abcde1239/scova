@@ -1,4 +1,5 @@
 import {
+    concurrentStudyConflicts,
     readWorkflowStages,
     isWorkflowCanvasGraph,
     type LegacyWorkflowGraph,
@@ -110,7 +111,6 @@ export function workflowCanvasOrder(graph: WorkflowCanvasGraph): WorkflowCanvasN
 
     const ordered: WorkflowCanvasNode[] = [];
     const ancestry = new Map<string, Set<string>>();
-    const studiesByTask = new Map<string, string[]>();
     const pending = new Set(graph.nodes);
     while (pending.size) {
         const ready = [...pending].filter((node) =>
@@ -123,18 +123,14 @@ export function workflowCanvasOrder(graph: WorkflowCanvasGraph): WorkflowCanvasN
             if (node.type !== 'start' && !ancestors.has(start[0]!.id))
                 invalid('/graph/edges', `节点 ${node.label ?? node.id} 未连接到开始`);
             validateCanvasNode(node, ancestors, direct.size, nodes);
-            if (node.type === 'study') {
-                const key = node.taskId.toLowerCase();
-                const prior = studiesByTask.get(key) ?? [];
-                if (prior.some((id) => !ancestors.has(id)))
-                    invalid(`/graph/nodes/${node.id}`, '可能同时运行的研究节点需要绑定不同任务');
-                studiesByTask.set(key, [...prior, node.id]);
-            }
             ancestry.set(node.id, ancestors);
             ordered.push(node);
             pending.delete(node);
         }
     }
+    const conflicts = concurrentStudyConflicts(ordered, (id) => ancestry.get(id)!);
+    const conflict = ordered.findLast((node) => conflicts.has(node.id));
+    if (conflict) invalid(`/graph/nodes/${conflict.id}`, '可能同时运行的研究节点需要绑定不同任务');
     if (ancestry.get(end[0]!.id)?.size !== nodes.size - 1)
         invalid('/graph/edges', '每条分支必须连接到结束');
     return ordered;

@@ -44,6 +44,19 @@
             <p class="[.execution-overview_&:is(p)]:m-0" v-if="executionFailure(run)">
                 {{ executionFailure(run) }}
             </p>
+            <div v-if="configurationFailure" class="failure-recovery layout-grid gap-2">
+                <p class="text-muted m-0">
+                    补齐配置后可在本页重试。若配置页提示尚未启用密钥加密，需要部署管理员处理。
+                </p>
+                <div class="flex flex-wrap gap-4">
+                    <router-link class="navigation-link" :to="{ name: 'agent-settings' }"
+                        >前往 Agent 配置<app-icon name="chevron"
+                    /></router-link>
+                    <a class="navigation-link" href="#run-actions-title" @click="focusActions"
+                        >跳到重试<app-icon name="chevron"
+                    /></a>
+                </div>
+            </div>
             <p class="run-timing [.execution-overview_&:is(p)]:m-0">
                 <time :datetime="run.startedAt ?? run.queuedAt">{{
                     time(run.startedAt ?? run.queuedAt)
@@ -395,6 +408,23 @@ const resultReport = computed(() => {
         return report;
     return listedReport.value;
 });
+// Failures the account owner can fix in Agent settings. Show recovery at the top of the page.
+const configurationFailures = new Set([
+    'AGENT_CONFIGURATION_INVALID',
+    'SEARCH_API_NOT_CONFIGURED',
+    'SEARCH_CREDENTIAL_INVALID',
+    'SEARCH_API_READING_UNSUPPORTED',
+]);
+const configurationFailure = computed(
+    () => run.value?.status === 'failed' && configurationFailures.has(run.value.failureCode ?? ''),
+);
+function focusActions(event: MouseEvent) {
+    const target = document.getElementById('run-actions-title');
+    if (!target) return;
+    event.preventDefault();
+    target.scrollIntoView({ block: 'start' });
+    target.focus({ preventScroll: true });
+}
 const terminal = computed(
     () => !!run.value && ['succeeded', 'partial', 'failed', 'canceled'].includes(run.value.status),
 );

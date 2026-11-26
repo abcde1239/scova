@@ -1,14 +1,5 @@
-import { setTimeout as delay } from 'node:timers/promises';
 import { estimateModelInputTokens, withDeadline, type StructuredInput } from '@scova/connectors';
-import {
-    and,
-    asc,
-    eq,
-    lt,
-    projectConversationTurns,
-    type DatabaseClient,
-    type DatabaseTransaction,
-} from '@scova/db';
+import { type DatabaseClient, type DatabaseTransaction } from '@scova/db';
 import {
     parseContract,
     TaskConfigSchema,
@@ -17,7 +8,10 @@ import {
     type TaskConfig,
 } from '@scova/models';
 import type { ApiServices } from '@/app/services';
-import { createProjectConversationStore } from '@/repo/project-conversations.ts';
+import {
+    createProjectConversationStore,
+    findExpiredProjectTurns,
+} from '@/repo/project-conversations.ts';
 import { appendProjectThreadItems, createProjectThreadStore } from '@/repo/project-threads.ts';
 import { readProjectReportParagraph } from '@/repo/project-report-paragraphs.ts';
 import { createProjectStore } from '@/repo/projects.ts';
@@ -41,6 +35,7 @@ import {
 } from '@/service/thread-attachments.ts';
 import { createThreadScheduleActionService } from '@/service/thread-schedule-actions.ts';
 import { requireWritableThread, threadMissing } from '@/service/thread-actions.ts';
+import { watchTurnCancellation } from '@/service/turn-cancel-watch.ts';
 import { ApiError } from '@/utils/errors.ts';
 
 const maxTurnSteps = 6;
@@ -56,7 +51,23 @@ const toolLabels = {
     start_run: '启动研究运行',
 } as const;
 type TurnTool = keyof typeof toolLabels;
-const clarification = '你想发起一次新研究，还是查询项目已有成果？查询已有成果时可以引用一份报告。';
+const draftPrefix = '起草研究计划：';
+/** No model can answer from the evidence. Offer a one-click research draft on the same topic. */
+function clarifyResearch(message: string, reportCount: number): Plan {
+    const choices = [
+        {
+            label: '起草研究',
+            message: draftPrefix + message.trim().slice(0, 2000 - draftPrefix.length),
+        },
+    ];
+    return {
+        response: reportCount
+            ? '你想发起一次新研究，还是查询项目已有成果？查询已有成果时请引用一份报告。'
+            : '项目还没有可查询的报告。可以选择「起草研究」，按这条消息准备研究计划。',
+        clarify: true,
+        choices,
+    };
+}
 type Store = ReturnType<typeof createProjectConversationStore>;
 type Thread = NonNullable<Awaited<ReturnType<ReturnType<typeof createProjectThreadStore>['lock']>>>;
 type Ref = NonNullable<SendProjectTurn['refs']>[number];
@@ -77,6 +88,7 @@ type Plan = {
     config?: TaskConfig;
     recurring?: ProjectScheduleProposal;
     clarify?: boolean;
+    choices?: { label: string; message: string }[];
     auto?: boolean;
 };
 
@@ -155,6 +167,7 @@ export function createProjectTurnService(services: ApiServices) {
         run?: { taskId: string; runId: string | null },
         clarify = false,
         tools: ReadonlySet<TurnTool> = new Set(),
+        choices?: Plan['choices'],
     ) {
         if (!turn?.threadId || !turn.answer) return;
         await appendProjectThreadItems(
@@ -172,7 +185,11 @@ export function createProjectTurnService(services: ApiServices) {
                     kind: clarify ? 'disambiguation' : 'message',
                     turnId: turn.id,
                     status: turn.status,
-                    payload: { role: 'assistant', text: turn.answer },
+                    payload: {
+                        role: 'assistant',
+                        text: turn.answer,
+                        ...(clarify && choices?.length ? { choices } : {}),
+                    },
                     refs,
                 },
                 ...(draft
@@ -215,7 +232,7 @@ export function createProjectTurnService(services: ApiServices) {
                     ? evidence.sources[0].excerpt
                     : evidence.reports.length === 1
                       ? evidence.reports[0]!.summary.slice(0, 6000)
-                      : clarification)
+                      : null)
             );
         const candidates = evidence.attachments.filter(({ excerpt }) => excerpt !== null);
         const request = {
@@ -537,7 +554,6 @@ export function createProjectTurnService(services: ApiServices) {
             );
             if ('receipt' in claim && claim.receipt) return claim.receipt;
             const controller = new AbortController();
-            const monitor = new AbortController();
             active.set(turnId, controller);
             const store = createProjectConversationStore(
                 services.db(),
@@ -545,21 +561,9 @@ export function createProjectTurnService(services: ApiServices) {
                 claim.projectId,
                 threadId,
             );
-            const watching = (async () => {
-                try {
-                    while (!controller.signal.aborted) {
-                        await delay(250, undefined, { signal: monitor.signal });
-                        if (
-                            !(await withDeadline(1000, monitor.signal, () =>
-                                store.isRunning(turnId, services.clock()),
-                            ))
-                        )
-                            controller.abort();
-                    }
-                } catch (error) {
-                    if (!monitor.signal.aborted) controller.abort(error);
-                }
-            })();
+            const stopWatching = watchTurnCancellation(controller, () =>
+                store.isRunning(turnId, services.clock()),
+            );
             try {
                 const result = await withDeadline<Plan>(
                     policy.timeoutMs,
@@ -569,15 +573,16 @@ export function createProjectTurnService(services: ApiServices) {
                             throw new Error('turn ended');
                         if (!research) {
                             beginTool('answer', false);
-                            return {
-                                response: await answer(
-                                    userId,
-                                    threadId,
-                                    message,
-                                    claim.evidence,
-                                    signal,
-                                ),
-                            };
+                            const response = await answer(
+                                userId,
+                                threadId,
+                                message,
+                                claim.evidence,
+                                signal,
+                            );
+                            return response === null
+                                ? clarifyResearch(message, claim.evidence.reports.length)
+                                : { response };
                         }
                         if (intent.kind === 'clarify')
                             return { response: '请说明你想研究的具体主题。', clarify: true };
@@ -721,6 +726,7 @@ export function createProjectTurnService(services: ApiServices) {
                         run ? { taskId: run.taskId, runId: run.runId } : undefined,
                         result.clarify,
                         tools,
+                        result.choices,
                     );
                     if (done && result.recurring)
                         await schedules.propose(
@@ -759,8 +765,7 @@ export function createProjectTurnService(services: ApiServices) {
                     return status(failed ?? turn);
                 });
             } finally {
-                monitor.abort();
-                await watching;
+                await stopWatching();
                 active.delete(turnId);
             }
         },
@@ -780,20 +785,28 @@ export function createProjectTurnService(services: ApiServices) {
 
 export async function expireProjectTurns(db: DatabaseClient, limit: number, signal: AbortSignal) {
     const now = new Date();
-    const turns = projectConversationTurns;
-    const expired = await db
-        .select({ userId: turns.userId, projectId: turns.projectId, threadId: turns.threadId })
-        .from(turns)
-        .where(and(eq(turns.status, 'running'), lt(turns.executionDeadlineAt, now)))
-        .orderBy(asc(turns.executionDeadlineAt))
-        .limit(limit);
-    for (const { userId, projectId, threadId } of expired) {
+    // One transaction per thread. Only the selected turns are updated, so a batch never exceeds limit.
+    const groups = new Map<
+        string,
+        { userId: string; projectId: string; threadId: string; ids: string[] }
+    >();
+    for (const { id, userId, projectId, threadId } of await findExpiredProjectTurns(
+        db,
+        now,
+        limit,
+    )) {
+        const key = `${userId}:${projectId}:${threadId}`;
+        const group = groups.get(key) ?? { userId, projectId, threadId, ids: [] };
+        group.ids.push(id);
+        groups.set(key, group);
+    }
+    for (const { userId, projectId, threadId, ids } of groups.values()) {
         if (signal.aborted) return;
         await db.transaction(async (tx) => {
             if (!(await createProjectStore(tx).lockProject(userId, projectId))) return;
             if (!(await createProjectThreadStore(tx, userId).lock(threadId))) return;
             const store = createProjectConversationStore(tx, userId, projectId, threadId);
-            for (const turn of await store.expire(now)) {
+            for (const turn of await store.expire(now, ids)) {
                 await appendProjectThreadItems(
                     tx,
                     userId,

@@ -1,4 +1,5 @@
 import {
+    concurrentStudyConflicts,
     workflowNodeLimit,
     type WorkflowCanvasGraph,
     type WorkflowCanvasNode,
@@ -148,16 +149,32 @@ export function acceptsCanvasSource(node: WorkflowCanvasNode, source: WorkflowCa
     }
 }
 
-export function canvasNodeIssue(
+/** Maps every node ID to its first blocking issue, or an empty string. */
+export function canvasIssues(graph: WorkflowCanvasGraph) {
+    const end = graph.nodes.find(({ type }) => type === 'end');
+    const reachesEnd = end ? canvasAncestors(graph.edges, end.id) : new Set<string>();
+    const ancestry = new Map(graph.nodes.map(({ id }) => [id, canvasAncestors(graph.edges, id)]));
+    const conflicts = concurrentStudyConflicts(graph.nodes, (id) => ancestry.get(id) ?? new Set());
+    return new Map(
+        graph.nodes.map((node) => [
+            node.id,
+            canvasNodeIssue(graph, node, reachesEnd, conflicts, ancestry.get(node.id)!),
+        ]),
+    );
+}
+
+function canvasNodeIssue(
     graph: WorkflowCanvasGraph,
     node: WorkflowCanvasNode,
     reachesEnd: ReadonlySet<string>,
+    conflicts: ReadonlySet<string>,
+    ancestors: ReadonlySet<string>,
 ) {
-    const ancestors = canvasAncestors(graph.edges, node.id);
     const validSource = (id: string) =>
         ancestors.has(id) &&
         graph.nodes.some((source) => source.id === id && acceptsCanvasSource(node, source));
     if (node.type === 'study' && !node.taskId) return '请选择研究任务。';
+    if (conflicts.has(node.id)) return '可能同时运行的研究节点需要绑定不同任务，或改为串行连接。';
     if (node.type === 'csv' || node.type === 'deliver' || node.type === 'notify') {
         const { source } = node.config;
         if (source && !validSource(source)) return '请选择仍有连线且类型兼容的上游来源。';

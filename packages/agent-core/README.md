@@ -39,4 +39,4 @@ vp run test:agent-recovery
 vp run agent-core#build
 ```
 
-交付和恢复集成需要独立 PostgreSQL，双运行时恢复还需 Bun。详见 [研究循环](../../docs/public/reference/agent-research-loop.md)、[提示词](../../docs/public/reference/research-prompts.md)和 [Worker](../../apps/worker/README.md)。
+交付和恢复集成需要独立 PostgreSQL，双运行时恢复还需 Bun。详见 [Worker](../../apps/worker/README.md)。

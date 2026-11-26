@@ -42,6 +42,38 @@ const unresolved = () => new Promise<void>(() => {});
 afterEach(() => vi.useRealTimers());
 
 describe('Worker lifecycle failure classification', () => {
+    it('checks the lease once immediately before dispatch', async () => {
+        const { repository, claimed } = fixture();
+        const execute = vi.fn(async () => {
+            expect(repository.assertActive).toHaveBeenCalledExactlyOnceWith(claimed.token);
+        });
+        expect(await new RunService({ repository, executor: { execute } }).execute('r')).toBe(
+            'processed',
+        );
+        expect(execute).toHaveBeenCalledTimes(1);
+    });
+
+    it.each(['LEASE_LOST', 'RUN_CANCELED', 'DEADLINE_EXCEEDED'] as const)(
+        'keeps the executor fenced when the pre-dispatch check returns %s',
+        async (code) => {
+            const { repository, claimed } = fixture();
+            repository.assertActive.mockRejectedValueOnce(new RunFenceError(code));
+            const execute = vi.fn(async () => {});
+            const onDeadline = vi.fn(async () => {});
+            const service = new RunService({ repository, executor: { execute, onDeadline } });
+            expect(await service.execute('r')).toBe(
+                code === 'LEASE_LOST' ? 'ignored' : 'processed',
+            );
+            expect(repository.assertActive).toHaveBeenCalledExactlyOnceWith(claimed.token);
+            expect(execute).not.toHaveBeenCalled();
+            expect(onDeadline).toHaveBeenCalledTimes(code === 'DEADLINE_EXCEEDED' ? 1 : 0);
+            if (code === 'LEASE_LOST') expect(repository.finish).not.toHaveBeenCalled();
+            else
+                expect(repository.finish).toHaveBeenCalledExactlyOnceWith(claimed.token, {
+                    code: code === 'DEADLINE_EXCEEDED' ? code : 'EXECUTOR_FAILED',
+                });
+        },
+    );
     it.each([
         { code: '08006' },
         { code: '57014' },

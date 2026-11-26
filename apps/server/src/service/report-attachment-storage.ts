@@ -43,13 +43,24 @@ export async function cleanUnusedReportAttachments(
 ) {
     const storage = services.objectStorage();
     if (!storage) return;
-    const cutoff = new Date(services.clock().getTime() - abandonedObjectGraceMs);
+    const now = services.clock();
+    const cutoff = new Date(now.getTime() - abandonedObjectGraceMs);
+    let failed = 0;
     for (const { userId, id } of await repo.findUnusedAttachmentObjects(cutoff, limit)) {
         signal.throwIfAborted();
-        await repo.removeUnusedAttachmentObject(userId, id, () =>
-            storage.delete(attachmentObjectKey(userId, id), {
-                signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
-            }),
-        );
+        try {
+            await repo.removeUnusedAttachmentObject(userId, id, () =>
+                storage.delete(attachmentObjectKey(userId, id), {
+                    signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
+                }),
+            );
+        } catch (error) {
+            signal.throwIfAborted();
+            // One failing object must not block the rest of the queue. Retry after the grace period.
+            await repo.postponeAttachmentObjectCleanup(userId, id, now);
+            failed += 1;
+            if (failed === 1) console.error('附件对象删除失败，已推迟重试', error);
+        }
     }
+    if (failed) throw new Error(`${failed} 个附件对象删除失败，已推迟重试`);
 }

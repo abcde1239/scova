@@ -289,7 +289,6 @@ export class RunService {
                     }
                 },
             };
-            await assertActive();
             // 不合作的执行器也不能阻止停止或租约失效；迟到返回只被丢弃。
             const execution = Promise.resolve()
                 .then(async () => {

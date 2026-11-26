@@ -1,42 +1,25 @@
 # 文档
 
-使用指南、当前实现参考和可复现示例保存在本目录，随仓库发布。功能状态与命令以当前代码为准。
+按使用目的查找文档。功能与命令以当前代码为准。
 
-## 安装与使用
+## 安装与部署
 
-- [本地开发](guides/local-development.md) · [部署与维护](guides/deployment.md)
-- [Web 工作台](guides/web-workbench.md) · [Agent 配置](guides/agent-configuration.md) · [搜索配置](guides/search.md) · [账号头像](guides/account-avatars.md)
-- [手工配置任务](reference/manual-task.md) · [自然语言草稿](reference/task-draft.md) · [执行计划](reference/task-schedule.md) · [任务生命周期](reference/task-lifecycle.md) · [任务中心](reference/task-center.md)
-- [执行详情](reference/frontend-run-detail.md) · [研究运行图](reference/frontend-run-graph.md) · [执行控制](reference/run-actions.md) · [执行历史](reference/frontend-run-history.md)
+- [本地开发](guides/local-development.md)：SQLite 本机版、PostgreSQL + Redis 开发环境、端口与数据位置。
+- [部署与维护](guides/deployment.md)：Docker Compose 单机部署、备份、升级和对象存储。
+- [Agent 配置](guides/agent-configuration.md)：部署默认模型与个人模型。
+- [搜索配置](guides/search.md)：自托管 SearXNG 或账号 Search API。
 
-## 报告与资料
+## 使用指南
 
-- [报告工作区](reference/frontend-report-detail.md) · [输出形式与成果](reference/frontend-report-formats.md)
-- [主题清单](reference/frontend-report-topic-list.md) · [对象对比表](reference/frontend-report-comparison.md) · [研究报告](reference/frontend-research-report.md)
-- [变化与基线](reference/frontend-report-changes.md) · [报告历史](reference/frontend-report-history.md)
-- [连续问答](reference/frontend-report-questions.md) · [修订与补充研究](reference/frontend-followup.md)
-- [反馈](reference/frontend-feedback.md) · [反馈的交付效果](reference/frontend-feedback-effects.md)
-- [收件箱](reference/frontend-inbox.md) · [通知](reference/frontend-notifications.md) · [收藏](reference/frontend-bookmarks.md) · [笔记](reference/frontend-notes.md)
-- [资料库搜索](reference/frontend-library-search.md) · [来源历史](reference/frontend-source-history.md) · [图片与媒体边界](reference/source-images.md)
+- [工作台概览](guides/web-workbench.md)：功能入口、账号与界面。
+- [任务与执行](guides/tasks.md)：创建任务、设置周期、运行、取消和管理。
+- [报告](guides/reports.md)：阅读与核对来源、输出形式、变化、提问、补充研究和导出。
+- [项目与对话](guides/projects.md)：项目、会话、起草研究计划和自主度。
+- [工作流](guides/workflows.md)：画布、模板、试跑和发布。
+- [资料库、附件与通知](guides/library.md)：资料搜索、收藏、笔记、附件和站内通知。
+- [账号头像](guides/account-avatars.md)
 
-## 系统与接口
+## 接口与包
 
-- [系统架构](reference/architecture.md) · [数据模型](reference/data-model.md) · [数据库与迁移](reference/database.md)
 - [HTTP 接口](reference/api.md) · [共享契约与事件](reference/contracts.md) · [OpenAPI JSON](../../swagger.json)
-- [研究循环与完成判定](reference/agent-research-loop.md) · [生成提示词](reference/research-prompts.md)
-- [Agent Core](../../packages/agent-core/README.md) · [搜索与阅读连接器](../../packages/connectors/README.md) · [共享模型](../../packages/models/README.md) · [数据库包](../../packages/db/README.md) · [执行协议](../../packages/execution/README.md) · [通用辅助](../../packages/shared/README.md)
-- [Worker](../../apps/worker/README.md) · [对象存储](../../packages/object-storage/README.md)
-
-## 前端实现
-
-- [目录、Vue 与通信约定](reference/frontend-conventions.md) · [路由](reference/frontend-routing.md) · [会话](reference/frontend-session.md) · [执行事件流](reference/frontend-run-events.md)
-- [注册](reference/frontend-registration.md) · [登录](reference/frontend-login.md) · [账号偏好](reference/frontend-preferences.md) · [加载、空与错误状态](reference/frontend-states.md)
-- [视觉设计](reference/frontend-design.md) · [字体与阅读](reference/frontend-fonts.md) · [图标](reference/frontend-icons.md) · [响应式布局](reference/frontend-responsive.md) · [局部玻璃效果](reference/frontend-glass.md)
-
-## 验证与示例
-
-- [工程验证入口](reference/harness.md) · [后端验证](guides/backend-verification.md) · [浏览器测试](reference/browser-testing.md)
-- [Web 验收清单](guides/web-acceptance.md) · [基础视觉检查](reference/frontend-visual-foundation.md) · [完整工作台验收](reference/workbench-verification.md) · [移动设备检查](reference/mobile-verification.md)
-- [两次执行场景](examples/two-run-scenarios.md)
-
-开发记忆、需求草案、决策过程、历史评审和实际验收记录仅保留本地。测试源码与固定夹具随所属工作区提交；日志、截图、trace、覆盖率和生成报告属于运行产物，不提交。
+- 各包说明：[Agent Core](../../packages/agent-core/README.md) · [连接器](../../packages/connectors/README.md) · [共享模型](../../packages/models/README.md) · [数据库](../../packages/db/README.md) · [执行协议](../../packages/execution/README.md) · [通用辅助](../../packages/shared/README.md) · [对象存储](../../packages/object-storage/README.md) · [Worker](../../apps/worker/README.md)

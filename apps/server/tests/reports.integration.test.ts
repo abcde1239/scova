@@ -513,9 +513,34 @@ describe('报告证据与收件箱 API', () => {
                 );
             await sweep();
             expect(remove).not.toHaveBeenCalled();
+            // A later orphan must still be collected while the oldest one keeps failing.
+            const laterId = randomUUID();
+            const laterKey = `report-attachments/${owner.userId}/${laterId}`;
+            objects.set(laterKey, new Uint8Array([1]));
+            await db.insert(tables.reportAttachmentObjects).values({
+                userId: owner.userId,
+                id: laterId,
+                createdAt: new Date(now.getTime() + 1),
+            });
+            const deleteObject = async (target: string) => {
+                objects.delete(target);
+            };
+            remove.mockImplementation(async (target) => {
+                if (target === failedKey) throw new Error('storage persistent failure');
+                await deleteObject(target);
+            });
+            sweepTime = new Date(sweepTime.getTime() + 2 * 60 * 60 * 1000);
+            const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+            await expect(sweep()).rejects.toThrow('1 个附件对象删除失败');
+            expect(logged).toHaveBeenCalledOnce();
+            logged.mockRestore();
+            expect(objects.has(laterKey)).toBe(false);
+            expect(objects.has(failedKey)).toBe(true);
+            // The failed object is postponed for a full grace period instead of retried at once.
+            await sweep();
+            expect(objects.has(failedKey)).toBe(true);
+            remove.mockImplementation(deleteObject);
             sweepTime = new Date(sweepTime.getTime() + 60 * 60 * 1000 + 1);
-            remove.mockRejectedValueOnce(new Error('storage transient failure'));
-            await expect(sweep()).rejects.toThrow('storage transient failure');
             await sweep();
             expect(objects.has(failedKey)).toBe(false);
             expect([...objects.keys()]).toEqual([key]);
@@ -550,6 +575,54 @@ describe('报告证据与收件箱 API', () => {
             await sweep();
             expect(objects.size).toBe(0);
         } finally {
+            store.destroy();
+        }
+    });
+
+    it('慢速大附件上传期间同账号其他报告仍可导出', async () => {
+        const owner = await register();
+        const { report } = await fixture(owner);
+        const { report: another } = await fixture(owner, undefined, 1);
+        const store = createObjectStorage({
+            provider: 's3',
+            region: 'us-east-1',
+            bucket: 'test-attachments',
+            credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
+        });
+        bucket = store;
+        let started!: () => void;
+        let release!: () => void;
+        const putStarted = new Promise<void>((resolve) => (started = resolve));
+        const putReleased = new Promise<void>((resolve) => (release = resolve));
+        vi.spyOn(store, 'upload').mockImplementation(async (input) => {
+            started();
+            await putReleased;
+            return {
+                key: input.key!,
+                size: input.body.byteLength,
+                url: null,
+                contentType: input.contentType,
+            };
+        });
+        try {
+            const slow = request(`/reports/${report.id}/attachments?filename=slow.txt`, {
+                method: 'POST',
+                body: 'x'.repeat(REPORT_ATTACHMENT_INLINE_MAX_BYTES + 1),
+                headers: { ...headers(owner), 'content-type': 'text/plain' },
+            });
+            await putStarted;
+            const exported = await request(`/reports/${another.id}/exports/markdown`, {
+                method: 'POST',
+                headers: headers(owner),
+            });
+            expect(exported.status).toBe(200);
+            release();
+            expect((await slow).status).toBe(200);
+            await db
+                .delete(tables.reportExports)
+                .where(eq(tables.reportExports.userId, owner.userId));
+        } finally {
+            release();
             store.destroy();
         }
     });

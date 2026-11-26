@@ -8,6 +8,9 @@
             <h2 class="text-[1.25rem] leading-[1.5] m-0" id="natural-draft-title">
                 用 AI 整理需求
             </h2>
+            <action-button v-if="!manualMode" text @click="enterManual"
+                >跳过 AI，手动创建</action-button
+            >
             <info-dialog label="如何创建任务" title="AI 整理与手动填写">
                 <p class="m-0">
                     AI 整理：描述想研究的内容，由需求整理 Agent

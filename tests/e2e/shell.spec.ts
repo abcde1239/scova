@@ -49,7 +49,7 @@ test('有效路径与未知路径均可刷新直达，标题、导航和焦点�
     await page.setViewportSize({ width: 1440, height: 900 });
     for (const [url, title, selected] of [
         ['/tasks', '任务', '任务'],
-        ['/tasks/new', '新建任务', '新建任务'],
+        ['/tasks/new', '新建任务', null],
         ['/projects', '项目', '项目'],
         ['/workflows', '工作流', '工作流'],
         ['/inbox', '收件箱', '收件箱'],
@@ -97,7 +97,7 @@ test('有效路径与未知路径均可刷新直达，标题、导航和焦点�
     expect(errors).toEqual([]);
 });
 
-test('桌面侧栏的任务和新建任务独立可达，底部弹层留在视口内', async ({ page }) => {
+test('桌面侧栏直达任务，任务页可以新建，底部工具并排显示', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/inbox');
     const banner = page.getByRole('banner');
@@ -105,7 +105,7 @@ test('桌面侧栏的任务和新建任务独立可达，底部弹层留在视�
     const navigation = banner.getByRole('navigation', { name: '主导航', exact: true });
     await expect(navigation).toBeVisible();
     const tasks = navigation.getByRole('link', { name: '任务', exact: true });
-    const create = navigation.getByRole('link', { name: '新建任务', exact: true });
+    await expect(navigation.getByRole('link', { name: '新建任务', exact: true })).toHaveCount(0);
     const brand = banner.getByRole('link', { name: 'Scova，工作台首页' });
     expect((await banner.boundingBox())!.width).toBeLessThanOrEqual((await main.boundingBox())!.x);
     const toggle = banner.getByRole('button', { name: '收起侧边栏' });
@@ -115,16 +115,21 @@ test('桌面侧栏的任务和新建任务独立可达，底部弹层留在视�
     await page.keyboard.press('Tab');
     await expect(navigation.getByRole('link', { name: '选择项目以新建会话' })).toBeFocused();
     await expect(brand).toHaveAttribute('href', '/');
-    await create.focus();
-    await page.keyboard.press('Enter');
+    await tasks.press('Enter');
+    await expect(page).toHaveURL(/\/tasks$/);
+    await expect(tasks).toHaveAttribute('aria-current', 'page');
+    await main.getByRole('link', { name: '新建任务', exact: true }).press('Enter');
     await expect(page).toHaveURL(/\/tasks\/new$/);
     await expect(main).toBeFocused();
-    await expect(create).toHaveAttribute('aria-current', 'page');
-    await expect(tasks).not.toHaveAttribute('aria-current');
-    await tasks.click();
-    await expect(page).toHaveURL(/\/tasks$/);
 
-    const notification = banner.getByRole('button', { name: '通知', exact: true });
+    const tools = banner.getByRole('navigation', { name: '全局工具' });
+    const notification = tools.getByRole('button', { name: '通知', exact: true });
+    const language = tools.getByRole('combobox', { name: '界面语言' });
+    const notificationBox = (await notification.boundingBox())!;
+    const languageBox = (await language.boundingBox())!;
+    expect(languageBox.y).toBe(notificationBox.y);
+    expect(languageBox.width).toBe(notificationBox.width);
+    expect(languageBox.x).toBeGreaterThan(notificationBox.x);
     await notification.focus();
     const preview = page.getByRole('dialog', { name: '通知预览', exact: true });
     await expect(preview).toBeInViewport({ ratio: 1 });
@@ -162,10 +167,9 @@ test('桌面侧栏可键盘收起并记住偏好，窄屏仍使用抽屉', async
     await expect(expand).toBeFocused();
     expect((await banner.boundingBox())!.width).toBeLessThan(expandedSidebar.width);
     expect((await main.boundingBox())!.x).toBeLessThan(expandedMain.x);
-    const create = navigation.getByRole('link', { name: '新建任务', exact: true });
-    await page.keyboard.press('Tab');
-    await expect(create).toBeFocused();
     const projects = navigation.getByRole('link', { name: '项目', exact: true });
+    await page.keyboard.press('Tab');
+    await expect(projects).toBeFocused();
     await expect(projects).toHaveAttribute('title', '项目');
     await projects.click();
     await expect(page).toHaveURL(/\/projects$/);

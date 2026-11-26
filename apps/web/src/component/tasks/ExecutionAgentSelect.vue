@@ -19,6 +19,17 @@
                 >重试读取配置</action-button
             >
         </template>
+        <div v-else-if="missingModel" class="layout-grid gap-2" role="note">
+            <p class="scova-partial break-anywhere m-0">
+                当前账号和部署都没有可用的研究模型，立即执行会失败。可以先保存任务，配置模型后再执行。
+            </p>
+            <p v-if="!query.data.value?.data.storageReady" class="text-muted break-anywhere m-0">
+                此部署尚未启用密钥加密，暂时无法添加个人模型，请联系部署管理员启用或配置部署默认模型。
+            </p>
+            <router-link class="navigation-link" :to="{ name: 'agent-settings' }"
+                >前往 Agent 配置<app-icon name="chevron"
+            /></router-link>
+        </div>
     </div>
 </template>
 
@@ -26,11 +37,18 @@
 import { computed } from 'vue';
 import AppSelect from '@/component/common/AppSelect.vue';
 import ActionButton from '@/component/common/ActionButton.vue';
+import AppIcon from '@/component/common/AppIcon.vue';
 import { listProvidersEndpoint } from '@/api/agent-providers';
 import { useSessionQuery } from '@/composable/useSessionQuery';
 const props = defineProps<{ disabled?: boolean; inherit?: boolean }>();
 const selection = defineModel<string>({ required: true });
 const query = useSessionQuery(listProvidersEndpoint, {}, ['agent-providers']);
+// Explain before starting. Saving the task stays available; the server still decides at run time.
+const missingModel = computed(() => {
+    const data = query.data.value?.data;
+    if (!data || data.systemConfigured) return false;
+    return !data.items.some((item) => item.active || item.id === selection.value);
+});
 const options = computed(() => {
     const items = query.isError.value ? [] : (query.data.value?.data.items ?? []);
     const active = items.find((item) => item.active);

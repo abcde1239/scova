@@ -1,5 +1,6 @@
 import {
     and,
+    asc,
     desc,
     eq,
     inArray,
@@ -16,6 +17,21 @@ import {
     type DatabaseExecutor,
 } from '@scova/db';
 import { firstRow } from '@/utils/database.ts';
+
+/** Oldest overdue running turns across accounts, for the background expiry batch. */
+export function findExpiredProjectTurns(db: DatabaseExecutor, now: Date, limit: number) {
+    return db
+        .select({
+            id: turns.id,
+            userId: turns.userId,
+            projectId: turns.projectId,
+            threadId: turns.threadId,
+        })
+        .from(turns)
+        .where(and(eq(turns.status, 'running'), lt(turns.executionDeadlineAt, now)))
+        .orderBy(asc(turns.executionDeadlineAt), asc(turns.id))
+        .limit(limit);
+}
 
 export function createProjectConversationStore(
     db: DatabaseExecutor,
@@ -105,12 +121,18 @@ export function createProjectConversationStore(
                 )
                 .orderBy(drafts.id);
         },
-        expire(now: Date) {
+        /** Fails overdue running turns. `ids` limits the update to an already selected batch. */
+        expire(now: Date, ids?: string[]) {
             return db
                 .update(turns)
                 .set({ status: 'failed', answer: '本轮已超时，可重新发送。' })
                 .where(
-                    and(ownTurn, eq(turns.status, 'running'), lt(turns.executionDeadlineAt, now)),
+                    and(
+                        ownTurn,
+                        eq(turns.status, 'running'),
+                        lt(turns.executionDeadlineAt, now),
+                        ids ? inArray(turns.id, ids) : undefined,
+                    ),
                 )
                 .returning();
         },

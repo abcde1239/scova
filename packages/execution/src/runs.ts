@@ -26,6 +26,7 @@ export type RunClaim<TRun extends ExecutionRun = ExecutionRun> =
     | { kind: 'ignored' | 'busy' };
 
 export interface RunRepository<TRun extends ExecutionRun = ExecutionRun> {
+    /** In-process repositories use leaseOwner. The Worker HTTP adapter uses the owner assigned by Server. */
     claim(
         runId: string,
         leaseOwner: string,

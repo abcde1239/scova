@@ -160,6 +160,15 @@
         <p v-if="text && Object.hasOwn(labels, item.kind)" class="m-0 whitespace-pre-wrap">
             {{ text }}
         </p>
+        <div v-if="choices.length && writable" class="flex flex-wrap gap-2">
+            <action-button
+                v-for="choice in choices"
+                :key="choice.label"
+                :disabled="!canRetry"
+                @click="$emit('choose', choice.message)"
+                >{{ choice.label }}</action-button
+            >
+        </div>
     </article>
 </template>
 
@@ -197,6 +206,7 @@ defineEmits<{
     'cancel-run': [runId: string];
     'read-report': [id: string];
     'retry-turn': [];
+    choose: [message: string];
 }>();
 const uuid = new RegExp(UuidSchema.pattern!);
 const id = (value: unknown) => (typeof value === 'string' && uuid.test(value) ? value : undefined);
@@ -209,6 +219,17 @@ const labels: Record<string, string> = {
     notice: '会话通知',
 };
 const text = computed(() => valueText(props.item.payload.text));
+// Clarifications may offer follow-up messages, such as drafting research on the same topic.
+const choices = computed(() => {
+    const raw = props.item.kind === 'disambiguation' ? props.item.payload.choices : undefined;
+    if (!Array.isArray(raw)) return [];
+    return raw.flatMap((choice: unknown) => {
+        const { label, message } = (choice ?? {}) as Record<string, unknown>;
+        return valueText(label) && valueText(message)
+            ? [{ label: label as string, message: message as string }]
+            : [];
+    });
+});
 const isUser = computed(() => props.item.payload.role === 'user');
 const decisionItem = computed(
     () => ['plan', 'schedule'].includes(props.item.kind) && !!id(props.item.payload.actionId),
