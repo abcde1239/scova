@@ -90,7 +90,9 @@ describe('列表ID选择与DTO加载使用同一个PG快照', () => {
             // Gate the real hydration SQL after ID selection established its snapshot.
             const reader = createObservedDatabase(fixture.databaseUrl, {
                 async before(query) {
-                    if (!query.text.includes('"read_at"')) return;
+                    // ID selection uses read_at in WHERE. Only pause the projection that returns it.
+                    const projection = query.text.split(/\bfrom\b/i, 1)[0];
+                    if (!projection?.includes('"read_at"')) return;
                     if (/\bfrom\s+"notifications"/i.test(query.text))
                         await beforeHydration('notifications');
                     else if (/\bfrom\s+"inbox_items"/i.test(query.text))

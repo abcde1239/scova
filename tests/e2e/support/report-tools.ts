@@ -3,7 +3,11 @@ import { expect, type Page } from '@playwright/test';
 
 /** Exercise the same native disclosure used by readers; never mutate its open attribute. */
 export async function openReportTool(page: Page, tool: 'notes' | 'bookmarks' | 'feedback') {
-    const section = page.locator(`.${tool}-tool`);
+    const tools = page.locator('.secondary-report-tools');
+    await expect(tools).toBeVisible();
+    if (!(await tools.evaluate((element) => (element as HTMLDetailsElement).open)))
+        await tools.locator(':scope > summary').press('Enter');
+    const section = tools.locator(`.${tool}-tool`);
     await expect(section).toBeAttached();
     if (!(await section.evaluate((element) => (element as HTMLDetailsElement).open)))
         await section.locator(':scope > summary').click();

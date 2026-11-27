@@ -27,6 +27,7 @@ test('完整工作台：反馈后的重要变化、收藏笔记真实冲突、�
     const config = environment.config();
     const task = await environment.task(owner, {
         ...config,
+        outputFormats: ['brief', 'list', 'comparison', 'research_report'],
         budget: { ...DEFAULT_TASK_BUDGET, maxDurationSeconds: config.budget.maxDurationSeconds },
     });
     const originalTask = await environment.request<TaskDetailResponse>(
@@ -152,6 +153,7 @@ test('完整工作台：反馈后的重要变化、收藏笔记真实冲突、�
     );
     await openReport(page, second.report);
     await assertChangeCitations(page, second.report, (change) => change.kind === 'changed');
+    await openReportTool(page, 'feedback');
     await expect(page.locator('.feedback-effects')).toBeVisible();
     const writes: string[] = [];
     const onRequest = (request: import('@playwright/test').Request) => {
@@ -159,23 +161,17 @@ test('完整工作台：反馈后的重要变化、收藏笔记真实冲突、�
             writes.push(new URL(request.url()).pathname);
     };
     page.on('request', onRequest);
-    await expect(page.getByLabel('报告形式', { exact: true })).toHaveCount(0);
-    for (const format of second.report.coverage.artifacts?.map((artifact) => artifact.format) ?? [
-        second.report.format,
-    ]) {
-        if ((second.report.coverage.artifacts?.length ?? 0) > 1)
-            await page
-                .getByRole('navigation', { name: '已生成成果', exact: true })
-                .getByRole('button', {
-                    name: {
-                        brief: '简报',
-                        list: '主题清单',
-                        comparison: '对比表',
-                        research_report: '研究报告',
-                    }[format],
-                    exact: true,
-                })
-                .click();
+    expect(second.report.coverage.artifacts?.map((artifact) => artifact.format)).toEqual([
+        'brief',
+        'list',
+        'comparison',
+        'research_report',
+    ]);
+    const formats = page.getByRole('navigation', { name: '已生成成果', exact: true });
+    for (const name of ['简报', '主题清单', '对比表', '研究报告']) {
+        const button = formats.getByRole('button', { name, exact: true });
+        await button.click();
+        await expect(button).toHaveAttribute('aria-pressed', 'true');
         expect(new URL(page.url()).pathname).toBe(`/reports/${second.report.id}`);
         await expect(page.locator('.report-frame')).toContainText(second.report.summary);
         await expectReportEvidence(page, second.report.evidence);

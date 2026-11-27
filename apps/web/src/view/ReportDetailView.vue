@@ -275,6 +275,7 @@ const {
 @media (width >= 64rem) {
     .report-companion {
         height: calc(100dvh - 3.25rem);
+        overflow-y: auto;
     }
     .report-workspace {
         @apply grid-cols-[minmax(0,_0.76fr)_minmax(0,_1.24fr)] gap-0;

@@ -527,6 +527,7 @@ onUnmounted(() => {
 }
 .conversation-history {
     @apply grid flex-1 gap-2 min-w-0 min-h-0 [align-content:start] overflow-y-auto pr-1 [overscroll-behavior:contain];
+    min-block-size: 8rem;
     scrollbar-width: thin;
 }
 .run-banner {

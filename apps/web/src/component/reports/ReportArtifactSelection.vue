@@ -56,7 +56,7 @@ const emit = defineEmits<{ select: [id: string] }>();
     background: var(--scova-surface);
     color: var(--scova-text);
     font: inherit;
-    font-size: 0.875rem;
+    font-size: 1rem;
     text-overflow: ellipsis;
     cursor: pointer;
 }

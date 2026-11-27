@@ -1,11 +1,11 @@
 <template>
     <article
-        class="task-card [border-top:0.0625rem_solid_color-mix(in_srgb,_var(--scova-border)_30%,_transparent)] min-w-0 break-anywhere cursor-default py-4 px-0 [&.task-row]:(grid grid-cols-[minmax(0,_1fr)_minmax(15rem,_0.6fr)_auto] gap-[0.75rem_1.5rem] items-center) [@media(max-width:_53.999rem)]:[&.task-row]:grid-cols-[minmax(0,_1fr)_auto] [@media(max-width:_29.999rem)]:[&.task-row]:grid-cols-[minmax(0,_1fr)]"
+        class="task-card [border-top:0.0625rem_solid_color-mix(in_srgb,_var(--scova-border)_30%,_transparent)] min-w-0 break-anywhere cursor-default py-4 px-0"
         :class="{ 'task-row': link }"
         :aria-labelledby="headingId"
     >
         <h2
-            class="[.task-row_&:is(h2)]:(text-[1.125rem] m-0) [@media(max-width:_53.999rem)]:[.task-row_&:is(h2)]:col-span-full mt-0 mb-3 text-[1.25rem] leading-[1.5] font-semibold mx-0"
+            class="[.task-row_&:is(h2)]:(text-[1.125rem] m-0) mt-0 mb-3 text-[1.25rem] leading-[1.5] font-semibold mx-0"
             :id="headingId"
         >
             <router-link
@@ -97,3 +97,28 @@ const runLabels: Record<RunStatus, string> = {
     failed: '失败',
 };
 </script>
+
+<style scoped>
+.task-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: center;
+    gap: 0.75rem 1.5rem;
+}
+@container task-entry (width >= 25rem) {
+    .task-row {
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
+    .task-row > h2 {
+        grid-column: 1 / -1;
+    }
+}
+@container task-entry (width >= 42rem) {
+    .task-row {
+        grid-template-columns: minmax(0, 1fr) minmax(15rem, 0.6fr) auto;
+    }
+    .task-row > h2 {
+        grid-column: auto;
+    }
+}
+</style>
