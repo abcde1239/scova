@@ -16,6 +16,8 @@
         "@scova/models": "workspace:*",
         "@tanstack/vue-query": "catalog:",
         "@vicons/ionicons5": "catalog:",
+        "lowlight": "catalog:",
+        "markstream-vue": "catalog:",
         "naive-ui": "catalog:",
         "pinia": "catalog:",
         "requestlane": "catalog:",

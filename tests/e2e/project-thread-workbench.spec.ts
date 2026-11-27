@@ -29,7 +29,11 @@ const threadPath = (threadId: string) => `${projectPath}/threads/${threadId}`;
 
 async function mockWorkbench(
     page: Page,
-    options: { launchRun?: boolean; beforeCancel?: (attempt: number) => Promise<boolean> } = {},
+    options: {
+        launchRun?: boolean;
+        beforeCancel?: (attempt: number) => Promise<boolean>;
+        markdown?: string;
+    } = {},
 ) {
     await mockFixtureSession(page);
     const project = { id: projectId, name: '能源研究', createdAt: timestamp };
@@ -91,6 +95,16 @@ async function mockWorkbench(
     append(firstThread, null, 'message', { role: 'assistant', text: '上次研究已完成。' }, null);
     append(firstThread, null, 'run', { runId, status: 'succeeded' }, 'succeeded');
     append(firstThread, null, 'report', { runId, unavailable: true }, 'succeeded');
+    if (options.markdown) {
+        const response = append(
+            firstThread,
+            null,
+            'message',
+            { role: 'assistant', text: options.markdown },
+            'completed',
+        );
+        response.refs = [{ kind: 'report', id: reportId }];
+    }
     let runCancellations = 0;
     await page.route(`**/api/v1/runs/${runId}/cancel`, async (route) => {
         expect(route.request().method()).toBe('POST');
@@ -301,6 +315,16 @@ async function mockWorkbench(
                 'running',
             );
             userItem.refs = input.refs ?? [];
+            if (input.message === '## 用户输入保留原文') {
+                append(
+                    threadId,
+                    input.turnId,
+                    'message',
+                    { role: 'assistant', text: '**本轮已更新**' },
+                    'completed',
+                );
+                return route.fulfill({ json: { turnId: input.turnId, status: 'completed' } });
+            }
             if (input.message === '暂停能源周报') {
                 append(
                     threadId,
@@ -838,4 +862,60 @@ test('composer uploads a private attachment and timeline downloads the original 
     await composer.press('Enter');
     await expect.poll(() => fixture.submitted.length).toBe(2);
     expect(fixture.submitted[1]?.refs).toEqual(fixture.submitted[0]?.refs);
+});
+
+test('project assistant renders safe Markdown, copies code and preserves reference and user text', async ({
+    page,
+    context,
+}) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    const externalRequests: string[] = [];
+    await page.route('https://preview.invalid/**', (route) => {
+        externalRequests.push(route.request().url());
+        return route.abort();
+    });
+    const code = 'const price = 12;';
+    await mockWorkbench(page, {
+        markdown: [
+            '## 本周发现',
+            '',
+            '- 检查来源',
+            '',
+            '| 第一列内容较长 | 第二列内容也较长 | 第三列内容同样较长 | 第四列需要横向滚动 |',
+            '| --- | --- | --- | --- |',
+            '| 1 | 2 | 3 | 4 |',
+            '',
+            '```js',
+            code,
+            '```',
+            '',
+            '![外链图](https://preview.invalid/image.png)',
+            '',
+            '<img src="https://preview.invalid/raw.png">',
+        ].join('\n'),
+    });
+    await page.goto(threadPath(firstThread));
+    const item = page
+        .locator('article')
+        .filter({ has: page.getByRole('heading', { name: '本周发现' }) });
+    await expect(item.getByRole('heading', { name: '本周发现' })).toBeVisible();
+    const table = item.getByRole('region', { name: '回答表格' });
+    await expect(table.getByRole('table')).toBeVisible();
+    await expect.poll(() => table.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
+    await expect(item.locator('.hljs-keyword')).toContainText('const');
+    await item.getByRole('button', { name: '复制代码' }).click();
+    await expect(item.getByRole('status')).toHaveText('已复制');
+    expect((await page.evaluate(() => navigator.clipboard.readText())).trim()).toBe(code);
+    await expect(item.getByRole('img')).toHaveCount(0);
+    expect(externalRequests).toEqual([]);
+    await expect(item.getByRole('link', { name: '季度能源报告' })).toHaveAttribute(
+        'href',
+        `/reports/${reportId}`,
+    );
+    const textbox = page.getByRole('textbox', { name: '给 Scova 发送消息' });
+    await textbox.fill('## 用户输入保留原文');
+    await textbox.press('Enter');
+    await expect(page.getByText('## 用户输入保留原文', { exact: true })).toBeVisible();
+    await expect(page.locator('strong').getByText('本轮已更新', { exact: true })).toBeVisible();
 });
