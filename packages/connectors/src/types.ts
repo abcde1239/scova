@@ -45,6 +45,8 @@ export class ConnectorError extends Error {
     modelDiagnostic?: ModelOutputDiagnostic;
     /** Confirmed provider usage can survive rejection of the generated content. */
     modelUsage?: ModelResponse['usage'];
+    /** The text callback has been invoked. The caller must end this attempt on failure. */
+    modelOutputPublished?: true;
     engineFailures?: { engine: string; error: string }[];
     retryAfterMs?: number;
     searchNetworkAttempts?: number;
@@ -214,6 +216,11 @@ export interface StructuredInput {
     untrustedSources?: unknown[];
 }
 
+export interface TextModelInput extends Omit<StructuredInput, 'schema'> {
+    /** Optional limit for the caller's final text contract, measured in UTF-16 code units. */
+    maxOutputChars?: number;
+}
+
 export interface ModelResponse<T = unknown> {
     data: T;
     mode: 'live' | 'demo';
@@ -232,6 +239,12 @@ export interface PageReader {
 }
 
 export interface ModelProvider {
+    /** Available only for explicitly enabled, supported providers. The callback must be synchronous. */
+    streamText?: (
+        input: TextModelInput,
+        onText: (delta: string) => undefined,
+        context?: CallContext,
+    ) => Promise<ModelResponse<string>>;
     generateStructured<T = unknown>(
         input: StructuredInput,
         context?: CallContext,

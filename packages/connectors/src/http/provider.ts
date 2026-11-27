@@ -115,6 +115,7 @@ export function prepareProvider(
             kind: ConnectorKind,
             context: CallContext,
             operation: (signal: AbortSignal) => Promise<HttpResponse>,
+            canRetry?: () => boolean,
         ) {
             const limit =
                 kind === 'model' ? MODEL_CALL_TIMEOUT_MS : kind === 'read' ? readTimeoutMs : 15_000;
@@ -137,6 +138,7 @@ export function prepareProvider(
                             if (
                                 !(error instanceof ConnectorError) ||
                                 !error.retryable ||
+                                canRetry?.() === false ||
                                 attempt + 1 >= attempts
                             )
                                 throw error;

@@ -7,6 +7,7 @@ export { createTavilySearch } from './search/tavily.ts';
 export {
     createModelProvider,
     estimateModelInputTokens,
+    estimateModelTextInputTokens,
     isModelPreflightFailure,
 } from './model/provider.ts';
 export type { ProviderOptions } from './http/provider.ts';
