@@ -81,7 +81,7 @@
             <div
                 v-for="task in tasks"
                 :key="task.id"
-                class="task-entry min-w-0 [&.task-entry.selecting]:(grid grid-cols-[auto_minmax(0,_1fr)] gap-x-4) [@media(max-width:_29.999rem)]:[&.task-entry.selecting]:gap-x-2"
+                class="task-entry min-w-0 [container:task-entry_/_inline-size] [&.task-entry.selecting]:(grid grid-cols-[auto_minmax(0,_1fr)] gap-x-4) [@media(max-width:_29.999rem)]:[&.task-entry.selecting]:gap-x-2"
                 :class="{ selecting: managing }"
             >
                 <label

@@ -7,9 +7,16 @@ import { auditInteractiveSemantics } from './support/accessibility-audit.ts';
 
 // Real same-origin services and controlled supplier delivery. Text enlargement is measured separately
 // from browser zoom and actual screen-reader output, which require manual verification.
+test.use({ actionTimeout: 15_000, navigationTimeout: 30_000 });
+
 async function tabTo(page: Page, target: Locator) {
+    await expect(target).toBeVisible();
     for (let index = 0; index < 160; index++) {
-        if (await target.evaluate((element) => element === document.activeElement)) {
+        if (
+            await target.evaluate((element) => element === document.activeElement, undefined, {
+                timeout: 5000,
+            })
+        ) {
             await expect(target).toBeInViewport();
             expect(await target.evaluate((element) => element.matches(':focus-visible'))).toBe(
                 true,
@@ -18,7 +25,7 @@ async function tabTo(page: Page, target: Locator) {
         }
         await page.keyboard.press('Tab');
     }
-    throw new Error(`Keyboard navigation did not reach ${await target.getAttribute('id')}`);
+    throw new Error(`Keyboard navigation did not reach ${target.toString()}`);
 }
 
 async function checkLayout(page: Page, scale: number) {
@@ -81,11 +88,12 @@ test('基础页面真实服务六宽、文字放大和浅暗矩阵（实际读�
     config.title = '跨地区招生与研究资料长期跟踪：长中文标题、费用变化与可追溯证据';
     config.goal = '保留来源原文，不将部分交付解释为没有重要变化。'.repeat(8);
     config.schedule = { frequency: 'weekly', weekday: 7, localTime: '23:59' };
-    config.sourcePreferences.preferredUrls = [
+    config.sourcePreferences.preferredUrls.push(
         `https://example.test/${'long-original-source-path-'.repeat(12)}`,
-    ];
+    );
     const task = await environment.task(owner, config);
-    const delivered = await environment.execute(owner, task.id, 'live');
+    const reportTask = await environment.task(owner);
+    const delivered = await environment.researchFixture(owner, reportTask.id, 'english', 'A');
     const page = owner.page;
     const errors: string[] = [];
     const outside: string[] = [];
@@ -106,7 +114,7 @@ test('基础页面真实服务六宽、文字放大和浅暗矩阵（实际读�
         { path: '/inbox', selector: '.inbox-view' },
         { path: '/notifications', selector: '.notifications-view' },
         { path: `/reports/${delivered.report.id}`, selector: '.report-frame' },
-        { path: `/tasks/reports?taskId=${task.id}`, selector: '.report-history' },
+        { path: `/tasks/reports?taskId=${reportTask.id}`, selector: '.report-history' },
         { path: `/reports/${randomUUID()}`, selector: '.state-panel', error: true },
         { path: `/runs/${randomUUID()}`, selector: '.state-panel', error: true },
     ];
@@ -125,6 +133,18 @@ test('基础页面真实服务六宽、文字放大和浅暗矩阵（实际读�
                 for (const entry of cases) {
                     await test.step(`${scheme}/${width}/${scale} ${entry.path}`, async () => {
                         await page.goto(`${environment.services.origin}${entry.path}`);
+                        if (
+                            entry.selector === '.report-frame' &&
+                            (await page.evaluate(() => matchMedia('(width < 64rem)').matches))
+                        ) {
+                            const artifact = page.getByRole('button', {
+                                name: '成果',
+                                exact: true,
+                            });
+                            await expect(artifact).toBeVisible();
+                            await checkLayout(page, scale);
+                            await artifact.press('Enter');
+                        }
                         await expect(page.locator(entry.selector)).toBeVisible();
                         await expect(page.locator('.scova-theme')).toHaveClass(
                             scheme === 'dark' ? /scova-theme--dark/ : /^scova-theme$/,
@@ -137,11 +157,15 @@ test('基础页面真实服务六宽、文字放大和浅暗矩阵（实际读�
                                 .press('Enter');
                         const inputs = await checkLayout(page, scale);
                         if (entry.selector === '.report-frame') {
+                            const coverage = page.getByRole('region', { name: '查阅与核验详情' });
+                            const coverageToggle = coverage.locator('details > summary');
+                            await coverageToggle.press('Enter');
                             await expect(
-                                page.getByRole('note', { name: '查阅范围说明' }),
+                                coverage.getByText('交付时间', { exact: true }),
                             ).toBeVisible();
+                            await coverageToggle.press('Enter');
                             const citation = page
-                                .locator('.report-frame .evidence-source-group')
+                                .locator('.evidence-appendix .evidence-source-group')
                                 .first();
                             await citation.locator(':scope > summary').press('Enter');
                             await expect(citation.locator('blockquote')).toBeVisible();
@@ -190,7 +214,7 @@ test('键盘注册、登录、创建、执行、报告引用及菜单返回；�
         await tabTo(page, page.getByLabel('密码', { exact: true }));
         await page.keyboard.type(password);
         await page.keyboard.press('Enter');
-        await expect(page).toHaveURL(/\/tasks$/);
+        await expect(page).toHaveURL((url) => url.pathname === '/');
         const me = await page.evaluate(async () => {
             const response = await fetch('/api/v1/me');
             return response.json() as Promise<{ user: { id: string }; csrfToken: string }>;
@@ -224,12 +248,9 @@ test('键盘注册、登录、创建、执行、报告引用及菜单返回；�
         } finally {
             release();
         }
-        await expect(page).toHaveURL(/\/tasks$/);
+        await expect(page).toHaveURL((url) => url.pathname === '/');
         await page.unroute('**/api/v1/auth/login');
-        await tabTo(
-            page,
-            page.getByRole('main').getByRole('link', { name: '新建任务', exact: true }),
-        );
+        await tabTo(page, page.getByRole('link', { name: '创建独立任务', exact: true }));
         await page.keyboard.press('Enter');
         for (const [label, value] of [
             ['任务标题', '键盘完成的演示任务'],
@@ -268,15 +289,17 @@ test('键盘注册、登录、创建、执行、报告引用及菜单返回；�
             `/api/v1/reports/${reports.items[0]!.id}`,
         );
         expect(report.runId).toBe(runId);
+        await expect(page).toHaveURL((url) => url.pathname === `/reports/${report.id}`);
+        await page.goto(`/runs/${runId}`);
         const reportLink = page.getByRole('link', { name: '阅读报告', exact: true });
         await expect(reportLink).toHaveAttribute('href', `/reports/${report.id}`);
         await tabTo(page, reportLink);
         await page.keyboard.press('Enter');
-        const summary = page.locator('.report-frame .evidence-source-group > summary').first();
+        const summary = page.locator('.evidence-appendix .evidence-source-group > summary').first();
         await tabTo(page, summary);
         await page.keyboard.press('Enter');
         await expect(
-            page.locator('.report-frame .evidence-source-group[open] blockquote').first(),
+            page.locator('.evidence-appendix .evidence-source-group[open] blockquote').first(),
         ).toBeVisible();
         await page.setViewportSize({ width: 390, height: 844 });
         const menu = page.getByRole('button', { name: /^打开(个人侧栏|导航菜单)$/, exact: true });

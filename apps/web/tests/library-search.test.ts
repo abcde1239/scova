@@ -433,7 +433,7 @@ describe('actual results SFC plain excerpt', () => {
             plugins: [vue()],
             optimizeDeps: { noDiscovery: true, include: [] },
             resolve: { alias: { '@': fileURLToPath(new URL('../src', import.meta.url)) } },
-            server: { middlewareMode: true, watch: null, hmr: false },
+            server: { middlewareMode: true, watch: null, hmr: false, ws: false },
             appType: 'custom',
         });
         component = (await server.ssrLoadModule('/src/component/library/LibrarySearchResults.vue'))

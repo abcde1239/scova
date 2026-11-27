@@ -106,7 +106,7 @@ beforeAll(async () => {
         plugins: [vue()],
         optimizeDeps: { noDiscovery: true, include: [] },
         resolve: { alias: { '@': resolve(root, 'src') } },
-        server: { middlewareMode: true, watch: null, hmr: false },
+        server: { middlewareMode: true, watch: null, hmr: false, ws: false },
         appType: 'custom',
     });
     graph = (await server.ssrLoadModule('/src/component/run/ExecutionGraph.vue')).default;

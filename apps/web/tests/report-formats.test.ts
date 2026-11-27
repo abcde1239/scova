@@ -534,7 +534,7 @@ describe('four actual report SFCs preserve one immutable saved report', () => {
             plugins: [vue()],
             optimizeDeps: { noDiscovery: true, include: [] },
             resolve: { alias: { '@': resolve(dirname(fileURLToPath(import.meta.url)), '../src') } },
-            server: { middlewareMode: true, watch: null, hmr: false },
+            server: { middlewareMode: true, watch: null, hmr: false, ws: false },
             appType: 'custom',
         });
         for (const [format, name] of Object.entries({
