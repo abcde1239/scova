@@ -52,6 +52,8 @@ export const nodeHttpTransport: HttpTransport = (url, options) =>
                     reject(new ConnectorError('response_too_large', '响应超过下载限制'));
                     return;
                 }
+                const status = res.statusCode ?? 0;
+                const consume = status >= 200 && status < 300 ? options.onBodyChunk : undefined;
                 const chunks: Buffer[] = [];
                 let bytes = 0;
                 let bodyTimer: ReturnType<typeof setTimeout> | undefined;
@@ -72,7 +74,22 @@ export const nodeHttpTransport: HttpTransport = (url, options) =>
                         const error = new ConnectorError('response_too_large', '响应超过下载限制');
                         reject(error);
                         res.destroy(error);
-                    } else chunks.push(chunk);
+                        return;
+                    }
+                    if (!consume) {
+                        chunks.push(chunk);
+                        return;
+                    }
+                    try {
+                        options.signal.throwIfAborted();
+                        if (consume(chunk, headers['content-type'], options.signal)) {
+                            resolve({ status, headers, body: '' });
+                            res.destroy();
+                        }
+                    } catch (error) {
+                        reject(error);
+                        res.destroy();
+                    }
                 });
                 res.on('error', reject);
                 res.on('aborted', () =>
@@ -86,6 +103,10 @@ export const nodeHttpTransport: HttpTransport = (url, options) =>
                 res.on('end', () => {
                     clearTimeout(bodyTimer);
                     try {
+                        if (consume) {
+                            resolve({ status, headers, body: '' });
+                            return;
+                        }
                         if (options.responseEncoding === 'web-text') {
                             // Redirect/error payloads are never rendered. Preserve status and Location
                             // even when an upstream sends an empty or binary diagnostic body.

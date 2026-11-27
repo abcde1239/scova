@@ -197,6 +197,7 @@ export function createSafeHttpClient(
                                         signal,
                                         maxBytes,
                                         responseEncoding: options.responseEncoding,
+                                        onBodyChunk: options.onBodyChunk,
                                         bodyIdleTimeoutMs:
                                             (options.method ?? 'GET') === 'GET'
                                                 ? bodyIdleTimeoutMs

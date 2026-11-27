@@ -12,6 +12,8 @@ export interface HttpOptions {
     /** Trusted guard immediately before dispatch, after any origin queue wait. */
     beforeDispatch?: () => Promise<void>;
     onReadDiagnostic?: (event: ReadDiagnostic) => void;
+    /** Consume successful body chunks synchronously. Return true to close the response early. */
+    onBodyChunk?: TransportOptions['onBodyChunk'];
     responseEncoding?: 'web-text';
     method?: 'GET' | 'POST';
     headers?: Record<string, string>;
@@ -34,6 +36,11 @@ export interface TransportOptions {
     address: ResolvedAddress;
     /** Trusted transport callback; only response headers end the IP connection budget. */
     onResponseStarted?: () => void;
+    onBodyChunk?: (
+        chunk: Uint8Array,
+        contentType: string | undefined,
+        signal: AbortSignal,
+    ) => true | void;
 }
 
 /** A privileged injection point: production callers should use the default pinned transport. */
