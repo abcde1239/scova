@@ -8,7 +8,8 @@
             <span class="font-semibold">{{ isUser ? '你' : 'Scova' }}</span>
             <time :datetime="item.createdAt">{{ localTaskTime(item.createdAt) }}</time>
         </div>
-        <p class="m-0 whitespace-pre-wrap leading-relaxed">{{ text ?? '消息内容不可用' }}</p>
+        <assistant-markdown v-if="item.payload.role === 'assistant' && text" :text="text" />
+        <p v-else class="m-0 whitespace-pre-wrap leading-relaxed">{{ text ?? '消息内容不可用' }}</p>
         <ul v-if="reportRefs.length" class="grid gap-2 m-0 p-0 list-none" aria-label="引用报告">
             <li
                 v-for="reportId in reportRefs"
@@ -180,6 +181,7 @@ import { scheduleDescription as describeSchedule } from '@/utils/schedule';
 import { localTaskTime } from '@/composable/useTasks';
 import ActionButton from '@/component/common/ActionButton.vue';
 import AppIcon from '@/component/common/AppIcon.vue';
+import AssistantMarkdown from '@/component/common/AssistantMarkdown.vue';
 import ProjectThreadAttachmentDownload from '@/component/projects/ProjectThreadAttachmentDownload.vue';
 
 const props = defineProps<{
